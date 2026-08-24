@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Generation {
+  id         String   @id @default(cuid())
+  kind       String
+  prompt     String
+  output     String
+  model      String
+  responseId String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// Versioned JSON documents for the aggregate roots in @aow/common.
+/// The resource discriminator and canonical domain ID form the primary key.
+model DomainRecord {
+  resource  String
+  id        String
+  kind      String?
+  name      String?
+  data      Json
+  revision  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([resource, id])
+  @@index([resource, kind])
+  @@index([resource, name])
+  @@index([resource, updatedAt])
+}
+
+/// LevelGraph's six-way hexastore indexes, persisted in the same PostgreSQL
+/// database as the relational application data.
+model GraphEntry {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MediaAsset {
+  id           String   @id @default(uuid())
+  bucket       String
+  objectKey    String   @unique
+  filename     String
+  originalName String
+  mimeType     String
+  mediaType    String
+  purpose      String
+  size         Int
+  etag         String?
+  tags         String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([mediaType, purpose])
+  @@index([mimeType])
+  @@index([tags], type: Gin)
+  @@index([createdAt])
+}

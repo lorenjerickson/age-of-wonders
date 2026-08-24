@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API: Attach to Docker",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "localRoot": "${workspaceFolder}/apps/api",
+      "remoteRoot": "/workspace/apps/api",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Web: Debug in Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/apps/web"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack: Docker",
+      "configurations": ["API: Attach to Docker", "Web: Debug in Chrome"]
+    }
+  ]
+}
