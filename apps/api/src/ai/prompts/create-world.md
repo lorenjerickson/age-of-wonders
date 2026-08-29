@@ -148,6 +148,7 @@ players.
 - Include a structurally valid `image` object with useful alt text. The surrounding system replaces
   its asset ID, dimensions, and MIME type with the generated media asset before persistence. Never
   fabricate a downloadable URL; omit `image.uri` because media URLs are signed when displayed.
+  Set `image.orientation` to `scenic` for the strategic world map.
 
 # Consistency and safety checks
 

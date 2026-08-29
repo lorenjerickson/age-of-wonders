@@ -11,6 +11,7 @@ import {
   replaceDomainRecord,
   uploadMedia,
 } from "./api";
+import { visibilityPolygon } from "./mapGeometry";
 
 type JsonObject = Record<string, unknown>;
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -462,13 +463,311 @@ function ChildLocations({
   );
 }
 
+interface MapPinPosition {
+  kind: "normalized-map";
+  x: number;
+  y: number;
+}
+
+interface MapDisplayPin {
+  id: string;
+  label: string;
+  position: MapPinPosition;
+}
+
+interface LocationWallBlocking {
+  sight: boolean;
+  sound: boolean;
+  movement: boolean;
+  environmentalEffects: boolean;
+}
+
+interface LocationWall {
+  id: string;
+  kind: "wall" | "door" | "invisible-wall";
+  vertices: MapPinPosition[];
+  blocks: LocationWallBlocking;
+  doorState?: "open" | "closed";
+}
+
+interface LocationTransition {
+  id: string;
+  position: MapPinPosition;
+  radius: number;
+  destination: {
+    locationId: string;
+    position: MapPinPosition;
+  };
+}
+
+const DEFAULT_WALL_BLOCKING: LocationWallBlocking = {
+  sight: true,
+  sound: true,
+  movement: true,
+  environmentalEffects: true,
+};
+
+const INVISIBLE_WALL_BLOCKING: LocationWallBlocking = {
+  sight: false,
+  sound: false,
+  movement: true,
+  environmentalEffects: false,
+};
+
+type LocationMapOrientation = "scenic" | "overhead" | "side-on";
+
+function mapOrientationOf(record: DomainRecord): LocationMapOrientation {
+  const orientation = stringAt(record.data, ["image", "orientation"]);
+  return orientation === "overhead" || orientation === "side-on"
+    ? orientation
+    : orientation === "scenic"
+      ? "scenic"
+      : stringAt(record.data, ["kind"]) === "site"
+        ? "overhead"
+        : "scenic";
+}
+
+function wallsOf(record: DomainRecord): LocationWall[] {
+  const walls = record.data.walls;
+  if (!Array.isArray(walls)) return [];
+  return walls.flatMap((candidate) => {
+    const wall = asObject(candidate);
+    const blocks = asObject(wall.blocks);
+    const vertices = Array.isArray(wall.vertices)
+      ? wall.vertices.flatMap((candidateVertex) => {
+          const vertex = asObject(candidateVertex);
+          return vertex.kind === "normalized-map" &&
+            typeof vertex.x === "number" &&
+            typeof vertex.y === "number" &&
+            vertex.x >= 0 &&
+            vertex.x <= 1 &&
+            vertex.y >= 0 &&
+            vertex.y <= 1
+            ? [
+                {
+                  kind: "normalized-map" as const,
+                  x: vertex.x,
+                  y: vertex.y,
+                },
+              ]
+            : [];
+        })
+      : [];
+    const kind =
+      wall.kind === "door" || wall.kind === "invisible-wall"
+        ? wall.kind
+        : "wall";
+    return typeof wall.id === "string" && vertices.length >= 2
+      ? [
+          {
+            id: wall.id,
+            kind,
+            vertices,
+            blocks:
+              kind === "invisible-wall"
+                ? { ...INVISIBLE_WALL_BLOCKING }
+                : {
+                    sight: blocks.sight !== false,
+                    sound: blocks.sound !== false,
+                    movement: blocks.movement !== false,
+                    environmentalEffects: blocks.environmentalEffects !== false,
+                  },
+            ...(kind === "door"
+              ? { doorState: wall.doorState === "open" ? "open" : "closed" }
+              : {}),
+          },
+        ]
+      : [];
+  });
+}
+
+function transitionsOf(record: DomainRecord): LocationTransition[] {
+  const transitions = record.data.transitions;
+  if (!Array.isArray(transitions)) return [];
+  return transitions.flatMap((candidate) => {
+    const transition = asObject(candidate);
+    const position = normalizedPosition(transition.position);
+    const destination = asObject(transition.destination);
+    const destinationPosition = normalizedPosition(destination.position);
+    return typeof transition.id === "string" &&
+      position &&
+      typeof transition.radius === "number" &&
+      transition.radius > 0 &&
+      transition.radius <= 1 &&
+      typeof destination.locationId === "string" &&
+      destinationPosition
+      ? [
+          {
+            id: transition.id,
+            position,
+            radius: transition.radius,
+            destination: {
+              locationId: destination.locationId,
+              position: destinationPosition,
+            },
+          },
+        ]
+      : [];
+  });
+}
+
+function normalizedPosition(value: unknown): MapPinPosition | undefined {
+  const position = asObject(value);
+  return position.kind === "normalized-map" &&
+    typeof position.x === "number" &&
+    typeof position.y === "number" &&
+    position.x >= 0 &&
+    position.x <= 1 &&
+    position.y >= 0 &&
+    position.y <= 1
+    ? { kind: "normalized-map", x: position.x, y: position.y }
+    : undefined;
+}
+
+function mapPositionOf(record: DomainRecord): MapPinPosition | undefined {
+  const placement = asObject(record.data.placement);
+  const position = asObject(placement.mapPosition);
+  return position.kind === "normalized-map" &&
+    typeof position.x === "number" &&
+    typeof position.y === "number" &&
+    position.x >= 0 &&
+    position.x <= 1 &&
+    position.y >= 0 &&
+    position.y <= 1
+    ? { kind: "normalized-map", x: position.x, y: position.y }
+    : undefined;
+}
+
+function ContainedMap({
+  src,
+  alt,
+  pins,
+  onMapClick,
+  onPinSelect,
+  mapActionLabel,
+  interactionClassName = "cursor-crosshair",
+}: {
+  src: string;
+  alt: string;
+  pins: MapDisplayPin[];
+  onMapClick?: (position: MapPinPosition) => void;
+  onPinSelect?: (id: string) => void;
+  mapActionLabel?: string;
+  interactionClassName?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [frame, setFrame] = useState({ left: 0, top: 0, width: 0, height: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const image = imageRef.current;
+    if (!container || !image) return;
+    const update = () => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const imageWidth = image.naturalWidth || 16;
+      const imageHeight = image.naturalHeight || 9;
+      const scale = Math.min(width / imageWidth, height / imageHeight);
+      const renderedWidth = imageWidth * scale;
+      const renderedHeight = imageHeight * scale;
+      setFrame({
+        left: (width - renderedWidth) / 2,
+        top: (height - renderedHeight) / 2,
+        width: renderedWidth,
+        height: renderedHeight,
+      });
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    image.addEventListener("load", update);
+    update();
+    return () => {
+      observer.disconnect();
+      image.removeEventListener("load", update);
+    };
+  }, [src]);
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
+      <img
+        ref={imageRef}
+        src={src}
+        alt={alt}
+        className="h-full w-full object-contain"
+      />
+      {frame.width > 0 && onMapClick && (
+        <button
+          type="button"
+          className={`absolute z-10 ${interactionClassName}`}
+          style={frame}
+          aria-label={mapActionLabel ?? "Choose a position on the map"}
+          onClick={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            onMapClick({
+              kind: "normalized-map",
+              x: Math.max(
+                0,
+                Math.min(1, (event.clientX - bounds.left) / bounds.width),
+              ),
+              y: Math.max(
+                0,
+                Math.min(1, (event.clientY - bounds.top) / bounds.height),
+              ),
+            });
+          }}
+        />
+      )}
+      {frame.width > 0 &&
+        pins.map((pin) => {
+          const style = {
+            left: frame.left + pin.position.x * frame.width,
+            top: frame.top + pin.position.y * frame.height,
+          };
+          const content = (
+            <>
+              <span className="rounded-full border-2 border-white bg-primary p-1.5 shadow-lg" />
+              <span className="max-w-48 truncate rounded-full border border-white/25 bg-black/80 px-3 py-1 text-xs font-semibold whitespace-nowrap text-white shadow-xl">
+                {pin.label}
+              </span>
+            </>
+          );
+          return onPinSelect ? (
+            <button
+              key={pin.id}
+              type="button"
+              className="absolute z-20 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1 pb-1 transition hover:scale-105"
+              style={style}
+              aria-label={`Open ${pin.label}`}
+              onClick={() => onPinSelect(pin.id)}
+            >
+              {content}
+            </button>
+          ) : (
+            <span
+              key={pin.id}
+              className="pointer-events-none absolute z-20 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1 pb-1"
+              style={style}
+            >
+              {content}
+            </span>
+          );
+        })}
+    </div>
+  );
+}
+
 function LocationMap({
   record,
+  childLocations,
+  onSelectChild,
   onReplace,
   onGenerate,
   onAltText,
 }: {
   record: DomainRecord;
+  childLocations: DomainRecord[];
+  onSelectChild: (id: string) => void;
   onReplace: (file: File) => Promise<void>;
   onGenerate: () => Promise<void>;
   onAltText: (value: string) => void;
@@ -478,6 +777,18 @@ function LocationMap({
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const pins = childLocations.flatMap((child) => {
+    const position = mapPositionOf(child);
+    return position
+      ? [
+          {
+            id: child.id,
+            label: child.name ?? "Untitled location",
+            position,
+          },
+        ]
+      : [];
+  });
 
   useEffect(() => {
     let active = true;
@@ -521,18 +832,15 @@ function LocationMap({
     <div className="card group overflow-hidden border border-base-300 bg-base-200 shadow-xl">
       <figure className="relative aspect-video min-h-80 max-h-[75vh] bg-base-300">
         {resolvedUrl ? (
-          <button
-            type="button"
-            className="absolute inset-0 cursor-zoom-in"
-            onClick={() => setExpanded(true)}
-            aria-label={`Expand map of ${record.name ?? "location"}`}
-          >
-            <img
-              src={resolvedUrl}
-              alt={image.altText || `Map of ${record.name ?? "location"}`}
-              className="h-full w-full object-contain"
-            />
-          </button>
+          <ContainedMap
+            src={resolvedUrl}
+            alt={image.altText || `Map of ${record.name ?? "location"}`}
+            pins={pins}
+            onMapClick={() => setExpanded(true)}
+            onPinSelect={onSelectChild}
+            mapActionLabel={`Expand map of ${record.name ?? "location"}`}
+            interactionClassName="cursor-zoom-in"
+          />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-base-content/40">
             <span className="text-5xl" aria-hidden>
@@ -611,22 +919,1106 @@ function LocationMap({
                 ✕
               </button>
             </div>
-            <button
-              type="button"
-              className="min-h-0 flex-1 cursor-zoom-out"
-              aria-label="Close expanded map"
-              onClick={() => setExpanded(false)}
-            >
-              <img
+            <div className="min-h-0 flex-1">
+              <ContainedMap
                 src={resolvedUrl}
                 alt={image.altText || `Map of ${record.name ?? "location"}`}
-                className="h-full w-full object-contain"
+                pins={pins}
+                onMapClick={() => setExpanded(false)}
+                onPinSelect={(id) => {
+                  setExpanded(false);
+                  onSelectChild(id);
+                }}
+                mapActionLabel="Close expanded map"
+                interactionClassName="cursor-zoom-out"
               />
-            </button>
+            </div>
           </div>
         </dialog>
       )}
     </div>
+  );
+}
+
+function SiteWallEditor({
+  record,
+  locations,
+  onCancel,
+  onSave,
+}: {
+  record: DomainRecord;
+  locations: DomainRecord[];
+  onCancel: () => void;
+  onSave: (decorators: {
+    walls: LocationWall[];
+    transitions: LocationTransition[];
+    orientation: LocationMapOrientation;
+  }) => void;
+}) {
+  const image = imageData(record);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<
+    | { pointerId: number; x: number; y: number; panX: number; panY: number }
+    | undefined
+  >(undefined);
+  const observerDragRef = useRef<number | undefined>(undefined);
+  const [resolvedUrl, setResolvedUrl] = useState(image.uri);
+  const [imageSize, setImageSize] = useState({ width: 1600, height: 900 });
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [walls, setWalls] = useState<LocationWall[]>(() => wallsOf(record));
+  const [transitions, setTransitions] = useState<LocationTransition[]>(() =>
+    transitionsOf(record),
+  );
+  const [orientation, setOrientation] = useState<LocationMapOrientation>(() =>
+    mapOrientationOf(record),
+  );
+  const [draft, setDraft] = useState<MapPinPosition[]>([]);
+  const [hoverPosition, setHoverPosition] = useState<MapPinPosition>();
+  const [draftBlocks, setDraftBlocks] = useState<LocationWallBlocking>({
+    ...DEFAULT_WALL_BLOCKING,
+  });
+  const [draftKind, setDraftKind] = useState<LocationWall["kind"]>("wall");
+  const [selectedWallId, setSelectedWallId] = useState<string>();
+  const [selectedTransitionId, setSelectedTransitionId] = useState<string>();
+  const [observer, setObserver] = useState<MapPinPosition>();
+  const [visionPreview, setVisionPreview] = useState(false);
+  const [tool, setTool] = useState<
+    "select" | "wall" | "door" | "invisible-wall" | "transition" | "observer"
+  >("select");
+  const [panning, setPanning] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  const selectedWall = walls.find((wall) => wall.id === selectedWallId);
+  const selectedTransition = transitions.find(
+    (transition) => transition.id === selectedTransitionId,
+  );
+  const fit = (() => {
+    if (!stageSize.width || !stageSize.height) {
+      return { left: 0, top: 0, width: 0, height: 0 };
+    }
+    const scale = Math.min(
+      stageSize.width / imageSize.width,
+      stageSize.height / imageSize.height,
+    );
+    const width = imageSize.width * scale;
+    const height = imageSize.height * scale;
+    return {
+      left: (stageSize.width - width) / 2,
+      top: (stageSize.height - height) / 2,
+      width,
+      height,
+    };
+  })();
+
+  useEffect(() => {
+    let active = true;
+    if (!image.assetId) return;
+    void getMediaDownloadUrl(image.assetId).then(
+      ({ url }) => {
+        if (active) setResolvedUrl(url);
+      },
+      () => {
+        if (active) setResolvedUrl(image.uri);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [image.assetId, image.uri]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const update = () =>
+      setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    update();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const keyDown = (event: KeyboardEvent) => {
+      const finishWallTool = () => {
+        setWalls((current) =>
+          draft.length >= 2
+            ? [
+                ...current,
+                {
+                  id: crypto.randomUUID(),
+                  kind: draftKind,
+                  vertices: draft,
+                  blocks: draftBlocks,
+                  ...(draftKind === "door"
+                    ? { doorState: "closed" as const }
+                    : {}),
+                },
+              ]
+            : current,
+        );
+        setDraft([]);
+        setHoverPosition(undefined);
+        setTool("select");
+      };
+      const target = event.target;
+      const editing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT");
+      if (
+        editing ||
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const drawingBoundary =
+        tool === "wall" || tool === "door" || tool === "invisible-wall";
+      const activateBoundary = (kind: LocationWall["kind"]) => {
+        if (drawingBoundary) finishWallTool();
+        setDraft([]);
+        setHoverPosition(undefined);
+        setDraftKind(kind);
+        setDraftBlocks({
+          ...(kind === "invisible-wall"
+            ? INVISIBLE_WALL_BLOCKING
+            : DEFAULT_WALL_BLOCKING),
+        });
+        setSelectedWallId(undefined);
+        setSelectedTransitionId(undefined);
+        setTool(kind);
+      };
+      if (key === "w" || key === "d" || key === "v") {
+        event.preventDefault();
+        activateBoundary(
+          key === "d" ? "door" : key === "v" ? "invisible-wall" : "wall",
+        );
+      }
+      if (key === "t") {
+        event.preventDefault();
+        if (drawingBoundary) finishWallTool();
+        setSelectedWallId(undefined);
+        setSelectedTransitionId(undefined);
+        setTool("transition");
+      }
+      if (key === "o") {
+        event.preventDefault();
+        if (drawingBoundary) finishWallTool();
+        if (tool === "observer") {
+          setTool("select");
+          setVisionPreview(false);
+        } else {
+          setSelectedWallId(undefined);
+          setSelectedTransitionId(undefined);
+          setTool("observer");
+          setVisionPreview(true);
+        }
+      }
+      if (
+        event.key === "Escape" &&
+        (tool === "wall" || tool === "door" || tool === "invisible-wall")
+      ) {
+        event.preventDefault();
+        finishWallTool();
+      }
+    };
+    window.addEventListener("keydown", keyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", keyDown);
+    };
+  }, [draft, draftBlocks, draftKind, tool]);
+
+  function finishDraft(currentWalls = walls) {
+    const next =
+      draft.length >= 2
+        ? [
+            ...currentWalls,
+            {
+              id: crypto.randomUUID(),
+              kind: draftKind,
+              vertices: draft,
+              blocks: draftBlocks,
+              ...(draftKind === "door" ? { doorState: "closed" as const } : {}),
+            },
+          ]
+        : currentWalls;
+    setWalls(next);
+    setDraft([]);
+    setHoverPosition(undefined);
+    setTool("select");
+    return next;
+  }
+
+  function beginWall(kind: LocationWall["kind"] = "wall") {
+    const drawingBoundary =
+      tool === "wall" || tool === "door" || tool === "invisible-wall";
+    const next = drawingBoundary ? finishDraft() : walls;
+    setWalls(next);
+    setDraft([]);
+    setHoverPosition(undefined);
+    setDraftKind(kind);
+    setDraftBlocks({
+      ...(kind === "invisible-wall"
+        ? INVISIBLE_WALL_BLOCKING
+        : DEFAULT_WALL_BLOCKING),
+    });
+    setSelectedWallId(undefined);
+    setSelectedTransitionId(undefined);
+    setTool(kind);
+  }
+
+  function pointerPosition(clientX: number, clientY: number) {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    const bounds = surface.getBoundingClientRect();
+    if (
+      clientX < bounds.left ||
+      clientX > bounds.right ||
+      clientY < bounds.top ||
+      clientY > bounds.bottom
+    ) {
+      return;
+    }
+    return {
+      kind: "normalized-map" as const,
+      x: Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, (clientY - bounds.top) / bounds.height)),
+    };
+  }
+
+  function updateBlocking(key: keyof LocationWallBlocking, checked: boolean) {
+    if (tool === "wall" || tool === "door") {
+      setDraftBlocks((current) => ({ ...current, [key]: checked }));
+      return;
+    }
+    if (!selectedWallId) return;
+    setWalls((current) =>
+      current.map((wall) =>
+        wall.id === selectedWallId
+          ? { ...wall, blocks: { ...wall.blocks, [key]: checked } }
+          : wall,
+      ),
+    );
+  }
+
+  const activeBlocks = draft.length > 0 ? draftBlocks : selectedWall?.blocks;
+  const sightSegments = walls.flatMap((wall) =>
+    wall.blocks.sight && !(wall.kind === "door" && wall.doorState === "open")
+      ? wall.vertices.slice(1).map((end, index) => ({
+          start: wall.vertices[index],
+          end,
+        }))
+      : [],
+  );
+  const visiblePolygon =
+    visionPreview && observer
+      ? visibilityPolygon(observer, sightSegments)
+      : undefined;
+  const vertexWidth = fit.width ? (6 / (fit.width * zoom)) * 1000 : 6;
+  const vertexHeight = fit.height ? (6 / (fit.height * zoom)) * 1000 : 6;
+
+  return (
+    <dialog open className="modal modal-open z-50 p-0">
+      <div className="fixed inset-0 flex min-h-0 flex-col bg-base-100">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 bg-base-200 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+              Site map decorators
+            </p>
+            <h2 className="truncate text-xl font-semibold">
+              {record.name ?? "Untitled site"}
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="join">
+              {(
+                [
+                  ["wall", "Wall"],
+                  ["door", "Door"],
+                  ["invisible-wall", "Invisible wall"],
+                ] as const
+              ).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className={`btn btn-sm join-item ${tool === kind ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => beginWall(kind)}
+                >
+                  {label}
+                  <kbd className="kbd kbd-xs">
+                    {kind === "wall" ? "W" : kind === "door" ? "D" : "V"}
+                  </kbd>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={`btn btn-sm ${tool === "transition" ? "btn-secondary" : "btn-outline"}`}
+              onClick={() => {
+                if (draft.length) finishDraft();
+                setSelectedWallId(undefined);
+                setSelectedTransitionId(undefined);
+                setTool("transition");
+              }}
+            >
+              Transition <kbd className="kbd kbd-xs">T</kbd>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${tool === "observer" ? "btn-accent" : "btn-outline"}`}
+              onClick={() => {
+                if (draft.length) finishDraft();
+                if (tool === "observer") {
+                  setTool("select");
+                  setVisionPreview(false);
+                } else {
+                  setTool("observer");
+                  setVisionPreview(true);
+                }
+              }}
+            >
+              Observer <kbd className="kbd kbd-xs">O</kbd>
+            </button>
+            <select
+              aria-label="Map orientation"
+              className="select select-bordered select-sm"
+              value={orientation}
+              onChange={(event) => {
+                const next = event.currentTarget
+                  .value as LocationMapOrientation;
+                setOrientation(next);
+              }}
+            >
+              <option value="scenic">Scenic</option>
+              <option value="overhead">Overhead</option>
+              <option value="side-on">Side-on · gravity</option>
+            </select>
+            <div className="join">
+              <button
+                type="button"
+                className="btn btn-sm join-item"
+                aria-label="Zoom out"
+                disabled={zoom <= 1}
+                onClick={() => setZoom((value) => Math.max(1, value / 1.25))}
+              >
+                −
+              </button>
+              <span className="btn btn-sm join-item pointer-events-none min-w-20">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm join-item"
+                aria-label="Zoom in"
+                disabled={zoom >= 6}
+                onClick={() => setZoom((value) => Math.min(6, value * 1.25))}
+              >
+                +
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }}
+            >
+              Reset view
+            </button>
+          </div>
+        </header>
+
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div
+            ref={stageRef}
+            className={`relative min-h-80 overflow-hidden bg-black/90 ${
+              panning
+                ? "cursor-grabbing"
+                : tool !== "select"
+                  ? "cursor-crosshair"
+                  : "cursor-default"
+            }`}
+            onContextMenu={(event) => event.preventDefault()}
+            onWheel={(event) => {
+              event.preventDefault();
+              const multiplier = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+              setZoom((value) => Math.max(1, Math.min(6, value * multiplier)));
+            }}
+            onPointerDown={(event) => {
+              if (event.button === 2) {
+                event.preventDefault();
+                setHoverPosition(undefined);
+                setPanning(true);
+                dragRef.current = {
+                  pointerId: event.pointerId,
+                  x: event.clientX,
+                  y: event.clientY,
+                  panX: pan.x,
+                  panY: pan.y,
+                };
+                event.currentTarget.setPointerCapture(event.pointerId);
+                return;
+              }
+              if (
+                (tool === "wall" ||
+                  tool === "door" ||
+                  tool === "invisible-wall") &&
+                event.button === 0
+              ) {
+                event.preventDefault();
+                const position = pointerPosition(event.clientX, event.clientY);
+                if (position) setDraft((current) => [...current, position]);
+                return;
+              }
+              if (tool === "transition" && event.button === 0) {
+                const position = pointerPosition(event.clientX, event.clientY);
+                if (!position) return;
+                const transition: LocationTransition = {
+                  id: crypto.randomUUID(),
+                  position,
+                  radius: 0.025,
+                  destination: { locationId: record.id, position },
+                };
+                setTransitions((current) => [...current, transition]);
+                setSelectedTransitionId(transition.id);
+                setTool("select");
+                return;
+              }
+              if (tool === "observer" && event.button === 0) {
+                const position = pointerPosition(event.clientX, event.clientY);
+                if (!position) return;
+                setObserver(position);
+                observerDragRef.current = event.pointerId;
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              if (drag?.pointerId === event.pointerId) {
+                setPan({
+                  x: drag.panX + event.clientX - drag.x,
+                  y: drag.panY + event.clientY - drag.y,
+                });
+                return;
+              }
+              if (
+                tool === "wall" ||
+                tool === "door" ||
+                tool === "invisible-wall"
+              ) {
+                setHoverPosition(pointerPosition(event.clientX, event.clientY));
+              }
+              if (observerDragRef.current === event.pointerId) {
+                const position = pointerPosition(event.clientX, event.clientY);
+                if (position) setObserver(position);
+              }
+            }}
+            onPointerLeave={() => {
+              if (!dragRef.current) setHoverPosition(undefined);
+            }}
+            onPointerUp={(event) => {
+              if (observerDragRef.current === event.pointerId) {
+                observerDragRef.current = undefined;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+                return;
+              }
+              if (dragRef.current?.pointerId !== event.pointerId) return;
+              dragRef.current = undefined;
+              setPanning(false);
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={(event) => {
+              if (observerDragRef.current === event.pointerId) {
+                observerDragRef.current = undefined;
+                return;
+              }
+              if (dragRef.current?.pointerId !== event.pointerId) return;
+              dragRef.current = undefined;
+              setPanning(false);
+            }}
+          >
+            {resolvedUrl ? (
+              <div
+                ref={surfaceRef}
+                className="absolute touch-none select-none"
+                style={{
+                  left: fit.left,
+                  top: fit.top,
+                  width: fit.width,
+                  height: fit.height,
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: "center",
+                }}
+              >
+                <img
+                  src={resolvedUrl}
+                  alt={image.altText || `Map of ${record.name ?? "site"}`}
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  onLoad={(event) =>
+                    setImageSize({
+                      width: event.currentTarget.naturalWidth || 1600,
+                      height: event.currentTarget.naturalHeight || 900,
+                    })
+                  }
+                />
+                <svg
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  viewBox="0 0 1000 1000"
+                  preserveAspectRatio="none"
+                  aria-label={`${walls.length} defined walls`}
+                >
+                  {[
+                    ...walls,
+                    ...(draft.length
+                      ? [
+                          {
+                            id: "draft",
+                            kind: draftKind,
+                            vertices: draft,
+                            blocks: draftBlocks,
+                          },
+                        ]
+                      : []),
+                  ].map((wall) => {
+                    const selected =
+                      wall.id === "draft" || wall.id === selectedWallId;
+                    const points = wall.vertices
+                      .map((vertex) => `${vertex.x * 1000},${vertex.y * 1000}`)
+                      .join(" ");
+                    const wallColor =
+                      wall.kind === "door"
+                        ? "#38bdf8"
+                        : wall.kind === "invisible-wall"
+                          ? "#c084fc"
+                          : "#ef4444";
+                    return (
+                      <g key={wall.id}>
+                        <polyline
+                          points={points}
+                          fill="none"
+                          stroke={selected ? "#fbbf24" : wallColor}
+                          strokeWidth={selected ? 4 : 3}
+                          vectorEffect="non-scaling-stroke"
+                          strokeLinejoin="round"
+                          strokeDasharray={
+                            wall.kind === "door"
+                              ? "10 5"
+                              : wall.kind === "invisible-wall"
+                                ? "3 6"
+                                : undefined
+                          }
+                        />
+                        {wall.vertices.map((vertex, index) => (
+                          <rect
+                            key={`${wall.id}:${index}`}
+                            x={vertex.x * 1000 - vertexWidth / 2}
+                            y={vertex.y * 1000 - vertexHeight / 2}
+                            width={vertexWidth}
+                            height={vertexHeight}
+                            fill={selected ? "#fbbf24" : wallColor}
+                            stroke="black"
+                            strokeWidth={1}
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        ))}
+                      </g>
+                    );
+                  })}
+                  {draft.length > 0 && hoverPosition && (
+                    <line
+                      x1={draft.at(-1)!.x * 1000}
+                      y1={draft.at(-1)!.y * 1000}
+                      x2={hoverPosition.x * 1000}
+                      y2={hoverPosition.y * 1000}
+                      stroke="#fbbf24"
+                      strokeWidth={3}
+                      vectorEffect="non-scaling-stroke"
+                      strokeDasharray="8 5"
+                    />
+                  )}
+                  {transitions.map((transition, index) => (
+                    <g key={transition.id}>
+                      <circle
+                        cx={transition.position.x * 1000}
+                        cy={transition.position.y * 1000}
+                        r={transition.radius * 1000}
+                        fill="rgba(34,211,238,.18)"
+                        stroke={
+                          selectedTransitionId === transition.id
+                            ? "#fbbf24"
+                            : "#22d3ee"
+                        }
+                        strokeWidth={3}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <text
+                        x={transition.position.x * 1000}
+                        y={transition.position.y * 1000 + 5}
+                        textAnchor="middle"
+                        fill="white"
+                        fontSize={18}
+                        fontWeight="bold"
+                      >
+                        {index + 1}
+                      </text>
+                    </g>
+                  ))}
+                  {visiblePolygon && visiblePolygon.length > 2 && (
+                    <path
+                      d={`M 0 0 H 1000 V 1000 H 0 Z ${visiblePolygon
+                        .map(
+                          (point, index) =>
+                            `${index ? "L" : "M"} ${point.x * 1000} ${point.y * 1000}`,
+                        )
+                        .join(" ")} Z`}
+                      fill="rgba(0,0,0,.78)"
+                      fillRule="evenodd"
+                    />
+                  )}
+                  {observer && (
+                    <g>
+                      <circle
+                        cx={observer.x * 1000}
+                        cy={observer.y * 1000}
+                        r={12}
+                        fill="#facc15"
+                        stroke="#111827"
+                        strokeWidth={3}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <circle
+                        cx={observer.x * 1000}
+                        cy={observer.y * 1000}
+                        r={24}
+                        fill="none"
+                        stroke="#facc15"
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  )}
+                </svg>
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center p-6 text-center text-white/60">
+                Upload or generate a site map before drawing walls.
+              </div>
+            )}
+            <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-sm text-white shadow-xl">
+              {tool === "wall" || tool === "door" || tool === "invisible-wall"
+                ? `${draft.length} ${draft.length === 1 ? "vertex" : "vertices"} · Left-click to extend · Right-drag to pan · Scroll to zoom · Esc to finish`
+                : tool === "transition"
+                  ? "Click to place a transition trigger · T"
+                  : tool === "observer"
+                    ? "Click or drag the observer to preview line of sight · O to turn off"
+                    : "W wall · D door · V invisible wall · T transition · O observer"}
+            </div>
+          </div>
+
+          <aside className="min-h-0 overflow-y-auto border-l border-base-300 bg-base-200 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Walls</h3>
+                <p className="text-sm text-base-content/60">
+                  {walls.length} {walls.length === 1 ? "wall" : "walls"}
+                </p>
+              </div>
+              {(tool === "wall" ||
+                tool === "door" ||
+                tool === "invisible-wall" ||
+                draft.length > 0) && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => finishDraft()}
+                >
+                  Finish wall
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              {walls.map((wall, index) => (
+                <button
+                  key={wall.id}
+                  type="button"
+                  className={`card border text-left transition ${
+                    selectedWallId === wall.id
+                      ? "border-primary bg-primary/10"
+                      : "border-base-300 bg-base-100 hover:border-base-content/30"
+                  }`}
+                  onClick={() => {
+                    if (
+                      tool === "wall" ||
+                      tool === "door" ||
+                      tool === "invisible-wall"
+                    )
+                      finishDraft();
+                    setSelectedWallId(wall.id);
+                    setSelectedTransitionId(undefined);
+                    setTool("select");
+                  }}
+                >
+                  <span className="card-body gap-1 p-3">
+                    <span className="font-semibold">
+                      {wall.kind === "door"
+                        ? "Door"
+                        : wall.kind === "invisible-wall"
+                          ? "Invisible wall"
+                          : "Wall"}{" "}
+                      {index + 1}
+                    </span>
+                    <span className="text-sm text-base-content/60">
+                      {wall.vertices.length} vertices
+                    </span>
+                  </span>
+                </button>
+              ))}
+              {!walls.length && tool === "select" && (
+                <p className="rounded-box border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                  Choose the wall tool, then click across the map to place a
+                  connected wall.
+                </p>
+              )}
+            </div>
+
+            {activeBlocks &&
+              (draft.length
+                ? draftKind !== "invisible-wall"
+                : selectedWall?.kind !== "invisible-wall") && (
+                <fieldset className="fieldset mt-5 rounded-box border border-base-300 bg-base-100 p-3">
+                  <legend className="fieldset-legend px-1">
+                    This wall blocks
+                  </legend>
+                  {(
+                    [
+                      ["sight", "Line of sight"],
+                      ["sound", "Sound"],
+                      ["movement", "Movement"],
+                      ["environmentalEffects", "Environmental effects"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="label justify-start gap-3 py-2">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-primary checkbox-sm"
+                        checked={activeBlocks[key]}
+                        onChange={(event) =>
+                          updateBlocking(key, event.currentTarget.checked)
+                        }
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+
+            {selectedWall && (
+              <div className="mt-4 grid gap-2">
+                {selectedWall.kind === "door" && (
+                  <label className="label justify-start gap-3 rounded-box border border-base-300 bg-base-100 p-3">
+                    <input
+                      type="checkbox"
+                      className="toggle toggle-info toggle-sm"
+                      checked={selectedWall.doorState === "open"}
+                      onChange={(event) => {
+                        const doorState = event.currentTarget.checked
+                          ? "open"
+                          : "closed";
+                        setWalls((current) =>
+                          current.map((wall) =>
+                            wall.id === selectedWall.id
+                              ? {
+                                  ...wall,
+                                  doorState,
+                                }
+                              : wall,
+                          ),
+                        );
+                      }}
+                    />
+                    <span>Door starts open</span>
+                  </label>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-error btn-outline w-full"
+                  onClick={() => {
+                    setWalls((current) =>
+                      current.filter((wall) => wall.id !== selectedWall.id),
+                    );
+                    setSelectedWallId(undefined);
+                  }}
+                >
+                  Delete selected boundary
+                </button>
+              </div>
+            )}
+
+            {walls.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-error btn-ghost mt-3 w-full"
+                onClick={() => {
+                  setWalls([]);
+                  setDraft([]);
+                  setSelectedWallId(undefined);
+                  setTool("select");
+                }}
+              >
+                Discard all walls and doors
+              </button>
+            )}
+
+            <div className="divider">Transitions</div>
+            <div className="grid gap-2">
+              {transitions.map((transition, index) => {
+                const destination = locations.find(
+                  (location) =>
+                    location.id === transition.destination.locationId,
+                );
+                return (
+                  <button
+                    key={transition.id}
+                    type="button"
+                    className={`card border text-left ${selectedTransitionId === transition.id ? "border-secondary bg-secondary/10" : "border-base-300 bg-base-100"}`}
+                    onClick={() => {
+                      setSelectedTransitionId(transition.id);
+                      setSelectedWallId(undefined);
+                      setTool("select");
+                    }}
+                  >
+                    <span className="card-body gap-1 p-3">
+                      <span className="font-semibold">
+                        Transition {index + 1}
+                      </span>
+                      <span className="text-sm text-base-content/60">
+                        To {destination?.name ?? "another map"}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {!transitions.length && (
+                <p className="text-sm text-base-content/60">
+                  Place a trigger point to move intersecting tokens to another
+                  map position.
+                </p>
+              )}
+            </div>
+
+            {selectedTransition && (
+              <fieldset className="fieldset mt-4 rounded-box border border-base-300 bg-base-100 p-3">
+                <legend className="fieldset-legend">
+                  Transition destination
+                </legend>
+                <label className="fieldset-label">Map</label>
+                <select
+                  className="select select-bordered w-full"
+                  value={selectedTransition.destination.locationId}
+                  onChange={(event) => {
+                    const locationId = event.currentTarget.value;
+                    setTransitions((current) =>
+                      current.map((transition) =>
+                        transition.id === selectedTransition.id
+                          ? {
+                              ...transition,
+                              destination: {
+                                ...transition.destination,
+                                locationId,
+                              },
+                            }
+                          : transition,
+                      ),
+                    );
+                  }}
+                >
+                  {locations
+                    .filter(
+                      (location) =>
+                        stringAt(location.data, ["kind"]) === "site",
+                    )
+                    .map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name ?? "Untitled site"}
+                      </option>
+                    ))}
+                </select>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(["x", "y"] as const).map((axis) => (
+                    <label key={axis} className="fieldset">
+                      <span className="fieldset-label">
+                        Destination {axis.toUpperCase()} (%)
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className="input input-bordered w-full"
+                        value={Math.round(
+                          selectedTransition.destination.position[axis] * 100,
+                        )}
+                        onChange={(event) => {
+                          const value = Math.max(
+                            0,
+                            Math.min(100, Number(event.currentTarget.value)),
+                          );
+                          setTransitions((current) =>
+                            current.map((transition) =>
+                              transition.id === selectedTransition.id
+                                ? {
+                                    ...transition,
+                                    destination: {
+                                      ...transition.destination,
+                                      position: {
+                                        ...transition.destination.position,
+                                        [axis]: value / 100,
+                                      },
+                                    },
+                                  }
+                                : transition,
+                            ),
+                          );
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label className="fieldset mt-2">
+                  <span className="fieldset-label">Trigger radius (%)</span>
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="25"
+                    step="0.5"
+                    className="input input-bordered w-full"
+                    value={selectedTransition.radius * 100}
+                    onChange={(event) => {
+                      const radius = Math.max(
+                        0.005,
+                        Math.min(0.25, Number(event.currentTarget.value) / 100),
+                      );
+                      setTransitions((current) =>
+                        current.map((transition) =>
+                          transition.id === selectedTransition.id
+                            ? { ...transition, radius }
+                            : transition,
+                        ),
+                      );
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-error btn-outline mt-3"
+                  onClick={() => {
+                    setTransitions((current) =>
+                      current.filter(
+                        (transition) => transition.id !== selectedTransition.id,
+                      ),
+                    );
+                    setSelectedTransitionId(undefined);
+                  }}
+                >
+                  Delete transition
+                </button>
+              </fieldset>
+            )}
+
+            <div className="divider">Line of sight</div>
+            <label className="label justify-start gap-3">
+              <input
+                type="checkbox"
+                className="toggle toggle-accent"
+                checked={visionPreview}
+                onChange={(event) =>
+                  setVisionPreview(event.currentTarget.checked)
+                }
+              />
+              <span>Reveal observer visibility</span>
+            </label>
+            <p className="mt-2 text-sm text-base-content/60">
+              Place and drag the observer. Closed doors and sight-blocking walls
+              hide the map. The observer stays exactly where you place it and is
+              never affected by token gravity.
+            </p>
+          </aside>
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 bg-base-200 px-4 py-3 sm:px-6">
+          <p className="text-sm text-base-content/60">
+            Decorator coordinates remain aligned when the map is resized.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() =>
+                onSave({
+                  walls: draft.length > 0 ? finishDraft() : walls,
+                  transitions,
+                  orientation,
+                })
+              }
+            >
+              Save decorators
+            </button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+  );
+}
+
+function SiteWallsPanel({
+  record,
+  onEdit,
+}: {
+  record: DomainRecord;
+  onEdit: () => void;
+}) {
+  const walls = wallsOf(record);
+  const transitions = transitionsOf(record);
+  const orientation = mapOrientationOf(record);
+  const vertices = walls.reduce(
+    (total, wall) => total + wall.vertices.length,
+    0,
+  );
+  return (
+    <section className="card border border-base-300 bg-base-200 shadow-xl">
+      <div className="card-body flex-row flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+            Runtime map geometry
+          </p>
+          <h2 className="card-title mt-1">Map decorators</h2>
+          <p className="mt-1 text-sm text-base-content/60">
+            {walls.length || transitions.length
+              ? `${orientation} · ${walls.length} ${walls.length === 1 ? "boundary" : "boundaries"} across ${vertices} vertices · ${transitions.length} ${transitions.length === 1 ? "transition" : "transitions"}`
+              : `${orientation} · Add walls, doors, transitions, gravity, and visibility preview.`}
+          </p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={onEdit}>
+          {walls.length || transitions.length
+            ? "Edit decorators"
+            : "Add decorators"}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -981,10 +2373,152 @@ function JsonExtensionField({
   );
 }
 
+function ParentMapPinDialog({
+  parent,
+  existingChildren,
+  label,
+  value,
+  onCancel,
+  onConfirm,
+}: {
+  parent: DomainRecord;
+  existingChildren: DomainRecord[];
+  label: string;
+  value?: MapPinPosition;
+  onCancel: () => void;
+  onConfirm: (position: MapPinPosition) => void;
+}) {
+  const image = imageData(parent);
+  const [resolvedUrl, setResolvedUrl] = useState(image.uri);
+  const [position, setPosition] = useState<MapPinPosition | undefined>(value);
+  const existingPins = existingChildren.flatMap((child) => {
+    const childPosition = mapPositionOf(child);
+    return childPosition
+      ? [
+          {
+            id: child.id,
+            label: child.name ?? "Untitled location",
+            position: childPosition,
+          },
+        ]
+      : [];
+  });
+
+  useEffect(() => {
+    let active = true;
+    if (image.assetId) {
+      void getMediaDownloadUrl(image.assetId).then(
+        ({ url }) => {
+          if (active) setResolvedUrl(url);
+        },
+        () => {
+          if (active) setResolvedUrl(image.uri);
+        },
+      );
+    }
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      active = false;
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [image.assetId, image.uri, onCancel]);
+
+  return (
+    <dialog open className="modal modal-open z-50 p-0">
+      <div className="fixed inset-0 flex flex-col bg-base-100">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 bg-base-200 px-5 py-4 sm:px-8">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+              Place child location
+            </p>
+            <h2 className="mt-1 text-xl font-semibold">
+              {parent.name ?? "Parent location"} map
+            </h2>
+            <p className="mt-1 text-sm text-base-content/60">
+              Click the map to position {label || "the new location"}. Confirm
+              when the pin is in the right place.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-circle btn-ghost"
+            aria-label="Cancel map placement"
+            onClick={onCancel}
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 bg-black/80 p-3 sm:p-6">
+          {resolvedUrl ? (
+            <ContainedMap
+              src={resolvedUrl}
+              alt={image.altText || `Map of ${parent.name ?? "location"}`}
+              pins={
+                position
+                  ? [
+                      ...existingPins,
+                      {
+                        id: "draft-location",
+                        label: label || "New location",
+                        position,
+                      },
+                    ]
+                  : existingPins
+              }
+              onMapClick={setPosition}
+              mapActionLabel="Place location pin"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="max-w-md rounded-box border border-warning/30 bg-base-200 p-6 text-center">
+                <h3 className="font-semibold">Parent map unavailable</h3>
+                <p className="mt-2 text-sm text-base-content/60">
+                  Upload or generate a map for the parent location before
+                  placing a child pin.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-base-300 bg-base-200 px-5 py-4 sm:px-8">
+          <p className="text-sm text-base-content/60">
+            {position
+              ? `Pin at ${Math.round(position.x * 100)}% across, ${Math.round(position.y * 100)}% down`
+              : "Choose a point on the map to continue."}
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!position}
+              onClick={() => {
+                if (position) onConfirm(position);
+              }}
+            >
+              Confirm pin
+            </button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+  );
+}
+
 function childLocationData(
   parent: DomainRecord,
   name: string,
   kind: string,
+  mapPosition?: MapPinPosition,
   physicalEnvironment?: JsonObject,
 ) {
   const now = new Date().toISOString();
@@ -1000,6 +2534,7 @@ function childLocationData(
     placement: {
       kind: "within-parent",
       parentLocationId: parent.id,
+      ...(mapPosition ? { mapPosition } : {}),
       border: {
         coordinateSpace: { kind: "custom", key: "aow:unplaced" },
         geometry: {
@@ -1032,6 +2567,7 @@ function childLocationData(
       width: 1600,
       height: 900,
       mimeType: "image/webp",
+      orientation: kind === "site" ? "overhead" : "scenic",
     },
     profile: {
       terrain: {
@@ -1071,11 +2607,13 @@ function dimensionsFor(file: File): Promise<{ width: number; height: number }> {
 
 function LocationCreator({
   parent,
+  existingChildren,
   onCancel,
   onCreated,
   onError,
 }: {
   parent: DomainRecord;
+  existingChildren: DomainRecord[];
   onCancel: () => void;
   onCreated: (record: DomainRecord) => void;
   onError: (message: string) => void;
@@ -1087,6 +2625,8 @@ function LocationCreator({
   const [environmentKind, setEnvironmentKind] = useState("unknown");
   const [understanding, setUnderstanding] = useState("unknown");
   const [observedProperty, setObservedProperty] = useState("");
+  const [mapPosition, setMapPosition] = useState<MapPinPosition>();
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [working, setWorking] = useState(false);
 
   async function createWithAi(event: FormEvent) {
@@ -1095,7 +2635,11 @@ function LocationCreator({
     setWorking(true);
     onError("");
     try {
-      const result = await createLocationWithAi(parent.id, prompt.trim());
+      const result = await createLocationWithAi(
+        parent.id,
+        prompt.trim(),
+        mapPosition,
+      );
       onCreated(result.location);
     } catch (caught) {
       onError(
@@ -1120,6 +2664,7 @@ function LocationCreator({
           parent,
           name.trim(),
           kind,
+          mapPosition,
           kind === "plane"
             ? {
                 kind: environmentKind,
@@ -1177,6 +2722,31 @@ function LocationCreator({
           Create manually
         </button>
       </div>
+
+      <section className="card border border-base-300 bg-base-200 shadow-sm">
+        <div className="card-body flex-row flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-2xl text-primary">
+              ●
+            </span>
+            <div>
+              <h2 className="font-semibold">Position on parent map</h2>
+              <p className="mt-1 text-sm text-base-content/60">
+                {mapPosition
+                  ? `Pinned ${Math.round(mapPosition.x * 100)}% across and ${Math.round(mapPosition.y * 100)}% down on ${parent.name ?? "the parent"}.`
+                  : `Choose where this location appears on ${parent.name ?? "the parent"}.`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={`btn ${mapPosition ? "btn-outline" : "btn-primary"}`}
+            onClick={() => setPinDialogOpen(true)}
+          >
+            {mapPosition ? "Move map pin" : "Place on parent map"}
+          </button>
+        </div>
+      </section>
 
       {mode === "ai" ? (
         <form
@@ -1309,6 +2879,19 @@ function LocationCreator({
           </div>
         </form>
       )}
+      {pinDialogOpen && (
+        <ParentMapPinDialog
+          parent={parent}
+          existingChildren={existingChildren}
+          label={name.trim() || "New location"}
+          value={mapPosition}
+          onCancel={() => setPinDialogOpen(false)}
+          onConfirm={(position) => {
+            setMapPosition(position);
+            setPinDialogOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1319,6 +2902,8 @@ export function WorldEditor({ id }: { id: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
   const [addParentId, setAddParentId] = useState<string>();
+  const [placingLocationId, setPlacingLocationId] = useState<string>();
+  const [wallEditorLocationId, setWallEditorLocationId] = useState<string>();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const recordsRef = useRef<DomainRecord[]>([]);
@@ -1435,6 +3020,7 @@ export function WorldEditor({ id }: { id: string }) {
   function selectLocation(locationId: string) {
     setSelectedId(locationId);
     setAddParentId(undefined);
+    setWallEditorLocationId(undefined);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1503,6 +3089,18 @@ export function WorldEditor({ id }: { id: string }) {
   const root = records.find((record) => record.id === id);
   const selected = records.find((record) => record.id === selectedId) ?? root;
   const addParent = records.find((record) => record.id === addParentId);
+  const placingLocation = records.find(
+    (record) => record.id === placingLocationId,
+  );
+  const wallEditorLocation = records.find(
+    (record) => record.id === wallEditorLocationId,
+  );
+  const placementParentId = placingLocation
+    ? parentIdOf(placingLocation)
+    : undefined;
+  const placementParent = placementParentId
+    ? records.find((record) => record.id === placementParentId)
+    : undefined;
   const activePath = addParent
     ? locationPath(addParent, records)
     : selected
@@ -1571,6 +3169,9 @@ export function WorldEditor({ id }: { id: string }) {
             <LocationCreator
               key={addParent.id}
               parent={addParent}
+              existingChildren={records.filter(
+                (candidate) => parentIdOf(candidate) === addParent.id,
+              )}
               onCancel={() => setAddParentId(undefined)}
               onCreated={finishCreating}
               onError={setMessage}
@@ -1596,31 +3197,58 @@ export function WorldEditor({ id }: { id: string }) {
                     />
                   </div>
                 </div>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Location type</legend>
-                  <select
-                    className="select select-bordered w-full"
-                    value={stringAt(selected.data, ["kind"])}
-                    disabled={selected.id === id}
-                    onChange={(event) => patch(["kind"], event.target.value)}
-                  >
-                    {selected.id === id && <option value="world">World</option>}
-                    {LOCATION_KINDS.map((kind) => (
-                      <option key={kind} value={kind}>
-                        {kind.charAt(0).toUpperCase() + kind.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </fieldset>
+                <div className="grid gap-3">
+                  <fieldset className="fieldset">
+                    <legend className="fieldset-legend">Location type</legend>
+                    <select
+                      className="select select-bordered w-full"
+                      value={stringAt(selected.data, ["kind"])}
+                      disabled={selected.id === id}
+                      onChange={(event) => patch(["kind"], event.target.value)}
+                    >
+                      {selected.id === id && (
+                        <option value="world">World</option>
+                      )}
+                      {LOCATION_KINDS.map((kind) => (
+                        <option key={kind} value={kind}>
+                          {kind.charAt(0).toUpperCase() + kind.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  {selected.id !== id && parentIdOf(selected) && (
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${mapPositionOf(selected) ? "btn-outline" : "btn-primary"}`}
+                      onClick={() => setPlacingLocationId(selected.id)}
+                    >
+                      <span aria-hidden>●</span>
+                      {mapPositionOf(selected)
+                        ? "Move map pin"
+                        : "Place map pin"}
+                    </button>
+                  )}
+                </div>
               </header>
 
               <LocationMap
                 key={`${selected.id}:${imageData(selected).assetId}`}
                 record={selected}
+                childLocations={records.filter(
+                  (candidate) => parentIdOf(candidate) === selected.id,
+                )}
+                onSelectChild={selectLocation}
                 onReplace={replaceMap}
                 onGenerate={createMap}
                 onAltText={(value) => patch(["image", "altText"], value)}
               />
+
+              {stringAt(selected.data, ["kind"]) === "site" && (
+                <SiteWallsPanel
+                  record={selected}
+                  onEdit={() => setWallEditorLocationId(selected.id)}
+                />
+              )}
 
               <PhysicalEnvironmentEditor record={selected} patch={patch} />
 
@@ -1680,6 +3308,50 @@ export function WorldEditor({ id }: { id: string }) {
           />
         </dialog>
       )}
+      {placingLocation && placementParent && (
+        <ParentMapPinDialog
+          parent={placementParent}
+          existingChildren={records.filter(
+            (candidate) =>
+              parentIdOf(candidate) === placementParent.id &&
+              candidate.id !== placingLocation.id,
+          )}
+          label={placingLocation.name ?? "Untitled location"}
+          value={mapPositionOf(placingLocation)}
+          onCancel={() => setPlacingLocationId(undefined)}
+          onConfirm={(position) => {
+            updateLocation(placingLocation.id, (data) =>
+              setAt(data, ["placement", "mapPosition"], position),
+            );
+            setPlacingLocationId(undefined);
+          }}
+        />
+      )}
+      {wallEditorLocation &&
+        stringAt(wallEditorLocation.data, ["kind"]) === "site" && (
+          <SiteWallEditor
+            key={wallEditorLocation.id}
+            record={wallEditorLocation}
+            locations={records}
+            onCancel={() => setWallEditorLocationId(undefined)}
+            onSave={({ walls, transitions, orientation }) => {
+              updateLocation(wallEditorLocation.id, (data) => {
+                const withWalls = setAt(data, ["walls"], walls);
+                const withTransitions = setAt(
+                  withWalls,
+                  ["transitions"],
+                  transitions,
+                );
+                return setAt(
+                  withTransitions,
+                  ["image", "orientation"],
+                  orientation,
+                );
+              });
+              setWallEditorLocationId(undefined);
+            }}
+          />
+        )}
     </main>
   );
 }

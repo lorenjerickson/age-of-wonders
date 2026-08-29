@@ -22,17 +22,14 @@ export class GeneratedMapService {
       typeof location.name === "string" ? location.name : "Untitled location";
     const description =
       typeof location.description === "string" ? location.description : "";
-    const extensions = isObject(location.extensions)
-      ? location.extensions
-      : {};
+    const extensions = isObject(location.extensions) ? location.extensions : {};
     const brief = isObject(extensions["aow:map-brief"])
       ? extensions["aow:map-brief"]
       : {};
-    const authoredPrompt = [
-      brief.imageGenerationPrompt,
-      brief.imagePrompt,
-      brief.prompt,
-    ].find((value): value is string => typeof value === "string") ?? "";
+    const authoredPrompt =
+      [brief.imageGenerationPrompt, brief.imagePrompt, brief.prompt].find(
+        (value): value is string => typeof value === "string",
+      ) ?? "";
     const prompt = [
       `Create a richly detailed cartographic map for the role-playing location "${name}".`,
       description,
@@ -62,6 +59,14 @@ export class GeneratedMapService {
       width: generated.width,
       height: generated.height,
       mimeType: generated.mimeType,
+      orientation:
+        previous.orientation === "scenic" ||
+        previous.orientation === "overhead" ||
+        previous.orientation === "side-on"
+          ? previous.orientation
+          : location.kind === "site"
+            ? "overhead"
+            : "scenic",
     };
     delete nextImage.uri;
     return {

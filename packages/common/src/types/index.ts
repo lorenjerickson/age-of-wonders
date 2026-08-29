@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./campaign";
 export * from "./character";
 export * from "./combat";
 export * from "./creatures";

@@ -56,7 +56,7 @@ export interface PhysicalEnvironment {
   readonly provenance?: string;
 }
 
-/** A gameplay illustration or strategic map, not encounter-grid geometry. */
+/** A location image whose orientation declares its strategic or encounter-map use. */
 export interface LocationImage {
   readonly assetId: MediaAssetId;
   readonly uri?: string;
@@ -64,8 +64,12 @@ export interface LocationImage {
   readonly width: number;
   readonly height: number;
   readonly mimeType: `image/${string}`;
+  /** How this image is used by the encounter map renderer. */
+  readonly orientation: LocationMapOrientation;
   readonly focalPoint?: NormalizedMapCoordinate;
 }
+
+export type LocationMapOrientation = "scenic" | "overhead" | "side-on";
 
 export interface NormalizedMapCoordinate {
   readonly kind: "normalized-map";
@@ -73,6 +77,50 @@ export interface NormalizedMapCoordinate {
   readonly x: number;
   /** Vertical position in the inclusive range 0..1. */
   readonly y: number;
+}
+
+export interface LocationWallBlocking {
+  readonly sight: boolean;
+  readonly sound: boolean;
+  readonly movement: boolean;
+  readonly environmentalEffects: boolean;
+}
+
+export type LocationWallKind = "wall" | "door" | "invisible-wall";
+
+/**
+ * An encounter-scale wall drawn over a site's map. Vertices are normalized to
+ * the location image so the geometry remains stable across display sizes.
+ */
+export interface LocationWall {
+  readonly id: string;
+  /** Missing on legacy records and interpreted as `wall` during migration/read. */
+  readonly kind: LocationWallKind;
+  readonly vertices: readonly [
+    NormalizedMapCoordinate,
+    NormalizedMapCoordinate,
+    ...NormalizedMapCoordinate[],
+  ];
+  readonly blocks: LocationWallBlocking;
+  /** Only meaningful for doors. Open doors do not block any channel. */
+  readonly doorState?: "open" | "closed";
+}
+
+export interface LocationTransitionDestination {
+  readonly locationId: LocationId;
+  readonly position: NormalizedMapCoordinate;
+}
+
+/**
+ * A circular encounter-map trigger. A token intersecting the trigger is moved
+ * to the destination position, which may be on this or another location map.
+ */
+export interface LocationTransition {
+  readonly id: string;
+  readonly position: NormalizedMapCoordinate;
+  /** Radius as a fraction of the map's smaller displayed dimension. */
+  readonly radius: number;
+  readonly destination: LocationTransitionDestination;
 }
 
 export interface GeographicCoordinate {
@@ -129,6 +177,8 @@ export type LocationPlacement<
   | {
       readonly kind: "within-parent";
       readonly parentLocationId: LocationId;
+      /** Pin position on the parent location's strategic map. */
+      readonly mapPosition?: NormalizedMapCoordinate;
       readonly border: LocationBorder<Coordinate>;
     };
 
@@ -215,6 +265,10 @@ export interface LocationState<
   readonly placement: LocationPlacement<Coordinate>;
   readonly image: LocationImage;
   readonly profile: Profile;
+  /** Encounter-scale collision boundaries; only meaningful when kind is `site`. */
+  readonly walls?: readonly LocationWall[];
+  /** Encounter-scale token transfer triggers; only meaningful when kind is `site`. */
+  readonly transitions?: readonly LocationTransition[];
   /** Encounter-scale scenes contextually situated in this strategic location. */
   readonly sceneIds: readonly SceneId[];
   readonly pointOfInterestIds?: readonly EntityId[];

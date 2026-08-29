@@ -127,19 +127,37 @@ export function createWorldWithAi(prompt: string) {
   });
 }
 
+export function createCampaignWithAi(worldId: string, prompt: string) {
+  return request<{ campaign: DomainRecord }>(
+    `/ai/worlds/${encodeURIComponent(worldId)}/campaigns`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    },
+  );
+}
+
 export function deleteWorld(id: string) {
   return request<void>(`/worlds/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }
 
-export function createLocationWithAi(parentId: string, prompt: string) {
+export function createLocationWithAi(
+  parentId: string,
+  prompt: string,
+  mapPosition?: { x: number; y: number },
+) {
   return request<{ location: DomainRecord }>(
     `/ai/locations/${encodeURIComponent(parentId)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        ...(mapPosition ? { mapX: mapPosition.x, mapY: mapPosition.y } : {}),
+      }),
     },
   );
 }

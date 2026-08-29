@@ -14,6 +14,7 @@ import { ArmorGenerationService } from "./armor-generation.service";
 import { ItemGenerationService } from "./item-generation.service";
 import { GeneratedItemImageService } from "./generated-item-image.service";
 import { WeaponGenerationService } from "./weapon-generation.service";
+import { CampaignGenerationService } from "./campaign-generation.service";
 
 @Module({
   imports: [DomainModule, MediaModule],
@@ -31,6 +32,7 @@ import { WeaponGenerationService } from "./weapon-generation.service";
     LocationGenerationService,
     ContentPipeline,
     WorldGenerationService,
+    CampaignGenerationService,
   ],
   exports: [OpenAiService],
 })

@@ -146,7 +146,9 @@ players.
   typography direction, desired dimensions, aspect ratio, and a concise image-generation prompt.
 - The required `image.assetId` should be a new UUID reserved for the future map asset. Omit
   `image.uri` until an actual uploaded asset URL is supplied by the surrounding system. Set useful
-  intended width, height, MIME type, and alt text.
+  intended width, height, MIME type, alt text, and orientation. Use `overhead` for a conventional
+  encounter site, `side-on` only for a profile/platform-style site, and `scenic` for illustrations
+  and strategic maps.
 - If the surrounding context explicitly provides a successfully uploaded asset and URL, use its real
   asset ID, URL, dimensions, and MIME type instead of a reserved asset.
 

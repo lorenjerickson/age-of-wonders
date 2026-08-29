@@ -16,6 +16,8 @@ import {
   CreatureListPage,
 } from "./Creatures";
 import { ItemCreatePage, ItemEditorPage, ItemListPage } from "./Items";
+import { CampaignCreatePage, CampaignEditorPage } from "./Campaigns";
+import { SessionCanvasHarness } from "./SessionCanvasHarness";
 
 const TOP_NAVIGATION = [
   { label: "Systems", href: "/systems" },
@@ -50,10 +52,10 @@ function aiActivitiesFor(section: string | undefined, hasRecord: boolean) {
     ],
     campaigns: [
       {
-        title: hasRecord ? "Plan the next arc" : "Pitch a campaign",
+        title: hasRecord ? "Refine the foundation" : "Pitch a campaign",
         description: hasRecord
-          ? "Turn current campaign pressures into a focused sequence of story beats."
-          : "Develop a campaign premise from a world, conflict, and player goals.",
+          ? "Strengthen the premise, introduction, placements, and discoveries without scripting play."
+          : "Develop a campaign premise from a world, conflict, and desired atmosphere.",
       },
       {
         title: "Create a session brief",
@@ -160,8 +162,24 @@ function aiActivitiesFor(section: string | undefined, hasRecord: boolean) {
 function NavigationIcon({
   item,
 }: {
-  item: "Locations" | "Creatures" | "Items";
+  item: "Definition" | "Locations" | "Creatures" | "Items";
 }) {
+  if (item === "Definition") {
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        className="h-5 w-5"
+      >
+        <path d="M6 3.5h9l3 3V20.5H6v-17Z" />
+        <path d="M15 3.5v3h3M9 11h6M9 15h6" />
+      </svg>
+    );
+  }
+
   if (item === "Locations") {
     return (
       <svg
@@ -209,7 +227,7 @@ function NavigationIcon({
 }
 
 type EditorSection = "worlds" | "campaigns" | "sessions";
-type EditorNavigationLabel = "Locations" | "Creatures" | "Items";
+type EditorNavigationLabel = "Definition" | "Locations" | "Creatures" | "Items";
 
 interface EditorLayoutRoute {
   section: EditorSection;
@@ -226,8 +244,23 @@ function editorLayoutRouteFor(
 ): EditorLayoutRoute | undefined {
   const [section, encodedId, nestedSection] = segments;
 
-  // Campaign and session editors can opt into this layout when their nested
-  // workspaces are introduced. List and other top-level routes stay full-width.
+  if (section === "campaigns" && encodedId && encodedId !== "new") {
+    const campaignHref = `/campaigns/${encodeURIComponent(
+      decodeURIComponent(encodedId),
+    )}`;
+    return {
+      section,
+      title: "Campaign studio",
+      activeNavigation:
+        nestedSection === "locations" ? "locations" : "definition",
+      navigation: [
+        { label: "Definition", href: campaignHref },
+        { label: "Locations", href: `${campaignHref}/locations` },
+      ],
+    };
+  }
+
+  // List and other top-level routes stay full-width.
   if (section !== "worlds" || !encodedId) return undefined;
 
   const worldHref = `/worlds/${encodeURIComponent(
@@ -739,12 +772,19 @@ function ResourceListPage({
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
         <Header />
-        <div className="py-12">
-          <p className="text-sm text-amber-300">Library</p>
-          <h1 className="mt-3 text-5xl font-semibold tracking-tight">
-            {label}
-          </h1>
-          <p className="mt-3 text-zinc-500">Most recently edited first.</p>
+        <div className="flex flex-wrap items-end justify-between gap-5 py-12">
+          <div>
+            <p className="text-sm text-amber-300">Library</p>
+            <h1 className="mt-3 text-5xl font-semibold tracking-tight">
+              {label}
+            </h1>
+            <p className="mt-3 text-zinc-500">Most recently edited first.</p>
+          </div>
+          {resource === "campaigns" && (
+            <a href="/campaigns/new" className="btn btn-primary">
+              Create campaign
+            </a>
+          )}
         </div>
         {error && (
           <p role="alert" className="alert alert-error">
@@ -769,6 +809,13 @@ function ResourceListPage({
               <span className="text-amber-300">Edit →</span>
             </a>
           ))}
+          {result && result.items.length === 0 && (
+            <div className="rounded-box border border-dashed border-base-300 bg-base-200/50 px-6 py-14 text-center text-base-content/60">
+              {resource === "campaigns"
+                ? "No campaigns yet. Create one from an existing world."
+                : `No ${label.toLowerCase()} yet.`}
+            </div>
+          )}
         </div>
       </div>
     </main>
@@ -947,16 +994,15 @@ function AppContent() {
   if (segments[0] === "worlds" && segments[1]) {
     return <WorldEditor id={decodeURIComponent(segments[1])} />;
   }
-  if (segments[0] === "campaigns" && segments[1]) {
+  if (segments[0] === "campaigns" && segments[1] === "new")
+    return <CampaignCreatePage />;
+  if (segments[0] === "campaigns" && segments[1])
     return (
-      <ResourceEditorPage
-        resource="campaigns"
+      <CampaignEditorPage
         id={decodeURIComponent(segments[1])}
-        label="Campaigns"
-        basePath="campaigns"
+        view={segments[2] === "locations" ? "locations" : "definition"}
       />
     );
-  }
   if (segments[0] === "locations" && segments[1]) {
     return (
       <ResourceEditorPage
@@ -1042,6 +1088,9 @@ function AppContent() {
 
 export function App() {
   const segments = window.location.pathname.split("/").filter(Boolean);
+  if (segments.length === 1 && segments[0] === "session-canvas-lab") {
+    return <SessionCanvasHarness />;
+  }
   const editorRoute = editorLayoutRouteFor(segments);
 
   return (

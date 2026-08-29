@@ -33,6 +33,19 @@ describe("domain resource registry", () => {
     });
   });
 
+  it("extracts campaign definition metadata", () => {
+    expect(
+      readResourceMetadata("campaigns", {
+        identity: { id: "campaign-1" },
+        name: "The Hound of Greybridge",
+        worldId: "greybridge",
+      }),
+    ).toEqual({
+      id: "campaign-1",
+      name: "The Hound of Greybridge",
+    });
+  });
+
   it("rejects a state without its canonical ID", () => {
     expect(() =>
       readResourceMetadata("characters", {

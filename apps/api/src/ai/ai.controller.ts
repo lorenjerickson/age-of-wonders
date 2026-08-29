@@ -17,6 +17,8 @@ import { CreateArmorSetDto } from "./dto/create-armor-set.dto";
 import { CreateItemDto } from "./dto/create-item.dto";
 import { ItemGenerationService } from "./item-generation.service";
 import { WeaponGenerationService } from "./weapon-generation.service";
+import { CampaignGenerationService } from "./campaign-generation.service";
+import { CreateCampaignDto } from "./dto/create-campaign.dto";
 
 @ApiTags("ai")
 @Controller("ai")
@@ -30,8 +32,38 @@ export class AiController {
     private readonly armorGeneration: ArmorGenerationService,
     private readonly itemGeneration: ItemGenerationService,
     private readonly weaponGeneration: WeaponGenerationService,
+    private readonly campaignGeneration: CampaignGenerationService,
     private readonly prisma: PrismaService,
   ) {}
+
+  @Post("worlds/:worldId/campaigns")
+  @ApiOperation({
+    summary:
+      "Create a campaign foundation using create-campaign.md and world context",
+  })
+  @ApiParam({ name: "worldId", description: "Root LocationState ID" })
+  async createCampaign(
+    @Param("worldId") worldId: string,
+    @Body() dto: CreateCampaignDto,
+  ) {
+    const result = await this.campaignGeneration.create(worldId, dto.prompt);
+    const generation = await this.prisma.generation.create({
+      data: {
+        kind: "create-campaign",
+        prompt: result.combinedPrompt,
+        output: result.output,
+        model: this.openAi.model,
+        responseId: result.responseId,
+      },
+    });
+    return {
+      campaign: result.campaign,
+      output: result.output,
+      responseId: result.responseId,
+      generationId: generation.id,
+      model: this.openAi.model,
+    };
+  }
 
   @Post("worlds/:worldId/weapons")
   @ApiOperation({
@@ -222,7 +254,13 @@ export class AiController {
     @Param("parentId") parentId: string,
     @Body() dto: CreateLocationDto,
   ) {
-    const result = await this.locationGeneration.create(parentId, dto.prompt);
+    const result = await this.locationGeneration.create(
+      parentId,
+      dto.prompt,
+      dto.mapX !== undefined && dto.mapY !== undefined
+        ? { kind: "normalized-map", x: dto.mapX, y: dto.mapY }
+        : undefined,
+    );
     const generation = await this.prisma.generation.create({
       data: {
         kind: "create-location",

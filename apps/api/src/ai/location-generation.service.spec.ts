@@ -61,7 +61,11 @@ describe("LocationGenerationService", () => {
       },
     });
 
-    await service.create("parent-1", "A nearby anomalous region.");
+    await service.create("parent-1", "A nearby anomalous region.", {
+      kind: "normalized-map",
+      x: 0.35,
+      y: 0.7,
+    });
 
     expect(create).toHaveBeenCalledTimes(1);
     const created = create.mock.calls[0]?.[1];
@@ -71,6 +75,13 @@ describe("LocationGenerationService", () => {
       understanding: "hypothesized",
       observedProperties: ["Atmospheric pressure cycles every eleven hours."],
     });
+    expect(created?.placement).toEqual(
+      expect.objectContaining({
+        kind: "within-parent",
+        parentLocationId: "parent-1",
+        mapPosition: { kind: "normalized-map", x: 0.35, y: 0.7 },
+      }),
+    );
   });
 
   it("rejects a generated plane without observed physical properties", async () => {

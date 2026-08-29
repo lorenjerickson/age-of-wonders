@@ -20,7 +20,11 @@ export class LocationGenerationService {
     private readonly domain: DomainService,
   ) {}
 
-  async create(parentId: string, userContext: string) {
+  async create(
+    parentId: string,
+    userContext: string,
+    mapPosition?: { kind: "normalized-map"; x: number; y: number },
+  ) {
     const parent = await this.domain.get("locations", parentId);
     if (!isObject(parent.data)) {
       throw new BadGatewayException(
@@ -49,7 +53,11 @@ export class LocationGenerationService {
     const result = await this.openAi.respond({ input: combinedPrompt });
     let data: Record<string, unknown>;
     try {
-      data = this.normalizeChild(this.parseObject(result.output), parentId);
+      data = this.normalizeChild(
+        this.parseObject(result.output),
+        parentId,
+        mapPosition,
+      );
     } catch (error) {
       logInvalidAiOutput(
         this.logger,
@@ -122,6 +130,7 @@ export class LocationGenerationService {
   private normalizeChild(
     generated: Record<string, unknown>,
     parentId: string,
+    mapPosition?: { kind: "normalized-map"; x: number; y: number },
   ): Record<string, unknown> {
     if (typeof generated.name !== "string" || !generated.name.trim()) {
       throw new BadGatewayException(
@@ -166,8 +175,24 @@ export class LocationGenerationService {
       },
       name: generated.name.trim(),
       kind,
-      placement: { kind: "within-parent", parentLocationId: parentId, border },
-      image: isObject(generated.image) ? generated.image : {},
+      placement: {
+        kind: "within-parent",
+        parentLocationId: parentId,
+        ...(mapPosition ? { mapPosition } : {}),
+        border,
+      },
+      image: {
+        ...(isObject(generated.image) ? generated.image : {}),
+        orientation:
+          isObject(generated.image) &&
+          (generated.image.orientation === "scenic" ||
+            generated.image.orientation === "overhead" ||
+            generated.image.orientation === "side-on")
+            ? generated.image.orientation
+            : kind === "site"
+              ? "overhead"
+              : "scenic",
+      },
       profile: {
         ...profile,
         terrain: {

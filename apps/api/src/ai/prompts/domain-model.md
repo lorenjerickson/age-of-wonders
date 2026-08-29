@@ -100,7 +100,7 @@ The generic domain API persists these resources. The identifier used by the API 
 | `extension-schemas`    | `ExtensionSchema`         | `id`                   | `extension-schema`, `key`                       |
 | `systems`              | `GameSystemDefinition`    | `id`                   | `game-system`, `name`                           |
 | `games`                | `GameState`               | `campaign.identity.id` | `game-state`, campaign name                     |
-| `campaigns`            | `CampaignState`           | `identity.id`          | name                                            |
+| `campaigns`            | `CampaignDefinition`      | `identity.id`          | name                                            |
 | `sessions`             | `SessionState`            | `identity.id`          | name                                            |
 | `characters`           | `CharacterState`          | `identity.id`          | name                                            |
 | `creatures`            | `CreatureState`           | `identity.id`          | name                                            |
@@ -184,11 +184,40 @@ interface LocationState {
   placement: LocationPlacement;
   image: LocationImage;
   profile: LocationProfile;
+  walls?: LocationWall[];
+  transitions?: LocationTransition[];
   sceneIds: string[];
   pointOfInterestIds?: string[];
   discoveredBy?: string[];
   physicalEnvironment?: PhysicalEnvironment;
   extensions?: Record<NamespacedKey, JsonValue>;
+}
+
+interface LocationWall {
+  id: string;
+  kind: "wall" | "door" | "invisible-wall";
+  vertices: [
+    NormalizedMapCoordinate,
+    NormalizedMapCoordinate,
+    ...NormalizedMapCoordinate[],
+  ];
+  blocks: {
+    sight: boolean;
+    sound: boolean;
+    movement: boolean;
+    environmentalEffects: boolean;
+  };
+  doorState?: "open" | "closed";
+}
+
+interface LocationTransition {
+  id: string;
+  position: NormalizedMapCoordinate;
+  radius: number;
+  destination: {
+    locationId: string;
+    position: NormalizedMapCoordinate;
+  };
 }
 
 interface PhysicalEnvironment {
@@ -213,7 +242,12 @@ interface PhysicalEnvironment {
 
 type LocationPlacement =
   | { kind: "root" }
-  | { kind: "within-parent"; parentLocationId: string; border: LocationBorder };
+  | {
+      kind: "within-parent";
+      parentLocationId: string;
+      mapPosition?: NormalizedMapCoordinate;
+      border: LocationBorder;
+    };
 
 interface LocationImage {
   assetId: string;
@@ -222,6 +256,7 @@ interface LocationImage {
   width: number;
   height: number;
   mimeType: `image/${string}`;
+  orientation: "scenic" | "overhead" | "side-on";
   focalPoint?: { kind: "normalized-map"; x: number; y: number };
 }
 
@@ -354,6 +389,25 @@ operation and known physical implementation honestly.
 `connections` array. It is composed into `GameState.entities.geography`; it is not itself a generic
 domain API resource.
 
+`image.orientation` determines encounter rendering: `scenic` is an illustrative view, `overhead`
+is a top-down map without gravity, and `side-on` is a profile map where tokens fall vertically to
+the nearest horizontal movement-blocking wall. If no wall catches a falling token, the lower edge
+of the background image acts as the final floor so tokens remain within the map. Every generated
+image must declare its orientation; use `scenic` for strategic and illustrative maps unless an
+encounter viewpoint is explicitly known.
+
+`walls` is encounter-scale geometry for `site` locations. Each boundary is one connected polyline
+with at least two normalized map vertices. A `wall` may independently block sight, sound, movement,
+and environmental effects. A `door` additionally has an open/closed state; an open door blocks no
+channel. An `invisible-wall` always blocks movement and nothing else. A legacy boundary without a
+`kind` is read as `wall`, but all new output must include the discriminant. Do not use walls for
+strategic location borders or child-location placement.
+
+`transitions` contains circular encounter-map triggers. `radius` is normalized against the smaller
+displayed map dimension. When a token intersects the trigger it moves to `destination.position` on
+the referenced location map. The editor resolves destination IDs to location names; never display
+opaque IDs to the GM.
+
 ### AI location-generation output
 
 The `POST /api/ai/worlds` workflow accepts exactly one JSON object, parses it as the root
@@ -366,8 +420,10 @@ two-sentence `description` suitable for the dashboard.
 The `POST /api/ai/locations/:parentId` workflow combines `create-location.md`, this document, the
 complete parent location record, and user context. It accepts one child `LocationState`, forces a
 new identity and a `within-parent` placement referencing the route parent, generates and stores its
-map, and then persists it. Never copy the parent's ID or emit nested child aggregates. Both workflows
-use `extensions["aow:map-brief"].imageGenerationPrompt` as the production image prompt.
+map, and then persists it. When the GM supplies normalized map coordinates, the workflow stores them
+as `placement.mapPosition` so the child appears as a labeled pin on the parent's strategic map.
+Never copy the parent's ID or emit nested child aggregates. Both workflows use
+`extensions["aow:map-brief"].imageGenerationPrompt` as the production image prompt.
 
 Use namespaced extension data for generation-only artifacts that do not yet have first-class domain
 fields. In particular, a session-zero brief may be stored at `extensions["aow:session-zero"]`. A
@@ -393,7 +449,8 @@ Minimal structurally complete root-world example:
     "altText": "A painted map of migrating islands beneath three moons",
     "width": 2048,
     "height": 2048,
-    "mimeType": "image/webp"
+    "mimeType": "image/webp",
+    "orientation": "scenic"
   },
   "profile": {
     "terrain": {
@@ -450,7 +507,91 @@ Minimal structurally complete root-world example:
 }
 ```
 
-## Campaign and world state
+## Campaign definitions and world state
+
+`CampaignDefinition` is the reusable GM-authored starting context persisted by the `campaigns`
+resource. It contains `identity`, `name`, the root-world `worldId`, a protected `gmPremise`, a
+`playerIntroduction`, an explicit set of included world locations in `locationIds`, and a required
+`partyStartingLocationId` within that set. The premise and introduction are sanitized rich HTML
+limited to paragraphs, second- and third-level headings, emphasis, lists, blockquotes, line breaks,
+and safe links. It does not contain a party roster or starting clock and never prescribes player
+actions.
+
+Campaign definitions own initial placement records and location discoveries:
+
+- `creaturePlacements` associate a world-supplied creature with its initial world location.
+- `itemPlacements` associate a world item definition with its initial world location.
+- `objectPlacements` associate a world object definition with its initial world location.
+- `discoveries` contain a human-readable GM name, a world location, and zero or more grants. Grants
+  are discriminated as `money`, `rumor`, `fact`, `general-knowledge`, or `item`. Money uses
+  `CurrencyAmount`; item grants reference a world item definition.
+- `locationCanvases` contain reusable GM-authored presentation defaults for included locations.
+  Each entry identifies its `locationId` and provides ordered layer settings with a stable `key`,
+  boolean `visible` state, and normalized `opacity` from 0 through 1. These are campaign preparation
+  defaults, not mutable session state. World locations remain authoritative for map images, walls,
+  transitions, and orientation; live rounds, visibility, token positions, and revealed information
+  remain session concerns.
+
+Every campaign location reference must appear in `locationIds`, and every entry in `locationIds`
+must resolve within the campaign's `worldId`. Campaign generation must not invent creature, item,
+object, currency, or location definitions inside a campaign. A location or placement supplies
+context only: presence never reveals a discovery, awards an item, starts combat, or restricts the
+actions available to the party.
+
+```ts
+type CampaignCanvasLayerKey =
+  | "background"
+  | "background-effects"
+  | "tiles"
+  | "grid"
+  | "regions"
+  | "drawings"
+  | "templates"
+  | "walls"
+  | "tokens"
+  | "sounds"
+  | "lighting"
+  | "notes"
+  | "controls"
+  | "special-effects"
+  | "illumination-effects"
+  | "coloration-effects"
+  | "darkness-effects"
+  | "visibility"
+  | "particle-effects"
+  | "weather-effects"
+  | "filter-effects"
+  | "interface";
+
+interface CampaignCanvasLayerConfiguration {
+  key: CampaignCanvasLayerKey;
+  visible: boolean;
+  opacity: number;
+}
+
+interface CampaignLocationCanvasConfiguration {
+  locationId: LocationId;
+  layers: CampaignCanvasLayerConfiguration[];
+}
+
+interface CampaignDefinition {
+  identity: StateIdentity<CampaignId>;
+  name: string;
+  worldId: LocationId;
+  gmPremise: string;
+  playerIntroduction: string;
+  locationIds: LocationId[];
+  partyStartingLocationId: LocationId;
+  creaturePlacements: CampaignCreaturePlacement[];
+  itemPlacements: CampaignItemPlacement[];
+  objectPlacements: CampaignObjectPlacement[];
+  discoveries: CampaignDiscovery[];
+  locationCanvases: CampaignLocationCanvasConfiguration[];
+}
+```
+
+`CampaignState` remains the mutable campaign state embedded in an authoritative `GameState`; it is
+not the aggregate stored by the `campaigns` definition resource.
 
 `CampaignState` contains `identity`, `name`, `currentTime`, optional `activeSceneId`, `sceneIds`,
 `partyIds`, `partyLocations`, `rests`, optional active `travel`, `socialAttitudes`,
