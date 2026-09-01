@@ -1,6 +1,16 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Dispatch,
+  FormEvent,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   createCampaignWithAi,
+  createCreatureWithAi,
+  createDomainRecord,
   type DomainRecord,
   getDomainRecord,
   getMediaDownloadUrl,
@@ -8,7 +18,7 @@ import {
   replaceDomainRecord,
 } from "./api";
 import {
-  defaultCampaignLocationCanvas,
+  creatureTokenArtworkView,
   SESSION_CANVAS_LAYERS,
   type SessionCanvasLayerKey,
 } from "./sessionCanvasModel";
@@ -16,6 +26,11 @@ import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   SessionCanvasWorkspace,
+  type CanvasDrawing,
+  type CanvasLight,
+  type CanvasNote,
+  type CanvasSound,
+  type CanvasTemplate,
   type CanvasToken,
   type CanvasWall,
 } from "./SessionCanvasHarness";
@@ -39,6 +54,9 @@ interface Placement {
   id: string;
   sourceId: string;
   locationId: string;
+  x?: number;
+  y?: number;
+  scale?: number;
 }
 
 interface EditableCanvasLayer {
@@ -50,6 +68,20 @@ interface EditableCanvasLayer {
 interface EditableLocationCanvas {
   locationId: string;
   layers: EditableCanvasLayer[];
+  pixelsPerFiveFeet?: number;
+  lights?: CanvasLight[];
+  sounds?: CanvasSound[];
+  drawings?: CanvasDrawing[];
+  templates?: CanvasTemplate[];
+  notes?: CanvasNote[];
+}
+
+interface EditableCanvasObjects {
+  lights: readonly CanvasLight[];
+  sounds: readonly CanvasSound[];
+  drawings: readonly CanvasDrawing[];
+  templates: readonly CanvasTemplate[];
+  notes: readonly CanvasNote[];
 }
 
 interface CampaignDraft {
@@ -64,6 +96,218 @@ interface CampaignDraft {
   objectPlacements: JsonObject[];
   discoveries: EditableDiscovery[];
   locationCanvases: EditableLocationCanvas[];
+}
+
+function SessionContextControls({
+  worldId,
+  campaignId,
+}: {
+  worldId: string;
+  campaignId: string;
+}) {
+  const [sessions, setSessions] = useState<DomainRecord[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    void listDomainRecords("sessions", {
+      worldId,
+      limit: 100,
+      sort: "createdAt",
+      order: "asc",
+    }).then(
+      (result) =>
+        setSessions(
+          result.items.filter(
+            (session) => session.data.campaignId === campaignId,
+          ),
+        ),
+      () => setMessage("Session history is unavailable."),
+    );
+  }, [campaignId, worldId]);
+
+  const active = sessions.find(
+    (session) => session.data.status === "in-progress",
+  );
+
+  async function startSession() {
+    setBusy(true);
+    setMessage("");
+    const now = new Date().toISOString();
+    try {
+      const session = await createDomainRecord("sessions", {
+        identity: {
+          id: `session:${crypto.randomUUID()}`,
+          version: { revision: 1, updatedAt: now },
+        },
+        name: `Session ${sessions.length + 1}`,
+        worldId,
+        campaignId,
+        status: "in-progress",
+        startedAt: now,
+        sceneIds: [],
+        encounterIds: [],
+        eventIds: [],
+      });
+      setSessions((current) => [...current, session]);
+      setMessage(`${session.name ?? "Session"} started.`);
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Could not start session.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function endSession() {
+    if (!active) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await replaceDomainRecord(active, {
+        ...active.data,
+        status: "completed",
+        endedAt: new Date().toISOString(),
+      });
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === updated.id ? updated : session,
+        ),
+      );
+      setMessage(
+        `${updated.name ?? "Session"} ended. World state is unchanged.`,
+      );
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Could not end session.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+      <span className="badge badge-ghost hidden sm:inline-flex">
+        {active ? `${active.name ?? "Session"} in progress` : "Authoring"}
+      </span>
+      <button
+        type="button"
+        className={`btn btn-sm ${active ? "btn-error btn-outline" : "btn-primary"}`}
+        disabled={busy}
+        onClick={() => void (active ? endSession() : startSession())}
+      >
+        {busy ? "Working…" : active ? "End session" : "Start session"}
+      </button>
+      {message && (
+        <span
+          role="status"
+          className="max-w-64 truncate text-xs text-base-content/55"
+        >
+          {message}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function LocationDetailsInspector({
+  location,
+  onChange,
+}: {
+  location: DomainRecord;
+  onChange: (location: DomainRecord) => void;
+}) {
+  const currentDescription = stringAt(location.data.description);
+  const storedOrientation = stringAt(objectAt(location.data.image).orientation);
+  const currentOrientation: "scenic" | "overhead" | "side-on" =
+    storedOrientation === "overhead" || storedOrientation === "side-on"
+      ? storedOrientation
+      : storedOrientation === "scenic"
+        ? "scenic"
+        : location.kind === "site"
+          ? "overhead"
+          : "scenic";
+  const [description, setDescription] = useState(currentDescription);
+  const [orientation, setOrientation] = useState(currentOrientation);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setDescription(currentDescription);
+    setOrientation(currentOrientation);
+  }, [currentDescription, currentOrientation]);
+
+  async function saveLocation() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const updated = await replaceDomainRecord(location, {
+        ...location.data,
+        description: description.trim(),
+        image: {
+          ...objectAt(location.data.image),
+          orientation,
+        },
+      });
+      onChange(updated);
+      setMessage("Location saved.");
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Could not save location.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-box border border-base-300 bg-base-100 p-3">
+      <label className="text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
+        Location description
+        <textarea
+          className="textarea textarea-bordered mt-2 min-h-28 w-full text-sm leading-6 normal-case"
+          value={description}
+          placeholder="Describe what the GM needs to know about this place."
+          onChange={(event) => setDescription(event.currentTarget.value)}
+        />
+      </label>
+      <label className="mt-3 block text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
+        Map perspective
+        <select
+          className="select select-bordered mt-2 w-full text-sm font-normal normal-case"
+          value={orientation}
+          onChange={(event) =>
+            setOrientation(
+              event.currentTarget.value as "scenic" | "overhead" | "side-on",
+            )
+          }
+        >
+          <option value="overhead">Overhead</option>
+          <option value="side-on">Side-on</option>
+          <option value="scenic">Scenic</option>
+        </select>
+      </label>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span role="status" className="truncate text-xs text-base-content/50">
+          {message}
+        </span>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={
+            saving ||
+            (description.trim() === currentDescription &&
+              orientation === currentOrientation)
+          }
+          onClick={() => void saveLocation()}
+        >
+          {saving ? "Saving…" : "Save location"}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 const SESSION_CANVAS_LAYER_KEYS = new Set(
@@ -151,6 +395,189 @@ function objectsAt(value: unknown): JsonObject[] {
   return Array.isArray(value) ? value.map(objectAt) : [];
 }
 
+const CANVAS_RANGE_SCALE = Math.min(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+function normalizedCoordinate(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+    ? value
+    : undefined;
+}
+
+function normalizedRadius(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function canvasPointAt(candidate: JsonObject) {
+  const position = objectAt(candidate.position);
+  const x = normalizedCoordinate(position.x ?? candidate.x);
+  const y = normalizedCoordinate(position.y ?? candidate.y);
+  return x === undefined || y === undefined
+    ? undefined
+    : { x: x * CANVAS_WIDTH, y: y * CANVAS_HEIGHT };
+}
+
+function canvasRadiusAt(candidate: JsonObject, fallback: number) {
+  return (
+    (normalizedRadius(candidate.radius) ?? fallback / CANVAS_RANGE_SCALE) *
+    CANVAS_RANGE_SCALE
+  );
+}
+
+function canvasLights(value: unknown): CanvasLight[] {
+  return objectsAt(value).flatMap((candidate, index) => {
+    const point = canvasPointAt(candidate);
+    if (!point) return [];
+    return [
+      {
+        key:
+          stringAt(candidate.id) || stringAt(candidate.key) || `light-${index}`,
+        name: stringAt(candidate.name).trim() || `Light ${index + 1}`,
+        ...point,
+        radius: canvasRadiusAt(candidate, 180),
+        color: stringAt(candidate.color).trim() || "#f6c85f",
+      },
+    ];
+  });
+}
+
+function canvasSounds(value: unknown): CanvasSound[] {
+  return objectsAt(value).flatMap((candidate, index) => {
+    const point = canvasPointAt(candidate);
+    if (!point) return [];
+    const volume =
+      typeof candidate.volume === "number" && Number.isFinite(candidate.volume)
+        ? Math.max(0, Math.min(1, candidate.volume))
+        : 0.75;
+    return [
+      {
+        key:
+          stringAt(candidate.id) || stringAt(candidate.key) || `sound-${index}`,
+        name: stringAt(candidate.name).trim() || `Sound ${index + 1}`,
+        ...point,
+        radius: canvasRadiusAt(candidate, 220),
+        volume,
+        volumeMode:
+          candidate.volumeMode === "constant" ? "constant" : "distance",
+        loop: candidate.loop !== false,
+      },
+    ];
+  });
+}
+
+function canvasDrawings(value: unknown): CanvasDrawing[] {
+  return objectsAt(value).flatMap((candidate, index) => {
+    const point = canvasPointAt(candidate);
+    if (!point) return [];
+    return [
+      {
+        key:
+          stringAt(candidate.id) ||
+          stringAt(candidate.key) ||
+          `drawing-${index}`,
+        name: stringAt(candidate.name).trim() || `Drawing ${index + 1}`,
+        ...point,
+        radius: canvasRadiusAt(candidate, 80),
+      },
+    ];
+  });
+}
+
+function canvasTemplates(value: unknown): CanvasTemplate[] {
+  return objectsAt(value).flatMap((candidate, index) => {
+    const point = canvasPointAt(candidate);
+    if (!point) return [];
+    return [
+      {
+        key:
+          stringAt(candidate.id) ||
+          stringAt(candidate.key) ||
+          `template-${index}`,
+        name: stringAt(candidate.name).trim() || `Template ${index + 1}`,
+        ...point,
+        radius: canvasRadiusAt(candidate, 110),
+      },
+    ];
+  });
+}
+
+function canvasNotes(value: unknown): CanvasNote[] {
+  return objectsAt(value).flatMap((candidate, index) => {
+    const point = canvasPointAt(candidate);
+    if (!point) return [];
+    return [
+      {
+        key:
+          stringAt(candidate.id) || stringAt(candidate.key) || `note-${index}`,
+        name: stringAt(candidate.name).trim() || `Note ${index + 1}`,
+        text: stringAt(candidate.text),
+        ...point,
+      },
+    ];
+  });
+}
+
+function persistedCanvasPoint(point: { x: number; y: number }) {
+  return {
+    x: Math.max(0, Math.min(1, point.x / CANVAS_WIDTH)),
+    y: Math.max(0, Math.min(1, point.y / CANVAS_HEIGHT)),
+  };
+}
+
+function persistedCanvasRadius(radius: number) {
+  return Math.max(0, radius / CANVAS_RANGE_SCALE);
+}
+
+function persistedMapPosition(point: { x: number; y: number }) {
+  return {
+    kind: "normalized-map",
+    ...persistedCanvasPoint(point),
+  };
+}
+
+function persistedCanvasObjects(objects: EditableCanvasObjects) {
+  return {
+    lightSources: objects.lights.map((light) => ({
+      id: light.key,
+      name: light.name,
+      position: persistedMapPosition(light),
+      radius: persistedCanvasRadius(light.radius),
+      color: light.color,
+    })),
+    soundSources: objects.sounds.map((sound) => ({
+      id: sound.key,
+      name: sound.name,
+      position: persistedMapPosition(sound),
+      radius: persistedCanvasRadius(sound.radius),
+      volume: sound.volume,
+      volumeMode: sound.volumeMode,
+      loop: sound.loop,
+    })),
+    drawings: objects.drawings.map((drawing) => ({
+      id: drawing.key,
+      name: drawing.name?.trim() || "Drawing",
+      position: persistedMapPosition(drawing),
+      radius: persistedCanvasRadius(drawing.radius),
+    })),
+    templates: objects.templates.map((template) => ({
+      id: template.key,
+      name: template.name?.trim() || "Template",
+      position: persistedMapPosition(template),
+      radius: persistedCanvasRadius(template.radius),
+    })),
+    notes: objects.notes.map((note) => ({
+      id: note.key,
+      name: note.name,
+      text: note.text,
+      position: persistedMapPosition(note),
+    })),
+  };
+}
+
 function canvasWalls(location: DomainRecord): CanvasWall[] {
   return objectsAt(location.data.walls).flatMap((candidate, wallIndex) => {
     const kind =
@@ -180,14 +607,38 @@ function canvasWalls(location: DomainRecord): CanvasWall[] {
       kind,
       open,
       blocksSight: !open && blocks.sight !== false,
+      blocksMovement: !open && blocks.movement !== false,
     }));
   });
+}
+
+function persistedWalls(walls: readonly CanvasWall[]): JsonObject[] {
+  return walls.map((wall) => ({
+    id: wall.key,
+    kind: wall.kind,
+    vertices: [wall.start, wall.end].map((vertex) => ({
+      kind: "normalized-map",
+      x: vertex.x / CANVAS_WIDTH,
+      y: vertex.y / CANVAS_HEIGHT,
+    })),
+    blocks: {
+      sight: wall.blocksSight,
+      sound: true,
+      movement: wall.blocksMovement !== false,
+      environmentalEffects: true,
+    },
+    ...(wall.kind === "door"
+      ? { doorState: wall.open ? "open" : "closed" }
+      : {}),
+  }));
 }
 
 function canvasTokens(
   locationId: string,
   placements: Placement[],
   creatures: DomainRecord[],
+  tokenArtUrls: ReadonlyMap<string, string>,
+  artworkView: "overhead" | "side-on",
 ): CanvasToken[] {
   return placements
     .filter((placement) => placement.locationId === locationId)
@@ -206,13 +657,72 @@ function canvasTokens(
         key: placement.id,
         name,
         initials,
-        x: 420 + (index % 5) * 120,
-        y: 360 + Math.floor(index / 5) * 120,
+        x:
+          (placement.x ?? (420 + (index % 5) * 120) / CANVAS_WIDTH) *
+          CANVAS_WIDTH,
+        y:
+          (placement.y ?? (360 + Math.floor(index / 5) * 120) / CANVAS_HEIGHT) *
+          CANVAS_HEIGHT,
         color: "#f3c85b",
         disposition: "friendly" as const,
         vision: 360,
+        artworkUrl: creature ? tokenArtUrls.get(creature.id) : undefined,
+        artworkView,
+        scale: placement.scale,
       };
     });
+}
+
+function mapTokenArtworkView(location: DomainRecord): "overhead" | "side-on" {
+  const orientation = mapOrientation(location);
+  return creatureTokenArtworkView(orientation, location.kind);
+}
+
+function mapOrientation(
+  location: DomainRecord,
+): "overhead" | "side-on" | "scenic" {
+  const orientation = stringAt(objectAt(location.data.image).orientation);
+  return orientation === "overhead" ||
+    orientation === "side-on" ||
+    orientation === "scenic"
+    ? orientation
+    : location.kind === "site"
+      ? "overhead"
+      : "scenic";
+}
+
+function useCreatureTokenArt(
+  creatures: DomainRecord[],
+  artworkView: "overhead" | "side-on",
+) {
+  const [urls, setUrls] = useState<ReadonlyMap<string, string>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+    const role =
+      artworkView === "overhead" ? "overheadToken" : "paperDollToken";
+    void Promise.all(
+      creatures.map(async (creature) => {
+        const image = objectAt(objectAt(creature.data.images)[role]);
+        const directUri = stringAt(image.uri);
+        const assetId = stringAt(image.assetId);
+        if (!assetId) return [creature.id, directUri] as const;
+        try {
+          const result = await getMediaDownloadUrl(assetId);
+          return [creature.id, result.url] as const;
+        } catch {
+          return [creature.id, directUri] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (active) setUrls(new Map(entries.filter(([, url]) => Boolean(url))));
+    });
+    return () => {
+      active = false;
+    };
+  }, [artworkView, creatures]);
+
+  return urls;
 }
 
 function parentLocationId(record: DomainRecord): string | undefined {
@@ -305,11 +815,25 @@ function parseGrant(value: JsonObject): EditableGrant | undefined {
 function draftFrom(record: DomainRecord): CampaignDraft {
   const partyStartingLocationId = stringAt(record.data.partyStartingLocationId);
   const creaturePlacements = objectsAt(record.data.creaturePlacements).map(
-    (placement) => ({
-      id: stringAt(placement.id) || crypto.randomUUID(),
-      sourceId: stringAt(placement.creatureId),
-      locationId: stringAt(placement.locationId),
-    }),
+    (placement) => {
+      const mapPosition = objectAt(placement.mapPosition);
+      const x = normalizedCoordinate(mapPosition.x ?? placement.x);
+      const y = normalizedCoordinate(mapPosition.y ?? placement.y);
+      const scale =
+        typeof placement.scale === "number" &&
+        Number.isFinite(placement.scale) &&
+        placement.scale > 0
+          ? placement.scale
+          : undefined;
+      return {
+        id: stringAt(placement.id) || crypto.randomUUID(),
+        sourceId: stringAt(placement.creatureId),
+        locationId: stringAt(placement.locationId),
+        ...(x === undefined ? {} : { x }),
+        ...(y === undefined ? {} : { y }),
+        ...(scale === undefined ? {} : { scale }),
+      };
+    },
   );
   const itemPlacements = objectsAt(record.data.itemPlacements).map(
     (placement) => ({
@@ -359,6 +883,17 @@ function draftFrom(record: DomainRecord): CampaignDraft {
           layers: [
             ...new Map(layers.map((layer) => [layer.key, layer])).values(),
           ],
+          pixelsPerFiveFeet:
+            typeof canvas.pixelsPerFiveFeet === "number" &&
+            Number.isFinite(canvas.pixelsPerFiveFeet) &&
+            canvas.pixelsPerFiveFeet > 0
+              ? canvas.pixelsPerFiveFeet
+              : undefined,
+          lights: canvasLights(canvas.lightSources ?? canvas.lights),
+          sounds: canvasSounds(canvas.soundSources ?? canvas.sounds),
+          drawings: canvasDrawings(canvas.drawings),
+          templates: canvasTemplates(canvas.templates),
+          notes: canvasNotes(canvas.notes),
         },
       ];
     },
@@ -417,6 +952,16 @@ function dataFrom(record: DomainRecord, draft: CampaignDraft): JsonObject {
       id: placement.id,
       creatureId: placement.sourceId,
       locationId: placement.locationId,
+      ...(placement.x === undefined || placement.y === undefined
+        ? {}
+        : {
+            mapPosition: {
+              kind: "normalized-map",
+              x: placement.x,
+              y: placement.y,
+            },
+          }),
+      ...(placement.scale === undefined ? {} : { scale: placement.scale }),
     })),
     itemPlacements: draft.itemPlacements.map((placement) => ({
       id: placement.id,
@@ -427,6 +972,16 @@ function dataFrom(record: DomainRecord, draft: CampaignDraft): JsonObject {
     locationCanvases: draft.locationCanvases.map((canvas) => ({
       locationId: canvas.locationId,
       layers: canvas.layers.map((layer) => ({ ...layer })),
+      ...(canvas.pixelsPerFiveFeet === undefined
+        ? {}
+        : { pixelsPerFiveFeet: canvas.pixelsPerFiveFeet }),
+      ...persistedCanvasObjects({
+        lights: canvas.lights ?? [],
+        sounds: canvas.sounds ?? [],
+        drawings: canvas.drawings ?? [],
+        templates: canvas.templates ?? [],
+        notes: canvas.notes ?? [],
+      }),
     })),
     discoveries: draft.discoveries.map((discovery) => ({
       id: discovery.id,
@@ -666,13 +1221,13 @@ function OverviewFields({
   setDraft,
 }: {
   draft: CampaignDraft;
-  setDraft: (draft: CampaignDraft) => void;
+  setDraft: Dispatch<SetStateAction<CampaignDraft>>;
 }) {
   return (
     <section className="card overflow-hidden border border-base-300 bg-base-200 shadow-xl">
       <div className="h-1 bg-gradient-to-r from-primary via-secondary to-transparent" />
-      <div className="card-body gap-7 p-6 md:p-8">
-        <div>
+      <div className="card-body grid gap-7 p-6 md:p-8 xl:grid-cols-2">
+        <div className="xl:col-span-2">
           <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
             Narrative foundation
           </p>
@@ -682,7 +1237,7 @@ function OverviewFields({
             player introduction remain separate by design.
           </p>
         </div>
-        <label className="form-control">
+        <label className="form-control xl:col-span-2">
           <FieldLabel>Campaign name</FieldLabel>
           <input
             className="input input-bordered mt-2"
@@ -865,6 +1420,7 @@ function PlacementSection({
   locationId,
   placements,
   onChange,
+  onCreateWithAi,
 }: {
   title: string;
   help: string;
@@ -873,15 +1429,47 @@ function PlacementSection({
   locationId: string;
   placements: Placement[];
   onChange: (placements: Placement[]) => void;
+  onCreateWithAi?: (prompt: string) => Promise<DomainRecord>;
 }) {
   const [editingPlacementId, setEditingPlacementId] = useState<
     string | "new"
   >();
-  const kind: VisualRecordKind =
-    sourceLabel === "Creature" ? "creature" : "item";
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [creatingWithAi, setCreatingWithAi] = useState(false);
+  const [creationMessage, setCreationMessage] = useState("");
+  const kind: VisualRecordKind = sourceLabel.startsWith("Creature")
+    ? "creature"
+    : "item";
   const locationPlacements = placements.filter(
     (placement) => placement.locationId === locationId,
   );
+
+  async function createAndPlace() {
+    if (!onCreateWithAi || creatingWithAi || aiPrompt.trim().length < 3) return;
+    setCreatingWithAi(true);
+    setCreationMessage("");
+    try {
+      const created = await onCreateWithAi(aiPrompt.trim());
+      onChange([
+        ...placements,
+        {
+          id: crypto.randomUUID(),
+          sourceId: created.id,
+          locationId,
+        },
+      ]);
+      setAiPrompt("");
+      setEditingPlacementId(undefined);
+    } catch (caught) {
+      setCreationMessage(
+        caught instanceof Error
+          ? caught.message
+          : `Could not create ${sourceLabel.toLowerCase()}`,
+      );
+    } finally {
+      setCreatingWithAi(false);
+    }
+  }
 
   return (
     <section className="card border border-base-300 bg-base-200 shadow-sm">
@@ -893,14 +1481,25 @@ function PlacementSection({
               {help}
             </p>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={sources.length === 0}
-            onClick={() => setEditingPlacementId("new")}
-          >
-            + Add {sourceLabel.toLowerCase()}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {onCreateWithAi && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setEditingPlacementId("ai")}
+              >
+                ✦ Create with AI
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={sources.length === 0}
+              onClick={() => setEditingPlacementId("new")}
+            >
+              + Add existing
+            </button>
+          </div>
         </div>
         {sources.length === 0 && (
           <p className="rounded-box border border-dashed border-base-300 p-4 text-sm text-base-content/55">
@@ -908,6 +1507,49 @@ function PlacementSection({
           </p>
         )}
         <div className="grid gap-3 xl:grid-cols-2">
+          {editingPlacementId === "ai" && onCreateWithAi && (
+            <div className="rounded-box border border-primary/30 bg-primary/[0.06] p-3 xl:col-span-2">
+              <label
+                className="text-sm font-semibold"
+                htmlFor="ai-creature-prompt"
+              >
+                Create and place a new {sourceLabel.toLowerCase()}
+              </label>
+              <p className="mt-1 text-xs leading-5 text-base-content/55">
+                The current location is included as context. The new creature is
+                added here without leaving the workspace.
+              </p>
+              <textarea
+                id="ai-creature-prompt"
+                className="textarea textarea-bordered mt-3 min-h-24 w-full"
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.currentTarget.value)}
+                placeholder="A wary tunnel scavenger adapted to this location…"
+              />
+              {creationMessage && (
+                <p role="alert" className="mt-2 text-xs text-error">
+                  {creationMessage}
+                </p>
+              )}
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setEditingPlacementId(undefined)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={creatingWithAi || aiPrompt.trim().length < 3}
+                  onClick={() => void createAndPlace()}
+                >
+                  {creatingWithAi ? "Creating…" : "Create and place"}
+                </button>
+              </div>
+            </div>
+          )}
           {editingPlacementId === "new" && (
             <div className="rounded-box border border-primary/30 bg-primary/[0.06] p-3">
               <p className="mb-2 text-sm font-semibold">
@@ -1369,41 +2011,49 @@ function DiscoverySection({
 }
 
 function CampaignLocationsWorkspace({
+  campaignRecord,
+  campaignId,
   draft,
   setDraft,
   locations,
   allLocations,
+  onLocationsChange,
   creatures,
+  onCreaturesChange,
+  onCampaignRecordChange,
   items,
   saving,
   saveMessage,
 }: {
+  campaignRecord: DomainRecord;
+  campaignId: string;
   draft: CampaignDraft;
-  setDraft: (draft: CampaignDraft) => void;
+  setDraft: Dispatch<SetStateAction<CampaignDraft>>;
   locations: DomainRecord[];
   allLocations: DomainRecord[];
+  onLocationsChange: (locations: DomainRecord[]) => void;
   creatures: DomainRecord[];
+  onCreaturesChange: (creatures: DomainRecord[]) => void;
+  onCampaignRecordChange: (record: DomainRecord) => void;
   items: DomainRecord[];
   saving: boolean;
   saveMessage: string;
 }) {
-  const [selectedLocationId, setSelectedLocationId] = useState<string>();
-  const [addingLocation, setAddingLocation] = useState(false);
-  const [locationToAdd, setLocationToAdd] = useState("");
-  const includedLocations = draft.locationIds
-    .map((id) => locations.find((location) => location.id === id))
-    .filter((location): location is DomainRecord => location !== undefined)
-    .sort((left, right) =>
-      locationLabel(left, allLocations).localeCompare(
-        locationLabel(right, allLocations),
-      ),
-    );
-  const availableLocations = locations
-    .filter(
-      (location) =>
-        location.id !== draft.worldId &&
-        !draft.locationIds.includes(location.id),
-    )
+  const campaignRecordRef = useRef(campaignRecord);
+  campaignRecordRef.current = campaignRecord;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const creaturesRef = useRef(creatures);
+  creaturesRef.current = creatures;
+  const [selectedLocationId, setSelectedLocationId] = useState<
+    string | undefined
+  >(draft.partyStartingLocationId);
+  const [locationSaveMessage, setLocationSaveMessage] = useState("");
+  // A campaign now operates across its whole world. Locations are not copied
+  // into a second campaign-specific silo; the campaign only stores contextual
+  // state attached to the authoritative world locations.
+  const includedLocations = locations
+    .filter((location) => location.id !== draft.worldId)
     .sort((left, right) =>
       locationLabel(left, allLocations).localeCompare(
         locationLabel(right, allLocations),
@@ -1413,98 +2063,33 @@ function CampaignLocationsWorkspace({
     (location) => location.id === selectedLocationId,
   );
   const selectedMapUrl = useLocationMapUrl(selectedLocation);
+  const tokenArtworkView = selectedLocation
+    ? mapTokenArtworkView(selectedLocation)
+    : "overhead";
+  const creatureTokenArt = useCreatureTokenArt(creatures, tokenArtworkView);
 
   function openLocation(locationId: string) {
     setSelectedLocationId(locationId);
-    setAddingLocation(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function addLocation() {
-    if (!locationToAdd) return;
-    const canvas = defaultCampaignLocationCanvas(locationToAdd);
-    setDraft({
-      ...draft,
-      locationIds: [...draft.locationIds, locationToAdd],
-      locationCanvases: [
-        ...draft.locationCanvases,
-        { locationId: canvas.locationId, layers: [...canvas.layers] },
-      ],
-    });
-    setSelectedLocationId(locationToAdd);
-    setLocationToAdd("");
-    setAddingLocation(false);
   }
 
   if (!selectedLocation) {
     return (
       <section className="grid gap-6">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-base-300 pb-6">
+        <div className="border-b border-base-300 pb-6">
           <div>
             <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
               Campaign locations
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-              Included locations
+              World locations
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-base-content/60">
-              Open a location to manage the discoveries and initial placements
-              the GM needs there.
+              Every location belongs to the same persistent world. Open one to
+              inspect, author, or run play there.
             </p>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={availableLocations.length === 0}
-            onClick={() => setAddingLocation((open) => !open)}
-          >
-            + Add world location
-          </button>
         </div>
-
-        {addingLocation && (
-          <div className="card border border-primary/25 bg-primary/[0.06] shadow-sm">
-            <div className="card-body gap-4 sm:flex-row sm:items-end">
-              <label className="block grow">
-                <span className="block text-sm font-medium">
-                  Location from world definition
-                </span>
-                <select
-                  className="select select-bordered mt-2 w-full"
-                  value={locationToAdd}
-                  onChange={(event) => setLocationToAdd(event.target.value)}
-                >
-                  <option value="">Choose a location</option>
-                  {availableLocations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {locationLabel(location, allLocations)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="card-actions shrink-0">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setAddingLocation(false);
-                    setLocationToAdd("");
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!locationToAdd}
-                  onClick={addLocation}
-                >
-                  Add location
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {includedLocations.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1569,6 +2154,7 @@ function CampaignLocationsWorkspace({
   }
 
   const selectedPath = locationPath(selectedLocation, allLocations);
+  const currentLocation = selectedLocation;
   const activeLocationId = selectedLocation.id;
   const selectedObjectCount = draft.objectPlacements.filter(
     (placement) => stringAt(placement.locationId) === selectedLocation.id,
@@ -1590,89 +2176,263 @@ function CampaignLocationsWorkspace({
     activeLocationId,
     draft.creaturePlacements,
     creatures,
+    creatureTokenArt,
+    tokenArtworkView,
   );
 
   function updateSelectedCanvas(configuration: EditableLocationCanvas) {
-    setDraft({
-      ...draft,
-      locationCanvases: [
-        ...draft.locationCanvases.filter(
-          (canvas) => canvas.locationId !== activeLocationId,
-        ),
-        configuration,
-      ],
+    setDraft((current) => {
+      const existing = current.locationCanvases.find(
+        (canvas) => canvas.locationId === activeLocationId,
+      );
+      return {
+        ...current,
+        locationCanvases: [
+          ...current.locationCanvases.filter(
+            (canvas) => canvas.locationId !== activeLocationId,
+          ),
+          { ...existing, ...configuration, locationId: activeLocationId },
+        ],
+      };
     });
   }
 
+  function updateSelectedTokens(tokens: readonly CanvasToken[]) {
+    const positions = new Map(
+      tokens.map((token) => [
+        token.key,
+        { ...persistedCanvasPoint(token), scale: token.scale },
+      ]),
+    );
+    setDraft((current) => ({
+      ...current,
+      creaturePlacements: current.creaturePlacements.flatMap((placement) => {
+        if (placement.locationId !== activeLocationId) return [placement];
+        const position = positions.get(placement.id);
+        return position ? [{ ...placement, ...position }] : [];
+      }),
+    }));
+  }
+
+  function updateSelectedCanvasObjects(objects: EditableCanvasObjects) {
+    setDraft((current) => {
+      const existing = current.locationCanvases.find(
+        (canvas) => canvas.locationId === activeLocationId,
+      );
+      const updated: EditableLocationCanvas = {
+        locationId: activeLocationId,
+        layers: existing?.layers ?? [],
+        pixelsPerFiveFeet: existing?.pixelsPerFiveFeet,
+        lights: [...objects.lights],
+        sounds: [...objects.sounds],
+        drawings: [...objects.drawings],
+        templates: [...objects.templates],
+        notes: [...objects.notes],
+      };
+      return {
+        ...current,
+        locationCanvases: [
+          ...current.locationCanvases.filter(
+            (canvas) => canvas.locationId !== activeLocationId,
+          ),
+          { ...existing, ...updated },
+        ],
+      };
+    });
+  }
+
+  async function applyTokenFall(fall: {
+    tokenKey: string;
+    feet: number;
+    dice: number;
+    position: { x: number; y: number };
+  }) {
+    const placement = draft.creaturePlacements.find(
+      ({ id }) => id === fall.tokenKey,
+    );
+    const creature = placement
+      ? creaturesRef.current.find(({ id }) => id === placement.sourceId)
+      : undefined;
+    const hitPoints = objectAt(creature?.data.hitPoints);
+    if (!creature || typeof hitPoints.current !== "number") {
+      setLocationSaveMessage(
+        `${creature?.name ?? "The creature"} fell ${Math.round(fall.feet)} feet; record ${fall.dice}d4 fall damage manually.`,
+      );
+      return;
+    }
+    const rolls = Array.from({ length: fall.dice }, () => {
+      const value = new Uint32Array(1);
+      crypto.getRandomValues(value);
+      return (value[0]! % 4) + 1;
+    });
+    const damage = rolls.reduce((total, roll) => total + roll, 0);
+    const position = persistedCanvasPoint(fall.position);
+    const currentDraft = draftRef.current;
+    const fallDraft: CampaignDraft = {
+      ...currentDraft,
+      creaturePlacements: currentDraft.creaturePlacements.map((candidate) =>
+        candidate.id === fall.tokenKey
+          ? { ...candidate, ...position }
+          : candidate,
+      ),
+    };
+    setLocationSaveMessage(`Saving the fall and applying ${damage} damage…`);
+    try {
+      const currentCampaign = campaignRecordRef.current;
+      const updatedCampaign = await replaceDomainRecord(
+        currentCampaign,
+        dataFrom(currentCampaign, fallDraft),
+      );
+      campaignRecordRef.current = updatedCampaign;
+      onCampaignRecordChange(updatedCampaign);
+      const persistedDraft = draftFrom(updatedCampaign);
+      draftRef.current = persistedDraft;
+      setDraft(persistedDraft);
+      const updated = await replaceDomainRecord(creature, {
+        ...creature.data,
+        hitPoints: {
+          ...hitPoints,
+          current: Math.max(0, hitPoints.current - damage),
+        },
+      });
+      const nextCreatures = creaturesRef.current.map((candidate) =>
+        candidate.id === updated.id ? updated : candidate,
+      );
+      creaturesRef.current = nextCreatures;
+      onCreaturesChange(nextCreatures);
+      setLocationSaveMessage(
+        `${updated.name ?? "Creature"} fell ${Math.round(fall.feet)} feet and took ${damage} damage (${rolls.join(" + ")}).`,
+      );
+    } catch (caught) {
+      setLocationSaveMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Fall damage could not be saved.",
+      );
+    }
+  }
+
+  async function updateLocationWalls(walls: readonly CanvasWall[]) {
+    setLocationSaveMessage("Saving boundaries…");
+    try {
+      const updated = await replaceDomainRecord(currentLocation, {
+        ...currentLocation.data,
+        walls: persistedWalls(walls),
+      });
+      onLocationsChange(
+        allLocations.map((location) =>
+          location.id === updated.id ? updated : location,
+        ),
+      );
+      setLocationSaveMessage("Boundaries saved.");
+    } catch (caught) {
+      setLocationSaveMessage(
+        caught instanceof Error ? caught.message : "Could not save boundaries.",
+      );
+    }
+  }
+
   return (
-    <div className="grid gap-4">
-      <nav aria-label="Campaign location hierarchy">
-        <ol className="flex flex-wrap items-center gap-1 text-sm">
-          <li>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm px-2 font-normal"
-              onClick={() => setSelectedLocationId(undefined)}
-            >
-              Campaign locations
-            </button>
-          </li>
-          {selectedPath.map((location) => (
-            <li key={location.id} className="flex min-w-0 items-center gap-1">
-              <span className="text-base-content/30">/</span>
-              {draft.locationIds.includes(location.id) &&
-              location.id !== selectedLocation.id ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm max-w-48 px-2 font-normal"
-                  onClick={() => openLocation(location.id)}
-                >
-                  <span className="truncate">
+    <div className="relative h-dvh min-h-0 overflow-hidden">
+      <div className="location-breadcrumb-overlay pointer-events-none absolute top-3 right-[23rem] left-14 z-30 flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/55 px-2 shadow-[0_8px_28px_rgba(0,0,0,.5)] backdrop-blur-md">
+        <button
+          type="button"
+          className="btn btn-ghost btn-square btn-sm pointer-events-auto"
+          aria-label="Browse world locations"
+          title="Browse world locations"
+          onClick={() => setSelectedLocationId(undefined)}
+        >
+          ←
+        </button>
+        <nav aria-label="Location hierarchy" className="min-w-0 flex-1">
+          <ol className="pointer-events-auto flex flex-wrap items-center gap-1 text-sm">
+            {selectedPath.map((location) => (
+              <li key={location.id} className="flex min-w-0 items-center gap-1">
+                <span className="text-base-content/30">/</span>
+                {includedLocations.some(
+                  (included) => included.id === location.id,
+                ) && location.id !== selectedLocation.id ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm max-w-48 px-2 font-normal"
+                    onClick={() => openLocation(location.id)}
+                  >
+                    <span className="truncate">
+                      {location.name ?? "Untitled location"}
+                    </span>
+                  </button>
+                ) : (
+                  <span
+                    className={`max-w-56 truncate px-2 py-1 ${
+                      location.id === selectedLocation.id
+                        ? "font-semibold"
+                        : "text-base-content/45"
+                    }`}
+                  >
                     {location.name ?? "Untitled location"}
                   </span>
-                </button>
-              ) : (
-                <span
-                  className={`max-w-56 truncate px-2 py-1 ${
-                    location.id === selectedLocation.id
-                      ? "font-semibold"
-                      : "text-base-content/45"
-                  }`}
-                >
-                  {location.name ?? "Untitled location"}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </nav>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <SessionContextControls
+            worldId={draft.worldId}
+            campaignId={campaignId}
+          />
+          <button type="submit" className="btn btn-ghost btn-sm">
+            {saving ? "Saving…" : "Save"}
+          </button>
+          {saveMessage && (
+            <span className="badge badge-ghost max-w-48 truncate">
+              {saveMessage}
+            </span>
+          )}
+          {locationSaveMessage && (
+            <span className="badge badge-ghost max-w-48 truncate">
+              {locationSaveMessage}
+            </span>
+          )}
+        </div>
+      </div>
 
-      <div className="campaign-session-canvas h-[calc(100dvh-13rem)] min-h-[42rem] min-w-0 w-full overflow-hidden">
+      <div className="campaign-session-canvas h-full min-h-0 min-w-0 w-full overflow-hidden">
         <SessionCanvasWorkspace
           key={selectedLocation.id}
           locationId={selectedLocation.id}
           locationName={selectedLocation.name ?? "Untitled location"}
           locationKind={selectedLocation.kind ?? undefined}
+          locationOrientation={mapOrientation(selectedLocation)}
           backgroundUrl={selectedMapUrl}
           initialWalls={selectedWalls}
+          onWallsChange={(walls) => void updateLocationWalls(walls)}
           initialTokens={selectedTokens}
+          initialLights={selectedCanvas?.lights ?? []}
+          initialSounds={selectedCanvas?.sounds ?? []}
+          initialDrawings={selectedCanvas?.drawings ?? []}
+          initialTemplates={selectedCanvas?.templates ?? []}
+          initialNotes={selectedCanvas?.notes ?? []}
+          onTokensChange={updateSelectedTokens}
+          onTokenFall={(fall) => void applyTokenFall(fall)}
+          onCanvasObjectsChange={updateSelectedCanvasObjects}
           initialConfiguration={selectedCanvas}
           onConfigurationChange={updateSelectedCanvas}
           onBack={() => setSelectedLocationId(undefined)}
           contentSummary={`${selectedCreatureCount} creatures · ${selectedItemCount} items · ${selectedDiscoveryCount} discoveries`}
-          saveControls={
-            <button type="submit" className="btn btn-outline btn-sm">
-              {saving ? "Saving…" : "Save campaign"}
-            </button>
-          }
-          saveStatus={saveMessage}
           content={
             <>
-              <div className="rounded-box border border-base-300 bg-base-100 p-3">
-                <p className="text-sm leading-6 text-base-content/60">
-                  {stringAt(selectedLocation.data.description) ||
-                    "No world description is available for this location."}
-                </p>
+              <div className="grid gap-3">
+                <LocationDetailsInspector
+                  location={selectedLocation}
+                  onChange={(updated) =>
+                    onLocationsChange(
+                      allLocations.map((location) =>
+                        location.id === updated.id ? updated : location,
+                      ),
+                    )
+                  }
+                />
                 {selectedLocation.id !== draft.partyStartingLocationId && (
                   <button
                     type="button"
@@ -1690,12 +2450,20 @@ function CampaignLocationsWorkspace({
               </div>
               <PlacementSection
                 key={`creatures:${selectedLocation.id}`}
-                title="Creature placements"
-                help="Creatures expected to begin here. Placement does not imply combat."
-                sourceLabel="Creature"
+                title="Creature instances"
+                help="Each placement is an instance of a world creature type and persists across sessions."
+                sourceLabel="Creature type"
                 sources={creatures}
                 locationId={selectedLocation.id}
                 placements={draft.creaturePlacements}
+                onCreateWithAi={async (prompt) => {
+                  const result = await createCreatureWithAi(
+                    draft.worldId,
+                    `${prompt}\n\nThe creature will first appear in ${selectedLocation.name ?? "the current location"}.`,
+                  );
+                  onCreaturesChange([...creatures, result.creature]);
+                  return result.creature;
+                }}
                 onChange={(creaturePlacements) =>
                   setDraft({ ...draft, creaturePlacements })
                 }
@@ -1842,7 +2610,7 @@ export function CampaignCreatePage() {
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-4xl px-6 py-10 lg:px-10">
+      <div className="w-full px-6 py-8 lg:px-10">
         <header className="border-b border-base-300 pb-8">
           <a href="/campaigns" className="text-sm text-primary">
             ← Campaigns
@@ -2005,7 +2773,14 @@ export function CampaignEditorPage({
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!record || !draft) return;
-    const validation = validationMessage(draft);
+    const currentWorldLocationIds = locations
+      .filter((location) => location.id !== draft.worldId)
+      .map((location) => location.id);
+    const normalizedDraft = {
+      ...draft,
+      locationIds: currentWorldLocationIds,
+    };
+    const validation = validationMessage(normalizedDraft);
     if (validation) {
       setMessage(validation);
       return;
@@ -2015,7 +2790,7 @@ export function CampaignEditorPage({
     try {
       const updated = await replaceDomainRecord(
         record,
-        dataFrom(record, draft),
+        dataFrom(record, normalizedDraft),
       );
       setRecord(updated);
       setDraft(draftFrom(updated));
@@ -2027,10 +2802,10 @@ export function CampaignEditorPage({
     }
   }
 
-  if (!draft) {
+  if (!draft || !record) {
     return (
       <main className="min-h-screen bg-base-100 px-6 py-12 text-base-content">
-        <div className="mx-auto max-w-5xl">
+        <div className="w-full">
           <a href="/campaigns" className="text-sm text-amber-300">
             ← Back to campaigns
           </a>
@@ -2040,28 +2815,41 @@ export function CampaignEditorPage({
     );
   }
 
+  const setCampaignDraft: Dispatch<SetStateAction<CampaignDraft>> = (next) =>
+    setDraft((current) => {
+      if (!current) return current;
+      return typeof next === "function" ? next(current) : next;
+    });
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-base-100 text-base-content">
+    <main
+      className={`relative overflow-hidden bg-base-100 text-base-content ${view === "locations" ? "h-full min-h-0" : "min-h-screen"}`}
+    >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-[radial-gradient(circle_at_80%_0%,color-mix(in_oklab,var(--color-primary)_10%,transparent),transparent_42%)]" />
       <form
         onSubmit={save}
-        className={`relative mx-auto px-6 py-12 lg:px-10 lg:py-16 ${view === "locations" ? "max-w-[96rem]" : "max-w-6xl"}`}
+        className={`relative w-full ${view === "locations" ? "h-full min-h-0 p-0" : "px-6 py-8 lg:px-10 lg:py-10"}`}
       >
-        <CampaignHeader
-          name={draft.name}
-          saving={saving}
-          compact={view === "locations"}
-        />
-        <div className={`${view === "locations" ? "mt-4" : "mt-8"} grid gap-6`}>
+        {view === "definition" && (
+          <CampaignHeader name={draft.name} saving={saving} />
+        )}
+        <div
+          className={`${view === "locations" ? "h-full min-h-0" : "mt-8"} grid gap-6`}
+        >
           {view === "definition" ? (
-            <OverviewFields draft={draft} setDraft={setDraft} />
+            <OverviewFields draft={draft} setDraft={setCampaignDraft} />
           ) : (
             <CampaignLocationsWorkspace
+              campaignRecord={record}
+              campaignId={id}
               draft={draft}
-              setDraft={setDraft}
+              setDraft={setCampaignDraft}
               locations={locations}
               allLocations={allLocations}
+              onLocationsChange={setAllLocations}
               creatures={creatures}
+              onCreaturesChange={setCreatures}
+              onCampaignRecordChange={setRecord}
               items={items}
               saving={saving}
               saveMessage={message}

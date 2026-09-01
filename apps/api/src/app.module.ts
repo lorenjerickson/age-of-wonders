@@ -12,7 +12,10 @@ import { TransferModule } from "./transfer/transfer.module";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [".env", "../../.env"],
+    }),
     PrismaModule,
     HealthModule,
     MediaModule,

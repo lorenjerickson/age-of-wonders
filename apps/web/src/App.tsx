@@ -19,152 +19,11 @@ import { ItemCreatePage, ItemEditorPage, ItemListPage } from "./Items";
 import { CampaignCreatePage, CampaignEditorPage } from "./Campaigns";
 import { SessionCanvasHarness } from "./SessionCanvasHarness";
 
-const TOP_NAVIGATION = [
-  { label: "Systems", href: "/systems" },
-  { label: "Worlds", href: "/worlds" },
-  { label: "Campaigns", href: "/campaigns" },
-  { label: "Sessions", href: "/sessions" },
-] as const;
+type PrimaryNavigationLabel =
+  "Location" | "Campaign" | "Sessions" | "Creatures" | "Items";
 
-interface AiActivity {
-  title: string;
-  description: string;
-}
-
-function aiActivitiesFor(section: string | undefined, hasRecord: boolean) {
-  const activities: Record<string, AiActivity[]> = {
-    systems: [
-      {
-        title: "Adapt a ruleset",
-        description:
-          "Translate the system’s core rules into table-ready guidance and rulings.",
-      },
-      {
-        title: "Draft content guidelines",
-        description:
-          "Define the tone, constraints, and balance targets for generated content.",
-      },
-      {
-        title: "Check system coverage",
-        description:
-          "Identify missing mechanics, definitions, or play procedures.",
-      },
-    ],
-    campaigns: [
-      {
-        title: hasRecord ? "Refine the foundation" : "Pitch a campaign",
-        description: hasRecord
-          ? "Strengthen the premise, introduction, placements, and discoveries without scripting play."
-          : "Develop a campaign premise from a world, conflict, and desired atmosphere.",
-      },
-      {
-        title: "Create a session brief",
-        description:
-          "Prepare objectives, likely scenes, key NPCs, and flexible complications.",
-      },
-      {
-        title: "Surface open threads",
-        description:
-          "Summarize unresolved hooks and suggest meaningful ways to pay them off.",
-      },
-    ],
-    sessions: [
-      {
-        title: "Prepare the next session",
-        description:
-          "Build a concise run sheet from the campaign’s current state.",
-      },
-      {
-        title: "Recap recent play",
-        description:
-          "Turn session notes into a player-facing recap and GM follow-ups.",
-      },
-      {
-        title: "Improvise an encounter",
-        description:
-          "Generate a situation that fits the active location and party goals.",
-      },
-    ],
-    creatures: [
-      {
-        title: hasRecord ? "Deepen this creature" : "Invent a creature",
-        description:
-          "Develop memorable behavior, ecology, motivations, and encounter cues.",
-      },
-      {
-        title: "Create encounter tactics",
-        description:
-          "Suggest terrain-aware tactics and escalation options for the table.",
-      },
-      {
-        title: "Generate variants",
-        description:
-          "Adapt a creature for a different environment, role, or challenge level.",
-      },
-    ],
-    items: [
-      {
-        title: hasRecord ? "Develop this item" : "Invent an item",
-        description:
-          "Create setting-specific equipment with table-ready mechanics and history.",
-      },
-      {
-        title: "Balance item mechanics",
-        description:
-          "Review dice, actions, requirements, and rarity against the active rules.",
-      },
-      {
-        title: "Create related items",
-        description:
-          "Build a family, upgrade path, or cultural variant grounded in the world.",
-      },
-    ],
-    locations: [
-      {
-        title: hasRecord ? "Enrich this location" : "Outline a location",
-        description:
-          "Add sensory details, landmarks, inhabitants, secrets, and active tensions.",
-      },
-      {
-        title: "Generate a map concept",
-        description:
-          "Describe a playable layout shaped by the location’s terrain and purpose.",
-      },
-      {
-        title: "Seed local encounters",
-        description:
-          "Create situations grounded in this place and its current conflicts.",
-      },
-    ],
-    worlds: [
-      {
-        title: hasRecord ? "Expand this world" : "Imagine a new world",
-        description: hasRecord
-          ? "Develop the selected place while preserving the world’s established facts."
-          : "Turn a premise, mood, or conflict into a coherent setting.",
-      },
-      {
-        title: "Create a child location",
-        description:
-          "Add a place that reinforces the parent location’s themes and conflicts.",
-      },
-      {
-        title: "Draft a session-zero brief",
-        description:
-          "Summarize player-safe themes, expectations, and character prompts.",
-      },
-    ],
-  };
-
-  return activities[section ?? ""] ?? activities.worlds;
-}
-
-function NavigationIcon({
-  item,
-}: {
-  item: "Definition" | "Locations" | "Creatures" | "Items";
-}) {
-  if (item === "Definition") {
+function NavigationIcon({ item }: { item: PrimaryNavigationLabel }) {
+  if (item === "Campaign" || item === "Sessions") {
     return (
       <svg
         aria-hidden="true"
@@ -174,13 +33,23 @@ function NavigationIcon({
         strokeWidth="1.8"
         className="h-5 w-5"
       >
-        <path d="M6 3.5h9l3 3V20.5H6v-17Z" />
-        <path d="M15 3.5v3h3M9 11h6M9 15h6" />
+        {item === "Campaign" && (
+          <>
+            <path d="M6 3.5h9l3 3V20.5H6v-17Z" />
+            <path d="M15 3.5v3h3M9 11h6M9 15h6" />
+          </>
+        )}
+        {item === "Sessions" && (
+          <>
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M12 7.5V12l3 2" />
+          </>
+        )}
       </svg>
     );
   }
 
-  if (item === "Locations") {
+  if (item === "Location") {
     return (
       <svg
         aria-hidden="true"
@@ -226,271 +95,149 @@ function NavigationIcon({
   );
 }
 
-type EditorSection = "worlds" | "campaigns" | "sessions";
-type EditorNavigationLabel = "Definition" | "Locations" | "Creatures" | "Items";
-
-interface EditorLayoutRoute {
-  section: EditorSection;
-  title: string;
-  activeNavigation: string;
-  navigation: ReadonlyArray<{
-    label: EditorNavigationLabel;
-    href: string;
-  }>;
-}
-
-function editorLayoutRouteFor(
-  segments: string[],
-): EditorLayoutRoute | undefined {
-  const [section, encodedId, nestedSection] = segments;
-
-  if (section === "campaigns" && encodedId && encodedId !== "new") {
-    const campaignHref = `/campaigns/${encodeURIComponent(
-      decodeURIComponent(encodedId),
-    )}`;
-    return {
-      section,
-      title: "Campaign studio",
-      activeNavigation:
-        nestedSection === "locations" ? "locations" : "definition",
-      navigation: [
-        { label: "Definition", href: campaignHref },
-        { label: "Locations", href: `${campaignHref}/locations` },
-      ],
-    };
-  }
-
-  // List and other top-level routes stay full-width.
-  if (section !== "worlds" || !encodedId) return undefined;
-
-  const worldHref = `/worlds/${encodeURIComponent(
-    decodeURIComponent(encodedId),
-  )}`;
-  return {
-    section,
-    title: "World studio",
-    activeNavigation:
-      nestedSection === "creatures" || nestedSection === "items"
-        ? nestedSection
-        : "locations",
-    navigation: [
-      { label: "Locations", href: worldHref },
-      { label: "Creatures", href: `${worldHref}/creatures` },
-      { label: "Items", href: `${worldHref}/items` },
-    ],
-  };
-}
-
-function AppShell({
-  children,
-  editorRoute,
-}: {
-  children: ReactNode;
-  editorRoute?: EditorLayoutRoute;
-}) {
+function AppShell({ children }: { children: ReactNode }) {
   const segments = window.location.pathname.split("/").filter(Boolean);
   const activeSection = segments[0];
   const nestedSection = activeSection === "worlds" ? segments[2] : undefined;
-  const activitySection =
-    nestedSection === "creatures" || nestedSection === "items"
-      ? nestedSection
-      : activeSection;
-  const hasActivityRecord =
-    nestedSection === "creatures" || nestedSection === "items"
-      ? Boolean(segments[3] && segments[3] !== "new")
-      : Boolean(segments[1]);
-  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
-  const activities = aiActivitiesFor(activitySection, hasActivityRecord);
-  const activeTopSection =
-    activeSection === "locations" ||
-    activeSection === "creatures" ||
-    activeSection === "items"
-      ? "worlds"
-      : (activeSection ?? "worlds");
+  const [world, setWorld] = useState<DomainRecord>();
+  const [campaign, setCampaign] = useState<DomainRecord>();
+  const locationWorkspaceActive =
+    activeSection === "campaigns" && segments[2] === "locations";
 
   useEffect(() => {
-    if (!aiDrawerOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAiDrawerOpen(false);
+    let active = true;
+    void Promise.all([
+      listDomainRecords("locations", {
+        kind: "world",
+        limit: 1,
+        sort: "updatedAt",
+        order: "desc",
+      }),
+      listDomainRecords("campaigns", {
+        limit: 1,
+        sort: "updatedAt",
+        order: "desc",
+      }),
+    ]).then(
+      ([worlds, campaigns]) => {
+        if (!active) return;
+        setWorld(worlds.items[0]);
+        setCampaign(campaigns.items[0]);
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [aiDrawerOpen]);
+  }, []);
+
+  const worldHref = world
+    ? `/worlds/${encodeURIComponent(world.id)}`
+    : "/worlds";
+  const campaignHref = campaign
+    ? `/campaigns/${encodeURIComponent(campaign.id)}`
+    : "/campaigns";
+  const locationWorkspaceHref = campaign
+    ? `${campaignHref}/locations`
+    : worldHref;
+  const primaryNavigation: ReadonlyArray<{
+    label: PrimaryNavigationLabel;
+    href: string;
+    active: boolean;
+  }> = [
+    {
+      label: "Location",
+      href: locationWorkspaceHref,
+      active:
+        !activeSection ||
+        (activeSection === "campaigns" && segments[2] === "locations") ||
+        (activeSection === "worlds" &&
+          nestedSection !== "creatures" &&
+          nestedSection !== "items") ||
+        activeSection === "locations",
+    },
+    {
+      label: "Campaign",
+      href: campaignHref,
+      active: activeSection === "campaigns" && segments[2] !== "locations",
+    },
+    {
+      label: "Sessions",
+      href: "/sessions",
+      active: activeSection === "sessions",
+    },
+    {
+      label: "Creatures",
+      href: world ? `${worldHref}/creatures` : "/creatures",
+      active:
+        activeSection === "creatures" ||
+        (activeSection === "worlds" && nestedSection === "creatures"),
+    },
+    {
+      label: "Items",
+      href: world ? `${worldHref}/items` : "/items",
+      active:
+        activeSection === "items" ||
+        (activeSection === "worlds" && nestedSection === "items"),
+    },
+  ];
 
   return (
-    <div className={editorRoute ? "drawer lg:drawer-open" : "min-h-screen"}>
-      {editorRoute && (
-        <input id="app-drawer" type="checkbox" className="drawer-toggle" />
-      )}
-      <div className={editorRoute ? "drawer-content min-w-0" : "min-w-0"}>
-        <header className="navbar sticky top-0 z-30 min-h-16 border-b border-base-300 bg-base-200/95 px-3 backdrop-blur sm:px-5">
-          {editorRoute && (
-            <div className="navbar-start min-w-0 lg:hidden">
-              <label
-                htmlFor="app-drawer"
-                aria-label="Open navigation"
-                className="btn btn-square btn-ghost btn-sm"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="h-5 w-5"
-                >
-                  <path d="M4 7h16M4 12h16M4 17h16" />
-                </svg>
-              </label>
-            </div>
-          )}
-          <nav
-            aria-label="Workspace navigation"
-            className="navbar-center min-w-0 flex-1 justify-start overflow-x-auto lg:justify-center"
-          >
-            <div role="tablist" className="tabs tabs-border flex-nowrap">
-              {TOP_NAVIGATION.map((item) => {
-                const section = item.href.slice(1);
-                const active = activeTopSection === section;
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    role="tab"
-                    aria-current={active ? "page" : undefined}
-                    className={`tab h-16 whitespace-nowrap ${active ? "tab-active font-semibold" : ""}`}
-                  >
-                    {item.label}
-                  </a>
-                );
-              })}
-            </div>
-          </nav>
-          <div className="navbar-end ml-2 w-auto">
-            <button
-              type="button"
-              className={`btn btn-sm gap-2 ${aiDrawerOpen ? "btn-primary" : "btn-ghost"}`}
-              aria-controls="ai-activities-drawer"
-              aria-expanded={aiDrawerOpen}
-              onClick={() => setAiDrawerOpen((open) => !open)}
-            >
-              <span aria-hidden="true" className="text-base">
-                ✦
-              </span>
-              <span className="hidden sm:inline">AI activities</span>
-            </button>
-          </div>
-        </header>
+    <div className="drawer h-dvh overflow-hidden lg:drawer-open">
+      <input id="app-drawer" type="checkbox" className="drawer-toggle" />
+      <div
+        className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
+      >
+        <label
+          htmlFor="app-drawer"
+          aria-label="Open navigation"
+          className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
+        >
+          <span aria-hidden="true">☰</span>
+        </label>
         {children}
       </div>
-      {editorRoute && (
-        <div className="drawer-side z-40">
-          <label
-            htmlFor="app-drawer"
-            aria-label="Close navigation"
-            className="drawer-overlay"
-          />
-          <aside className="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-200 p-4 text-base-content">
-            <a
-              href={`/${editorRoute.section}`}
-              className="btn btn-ghost h-auto justify-start px-3 py-4 text-left"
-            >
-              <span>
-                <span className="block text-xs font-semibold tracking-[0.22em] text-primary uppercase">
-                  Age of Wonders
-                </span>
-                <span className="mt-1 block text-lg font-semibold">
-                  {editorRoute.title}
-                </span>
-              </span>
-            </a>
-            <nav aria-label="Primary navigation" className="mt-8">
-              <ul className="menu w-full gap-2 p-0">
-                {editorRoute.navigation.map((item) => {
-                  const section = item.label.toLowerCase();
-                  const active = editorRoute.activeNavigation === section;
-                  return (
-                    <li key={item.href}>
-                      <a
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        className={
-                          active ? "menu-active font-semibold" : undefined
-                        }
-                      >
-                        <NavigationIcon item={item.label} />
-                        {item.label}
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          </aside>
-        </div>
-      )}
-
-      {aiDrawerOpen && (
-        <button
-          type="button"
-          aria-label="Close AI activities"
-          className="fixed inset-0 z-40 cursor-default bg-black/35"
-          onClick={() => setAiDrawerOpen(false)}
+      <div className="drawer-side z-40">
+        <label
+          htmlFor="app-drawer"
+          aria-label="Close navigation"
+          className="drawer-overlay"
         />
-      )}
-      <aside
-        id="ai-activities-drawer"
-        aria-label="Recommended AI activities"
-        aria-hidden={!aiDrawerOpen}
-        inert={!aiDrawerOpen}
-        className={`fixed top-0 right-0 z-50 flex h-dvh w-[min(24rem,calc(100vw-2rem))] flex-col border-l border-base-300 bg-base-200 shadow-2xl transition-transform duration-200 ease-out ${aiDrawerOpen ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-base-300 p-5">
-          <div>
+        <aside className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl">
+          <div className="px-3 pt-3 pb-5">
             <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
-              AI assistant
+              GM workspace
             </p>
-            <h2 className="mt-2 text-xl font-semibold">
-              Recommended next steps
-            </h2>
+            <p className="mt-2 truncate font-semibold">
+              {world?.name ?? "Your world"}
+            </p>
+            <p className="mt-1 truncate text-sm text-base-content/50">
+              {campaign?.name ?? "Campaign not configured"}
+            </p>
           </div>
-          <button
-            type="button"
-            className="btn btn-circle btn-ghost btn-sm"
-            aria-label="Close AI activities"
-            onClick={() => setAiDrawerOpen(false)}
-          >
-            ✕
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          <p className="text-sm leading-6 text-base-content/60">
-            Suggestions are tailored to the section and record you are viewing.
+          <nav aria-label="Primary navigation" className="min-h-0 flex-1">
+            <ul className="menu w-full gap-1 p-0">
+              {primaryNavigation.map((item) => (
+                <li key={item.label}>
+                  <a
+                    href={item.href}
+                    aria-current={item.active ? "page" : undefined}
+                    className={
+                      item.active ? "menu-active font-semibold" : undefined
+                    }
+                  >
+                    <NavigationIcon item={item.label} />
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <p className="px-3 py-3 text-xs leading-5 text-base-content/35">
+            World changes persist across every session.
           </p>
-          <ol className="mt-6 grid gap-3">
-            {activities.map((activity, index) => (
-              <li
-                key={activity.title}
-                className="card border border-base-300 bg-base-100"
-              >
-                <div className="card-body gap-2 p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="badge badge-primary badge-outline mt-0.5">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <h3 className="font-semibold">{activity.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-base-content/60">
-                        {activity.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </aside>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -910,32 +657,131 @@ function ResourceEditorPage({
 }
 
 function SessionsPage() {
+  const [sessions, setSessions] = useState<DomainRecord[]>([]);
+  const [campaign, setCampaign] = useState<DomainRecord>();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void Promise.all([
+      listDomainRecords("sessions", {
+        limit: 100,
+        sort: "createdAt",
+        order: "desc",
+      }),
+      listDomainRecords("campaigns", {
+        limit: 1,
+        sort: "updatedAt",
+        order: "desc",
+      }),
+    ]).then(
+      ([sessionResult, campaignResult]) => {
+        const currentCampaign = campaignResult.items[0];
+        setSessions(
+          currentCampaign
+            ? sessionResult.items.filter(
+                (session) => session.data.campaignId === currentCampaign.id,
+              )
+            : [],
+        );
+        setCampaign(currentCampaign);
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+  }, []);
+
+  const workspaceHref = campaign
+    ? `/campaigns/${encodeURIComponent(campaign.id)}/locations`
+    : "/campaigns";
+
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
-        <Header />
-        <section className="py-12">
-          <p className="text-sm text-amber-300">Play workspace</p>
-          <h1 className="mt-3 text-5xl font-semibold tracking-tight">
-            Sessions
-          </h1>
-          <div className="card mt-10 border border-dashed border-base-300 bg-base-200/50">
-            <div className="card-body items-center py-16 text-center">
-              <span className="text-4xl text-primary" aria-hidden="true">
-                ◷
-              </span>
-              <h2 className="mt-3 text-xl font-semibold">
-                Session workspace is ready for its next chapter
-              </h2>
-              <p className="mt-2 max-w-lg leading-7 text-base-content/60">
-                There is no persisted session resource yet. When session data is
-                added to the domain model, preparation notes, recaps, and live
-                play tools can live here.
-              </p>
-            </div>
+      <div className="w-full px-6 py-8 lg:px-10">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-base-300 pb-6">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
+              World journal
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold">Sessions</h1>
+            <p className="mt-2 text-sm text-base-content/55">
+              Sessions mark periods of play; world and location state continues
+              between them.
+            </p>
           </div>
-        </section>
+          <a href={workspaceHref} className="btn btn-primary">
+            Open location workspace
+          </a>
+        </div>
+        {loading ? (
+          <p className="py-10 text-sm text-base-content/50">
+            Loading session history…
+          </p>
+        ) : sessions.length ? (
+          <ol className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {sessions.map((session) => (
+              <li
+                key={session.id}
+                className="rounded-box border border-base-300 bg-base-200/65 p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-semibold">
+                    {session.name ?? "Untitled session"}
+                  </h2>
+                  <span className="badge badge-outline capitalize">
+                    {typeof session.data.status === "string"
+                      ? session.data.status.replaceAll("-", " ")
+                      : "Recorded"}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-base-content/50">
+                  {typeof session.data.notes === "string" &&
+                  session.data.notes.trim()
+                    ? session.data.notes
+                    : "No session notes yet."}
+                </p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className="mt-6 rounded-box border border-dashed border-base-300 p-8 text-center">
+            <h2 className="font-semibold">No sessions recorded yet</h2>
+            <p className="mt-2 text-sm text-base-content/50">
+              Start the first session from any location workspace.
+            </p>
+          </div>
+        )}
       </div>
+    </main>
+  );
+}
+
+function WorkspaceEntryPage() {
+  const [showSetup, setShowSetup] = useState(false);
+
+  useEffect(() => {
+    void listDomainRecords("campaigns", {
+      limit: 1,
+      sort: "updatedAt",
+      order: "desc",
+    }).then(
+      (result) => {
+        const current = result.items[0];
+        if (!current) {
+          setShowSetup(true);
+          return;
+        }
+        window.location.replace(
+          `/campaigns/${encodeURIComponent(current.id)}/locations`,
+        );
+      },
+      () => setShowSetup(true),
+    );
+  }, []);
+
+  if (showSetup) return <LandingPage />;
+  return (
+    <main className="grid min-h-[calc(100dvh-3rem)] place-items-center bg-base-100">
+      <p className="text-sm text-base-content/55">Opening your world…</p>
     </main>
   );
 }
@@ -1083,7 +929,7 @@ function AppContent() {
       <ResourceListPage resource="systems" label="Systems" basePath="systems" />
     );
   if (segments[0] === "sessions") return <SessionsPage />;
-  return <LandingPage />;
+  return <WorkspaceEntryPage />;
 }
 
 export function App() {
@@ -1091,10 +937,8 @@ export function App() {
   if (segments.length === 1 && segments[0] === "session-canvas-lab") {
     return <SessionCanvasHarness />;
   }
-  const editorRoute = editorLayoutRouteFor(segments);
-
   return (
-    <AppShell editorRoute={editorRoute}>
+    <AppShell>
       <AppContent />
     </AppShell>
   );

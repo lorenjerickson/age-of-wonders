@@ -11,10 +11,11 @@ an editable starting point for a GM, not a script for the party.
 - Write a separate player introduction that is safe to share at session zero. It should be
   evocative, concise, and free of protected GM information.
 - Select one valid starting location from the supplied world-location catalog.
-- Select a focused set of world locations to include in the campaign. Include every location used as
-  the party start, a placement, or a discovery.
-- When useful world creatures or items are available, propose a small number of initial placements
-  at valid locations. Placement never implies combat or a required interaction.
+- Include the supplied world-location hierarchy. The singleton campaign can author and play in every
+  location; `locationIds` is a materialized hierarchy, not a separate campaign scope.
+- When useful world creatures or items are available, propose a small number of persistent
+  placements at valid locations. Placement never implies combat or a required interaction, and it
+  remains present across session boundaries until the GM changes it or resets the world.
 - Author three to six location discoveries. Give each a clear GM-facing name and useful grants.
   Prefer rumors, facts, and general knowledge. Item grants may reference only supplied item
   definitions. Do not invent identifiers.
@@ -36,7 +37,7 @@ Return exactly one JSON object with this shape:
   "name": "Campaign name",
   "gmPremise": "<p>Protected GM context.</p>",
   "playerIntroduction": "<p>Player-safe introduction.</p>",
-  "locationIds": ["IDs from the location catalog included in this campaign"],
+  "locationIds": ["all IDs from the supplied world-location catalog"],
   "partyStartingLocationId": "an ID from the location catalog",
   "creaturePlacements": [
     {
@@ -68,5 +69,5 @@ Return exactly one JSON object with this shape:
 ```
 
 Arrays may be empty when the supplied world has no suitable content. Do not include IDs outside the
-provided catalogs. Leave `locationCanvases` empty; the GM configures those presentation defaults in
-the campaign canvas. Do not include commentary outside the JSON object.
+provided catalogs. Leave `locationCanvases` empty; the GM configures that persistent presentation
+state in the location workspace. Do not include commentary outside the JSON object.

@@ -91,6 +91,10 @@ Other shared values include:
 ## Persisted API resources
 
 The generic domain API persists these resources. The identifier used by the API is derived as shown.
+An active installation contains exactly one root `locations` record with kind `world` and exactly
+one `campaigns` record. It may contain many `sessions` records. Ordinary creation rejects a second
+world or campaign; resetting the world removes its campaign, sessions, authoritative game snapshot,
+owned content, and location hierarchy.
 
 | Resource               | Aggregate                 | Stored ID              | Stored kind/name                                |
 | ---------------------- | ------------------------- | ---------------------- | ----------------------------------------------- |
@@ -509,31 +513,39 @@ Minimal structurally complete root-world example:
 
 ## Campaign definitions and world state
 
-`CampaignDefinition` is the reusable GM-authored starting context persisted by the `campaigns`
-resource. It contains `identity`, `name`, the root-world `worldId`, a protected `gmPremise`, a
-`playerIntroduction`, an explicit set of included world locations in `locationIds`, and a required
-`partyStartingLocationId` within that set. The premise and introduction are sanitized rich HTML
+`CampaignDefinition` is the singleton world's GM-authored story and persistent play context,
+persisted by the `campaigns` resource. It contains `identity`, `name`, the root-world `worldId`, a
+protected `gmPremise`, a `playerIntroduction`, the materialized world hierarchy in `locationIds`,
+and a required `partyStartingLocationId` within that set. Every world descendant is in editable
+scope; `locationIds` does not create a campaign-specific location silo. The premise and introduction are sanitized rich HTML
 limited to paragraphs, second- and third-level headings, emphasis, lists, blockquotes, line breaks,
 and safe links. It does not contain a party roster or starting clock and never prescribes player
 actions.
 
-Campaign definitions own initial placement records and location discoveries:
+Campaign definitions own persistent placement records and location discoveries shared by every
+session:
 
-- `creaturePlacements` associate a world-supplied creature with its initial world location.
-- `itemPlacements` associate a world item definition with its initial world location.
-- `objectPlacements` associate a world object definition with its initial world location.
+- `creaturePlacements` associate a world-supplied creature with its current world location and may
+  include a persistent normalized `mapPosition` on that location's map plus a positive `scale`
+  multiplier for its authored token size.
+- `itemPlacements` associate a world item definition with its current world location.
+- `objectPlacements` associate a world object definition with its current world location.
 - `discoveries` contain a human-readable GM name, a world location, and zero or more grants. Grants
   are discriminated as `money`, `rumor`, `fact`, `general-knowledge`, or `item`. Money uses
   `CurrencyAmount`; item grants reference a world item definition.
-- `locationCanvases` contain reusable GM-authored presentation defaults for included locations.
+- `locationCanvases` contain persistent GM-authored presentation state for world locations.
   Each entry identifies its `locationId` and provides ordered layer settings with a stable `key`,
-  boolean `visible` state, and normalized `opacity` from 0 through 1. These are campaign preparation
-  defaults, not mutable session state. World locations remain authoritative for map images, walls,
-  transitions, and orientation; live rounds, visibility, token positions, and revealed information
-  remain session concerns.
+  boolean `visible` state, and normalized `opacity` from 0 through 1. This presentation state is
+  shared across session boundaries. `pixelsPerFiveFeet` defines the measurement scale used by the
+  grid and side-on fall resolution. Optional arrays persist directly authored light sources, sound
+  sources, drawings, templates, and notes. Every authored object has a human-readable `name` and a
+  normalized map position. Light and sound ranges and drawing/template sizes use `radius`, expressed
+  as a fraction of the smaller map dimension. World locations remain authoritative for map images,
+  walls, transitions, and orientation. Sessions are journal and timing boundaries; ending one does
+  not reset placements, discoveries, or location presentation.
 
-Every campaign location reference must appear in `locationIds`, and every entry in `locationIds`
-must resolve within the campaign's `worldId`. Campaign generation must not invent creature, item,
+Every campaign location reference must appear in `locationIds`, every world descendant must be
+materialized there, and every entry must resolve within the campaign's `worldId`. Campaign generation must not invent creature, item,
 object, currency, or location definitions inside a campaign. A location or placement supplies
 context only: presence never reveals a discovery, awards an item, starts combat, or restricts the
 actions available to the party.
@@ -569,9 +581,72 @@ interface CampaignCanvasLayerConfiguration {
   opacity: number;
 }
 
+interface CampaignCreaturePlacement {
+  id: string;
+  creatureId: CreatureId;
+  locationId: LocationId;
+  mapPosition?: NormalizedMapCoordinate;
+  // Optional visual scale multiplier for the placed token.
+  scale?: number;
+}
+
+interface CampaignCanvasLightSource {
+  id: string;
+  name: string;
+  position: NormalizedMapCoordinate;
+  // Fraction of the smaller map dimension.
+  radius: number;
+  // CSS-compatible color used by the location canvas renderer.
+  color: string;
+}
+
+type CampaignCanvasSoundVolumeMode = "distance" | "constant";
+
+interface CampaignCanvasSoundSource {
+  id: string;
+  name: string;
+  position: NormalizedMapCoordinate;
+  // Fraction of the smaller map dimension.
+  radius: number;
+  // 0 (silent) through 1 (full volume).
+  volume: number;
+  volumeMode: CampaignCanvasSoundVolumeMode;
+  loop: boolean;
+}
+
+interface CampaignCanvasDrawing {
+  id: string;
+  name: string;
+  position: NormalizedMapCoordinate;
+  // Fraction of the smaller map dimension.
+  radius: number;
+}
+
+interface CampaignCanvasTemplate {
+  id: string;
+  name: string;
+  position: NormalizedMapCoordinate;
+  // Fraction of the smaller map dimension.
+  radius: number;
+}
+
+interface CampaignCanvasNote {
+  id: string;
+  name: string;
+  position: NormalizedMapCoordinate;
+  text: string;
+}
+
 interface CampaignLocationCanvasConfiguration {
   locationId: LocationId;
   layers: CampaignCanvasLayerConfiguration[];
+  // Canvas pixels representing five feet for measurement and side-on falls.
+  pixelsPerFiveFeet?: number;
+  lightSources?: CampaignCanvasLightSource[];
+  soundSources?: CampaignCanvasSoundSource[];
+  drawings?: CampaignCanvasDrawing[];
+  templates?: CampaignCanvasTemplate[];
+  notes?: CampaignCanvasNote[];
 }
 
 interface CampaignDefinition {

@@ -20,6 +20,42 @@ const location = (id: string, kind: string, parentLocationId?: string) => ({
   },
 });
 
+describe("DomainService singleton creation", () => {
+  it.each([
+    [
+      "locations" as const,
+      {
+        identity: { id: "world:new" },
+        name: "Another World",
+        kind: "world",
+        placement: { kind: "root" },
+      },
+      "A world already exists",
+    ],
+    [
+      "campaigns" as const,
+      {
+        identity: { id: "campaign:new" },
+        name: "Another Campaign",
+        worldId: "world:current",
+      },
+      "A campaign already exists",
+    ],
+  ])("rejects a second %s aggregate", async (resource, data, message) => {
+    const create = jest.fn();
+    const prisma = {
+      domainRecord: {
+        count: jest.fn(() => Promise.resolve(1)),
+        create,
+      },
+    } as unknown as PrismaService;
+    const service = new DomainService(prisma, {} as GraphService);
+
+    await expect(service.create(resource, data)).rejects.toThrow(message);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe("DomainService.removeWorld", () => {
   it("removes connections and descendants before deleting the root world", async () => {
     const world = location("world-1", "world");
@@ -59,6 +95,64 @@ describe("DomainService.removeWorld", () => {
         extensions: { "aow:worldId": "world-1" },
       },
     };
+    const campaign = {
+      ...location("campaign-1", "campaign"),
+      resource: "campaigns",
+      data: {
+        identity: { id: "campaign-1" },
+        name: "The Glasswake",
+        worldId: "world-1",
+      },
+    };
+    const session = {
+      ...location("session-1", "session"),
+      resource: "sessions",
+      data: {
+        identity: { id: "session-1" },
+        name: "Into the Observatory",
+        worldId: "world-1",
+        campaignId: "campaign-1",
+      },
+    };
+    const game = {
+      ...location("campaign-1", "game-state"),
+      resource: "games",
+      data: {
+        campaign: {
+          identity: { id: "campaign-1" },
+          name: "The Glasswake",
+        },
+      },
+    };
+    const otherCampaign = {
+      ...campaign,
+      id: "campaign-2",
+      data: {
+        identity: { id: "campaign-2" },
+        name: "Elsewhere",
+        worldId: "world-2",
+      },
+    };
+    const otherSession = {
+      ...session,
+      id: "session-2",
+      data: {
+        identity: { id: "session-2" },
+        name: "Elsewhere",
+        worldId: "world-2",
+        campaignId: "campaign-2",
+      },
+    };
+    const otherGame = {
+      ...game,
+      id: "campaign-2",
+      data: {
+        campaign: {
+          identity: { id: "campaign-2" },
+          name: "Elsewhere",
+        },
+      },
+    };
     const records = [
       world,
       region,
@@ -67,6 +161,12 @@ describe("DomainService.removeWorld", () => {
       creature,
       item,
       definition,
+      campaign,
+      session,
+      game,
+      otherCampaign,
+      otherSession,
+      otherGame,
     ];
     const deleted: string[] = [];
     const prisma = {
@@ -78,12 +178,18 @@ describe("DomainService.removeWorld", () => {
           ),
         ),
         delete: jest.fn(
-          ({ where }: { where: { resource_id: { id: string } } }) => {
+          ({
+            where,
+          }: {
+            where: { resource_id: { resource: string; id: string } };
+          }) => {
             const record = records.find(
-              (candidate) => candidate.id === where.resource_id.id,
+              (candidate) =>
+                candidate.resource === where.resource_id.resource &&
+                candidate.id === where.resource_id.id,
             );
             if (!record) throw new Error("missing test record");
-            deleted.push(record.id);
+            deleted.push(`${record.resource}:${record.id}`);
             return Promise.resolve(record);
           },
         ),
@@ -97,13 +203,16 @@ describe("DomainService.removeWorld", () => {
     await service.removeWorld("world-1");
 
     expect(deleted).toEqual([
-      "connection-1",
-      "creature-1",
-      "item-1",
-      "definition-1",
-      "site-1",
-      "region-1",
-      "world-1",
+      "sessions:session-1",
+      "games:campaign-1",
+      "campaigns:campaign-1",
+      "location-connections:connection-1",
+      "creatures:creature-1",
+      "items:item-1",
+      "definitions:definition-1",
+      "locations:site-1",
+      "locations:region-1",
+      "locations:world-1",
     ]);
   });
 });

@@ -866,7 +866,7 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-6xl px-6 py-10 lg:px-10">
+      <div className="w-full px-6 py-8 lg:px-10">
         <div className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-8">
           <div>
             <a
@@ -892,28 +892,33 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
 
         {error && <div className="alert alert-error mt-8">{error}</div>}
         {loading ? (
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,200px))] justify-start gap-4">
             {[0, 1, 2].map((item) => (
-              <div key={item} className="skeleton h-80" />
+              <div
+                key={item}
+                className="skeleton aspect-[4/5] w-full max-w-[200px]"
+              />
             ))}
           </div>
         ) : creatures.length ? (
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,200px))] justify-start gap-4">
             {creatures.map((creature) => (
               <a
                 key={creature.id}
                 href={`/worlds/${encodeURIComponent(worldId)}/creatures/${encodeURIComponent(creature.id)}`}
-                className="card overflow-hidden border border-base-300 bg-base-200 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xl"
+                className="card w-full max-w-[200px] overflow-hidden border border-base-300 bg-base-200 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xl"
               >
                 <CreaturePortrait creature={creature} />
-                <div className="card-body gap-2 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="card-title">{creature.name}</h2>
-                    <span className="badge badge-ghost shrink-0">
+                <div className="card-body gap-2 p-3">
+                  <div>
+                    <h2 className="line-clamp-2 text-base leading-5 font-semibold">
+                      {creature.name}
+                    </h2>
+                    <span className="badge badge-ghost badge-sm mt-2 max-w-full truncate">
                       {String(creature.data.size ?? "unknown")}
                     </span>
                   </div>
-                  <p className="text-sm text-base-content/55">
+                  <p className="line-clamp-2 text-xs leading-5 text-base-content/55">
                     {creatureClassificationLabel(creature.data)}
                   </p>
                 </div>
@@ -1199,7 +1204,7 @@ export function CreatureEditorPage({
   if (!record && !error) {
     return (
       <main className="min-h-screen bg-base-100 p-8">
-        <div className="skeleton mx-auto h-[70vh] max-w-6xl" />
+        <div className="skeleton h-[70vh] w-full" />
       </main>
     );
   }
@@ -1225,7 +1230,7 @@ export function CreatureEditorPage({
     <main className="min-h-screen bg-base-100 text-base-content">
       <form
         onSubmit={(event) => void save(event)}
-        className="mx-auto grid max-w-6xl gap-8 px-6 py-10 lg:px-10"
+        className="grid w-full gap-8 px-6 py-8 lg:px-10"
       >
         <header className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-7">
           <div>
@@ -1666,7 +1671,7 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-4xl px-6 py-10 lg:px-10">
+      <div className="w-full px-6 py-8 lg:px-10">
         <header className="flex flex-wrap items-start justify-between gap-5 border-b border-base-300 pb-8">
           <div>
             <a

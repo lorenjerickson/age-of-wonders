@@ -232,6 +232,10 @@ a {
 }
 
 @media (max-width: 64rem) {
+  .location-breadcrumb-overlay {
+    right: 0.75rem;
+  }
+
   .session-canvas-layout {
     grid-template-columns: 4rem minmax(0, 1fr);
     grid-template-rows: minmax(28rem, 1fr) minmax(18rem, 42vh);
@@ -260,12 +264,12 @@ a {
 
 @media (max-width: 40rem) {
   .campaign-session-canvas {
-    height: 64rem;
-    min-height: 64rem;
+    height: 100%;
+    min-height: 0;
   }
 
-  .session-canvas-shell {
-    min-height: 64rem;
+  .campaign-session-canvas .session-canvas-shell {
+    min-height: 0;
   }
 
   .session-canvas-layout {

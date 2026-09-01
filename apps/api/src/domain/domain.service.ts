@@ -28,6 +28,24 @@ export class DomainService {
   async create(resource: DomainResource, data: Record<string, unknown>) {
     this.assertCurrentScienceContract(resource, data);
     const metadata = readResourceMetadata(resource, data);
+    if (
+      resource === "campaigns" ||
+      (resource === "locations" && metadata.kind === "world")
+    ) {
+      const existing = await this.prisma.domainRecord.count({
+        where:
+          resource === "campaigns"
+            ? { resource: "campaigns" }
+            : { resource: "locations", kind: "world" },
+      });
+      if (existing > 0) {
+        throw new ConflictException(
+          resource === "campaigns"
+            ? "A campaign already exists. Reset the world before creating another campaign."
+            : "A world already exists. Reset it before creating another world.",
+        );
+      }
+    }
     try {
       const record = await this.prisma.domainRecord.create({
         data: {
@@ -237,6 +255,50 @@ export class DomainService {
       deletionOrder.push(locationId);
     };
     visit(id);
+
+    const campaigns = await this.prisma.domainRecord.findMany({
+      where: { resource: "campaigns" },
+    });
+    const campaignIds = new Set(
+      campaigns
+        .filter(
+          (campaign) => isObject(campaign.data) && campaign.data.worldId === id,
+        )
+        .map((campaign) => campaign.id),
+    );
+
+    const sessions = await this.prisma.domainRecord.findMany({
+      where: { resource: "sessions" },
+    });
+    for (const session of sessions) {
+      if (
+        isObject(session.data) &&
+        (session.data.worldId === id ||
+          (typeof session.data.campaignId === "string" &&
+            campaignIds.has(session.data.campaignId)))
+      ) {
+        await this.remove("sessions", session.id);
+      }
+    }
+
+    const games = await this.prisma.domainRecord.findMany({
+      where: { resource: "games" },
+    });
+    for (const game of games) {
+      if (!isObject(game.data) || !isObject(game.data.campaign)) continue;
+      const identity = isObject(game.data.campaign.identity)
+        ? game.data.campaign.identity
+        : undefined;
+      if (typeof identity?.id === "string" && campaignIds.has(identity.id)) {
+        await this.remove("games", game.id);
+      }
+    }
+
+    for (const campaign of campaigns) {
+      if (campaignIds.has(campaign.id)) {
+        await this.remove("campaigns", campaign.id);
+      }
+    }
 
     const connections = await this.prisma.domainRecord.findMany({
       where: { resource: "location-connections" },

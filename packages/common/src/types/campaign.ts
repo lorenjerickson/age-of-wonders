@@ -7,22 +7,27 @@ import type {
   LocationId,
   StateIdentity,
 } from "./primitives";
+import type { NormalizedMapCoordinate } from "./locations";
 
-/** The initial placement of one world-supplied creature in a campaign. */
+/** A persistent creature placement shared by every session in the world. */
 export interface CampaignCreaturePlacement {
   readonly id: string;
   readonly creatureId: CreatureId;
   readonly locationId: LocationId;
+  /** Optional persistent position on the location map. */
+  readonly mapPosition?: NormalizedMapCoordinate;
+  /** Optional visual scale multiplier for the placed token. */
+  readonly scale?: number;
 }
 
-/** The initial placement of one world-defined inventory item in a campaign. */
+/** A persistent world-item placement shared by every session. */
 export interface CampaignItemPlacement {
   readonly id: string;
   readonly itemDefinitionId: DefinitionId;
   readonly locationId: LocationId;
 }
 
-/** The initial placement of one world-defined environmental object. */
+/** A persistent environmental-object placement shared by every session. */
 export interface CampaignObjectPlacement {
   readonly id: string;
   readonly objectDefinitionId: DefinitionId;
@@ -76,7 +81,7 @@ export type CampaignCanvasLayerKey =
   | "filter-effects"
   | "interface";
 
-/** GM-authored presentation defaults for one session-canvas layer. */
+/** Persistent GM-authored presentation state for one location-canvas layer. */
 export interface CampaignCanvasLayerConfiguration {
   readonly key: CampaignCanvasLayerKey;
   readonly visible: boolean;
@@ -84,17 +89,77 @@ export interface CampaignCanvasLayerConfiguration {
   readonly opacity: number;
 }
 
+/** A persistent light emitter authored directly on a location map. */
+export interface CampaignCanvasLightSource {
+  readonly id: string;
+  readonly name: string;
+  readonly position: NormalizedMapCoordinate;
+  /** Range as a fraction of the smaller map dimension. */
+  readonly radius: number;
+  /** CSS-compatible light color used by the canvas renderer. */
+  readonly color: string;
+}
+
+/** How a persistent sound source's volume behaves across its range. */
+export type CampaignCanvasSoundVolumeMode = "distance" | "constant";
+
+/** A persistent positional sound emitter authored on a location map. */
+export interface CampaignCanvasSoundSource {
+  readonly id: string;
+  readonly name: string;
+  readonly position: NormalizedMapCoordinate;
+  /** Range as a fraction of the smaller map dimension. */
+  readonly radius: number;
+  /** Playback volume from 0 (silent) through 1 (full volume). */
+  readonly volume: number;
+  readonly volumeMode: CampaignCanvasSoundVolumeMode;
+  readonly loop: boolean;
+}
+
+/** A persistent freeform drawing authored on a location map. */
+export interface CampaignCanvasDrawing {
+  readonly id: string;
+  readonly name: string;
+  readonly position: NormalizedMapCoordinate;
+  /** Size as a radius expressed as a fraction of the smaller map dimension. */
+  readonly radius: number;
+}
+
+/** A persistent area template authored on a location map. */
+export interface CampaignCanvasTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly position: NormalizedMapCoordinate;
+  /** Size as a radius expressed as a fraction of the smaller map dimension. */
+  readonly radius: number;
+}
+
+/** A persistent GM-authored note pinned to a location map. */
+export interface CampaignCanvasNote {
+  readonly id: string;
+  readonly name: string;
+  readonly position: NormalizedMapCoordinate;
+  readonly text: string;
+}
+
 /** Reusable canvas preparation for one world location in a campaign. */
 export interface CampaignLocationCanvasConfiguration {
   readonly locationId: LocationId;
   readonly layers: readonly CampaignCanvasLayerConfiguration[];
+  /** Canvas pixels representing five feet for measurement and side-on falls. */
+  readonly pixelsPerFiveFeet?: number;
+  readonly lightSources?: readonly CampaignCanvasLightSource[];
+  readonly soundSources?: readonly CampaignCanvasSoundSource[];
+  readonly drawings?: readonly CampaignCanvasDrawing[];
+  readonly templates?: readonly CampaignCanvasTemplate[];
+  readonly notes?: readonly CampaignCanvasNote[];
 }
 
 /**
- * Reusable, GM-authored starting context for campaign instances.
+ * The singleton world's GM-authored story and persistent play context.
  *
- * This definition deliberately does not contain a party roster, session clock,
- * prescribed player actions, or mutable state produced during play.
+ * Sessions are journal boundaries over this context; ending a session does not
+ * reset placements, discoveries, or location-canvas presentation state.
  */
 export interface CampaignDefinition<
   Extensions extends ExtensionData = ExtensionData,
@@ -104,14 +169,14 @@ export interface CampaignDefinition<
   readonly worldId: LocationId;
   readonly gmPremise: string;
   readonly playerIntroduction: string;
-  /** World locations explicitly included in this campaign's editable scope. */
+  /** Materialized world hierarchy; all descendants are in editable scope. */
   readonly locationIds: readonly LocationId[];
   readonly partyStartingLocationId: LocationId;
   readonly creaturePlacements: readonly CampaignCreaturePlacement[];
   readonly itemPlacements: readonly CampaignItemPlacement[];
   readonly objectPlacements: readonly CampaignObjectPlacement[];
   readonly discoveries: readonly CampaignDiscovery[];
-  /** Per-location GM preparation defaults; mutable play state belongs to sessions. */
+  /** Persistent per-location presentation state shared across sessions. */
   readonly locationCanvases: readonly CampaignLocationCanvasConfiguration[];
   readonly extensions?: Extensions;
 }

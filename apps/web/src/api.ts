@@ -5,7 +5,13 @@ interface ApiError {
 }
 
 export type DomainResource =
-  "definitions" | "locations" | "campaigns" | "creatures" | "items" | "systems";
+  | "definitions"
+  | "locations"
+  | "campaigns"
+  | "sessions"
+  | "creatures"
+  | "items"
+  | "systems";
 
 export interface DomainRecord {
   resource: DomainResource;
