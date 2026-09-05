@@ -1,5 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { CurrentUser, DomainResource, JsonValue } from "../api";
+import type {
+  CampaignDefinitionDetail,
+  CampaignDefinitionList,
+  CampaignInstanceDetail,
+  CampaignInstanceList,
+  CurrentUser,
+  DomainResource,
+  JsonValue,
+  WorldDefinitionDetail,
+  WorldDefinitionList,
+} from "../api";
 import { ServerApiError, serverApiRequest } from "./api";
 
 export type SessionResult =
@@ -50,44 +60,74 @@ function listPath(
 
 const recentOptions = { limit: 1, sort: "updatedAt", order: "desc" } as const;
 
+export type ReadSection<T> =
+  | { ok: true; data: T }
+  | { ok: false; message: string };
+
+async function readSection<T>(
+  read: () => Promise<T>,
+  message: string,
+): Promise<ReadSection<T>> {
+  try {
+    return { ok: true, data: await read() };
+  } catch {
+    return { ok: false, message };
+  }
+}
+
 export const readGmShell = createServerFn({ method: "GET" }).handler(
   async () => {
     const session = await readSession();
-    if (!session.authenticated || session.user.role !== "gm")
-      return { session };
-    const [worlds, campaigns] = await Promise.all([
-      serverApiRequest<SerializableDomainList>(
-        listPath("locations", { ...recentOptions, kind: "world" }),
-      ),
-      serverApiRequest<SerializableDomainList>(
-        listPath("campaigns", recentOptions),
-      ),
-    ]);
-    return {
-      session,
-      world: worlds.items[0],
-      campaign: campaigns.items[0],
-    };
+    return { session };
   },
 );
 
 export const readLanding = createServerFn({ method: "GET" }).handler(
   async () => {
-    const [health, worlds, campaigns] = await Promise.all([
+    const [health, worlds, instances] = await Promise.all([
       serverApiRequest<{ status: string }>("/health").then(
         () => true,
         () => false,
       ),
-      serverApiRequest<SerializableDomainList>(
-        listPath("locations", { ...recentOptions, kind: "world" }),
+      readSection(
+        () => serverApiRequest<WorldDefinitionList>("/world-definitions"),
+        "World Definitions could not be loaded.",
       ),
-      serverApiRequest<SerializableDomainList>(
-        listPath("campaigns", recentOptions),
+      readSection(
+        () => serverApiRequest<CampaignInstanceList>("/campaign-instances"),
+        "Campaign Instances could not be loaded.",
       ),
     ]);
-    return { healthy: health, worlds, campaigns };
+    return { healthy: health, worlds, instances };
   },
 );
+
+export const readWorldDefinitionLibrary = createServerFn({
+  method: "GET",
+}).handler(() =>
+  readSection(
+    () => serverApiRequest<WorldDefinitionList>("/world-definitions"),
+    "World Definitions could not be loaded.",
+  ),
+);
+
+export const readWorldDefinition = createServerFn({ method: "GET" })
+  .validator((data: { worldDefinitionId: string }) => ({
+    worldDefinitionId: data.worldDefinitionId.trim(),
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const definition = await serverApiRequest<WorldDefinitionDetail>(
+        `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}`,
+      );
+      return { found: true as const, definition };
+    } catch (error) {
+      if (error instanceof ServerApiError && error.status === 404) {
+        return { found: false as const };
+      }
+      throw error;
+    }
+  });
 
 export const readResourceList = createServerFn({ method: "GET" })
   .validator(
@@ -115,6 +155,59 @@ export const readResource = createServerFn({ method: "GET" })
         `/domain/${data.resource}/${encodeURIComponent(data.id)}`,
       );
       return { found: true as const, record };
+    } catch (error) {
+      if (error instanceof ServerApiError && error.status === 404) {
+        return { found: false as const };
+      }
+      throw error;
+    }
+  });
+
+export const readCampaignLibrary = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const [definitions, instances] = await Promise.all([
+      readSection(
+        () =>
+          serverApiRequest<CampaignDefinitionList>("/campaign-definitions"),
+        "Campaign Definitions could not be loaded.",
+      ),
+      readSection(
+        () => serverApiRequest<CampaignInstanceList>("/campaign-instances"),
+        "Campaign Instances could not be loaded.",
+      ),
+    ]);
+    return { definitions, instances };
+  },
+);
+
+export const readCampaignDefinition = createServerFn({ method: "GET" })
+  .validator((data: { campaignDefinitionId: string }) => ({
+    campaignDefinitionId: data.campaignDefinitionId.trim(),
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const definition = await serverApiRequest<CampaignDefinitionDetail>(
+        `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}`,
+      );
+      return { found: true as const, definition };
+    } catch (error) {
+      if (error instanceof ServerApiError && error.status === 404) {
+        return { found: false as const };
+      }
+      throw error;
+    }
+  });
+
+export const readCampaignInstance = createServerFn({ method: "GET" })
+  .validator((data: { campaignInstanceId: string }) => ({
+    campaignInstanceId: data.campaignInstanceId.trim(),
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const instance = await serverApiRequest<CampaignInstanceDetail>(
+        `/campaign-instances/${encodeURIComponent(data.campaignInstanceId)}`,
+      );
+      return { found: true as const, instance };
     } catch (error) {
       if (error instanceof ServerApiError && error.status === 404) {
         return { found: false as const };

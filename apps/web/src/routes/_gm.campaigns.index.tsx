@@ -1,19 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ResourceListPage } from "../App";
-import { readResourceList } from "../server/readModels";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
+import { CampaignLibraryPage } from "../CampaignLibrary";
+import { readCampaignLibrary } from "../server/readModels";
+import { quickStartSuffix } from "../quickStartModel";
 
 export const Route = createFileRoute("/_gm/campaigns/")({
-  loader: () => readResourceList({ data: { resource: "campaigns" } }),
+  loader: () => readCampaignLibrary(),
   component: CampaignsRoute,
 });
 
 function CampaignsRoute() {
+  const search = useLocation({ select: (location) => location.searchStr });
   return (
-    <ResourceListPage
-      resource="campaigns"
-      label="Campaigns"
-      basePath="campaigns"
-      initialResult={Route.useLoaderData()}
+    <CampaignLibraryPage
+      {...Route.useLoaderData()}
+      quickStartSuffix={quickStartSuffix(search)}
     />
   );
 }

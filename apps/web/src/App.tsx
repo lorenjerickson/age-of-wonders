@@ -1,4 +1,11 @@
-import { FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
   Alert,
@@ -8,349 +15,220 @@ import {
   StatusIndicator,
   StructuralCheckbox,
   Textarea,
-  TextareaField,
 } from "@aow/ui";
 import {
   checkHealth,
-  createWorldWithAi,
+  type CampaignInstanceList,
   type DomainList,
   type DomainRecord,
   type DomainResource,
   getDomainRecord,
   listDomainRecords,
   replaceDomainRecord,
+  type WorldDefinitionList,
 } from "./api";
 import {
   InternalLink,
   RouterButtonLink,
-  useInternalNavigate,
 } from "./navigation";
+import {
+  primaryNavigationForPath,
+  type PrimaryNavigationItem,
+} from "./gmNavigationModel";
+import { QuickStartGuide } from "./QuickStart";
+import {
+  quickStartActivity,
+  quickStartKeyFromSearch,
+} from "./quickStartModel";
+import type { ReadSection } from "./server/readModels";
+import { statusLabel } from "./campaignLibraryModel";
 
-type PrimaryNavigationLabel =
-  "Location" | "Campaign" | "Sessions" | "Creatures" | "Items";
-
-function NavigationIcon({ item }: { item: PrimaryNavigationLabel }) {
-  if (item === "Campaign" || item === "Sessions") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        className="h-5 w-5"
-      >
-        {item === "Campaign" && (
-          <>
-            <path d="M6 3.5h9l3 3V20.5H6v-17Z" />
-            <path d="M15 3.5v3h3M9 11h6M9 15h6" />
-          </>
-        )}
-        {item === "Sessions" && (
-          <>
-            <circle cx="12" cy="12" r="8.5" />
-            <path d="M12 7.5V12l3 2" />
-          </>
-        )}
-      </svg>
-    );
-  }
-
-  if (item === "Location") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        className="h-5 w-5"
-      >
-        <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
-        <circle cx="12" cy="10" r="2.5" />
-      </svg>
-    );
-  }
-
-  if (item === "Creatures")
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        className="h-5 w-5"
-      >
-        <path d="M8.5 10.5 6 6l4.5 1.5M15.5 10.5 18 6l-4.5 1.5M7 13c0-3 2.2-5.5 5-5.5s5 2.5 5 5.5v2c0 3-2.2 5.5-5 5.5S7 18 7 15v-2Z" />
-        <path d="M9.5 14h.01M14.5 14h.01M10 17c1.3.7 2.7.7 4 0" />
-      </svg>
-    );
-
+function NavigationIcon({ item }: { item: PrimaryNavigationItem["key"] }) {
+  const glyphs: Record<PrimaryNavigationItem["key"], string> = {
+    home: "M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4v-8.5Z",
+    worlds:
+      "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c2.2 2.4 3.3 5.4 3.3 9S14.2 18.6 12 21m0-18C9.8 5.4 8.7 8.4 8.7 12s1.1 6.6 3.3 9M3.5 12h17",
+    campaigns: "M6 3.5h9l3 3V20.5H6v-17Zm9 0v3h3M9 11h6M9 15h6",
+    players:
+      "M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.5-1a3 3 0 1 0 0-6m-7.5 9c-3 0-5.5 1.8-5.5 4v2h11v-2c0-2.2-2.5-4-5.5-4Zm7.5-.5c2.8 0 5 1.6 5 3.5v2h-5",
+    settings:
+      "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1 2.2 2.4.7 2-1.3 1.8 1.8-1.3 2 .7 2.4 2.2 1-1 2.4.3 2.6-2.4.4-1.7 1.8.1 2.4-2.4 1-1.3-2-2.3-.8-2 1.3-1.8-1.8 1.3-2-.7-2.4-2.2-1 1-2.4-.3-2.6 2.4-.4 1.7-1.8-.1-2.4 2.4-1 1.3 2 2.3.8 2-1.3 1.8 1.8-1.3 2 .7 2.4Z",
+  };
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.7"
       className="h-5 w-5"
     >
-      <path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5v-9Z" />
-      <path d="m5 7.5 7 3.5 7-3.5M12 11v9" />
+      <path d={glyphs[item]} />
     </svg>
   );
 }
 
 function PrimaryNavigationLink({
   item,
-  active,
-  world,
-  campaign,
+  onNavigate,
 }: {
-  item: PrimaryNavigationLabel;
-  active: boolean;
-  world?: DomainRecord;
-  campaign?: DomainRecord;
+  item: PrimaryNavigationItem;
+  onNavigate?: () => void;
 }) {
-  const className = active ? "menu-active font-semibold" : undefined;
-  const content = (
-    <>
-      <NavigationIcon item={item} />
-      {item}
-    </>
-  );
-  if (item === "Location") {
-    if (campaign) {
-      return (
-        <Link
-          to="/campaigns/$campaignId/locations"
-          params={{ campaignId: campaign.id }}
-          aria-current={active ? "page" : undefined}
-          className={className}
-        >
-          {content}
-        </Link>
-      );
-    }
-    if (world) {
-      return (
-        <Link
-          to="/worlds/$worldId"
-          params={{ worldId: world.id }}
-          aria-current={active ? "page" : undefined}
-          className={className}
-        >
-          {content}
-        </Link>
-      );
-    }
-    return (
-      <Link
-        to="/worlds"
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-  if (item === "Campaign") {
-    return campaign ? (
-      <Link
-        to="/campaigns/$campaignId"
-        params={{ campaignId: campaign.id }}
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    ) : (
-      <Link
-        to="/campaigns"
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-  if (item === "Sessions") {
-    return (
-      <Link
-        to="/sessions"
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-  if (item === "Creatures" && world) {
-    return (
-      <Link
-        to="/worlds/$worldId/creatures"
-        params={{ worldId: world.id }}
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-  if (item === "Items" && world) {
-    return (
-      <Link
-        to="/worlds/$worldId/items"
-        params={{ worldId: world.id }}
-        aria-current={active ? "page" : undefined}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
   return (
     <Link
-      to={item === "Creatures" ? "/creatures" : "/items"}
-      aria-current={active ? "page" : undefined}
-      className={className}
+      to={item.href}
+      aria-current={item.active ? "page" : undefined}
+      className={item.active ? "menu-active font-semibold" : undefined}
+      onClick={onNavigate}
     >
-      {content}
+      <NavigationIcon item={item.key} />
+      {item.label}
     </Link>
   );
 }
 
 export function AppShell({
   children,
-  initialWorld,
-  initialCampaign,
+  gmScope,
 }: {
   children: ReactNode;
-  initialWorld?: DomainRecord;
-  initialCampaign?: DomainRecord;
+  gmScope: string;
 }) {
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const location = useLocation();
+  const pathname = location.pathname;
+  const quickStartKey = quickStartKeyFromSearch(location.searchStr);
+  const guide = quickStartKey ? quickStartActivity(quickStartKey) : undefined;
   const segments = pathname.split("/").filter(Boolean);
-  const activeSection = segments[0];
-  const nestedSection = activeSection === "worlds" ? segments[2] : undefined;
-  const world = initialWorld;
-  const campaign = initialCampaign;
   const locationWorkspaceActive =
-    activeSection === "campaigns" && segments[2] === "locations";
+    segments[0] === "campaigns" && segments[2] === "locations";
+  const primaryNavigation = primaryNavigationForPath(pathname);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerTrigger = useRef<HTMLLabelElement>(null);
+  const drawerPanel = useRef<HTMLElement>(null);
 
-  const primaryNavigation: ReadonlyArray<{
-    label: PrimaryNavigationLabel;
-    active: boolean;
-  }> = [
-    {
-      label: "Location",
-      active:
-        !activeSection ||
-        (activeSection === "campaigns" && segments[2] === "locations") ||
-        (activeSection === "worlds" &&
-          nestedSection !== "creatures" &&
-          nestedSection !== "items") ||
-        activeSection === "locations",
-    },
-    {
-      label: "Campaign",
-      active: activeSection === "campaigns" && segments[2] !== "locations",
-    },
-    {
-      label: "Sessions",
-      active: activeSection === "sessions",
-    },
-    {
-      label: "Creatures",
-      active:
-        activeSection === "creatures" ||
-        (activeSection === "worlds" && nestedSection === "creatures"),
-    },
-    {
-      label: "Items",
-      active:
-        activeSection === "items" ||
-        (activeSection === "worlds" && nestedSection === "items"),
-    },
-  ];
+  useEffect(() => {
+    if (!drawerOpen) return;
+    drawerPanel.current
+      ?.querySelector<HTMLElement>("a[href], button:not([disabled])")
+      ?.focus();
+  }, [drawerOpen]);
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    requestAnimationFrame(() => drawerTrigger.current?.focus());
+  }
+
+  function handleDrawerKeys(event: KeyboardEvent<HTMLElement>) {
+    if (!drawerOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDrawer();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = drawerPanel.current?.querySelectorAll<HTMLElement>(
+      "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   return (
     <div className="drawer h-dvh overflow-hidden lg:drawer-open">
-      <StructuralCheckbox id="app-drawer" />
+      <StructuralCheckbox
+        id="app-drawer"
+        checked={drawerOpen}
+        onChange={(event) => setDrawerOpen(event.target.checked)}
+      />
       <div
         className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
       >
         <Label
+          ref={drawerTrigger}
           htmlFor="app-drawer"
           aria-label="Open navigation"
+          aria-expanded={drawerOpen}
+          aria-controls="app-navigation-panel"
           className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
         >
           <span aria-hidden="true">☰</span>
         </Label>
-        {children}
+        <div
+          className={
+            guide
+              ? "min-h-full xl:grid xl:grid-cols-[minmax(0,1fr)_20rem]"
+              : "min-h-full"
+          }
+        >
+          <div className="min-w-0">{children}</div>
+          {guide && (
+            <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+          )}
+        </div>
       </div>
-      <div className="drawer-side z-40">
+      <div
+        id="app-navigation-panel"
+        className="drawer-side z-40"
+        role={drawerOpen ? "dialog" : undefined}
+        aria-modal={drawerOpen || undefined}
+        aria-label={drawerOpen ? "Application navigation" : undefined}
+      >
         <Label
           htmlFor="app-drawer"
           aria-label="Close navigation"
           className="drawer-overlay"
+          onClick={closeDrawer}
         />
-        <aside className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl">
+        <aside
+          ref={drawerPanel}
+          onKeyDown={handleDrawerKeys}
+          className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl"
+        >
+          <Button
+            tone="ghost"
+            size="sm"
+            className="mb-2 min-h-11 self-end lg:hidden"
+            onClick={closeDrawer}
+          >
+            Close navigation
+          </Button>
           <div className="px-3 pt-3 pb-5">
             <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
               GM workspace
             </p>
-            <p className="mt-2 truncate font-semibold">
-              {world?.name ?? "Your world"}
-            </p>
-            <p className="mt-1 truncate text-sm text-base-content/50">
-              {campaign?.name ?? "Campaign not configured"}
+            <p className="mt-2 font-semibold">Age of Wonders</p>
+            <p className="mt-1 text-sm text-base-content/50">
+              Choose a workspace to begin.
             </p>
           </div>
           <nav aria-label="Primary navigation" className="min-h-0 flex-1">
             <ul className="menu w-full gap-1 p-0">
               {primaryNavigation.map((item) => (
-                <li key={item.label}>
+                <li key={item.key}>
                   <PrimaryNavigationLink
-                    item={item.label}
-                    active={item.active}
-                    world={world}
-                    campaign={campaign}
+                    item={item}
+                    onNavigate={() => setDrawerOpen(false)}
                   />
                 </li>
               ))}
             </ul>
           </nav>
           <p className="px-3 py-3 text-xs leading-5 text-base-content/35">
-            World changes persist across every session.
+            Author Worlds, prepare Campaigns, and continue play.
           </p>
         </aside>
       </div>
     </div>
   );
-}
-
-function textAt(
-  data: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = data[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function twoSentenceSummary(
-  source: string | undefined,
-  firstFallback: string,
-  secondFallback: string,
-) {
-  const sentences = source
-    ?.match(/[^.!?]+[.!?]+|[^.!?]+$/g)
-    ?.map((sentence) => sentence.trim())
-    .filter(Boolean);
-  if (!sentences?.length) return `${firstFallback} ${secondFallback}`;
-  if (sentences.length === 1) return `${sentences[0]} ${secondFallback}`;
-  return sentences.slice(0, 2).join(" ");
 }
 
 function Header({ healthy }: { healthy?: boolean }) {
@@ -381,80 +259,16 @@ function Header({ healthy }: { healthy?: boolean }) {
   );
 }
 
-function RecentCard({
-  eyebrow,
-  record,
-  href,
-  empty,
-}: {
-  eyebrow: string;
-  record?: DomainRecord;
-  href?: string;
-  empty: string;
-}) {
-  const isWorld = record?.resource === "locations";
-  const summary = record
-    ? twoSentenceSummary(
-        textAt(record.data, "description") ?? textAt(record.data, "summary"),
-        isWorld
-          ? `${record.name ?? "This world"} is ready to be shaped.`
-          : `${record.name ?? "This campaign"} is your latest active story.`,
-        isWorld
-          ? "Open it to develop its places, peoples, and conflicts."
-          : "Open it to continue its scenes, parties, and quests.",
-      )
-    : undefined;
-
-  return (
-    <article className="card min-h-64 border border-base-300 bg-base-200 shadow-xl">
-      <div className="card-body">
-        <p className="text-xs font-semibold tracking-[0.2em] text-zinc-500 uppercase">
-          {eyebrow}
-        </p>
-        {record ? (
-          <>
-            <h3 className="mt-5 text-3xl font-semibold tracking-tight text-white">
-              {record.name}
-            </h3>
-            <p className="mt-4 flex-1 text-base leading-7 text-zinc-400">
-              {summary}
-            </p>
-            <RouterButtonLink
-              href={href ?? "/"}
-              tone="ghost"
-              className="mt-7 w-fit px-0 text-primary"
-            >
-              Edit {isWorld ? "world" : "campaign"} <span aria-hidden>→</span>
-            </RouterButtonLink>
-          </>
-        ) : (
-          <p className="mt-5 max-w-sm text-base leading-7 text-zinc-500">
-            {empty}
-          </p>
-        )}
-      </div>
-    </article>
-  );
-}
-
 export function LandingPage({
   initialHealthy,
   initialWorlds,
-  initialCampaigns,
+  initialInstances,
 }: {
   initialHealthy?: boolean;
-  initialWorlds?: DomainList;
-  initialCampaigns?: DomainList;
-} = {}) {
-  const navigate = useInternalNavigate();
+  initialWorlds: ReadSection<WorldDefinitionList>;
+  initialInstances: ReadSection<CampaignInstanceList>;
+}) {
   const [healthy, setHealthy] = useState(initialHealthy ?? false);
-  const [worlds, setWorlds] = useState<DomainList | undefined>(initialWorlds);
-  const [campaigns, setCampaigns] = useState<DomainList | undefined>(
-    initialCampaigns,
-  );
-  const [prompt, setPrompt] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (initialHealthy === undefined) {
@@ -463,54 +277,19 @@ export function LandingPage({
         () => setHealthy(false),
       );
     }
-    if (!initialWorlds) {
-      void listDomainRecords("locations", {
-        kind: "world",
-        limit: 1,
-        sort: "updatedAt",
-        order: "desc",
-      }).then(setWorlds, (caught: unknown) =>
-        setError(
-          caught instanceof Error ? caught.message : "Could not load worlds",
-        ),
-      );
-    }
-    if (!initialCampaigns) {
-      void listDomainRecords("campaigns", {
-        limit: 1,
-        sort: "updatedAt",
-        order: "desc",
-      }).then(setCampaigns, (caught: unknown) =>
-        setError(
-          caught instanceof Error ? caught.message : "Could not load campaigns",
-        ),
-      );
-    }
-  }, [initialCampaigns, initialHealthy, initialWorlds]);
+  }, [initialHealthy]);
 
-  async function createWorld(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const result = await createWorldWithAi(prompt);
-      await navigate(`/worlds/${encodeURIComponent(result.world.id)}`);
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "World creation failed",
-      );
-      setLoading(false);
-    }
-  }
-
-  const recentWorld = worlds?.items[0];
-  const recentCampaign = campaigns?.items[0];
+  const activeInstances = initialInstances.ok
+    ? initialInstances.data.items.filter(
+        (instance) => instance.status.toLowerCase() === "active",
+      )
+    : [];
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="mx-auto min-h-screen max-w-6xl px-6 py-10 lg:px-10">
         <Header healthy={healthy} />
-        <section className="grid gap-10 py-14 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+        <section className="grid gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
           <div>
             <p className="text-sm font-medium text-amber-300">
               Your next realm
@@ -523,71 +302,67 @@ export function LandingPage({
               setting you can refine, connect, and bring into play.
             </p>
           </div>
-          <form
-            onSubmit={createWorld}
-            className="card border border-primary/20 bg-primary/[0.07] shadow-xl"
-          >
+          <article className="card border border-primary/20 bg-primary/[0.07] shadow-xl">
             <div className="card-body">
-              <TextareaField
-                id="world-prompt"
-                label="Create a new world with AI"
-                help="Describe the mood, premise, people, or conflict you want to explore."
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="A rain-soaked empire built inside the skeleton of a sleeping god…"
-                rows={4}
-                resize="none"
-                className="text-base"
-              />
-              <Button
-                type="submit"
-                tone="primary"
-                disabled={loading || prompt.trim().length < 3}
-                loading={loading}
-                className="mt-4"
-              >
-                Create world
-              </Button>
+              <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+                Learn by doing
+              </p>
+              <h2 className="card-title text-2xl">Quick Start</h2>
+              <p className="leading-7 text-base-content/65">
+                Complete guided tasks inside the real World, Campaign, and
+                Players workspaces.
+              </p>
+              <RouterButtonLink href="/quick-start" tone="primary" className="mt-3">
+                Open Quick Start
+              </RouterButtonLink>
             </div>
-          </form>
+          </article>
         </section>
 
-        {error && (
-          <Alert tone="error" className="mb-6">
-            {error}
-          </Alert>
-        )}
-
-        <section className="grid gap-6 border-t border-white/10 pt-10 md:grid-cols-2">
-          <RecentCard
-            eyebrow="Recently edited world"
-            record={recentWorld}
-            href={
-              recentWorld
-                ? `/worlds/${encodeURIComponent(recentWorld.id)}`
-                : undefined
-            }
-            empty="No worlds yet. Use the prompt above to imagine your first one."
-          />
-          <RecentCard
-            eyebrow="Recently active campaign"
-            record={recentCampaign}
-            href={
-              recentCampaign
-                ? `/campaigns/${encodeURIComponent(recentCampaign.id)}`
-                : undefined
-            }
-            empty="No campaigns yet. Your latest active story will appear here."
-          />
+        <section className="border-t border-white/10 pt-10" aria-labelledby="world-choice-heading">
+          <h2 id="world-choice-heading" className="text-2xl font-semibold">Choose a World</h2>
+          <p className="mt-2 text-base-content/60">
+            World selection is deliberate; the dashboard does not infer a current World.
+          </p>
+          {!initialWorlds.ok ? (
+            <Alert tone="error" className="mt-5">{initialWorlds.message}</Alert>
+          ) : (
+            <p className="mt-5 text-sm text-base-content/60">
+              {initialWorlds.data.total} World {initialWorlds.data.total === 1 ? "Definition" : "Definitions"} available.
+            </p>
+          )}
+          <RouterButtonLink href="/worlds" tone="outline" className="mt-5">Choose a World Definition</RouterButtonLink>
         </section>
-        <nav className="flex flex-wrap gap-6 py-8 text-sm font-medium text-zinc-300">
-          {(worlds?.total ?? 0) > 1 && (
-            <InternalLink href="/worlds">View all worlds →</InternalLink>
+
+        <section className="py-10" aria-labelledby="continue-heading">
+          <h2 id="continue-heading" className="text-2xl font-semibold">Continue Campaigns</h2>
+          <p className="mt-2 max-w-3xl text-base-content/60">
+            Every active Campaign Instance appears here. Continue remains unavailable until an Instance has an explicit resumable Session relationship.
+          </p>
+          {!initialInstances.ok ? (
+            <Alert tone="error" className="mt-5">{initialInstances.message}</Alert>
+          ) : activeInstances.length ? (
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {activeInstances.map((instance, index) => (
+                <article key={instance.id} className="card border border-base-300 bg-base-200">
+                  <div className="card-body">
+                    <div className="flex items-start justify-between gap-4">
+                      <h3 className="card-title">{instance.name.trim() || "Unnamed Campaign Instance"}</h3>
+                      <Badge outline>{statusLabel(instance.status)}</Badge>
+                    </div>
+                    <div className="card-actions mt-4 items-center">
+                      <RouterButtonLink href={`/campaigns/instances/${encodeURIComponent(instance.id)}`} tone="outline" size="sm">Manage Instance</RouterButtonLink>
+                      <Button disabled size="sm" aria-describedby={`continue-campaign-${index}`}>Continue</Button>
+                    </div>
+                    <p id={`continue-campaign-${index}`} className="text-xs text-base-content/50">No resumable Session is linked yet.</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-5 text-sm text-base-content/55">No active Campaign Instances are available.</p>
           )}
-          {(campaigns?.total ?? 0) > 1 && (
-            <InternalLink href="/campaigns">View all campaigns →</InternalLink>
-          )}
-        </nav>
+        </section>
       </div>
     </main>
   );

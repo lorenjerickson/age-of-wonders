@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ItemEditorPage } from "../Items";
+import { WorldAggregateBoundary } from "../WorldAggregateBoundary";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId/items/$itemId")({
-  ssr: false,
   component: WorldItemRoute,
 });
 
 function WorldItemRoute() {
-  const { worldId, itemId } = Route.useParams();
-  return <ItemEditorPage worldId={worldId} itemId={itemId} />;
+  return (
+    <WorldAggregateBoundary
+      title="Item Compendium"
+      description="Item editing will publish through the World Definition revision workflow."
+    />
+  );
 }

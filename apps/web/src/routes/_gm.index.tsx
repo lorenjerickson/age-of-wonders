@@ -8,12 +8,12 @@ export const Route = createFileRoute("/_gm/")({
 });
 
 function HomeRoute() {
-  const { healthy, worlds, campaigns } = Route.useLoaderData();
+  const { healthy, worlds, instances } = Route.useLoaderData();
   return (
     <LandingPage
       initialHealthy={healthy}
       initialWorlds={worlds}
-      initialCampaigns={campaigns}
+      initialInstances={instances}
     />
   );
 }

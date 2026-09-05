@@ -13,8 +13,14 @@ export const ROUTE_POLICIES = [
   },
   { family: "home", pattern: "/", audience: "gm", rendering: "ssr" },
   {
+    family: "quick start",
+    pattern: "/quick-start",
+    audience: "gm",
+    rendering: "ssr-client-progress",
+  },
+  {
     family: "resource browse",
-    pattern: "/worlds|campaigns|locations|creatures|items|systems|sessions",
+    pattern: "/worlds|campaigns|players|settings|systems",
     audience: "gm",
     rendering: "ssr",
   },

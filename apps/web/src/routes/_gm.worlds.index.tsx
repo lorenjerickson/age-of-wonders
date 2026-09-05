@@ -1,21 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ResourceListPage } from "../App";
-import { readResourceList } from "../server/readModels";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
+import { WorldLibraryPage } from "../WorldLibrary";
+import { quickStartSuffix } from "../quickStartModel";
+import { readWorldDefinitionLibrary } from "../server/readModels";
 
 export const Route = createFileRoute("/_gm/worlds/")({
-  loader: () =>
-    readResourceList({ data: { resource: "locations", kind: "world" } }),
+  loader: () => readWorldDefinitionLibrary(),
   component: WorldsRoute,
 });
 
 function WorldsRoute() {
+  const search = useLocation({ select: (location) => location.searchStr });
   return (
-    <ResourceListPage
-      resource="locations"
-      label="Worlds"
-      basePath="worlds"
-      kind="world"
-      initialResult={Route.useLoaderData()}
+    <WorldLibraryPage
+      result={Route.useLoaderData()}
+      quickStartSuffix={quickStartSuffix(search)}
     />
   );
 }

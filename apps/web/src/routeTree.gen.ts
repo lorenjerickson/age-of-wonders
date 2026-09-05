@@ -15,8 +15,11 @@ import { Route as HealthzRouteImport } from './routes/healthz'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GmIndexRouteImport } from './routes/_gm.index'
+import { Route as GmPlayersRouteImport } from './routes/_gm.players'
+import { Route as GmQuickStartRouteImport } from './routes/_gm.quick-start'
 import { Route as GmSessionCanvasLabRouteImport } from './routes/_gm.session-canvas-lab'
 import { Route as GmSessionsRouteImport } from './routes/_gm.sessions'
+import { Route as GmSettingsRouteImport } from './routes/_gm.settings'
 import { Route as PlayerPlayRouteImport } from './routes/_player.play'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as JoinIndexRouteImport } from './routes/join.index'
@@ -37,9 +40,13 @@ import { Route as GmWorldsWorldIdRouteImport } from './routes/_gm.worlds.$worldI
 import { Route as PlayerPlayIndexRouteImport } from './routes/_player.play.index'
 import { Route as GmCampaignsCampaignIdIndexRouteImport } from './routes/_gm.campaigns.$campaignId.index'
 import { Route as GmCampaignsCampaignIdLocationsRouteImport } from './routes/_gm.campaigns.$campaignId.locations'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId'
+import { Route as GmCampaignsInstancesCampaignInstanceIdRouteImport } from './routes/_gm.campaigns.instances.$campaignInstanceId'
 import { Route as GmWorldsWorldIdIndexRouteImport } from './routes/_gm.worlds.$worldId.index'
+import { Route as GmWorldsWorldIdCharactersRouteImport } from './routes/_gm.worlds.$worldId.characters'
 import { Route as GmWorldsWorldIdCreaturesRouteImport } from './routes/_gm.worlds.$worldId.creatures'
 import { Route as GmWorldsWorldIdItemsRouteImport } from './routes/_gm.worlds.$worldId.items'
+import { Route as GmWorldsWorldIdRulesRouteImport } from './routes/_gm.worlds.$worldId.rules'
 import { Route as PlayerPlayCharactersIndexRouteImport } from './routes/_player.play.characters.index'
 import { Route as PlayerPlayCharactersCharacterIdRouteImport } from './routes/_player.play.characters.$characterId'
 import { Route as GmWorldsWorldIdCreaturesIndexRouteImport } from './routes/_gm.worlds.$worldId.creatures.index'
@@ -77,6 +84,16 @@ const GmIndexRoute = GmIndexRouteImport.update({
   path: '/',
   getParentRoute: () => GmRoute,
 } as any)
+const GmPlayersRoute = GmPlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
+  getParentRoute: () => GmRoute,
+} as any)
+const GmQuickStartRoute = GmQuickStartRouteImport.update({
+  id: '/quick-start',
+  path: '/quick-start',
+  getParentRoute: () => GmRoute,
+} as any)
 const GmSessionCanvasLabRoute = GmSessionCanvasLabRouteImport.update({
   id: '/session-canvas-lab',
   path: '/session-canvas-lab',
@@ -85,6 +102,11 @@ const GmSessionCanvasLabRoute = GmSessionCanvasLabRouteImport.update({
 const GmSessionsRoute = GmSessionsRouteImport.update({
   id: '/sessions',
   path: '/sessions',
+  getParentRoute: () => GmRoute,
+} as any)
+const GmSettingsRoute = GmSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => GmRoute,
 } as any)
 const PlayerPlayRoute = PlayerPlayRouteImport.update({
@@ -189,11 +211,29 @@ const GmCampaignsCampaignIdLocationsRoute =
     path: '/locations',
     getParentRoute: () => GmCampaignsCampaignIdRoute,
   } as any)
+const GmCampaignsDefinitionsCampaignDefinitionIdRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdRouteImport.update({
+    id: '/campaigns/definitions/$campaignDefinitionId',
+    path: '/campaigns/definitions/$campaignDefinitionId',
+    getParentRoute: () => GmRoute,
+  } as any)
+const GmCampaignsInstancesCampaignInstanceIdRoute =
+  GmCampaignsInstancesCampaignInstanceIdRouteImport.update({
+    id: '/campaigns/instances/$campaignInstanceId',
+    path: '/campaigns/instances/$campaignInstanceId',
+    getParentRoute: () => GmRoute,
+  } as any)
 const GmWorldsWorldIdIndexRoute = GmWorldsWorldIdIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => GmWorldsWorldIdRoute,
 } as any)
+const GmWorldsWorldIdCharactersRoute =
+  GmWorldsWorldIdCharactersRouteImport.update({
+    id: '/characters',
+    path: '/characters',
+    getParentRoute: () => GmWorldsWorldIdRoute,
+  } as any)
 const GmWorldsWorldIdCreaturesRoute =
   GmWorldsWorldIdCreaturesRouteImport.update({
     id: '/creatures',
@@ -203,6 +243,11 @@ const GmWorldsWorldIdCreaturesRoute =
 const GmWorldsWorldIdItemsRoute = GmWorldsWorldIdItemsRouteImport.update({
   id: '/items',
   path: '/items',
+  getParentRoute: () => GmWorldsWorldIdRoute,
+} as any)
+const GmWorldsWorldIdRulesRoute = GmWorldsWorldIdRulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
   getParentRoute: () => GmWorldsWorldIdRoute,
 } as any)
 const PlayerPlayCharactersIndexRoute =
@@ -258,8 +303,11 @@ export interface FileRoutesByFullPath {
   '/healthz': typeof HealthzRoute
   '/join': typeof JoinRouteWithChildren
   '/login': typeof LoginRoute
+  '/players': typeof GmPlayersRoute
+  '/quick-start': typeof GmQuickStartRoute
   '/session-canvas-lab': typeof GmSessionCanvasLabRoute
   '/sessions': typeof GmSessionsRoute
+  '/settings': typeof GmSettingsRoute
   '/play': typeof PlayerPlayRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/join/campaign': typeof JoinCampaignRoute
@@ -279,8 +327,12 @@ export interface FileRoutesByFullPath {
   '/worlds/': typeof GmWorldsIndexRoute
   '/play/': typeof PlayerPlayIndexRoute
   '/campaigns/$campaignId/locations': typeof GmCampaignsCampaignIdLocationsRoute
+  '/campaigns/definitions/$campaignDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdRoute
+  '/campaigns/instances/$campaignInstanceId': typeof GmCampaignsInstancesCampaignInstanceIdRoute
+  '/worlds/$worldId/characters': typeof GmWorldsWorldIdCharactersRoute
   '/worlds/$worldId/creatures': typeof GmWorldsWorldIdCreaturesRouteWithChildren
   '/worlds/$worldId/items': typeof GmWorldsWorldIdItemsRouteWithChildren
+  '/worlds/$worldId/rules': typeof GmWorldsWorldIdRulesRoute
   '/play/characters/$characterId': typeof PlayerPlayCharactersCharacterIdRoute
   '/campaigns/$campaignId/': typeof GmCampaignsCampaignIdIndexRoute
   '/worlds/$worldId/': typeof GmWorldsWorldIdIndexRoute
@@ -296,8 +348,11 @@ export interface FileRoutesByTo {
   '/': typeof GmIndexRoute
   '/healthz': typeof HealthzRoute
   '/login': typeof LoginRoute
+  '/players': typeof GmPlayersRoute
+  '/quick-start': typeof GmQuickStartRoute
   '/session-canvas-lab': typeof GmSessionCanvasLabRoute
   '/sessions': typeof GmSessionsRoute
+  '/settings': typeof GmSettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/join/campaign': typeof JoinCampaignRoute
   '/join': typeof JoinIndexRoute
@@ -314,6 +369,10 @@ export interface FileRoutesByTo {
   '/worlds': typeof GmWorldsIndexRoute
   '/play': typeof PlayerPlayIndexRoute
   '/campaigns/$campaignId/locations': typeof GmCampaignsCampaignIdLocationsRoute
+  '/campaigns/definitions/$campaignDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdRoute
+  '/campaigns/instances/$campaignInstanceId': typeof GmCampaignsInstancesCampaignInstanceIdRoute
+  '/worlds/$worldId/characters': typeof GmWorldsWorldIdCharactersRoute
+  '/worlds/$worldId/rules': typeof GmWorldsWorldIdRulesRoute
   '/play/characters/$characterId': typeof PlayerPlayCharactersCharacterIdRoute
   '/campaigns/$campaignId': typeof GmCampaignsCampaignIdIndexRoute
   '/worlds/$worldId': typeof GmWorldsWorldIdIndexRoute
@@ -332,8 +391,11 @@ export interface FileRoutesById {
   '/healthz': typeof HealthzRoute
   '/join': typeof JoinRouteWithChildren
   '/login': typeof LoginRoute
+  '/_gm/players': typeof GmPlayersRoute
+  '/_gm/quick-start': typeof GmQuickStartRoute
   '/_gm/session-canvas-lab': typeof GmSessionCanvasLabRoute
   '/_gm/sessions': typeof GmSessionsRoute
+  '/_gm/settings': typeof GmSettingsRoute
   '/_player/play': typeof PlayerPlayRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/join/campaign': typeof JoinCampaignRoute
@@ -354,8 +416,12 @@ export interface FileRoutesById {
   '/_gm/worlds/': typeof GmWorldsIndexRoute
   '/_player/play/': typeof PlayerPlayIndexRoute
   '/_gm/campaigns/$campaignId/locations': typeof GmCampaignsCampaignIdLocationsRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdRoute
+  '/_gm/campaigns/instances/$campaignInstanceId': typeof GmCampaignsInstancesCampaignInstanceIdRoute
+  '/_gm/worlds/$worldId/characters': typeof GmWorldsWorldIdCharactersRoute
   '/_gm/worlds/$worldId/creatures': typeof GmWorldsWorldIdCreaturesRouteWithChildren
   '/_gm/worlds/$worldId/items': typeof GmWorldsWorldIdItemsRouteWithChildren
+  '/_gm/worlds/$worldId/rules': typeof GmWorldsWorldIdRulesRoute
   '/_player/play/characters/$characterId': typeof PlayerPlayCharactersCharacterIdRoute
   '/_gm/campaigns/$campaignId/': typeof GmCampaignsCampaignIdIndexRoute
   '/_gm/worlds/$worldId/': typeof GmWorldsWorldIdIndexRoute
@@ -374,8 +440,11 @@ export interface FileRouteTypes {
     | '/healthz'
     | '/join'
     | '/login'
+    | '/players'
+    | '/quick-start'
     | '/session-canvas-lab'
     | '/sessions'
+    | '/settings'
     | '/play'
     | '/api/$'
     | '/join/campaign'
@@ -395,8 +464,12 @@ export interface FileRouteTypes {
     | '/worlds/'
     | '/play/'
     | '/campaigns/$campaignId/locations'
+    | '/campaigns/definitions/$campaignDefinitionId'
+    | '/campaigns/instances/$campaignInstanceId'
+    | '/worlds/$worldId/characters'
     | '/worlds/$worldId/creatures'
     | '/worlds/$worldId/items'
+    | '/worlds/$worldId/rules'
     | '/play/characters/$characterId'
     | '/campaigns/$campaignId/'
     | '/worlds/$worldId/'
@@ -412,8 +485,11 @@ export interface FileRouteTypes {
     | '/'
     | '/healthz'
     | '/login'
+    | '/players'
+    | '/quick-start'
     | '/session-canvas-lab'
     | '/sessions'
+    | '/settings'
     | '/api/$'
     | '/join/campaign'
     | '/join'
@@ -430,6 +506,10 @@ export interface FileRouteTypes {
     | '/worlds'
     | '/play'
     | '/campaigns/$campaignId/locations'
+    | '/campaigns/definitions/$campaignDefinitionId'
+    | '/campaigns/instances/$campaignInstanceId'
+    | '/worlds/$worldId/characters'
+    | '/worlds/$worldId/rules'
     | '/play/characters/$characterId'
     | '/campaigns/$campaignId'
     | '/worlds/$worldId'
@@ -447,8 +527,11 @@ export interface FileRouteTypes {
     | '/healthz'
     | '/join'
     | '/login'
+    | '/_gm/players'
+    | '/_gm/quick-start'
     | '/_gm/session-canvas-lab'
     | '/_gm/sessions'
+    | '/_gm/settings'
     | '/_player/play'
     | '/api/$'
     | '/join/campaign'
@@ -469,8 +552,12 @@ export interface FileRouteTypes {
     | '/_gm/worlds/'
     | '/_player/play/'
     | '/_gm/campaigns/$campaignId/locations'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId'
+    | '/_gm/campaigns/instances/$campaignInstanceId'
+    | '/_gm/worlds/$worldId/characters'
     | '/_gm/worlds/$worldId/creatures'
     | '/_gm/worlds/$worldId/items'
+    | '/_gm/worlds/$worldId/rules'
     | '/_player/play/characters/$characterId'
     | '/_gm/campaigns/$campaignId/'
     | '/_gm/worlds/$worldId/'
@@ -536,6 +623,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GmIndexRouteImport
       parentRoute: typeof GmRoute
     }
+    '/_gm/players': {
+      id: '/_gm/players'
+      path: '/players'
+      fullPath: '/players'
+      preLoaderRoute: typeof GmPlayersRouteImport
+      parentRoute: typeof GmRoute
+    }
+    '/_gm/quick-start': {
+      id: '/_gm/quick-start'
+      path: '/quick-start'
+      fullPath: '/quick-start'
+      preLoaderRoute: typeof GmQuickStartRouteImport
+      parentRoute: typeof GmRoute
+    }
     '/_gm/session-canvas-lab': {
       id: '/_gm/session-canvas-lab'
       path: '/session-canvas-lab'
@@ -548,6 +649,13 @@ declare module '@tanstack/react-router' {
       path: '/sessions'
       fullPath: '/sessions'
       preLoaderRoute: typeof GmSessionsRouteImport
+      parentRoute: typeof GmRoute
+    }
+    '/_gm/settings': {
+      id: '/_gm/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof GmSettingsRouteImport
       parentRoute: typeof GmRoute
     }
     '/_player/play': {
@@ -690,11 +798,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GmCampaignsCampaignIdLocationsRouteImport
       parentRoute: typeof GmCampaignsCampaignIdRoute
     }
+    '/_gm/campaigns/definitions/$campaignDefinitionId': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId'
+      path: '/campaigns/definitions/$campaignDefinitionId'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdRouteImport
+      parentRoute: typeof GmRoute
+    }
+    '/_gm/campaigns/instances/$campaignInstanceId': {
+      id: '/_gm/campaigns/instances/$campaignInstanceId'
+      path: '/campaigns/instances/$campaignInstanceId'
+      fullPath: '/campaigns/instances/$campaignInstanceId'
+      preLoaderRoute: typeof GmCampaignsInstancesCampaignInstanceIdRouteImport
+      parentRoute: typeof GmRoute
+    }
     '/_gm/worlds/$worldId/': {
       id: '/_gm/worlds/$worldId/'
       path: '/'
       fullPath: '/worlds/$worldId/'
       preLoaderRoute: typeof GmWorldsWorldIdIndexRouteImport
+      parentRoute: typeof GmWorldsWorldIdRoute
+    }
+    '/_gm/worlds/$worldId/characters': {
+      id: '/_gm/worlds/$worldId/characters'
+      path: '/characters'
+      fullPath: '/worlds/$worldId/characters'
+      preLoaderRoute: typeof GmWorldsWorldIdCharactersRouteImport
       parentRoute: typeof GmWorldsWorldIdRoute
     }
     '/_gm/worlds/$worldId/creatures': {
@@ -709,6 +838,13 @@ declare module '@tanstack/react-router' {
       path: '/items'
       fullPath: '/worlds/$worldId/items'
       preLoaderRoute: typeof GmWorldsWorldIdItemsRouteImport
+      parentRoute: typeof GmWorldsWorldIdRoute
+    }
+    '/_gm/worlds/$worldId/rules': {
+      id: '/_gm/worlds/$worldId/rules'
+      path: '/rules'
+      fullPath: '/worlds/$worldId/rules'
+      preLoaderRoute: typeof GmWorldsWorldIdRulesRouteImport
       parentRoute: typeof GmWorldsWorldIdRoute
     }
     '/_player/play/characters/': {
@@ -820,14 +956,18 @@ const GmWorldsWorldIdItemsRouteWithChildren =
   GmWorldsWorldIdItemsRoute._addFileChildren(GmWorldsWorldIdItemsRouteChildren)
 
 interface GmWorldsWorldIdRouteChildren {
+  GmWorldsWorldIdCharactersRoute: typeof GmWorldsWorldIdCharactersRoute
   GmWorldsWorldIdCreaturesRoute: typeof GmWorldsWorldIdCreaturesRouteWithChildren
   GmWorldsWorldIdItemsRoute: typeof GmWorldsWorldIdItemsRouteWithChildren
+  GmWorldsWorldIdRulesRoute: typeof GmWorldsWorldIdRulesRoute
   GmWorldsWorldIdIndexRoute: typeof GmWorldsWorldIdIndexRoute
 }
 
 const GmWorldsWorldIdRouteChildren: GmWorldsWorldIdRouteChildren = {
+  GmWorldsWorldIdCharactersRoute: GmWorldsWorldIdCharactersRoute,
   GmWorldsWorldIdCreaturesRoute: GmWorldsWorldIdCreaturesRouteWithChildren,
   GmWorldsWorldIdItemsRoute: GmWorldsWorldIdItemsRouteWithChildren,
+  GmWorldsWorldIdRulesRoute: GmWorldsWorldIdRulesRoute,
   GmWorldsWorldIdIndexRoute: GmWorldsWorldIdIndexRoute,
 }
 
@@ -836,8 +976,11 @@ const GmWorldsWorldIdRouteWithChildren = GmWorldsWorldIdRoute._addFileChildren(
 )
 
 interface GmRouteChildren {
+  GmPlayersRoute: typeof GmPlayersRoute
+  GmQuickStartRoute: typeof GmQuickStartRoute
   GmSessionCanvasLabRoute: typeof GmSessionCanvasLabRoute
   GmSessionsRoute: typeof GmSessionsRoute
+  GmSettingsRoute: typeof GmSettingsRoute
   GmIndexRoute: typeof GmIndexRoute
   GmCampaignsCampaignIdRoute: typeof GmCampaignsCampaignIdRouteWithChildren
   GmCampaignsNewRoute: typeof GmCampaignsNewRoute
@@ -852,11 +995,16 @@ interface GmRouteChildren {
   GmLocationsIndexRoute: typeof GmLocationsIndexRoute
   GmSystemsIndexRoute: typeof GmSystemsIndexRoute
   GmWorldsIndexRoute: typeof GmWorldsIndexRoute
+  GmCampaignsDefinitionsCampaignDefinitionIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdRoute
+  GmCampaignsInstancesCampaignInstanceIdRoute: typeof GmCampaignsInstancesCampaignInstanceIdRoute
 }
 
 const GmRouteChildren: GmRouteChildren = {
+  GmPlayersRoute: GmPlayersRoute,
+  GmQuickStartRoute: GmQuickStartRoute,
   GmSessionCanvasLabRoute: GmSessionCanvasLabRoute,
   GmSessionsRoute: GmSessionsRoute,
+  GmSettingsRoute: GmSettingsRoute,
   GmIndexRoute: GmIndexRoute,
   GmCampaignsCampaignIdRoute: GmCampaignsCampaignIdRouteWithChildren,
   GmCampaignsNewRoute: GmCampaignsNewRoute,
@@ -871,6 +1019,10 @@ const GmRouteChildren: GmRouteChildren = {
   GmLocationsIndexRoute: GmLocationsIndexRoute,
   GmSystemsIndexRoute: GmSystemsIndexRoute,
   GmWorldsIndexRoute: GmWorldsIndexRoute,
+  GmCampaignsDefinitionsCampaignDefinitionIdRoute:
+    GmCampaignsDefinitionsCampaignDefinitionIdRoute,
+  GmCampaignsInstancesCampaignInstanceIdRoute:
+    GmCampaignsInstancesCampaignInstanceIdRoute,
 }
 
 const GmRouteWithChildren = GmRoute._addFileChildren(GmRouteChildren)

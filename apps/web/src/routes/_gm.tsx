@@ -14,9 +14,11 @@ export const Route = createFileRoute("/_gm")({
 });
 
 function GmShell() {
-  const { world, campaign } = Route.useRouteContext();
+  const { session } = Route.useRouteContext();
   return (
-    <AppShell initialWorld={world} initialCampaign={campaign}>
+    <AppShell
+      gmScope={session.authenticated ? session.user.displayName : "local-gm"}
+    >
       <Outlet />
     </AppShell>
   );

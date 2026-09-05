@@ -51,6 +51,167 @@ export interface DomainList {
   offset: number;
 }
 
+export interface CapturedWorldSummary {
+  snapshotId: string;
+  worldDefinitionId: string;
+  worldDefinitionRevisionId: string;
+  revisionNumber: number;
+  name: string;
+}
+
+export interface WorldDefinitionRevisionSummary {
+  id: string;
+  revisionNumber: number;
+  name: string;
+  contentHash: string;
+  publishedAt: string;
+}
+
+export interface WorldDefinitionSummary {
+  id: string;
+  name: string;
+  description?: string;
+  status: string;
+  archivedAt?: string;
+  updatedAt: string;
+  currentRevision?: WorldDefinitionRevisionSummary;
+}
+
+export interface WorldDefinitionList {
+  items: WorldDefinitionSummary[];
+  total: number;
+}
+
+export interface WorldDefinitionDetail {
+  id: string;
+  name: string;
+  description?: string;
+  status: string;
+  currentRevisionId?: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+  revisions: Array<
+    WorldDefinitionRevisionSummary & {
+      predecessorRevisionId?: string;
+      content: JsonValue;
+      createdAt: string;
+      snapshots: Array<{
+        id: string;
+        manifest: JsonValue;
+        contentHash: string;
+        capturedAt: string;
+      }>;
+    }
+  >;
+}
+
+export interface CampaignDefinitionSummary {
+  id: string;
+  name: string;
+  description?: string;
+  status: string;
+  archivedAt?: string;
+  updatedAt: string;
+  currentRevision?: {
+    id: string;
+    revisionNumber: number;
+    name: string;
+    contentHash: string;
+    publishedAt: string;
+    capturedWorld: CapturedWorldSummary;
+  };
+}
+
+export interface CampaignDefinitionList {
+  items: CampaignDefinitionSummary[];
+  total: number;
+}
+
+export interface CampaignDefinitionDetail {
+  id: string;
+  name: string;
+  description?: string;
+  status: string;
+  currentRevisionId?: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+  currentRevision?: CampaignDefinitionSummary["currentRevision"] & {
+    predecessorRevisionId?: string;
+    content: JsonValue;
+    createdAt: string;
+    capturedWorld: CapturedWorldSummary & {
+      snapshotContentHash: string;
+      capturedAt: string;
+      revisionContentHash: string;
+      publishedAt: string;
+    };
+  };
+}
+
+export interface CapturedDefinitionSummary {
+  revisionNumber: number;
+  name: string;
+}
+
+export interface CampaignInstanceSummary {
+  id: string;
+  name: string;
+  status: string;
+  updatedAt: string;
+  currentSnapshot?: {
+    snapshotNumber: number;
+    campaignDefinition: CapturedDefinitionSummary;
+    worldDefinition: CapturedDefinitionSummary;
+  };
+}
+
+export interface CampaignInstanceList {
+  items: CampaignInstanceSummary[];
+  total: number;
+}
+
+export interface CampaignInstanceDetail {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  concludedAt?: string;
+  archivedAt?: string;
+  currentSnapshot?: {
+    id: string;
+    snapshotNumber: number;
+    predecessorSnapshotId?: string;
+    reason: string;
+    contentHash: string;
+    adoptedAt: string;
+    campaignDefinition: CapturedDefinitionSummary & {
+      snapshotId: string;
+      revisionId: string;
+      snapshotContentHash: string;
+      revisionContentHash: string;
+      capturedAt: string;
+      publishedAt: string;
+    };
+    worldDefinition: CapturedDefinitionSummary & {
+      snapshotId: string;
+      revisionId: string;
+      snapshotContentHash: string;
+      revisionContentHash: string;
+      capturedAt: string;
+      publishedAt: string;
+    };
+  };
+  runtime?: {
+    id: string;
+    campaignInstanceSnapshotId: string;
+    revision: number;
+    updatedAt: string;
+  };
+}
+
 export interface MediaAsset {
   id: string;
   originalName: string;
@@ -126,6 +287,36 @@ export function loginAsGm(token: string) {
 
 export function getCurrentUser() {
   return request<{ user: CurrentUser }>("/auth/me");
+}
+
+export function listWorldDefinitions() {
+  return request<WorldDefinitionList>("/world-definitions");
+}
+
+export function getWorldDefinition(worldDefinitionId: string) {
+  return request<WorldDefinitionDetail>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}`,
+  );
+}
+
+export function listCampaignDefinitions() {
+  return request<CampaignDefinitionList>("/campaign-definitions");
+}
+
+export function getCampaignDefinition(campaignDefinitionId: string) {
+  return request<CampaignDefinitionDetail>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}`,
+  );
+}
+
+export function listCampaignInstances() {
+  return request<CampaignInstanceList>("/campaign-instances");
+}
+
+export function getCampaignInstance(campaignInstanceId: string) {
+  return request<CampaignInstanceDetail>(
+    `/campaign-instances/${encodeURIComponent(campaignInstanceId)}`,
+  );
 }
 
 export function logout() {

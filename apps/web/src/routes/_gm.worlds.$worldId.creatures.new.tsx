@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CreatureCreatePage } from "../Creatures";
+import { WorldAggregateBoundary } from "../WorldAggregateBoundary";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId/creatures/new")({
-  ssr: false,
   component: NewCreatureRoute,
 });
 
 function NewCreatureRoute() {
-  return <CreatureCreatePage worldId={Route.useParams().worldId} />;
+  return (
+    <WorldAggregateBoundary
+      title="Bestiary"
+      description="Creature creation will publish through the World Definition revision workflow."
+    />
+  );
 }
