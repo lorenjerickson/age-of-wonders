@@ -1,26 +1,25 @@
-# Create a campaign foundation
+# Propose a Campaign Definition draft
 
-Create a compelling, immediately usable campaign foundation for the selected world. The result is
-an editable starting point for a GM, not a script for the party.
+Create an editable Campaign Definition draft proposal against the supplied immutable captured World
+catalogs. The result is reusable authored preparation for a GM, not play state and not a script for
+the players.
 
-## Creative goals
+## Boundaries
 
-- Give the campaign a memorable, specific name.
-- Write a rich GM premise that explains the starting situation, important tensions, notable people,
-  and protected context. Give the GM useful material without dictating solutions.
-- Write a separate player introduction that is safe to share at session zero. It should be
-  evocative, concise, and free of protected GM information.
-- Select one valid starting location from the supplied world-location catalog.
-- Include the supplied world-location hierarchy. The singleton campaign can author and play in every
-  location; `locationIds` is a materialized hierarchy, not a separate campaign scope.
-- When useful world creatures or items are available, propose a small number of persistent
-  placements at valid locations. Placement never implies combat or a required interaction, and it
-  remains present across session boundaries until the GM changes it or resets the world.
-- Author three to six location discoveries. Give each a clear GM-facing name and useful grants.
-  Prefer rumors, facts, and general knowledge. Item grants may reference only supplied item
-  definitions. Do not invent identifiers.
-- Never prescribe what the party must do, list approved actions, create a story arc, define an
-  objective, or predict an outcome.
+- Use only Location, Creature, Item, and World Placement identifiers supplied in the captured World
+  catalogs. Never invent or infer an identifier and never target a mutable or latest World head.
+- Author Plots, including useful subplots. A Campaign may have multiple root Plots and subplots may
+  nest recursively. Parent, prerequisite, and dependency references use the local Plot `key` values
+  in this proposal. Relationships should normally point upward to an ancestor and must be acyclic.
+- Objectives, Pressures, Resistances, and Discoveries organize GM intent and circumstances; they do
+  not prescribe player actions or automatically trigger outcomes.
+- Campaign placements are overlays. An `independent` placement places captured World content for one
+  or more Plots. A `world-decoration` adds Campaign-specific meaning to a supplied World Placement.
+  Neither changes the captured World or its placement.
+- Objects, Traps, and Hazards are Item families and use `world-item`; do not create separate object or
+  hazard placement kinds.
+- Do not include Sessions, players, spectators, Agents, attendance, event logs, runtime actors,
+  mutable inventory, Plot progress, or other Campaign Instance state.
 
 ## Rich text
 
@@ -30,44 +29,86 @@ scripts, or links.
 
 ## Output contract
 
-Return exactly one JSON object with this shape:
+Return exactly one JSON object shaped like this:
 
 ```json
 {
-  "name": "Campaign name",
+  "name": "Campaign Definition name",
+  "description": "Short library description",
   "gmPremise": "<p>Protected GM context.</p>",
   "playerIntroduction": "<p>Player-safe introduction.</p>",
-  "locationIds": ["all IDs from the supplied world-location catalog"],
-  "partyStartingLocationId": "an ID from the location catalog",
-  "creaturePlacements": [
+  "partyStartingLocationId": "an ID from the captured Location catalog",
+  "plots": [
     {
-      "creatureId": "an ID from the creature catalog",
-      "locationId": "an ID from the location catalog"
+      "key": "local-stable-key",
+      "name": "Root Plot name",
+      "description": "GM-facing circumstances",
+      "objectives": [{ "name": "Objective", "description": "Optional detail" }],
+      "pressures": [{ "name": "Pressure", "description": "Optional detail" }],
+      "resistances": [{ "name": "Resistance", "description": "Optional detail" }],
+      "discoveries": [
+        {
+          "name": "What may be learned",
+          "claims": [
+            { "key": "claim-truth", "kind": "truth", "statement": "An authoritative truth." },
+            {
+              "key": "claim-rumor",
+              "kind": "rumor",
+              "statement": "A possibly false rumor.",
+              "conflictsWithKeys": ["claim-truth"]
+            }
+          ]
+        }
+      ],
+      "locationIds": ["captured Location ID"],
+      "prerequisites": [],
+      "dependencies": []
+    },
+    {
+      "key": "subplot-key",
+      "parentKey": "local-stable-key",
+      "name": "Nested subplot",
+      "objectives": [],
+      "pressures": [],
+      "resistances": [],
+      "discoveries": [],
+      "locationIds": [],
+      "prerequisites": ["local-stable-key"],
+      "dependencies": []
     }
   ],
-  "itemPlacements": [
+  "placements": [
     {
-      "itemDefinitionId": "an ID from the item catalog",
-      "locationId": "an ID from the location catalog"
-    }
-  ],
-  "locationCanvases": [],
-  "discoveries": [
+      "kind": "independent",
+      "name": "Campaign placement name",
+      "locationId": "captured Location ID",
+      "plotKeys": ["local-stable-key"],
+      "source": {
+        "kind": "world-creature",
+        "creatureId": "captured Creature ID"
+      },
+      "notes": "Campaign-only behavior or presentation"
+    },
     {
-      "name": "GM-facing discovery name",
-      "locationId": "an ID from the location catalog",
-      "grants": [
-        { "kind": "rumor", "text": "A concise rumor." },
-        { "kind": "fact", "text": "A concise fact." },
-        { "kind": "general-knowledge", "text": "Useful knowledge." },
-        { "kind": "money", "value": { "amount": 25, "denomination": "gp" } },
-        { "kind": "item", "itemDefinitionId": "an ID from the item catalog" }
-      ]
+      "kind": "independent",
+      "locationId": "captured Location ID",
+      "plotKeys": ["subplot-key"],
+      "source": {
+        "kind": "world-item",
+        "itemDefinitionId": "captured Item Definition ID"
+      }
+    },
+    {
+      "kind": "world-decoration",
+      "name": "Campaign meaning added to an existing placement",
+      "locationId": "the World Placement's captured Location ID",
+      "plotKeys": ["local-stable-key", "subplot-key"],
+      "capturedWorldPlacementId": "captured World Placement ID",
+      "notes": "Campaign-only decoration"
     }
   ]
 }
 ```
 
-Arrays may be empty when the supplied world has no suitable content. Do not include IDs outside the
-provided catalogs. Leave `locationCanvases` empty; the GM configures that persistent presentation
-state in the location workspace. Do not include commentary outside the JSON object.
+Provide at least one Plot. Arrays of placements and Plot details may be empty when the captured World
+does not provide suitable content. Do not include commentary outside the JSON object.

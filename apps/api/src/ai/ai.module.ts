@@ -15,6 +15,7 @@ import { ItemGenerationService } from "./item-generation.service";
 import { GeneratedItemImageService } from "./generated-item-image.service";
 import { WeaponGenerationService } from "./weapon-generation.service";
 import { CampaignGenerationService } from "./campaign-generation.service";
+import { CampaignProposalRequestGate } from "./campaign-proposal-request-gate";
 
 @Module({
   imports: [DomainModule, MediaModule],
@@ -33,6 +34,7 @@ import { CampaignGenerationService } from "./campaign-generation.service";
     ContentPipeline,
     WorldGenerationService,
     CampaignGenerationService,
+    CampaignProposalRequestGate,
   ],
   exports: [OpenAiService],
 })

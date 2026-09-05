@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { GenerateContentDto } from "./dto/generate-content.dto";
 import { CreateWorldDto } from "./dto/create-world.dto";
@@ -20,6 +21,11 @@ import { WeaponGenerationService } from "./weapon-generation.service";
 import { CampaignGenerationService } from "./campaign-generation.service";
 import { CreateCampaignDto } from "./dto/create-campaign.dto";
 import { GmGuard } from "../auth/auth.guard";
+import type { AuthenticatedRequest } from "../auth/auth.types";
+import type { Request } from "express";
+import { CampaignProposalRequestGate } from "./campaign-proposal-request-gate";
+
+const GENERATION_OUTPUT_PREVIEW_LENGTH = 600;
 
 @ApiTags("ai")
 @Controller("ai")
@@ -35,36 +41,67 @@ export class AiController {
     private readonly itemGeneration: ItemGenerationService,
     private readonly weaponGeneration: WeaponGenerationService,
     private readonly campaignGeneration: CampaignGenerationService,
+    private readonly campaignProposalGate: CampaignProposalRequestGate,
     private readonly prisma: PrismaService,
   ) {}
 
-  @Post("worlds/:worldId/campaigns")
+  @Post(
+    "world-definition-snapshots/:worldDefinitionSnapshotId/campaign-definition-draft-proposals",
+  )
   @ApiOperation({
     summary:
-      "Create a campaign foundation using create-campaign.md and world context",
+      "Propose Campaign Definition draft content from an immutable World capture",
   })
-  @ApiParam({ name: "worldId", description: "Root LocationState ID" })
+  @ApiParam({
+    name: "worldDefinitionSnapshotId",
+    description: "Explicit immutable World Definition snapshot ID",
+  })
   async createCampaign(
-    @Param("worldId") worldId: string,
+    @Param("worldDefinitionSnapshotId") worldDefinitionSnapshotId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Body() dto: CreateCampaignDto,
   ) {
-    const result = await this.campaignGeneration.create(worldId, dto.prompt);
-    const generation = await this.prisma.generation.create({
-      data: {
-        kind: "create-campaign",
-        prompt: result.combinedPrompt,
-        output: result.output,
-        model: this.openAi.model,
-        responseId: result.responseId,
+    const userId = request.user!.id;
+    const requestFingerprint = createHash("sha256")
+      .update(worldDefinitionSnapshotId)
+      .update("\0")
+      .update(dto.prompt.trim())
+      .digest("hex");
+    return this.campaignProposalGate.execute(
+      {
+        userId,
+        clientAddress:
+          request.ip ?? request.socket.remoteAddress ?? "unknown",
+        idempotencyKey,
+        requestFingerprint,
       },
-    });
-    return {
-      campaign: result.campaign,
-      output: result.output,
-      responseId: result.responseId,
-      generationId: generation.id,
-      model: this.openAi.model,
-    };
+      async () => {
+        const result = await this.campaignGeneration.createDraftProposal(
+          worldDefinitionSnapshotId,
+          userId,
+          dto.prompt,
+        );
+        const generation = await this.prisma.generation.create({
+          data: {
+            kind: "create-campaign",
+            prompt: result.combinedPrompt,
+            output: result.output,
+            model: this.openAi.model,
+            responseId: result.responseId,
+            createdByUserId: userId,
+          },
+        });
+        return {
+          draftProposal: result.draftProposal,
+          generationId: generation.id,
+          model: this.openAi.model,
+          outputPreview: preview(result.output),
+          outputTruncated:
+            result.output.length > GENERATION_OUTPUT_PREVIEW_LENGTH,
+        };
+      },
+    );
   }
 
   @Post("worlds/:worldId/weapons")
@@ -352,10 +389,27 @@ export class AiController {
 
   @Get("generations")
   @ApiOperation({ summary: "List recent generated content" })
-  listGenerations() {
-    return this.prisma.generation.findMany({
+  async listGenerations(@Req() request: Request & AuthenticatedRequest) {
+    const generations = await this.prisma.generation.findMany({
+      where: { createdByUserId: request.user!.id },
       orderBy: { createdAt: "desc" },
       take: 20,
+      select: {
+        id: true,
+        kind: true,
+        output: true,
+        model: true,
+        createdAt: true,
+      },
     });
+    return generations.map(({ output, ...generation }) => ({
+      ...generation,
+      outputPreview: preview(output),
+      outputTruncated: output.length > GENERATION_OUTPUT_PREVIEW_LENGTH,
+    }));
   }
+}
+
+function preview(value: string): string {
+  return value.slice(0, GENERATION_OUTPUT_PREVIEW_LENGTH);
 }

@@ -14,6 +14,7 @@ const draft = {
     locationIds: ["root"],
     definitionIds: [],
     schemaDefinitionIds: [],
+    worldPlacementDefinitionIds: [],
     modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
   },
   snapshotRecords: [
@@ -203,6 +204,7 @@ describe("WorldDefinitionAuthoringService", () => {
           baseSnapshotId: "snapshot-1",
           content: {
             ...legacyContent,
+            worldPlacementDefinitionIds: [],
             modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
           },
           snapshotRecords: [

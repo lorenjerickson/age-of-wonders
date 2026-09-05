@@ -26,6 +26,7 @@ export class DomainService {
   ) {}
 
   async create(resource: DomainResource, data: Record<string, unknown>) {
+    this.assertLegacyCampaignWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, data);
     const metadata = readResourceMetadata(resource, data);
     if (
@@ -126,6 +127,7 @@ export class DomainService {
     id: string,
     dto: ReplaceDomainResourceDto,
   ) {
+    this.assertLegacyCampaignWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, dto.data);
     const metadata = readResourceMetadata(resource, dto.data);
     if (metadata.id !== id) {
@@ -199,6 +201,7 @@ export class DomainService {
   }
 
   async remove(resource: DomainResource, id: string) {
+    this.assertLegacyCampaignWriteDisabled(resource);
     try {
       const record = await this.prisma.domainRecord.delete({
         where: { resource_id: { resource, id } },
@@ -215,6 +218,14 @@ export class DomainService {
     } catch (error) {
       if (this.isPrismaError(error, "P2025")) this.notFound(resource, id);
       throw error;
+    }
+  }
+
+  private assertLegacyCampaignWriteDisabled(resource: DomainResource): void {
+    if (resource === "campaigns") {
+      throw new ConflictException(
+        "Legacy Campaign writes are disabled. Use Campaign Definition authoring.",
+      );
     }
   }
 

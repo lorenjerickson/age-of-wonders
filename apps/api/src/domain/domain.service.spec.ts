@@ -21,6 +21,18 @@ const location = (id: string, kind: string, parentLocationId?: string) => ({
 });
 
 describe("DomainService singleton creation", () => {
+  it("rejects every legacy Campaign mutation before persistence", async () => {
+    const create = jest.fn(), update = jest.fn(), remove = jest.fn();
+    const prisma = { domainRecord: { create, update, delete: remove } } as unknown as PrismaService;
+    const service = new DomainService(prisma, {} as GraphService);
+    await expect(service.create("campaigns", {})).rejects.toThrow("Use Campaign Definition authoring");
+    await expect(service.replace("campaigns", "legacy", { data: {} })).rejects.toThrow("Use Campaign Definition authoring");
+    await expect(service.remove("campaigns", "legacy")).rejects.toThrow("Use Campaign Definition authoring");
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       "locations" as const,
@@ -31,15 +43,6 @@ describe("DomainService singleton creation", () => {
         placement: { kind: "root" },
       },
       "A world already exists",
-    ],
-    [
-      "campaigns" as const,
-      {
-        identity: { id: "campaign:new" },
-        name: "Another Campaign",
-        worldId: "world:current",
-      },
-      "A campaign already exists",
     ],
   ])("rejects a second %s aggregate", async (resource, data, message) => {
     const create = jest.fn();

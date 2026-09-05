@@ -155,13 +155,18 @@ export class WorldDefinitionAuthoringService {
               "The selected published World revision cannot seed an authoring draft.",
             );
           }
-          const content =
-            modelReleaseIds(world.currentRevision.content).length > 0
-              ? world.currentRevision.content
-              : {
-                  ...world.currentRevision.content,
-                  modelSchemaReleaseIds: [CORE_MODEL_SCHEMA_RELEASE_ID],
-                };
+          const content = {
+            ...world.currentRevision.content,
+            worldPlacementDefinitionIds: Array.isArray(
+              world.currentRevision.content.worldPlacementDefinitionIds,
+            )
+              ? world.currentRevision.content.worldPlacementDefinitionIds
+              : [],
+            modelSchemaReleaseIds:
+              modelReleaseIds(world.currentRevision.content).length > 0
+                ? world.currentRevision.content.modelSchemaReleaseIds
+                : [CORE_MODEL_SCHEMA_RELEASE_ID],
+          };
           const records = snapshot.manifest.records
             .filter((record) => record.resourceType !== RESERVED_RECORD)
             .map(({ resourceType, sourceId, sourceRevision, payload }) => ({
@@ -813,6 +818,7 @@ function newWorldBaseline(name: string) {
       locationIds: [rootLocationId],
       definitionIds: [],
       schemaDefinitionIds: [],
+      worldPlacementDefinitionIds: [],
       modelSchemaReleaseIds: [CORE_MODEL_SCHEMA_RELEASE_ID],
     },
     records: [
@@ -892,7 +898,7 @@ function modelReleaseIds(value: Prisma.JsonValue): string[] {
     (id): id is string => typeof id === "string",
   );
 }
-function assertGovernedRecordConformance(
+export function assertGovernedRecordConformance(
   records: readonly WorldDraftRecordDto[],
   rootReleaseIds: readonly string[],
   elements: readonly CompiledModelElement[],
@@ -913,10 +919,22 @@ function assertGovernedRecordConformance(
       record.resourceType,
       record.payload,
     );
+    const expectedRole = definitionType === "creature"
+      ? "aow:creature"
+      : definitionType === "item"
+        ? "aow:item"
+        : record.resourceType === "world-placements"
+          ? "aow:world-placement"
+          : undefined;
+    const matchingConcepts = expectedRole
+      ? elements.filter((element) =>
+          element.lineage.kind === "concept" &&
+          element.lineage.semanticRole === expectedRole)
+      : [];
     if (!isObject(conformance)) {
-      if (hasGovernedValues || definitionType)
+      if (hasGovernedValues || definitionType || matchingConcepts.length > 0)
         throw new BadRequestException(
-          "A governed World resource is missing Model Schema conformance.",
+          "A governed authored resource is missing Model Schema conformance.",
         );
       continue;
     }
@@ -927,7 +945,7 @@ function assertGovernedRecordConformance(
       selected.some((id, index) => id !== rootReleaseIds[index])
     ) {
       throw new BadRequestException(
-        "A governed World resource does not conform to the draft's exact Model Schema releases.",
+        "A governed authored resource does not conform to the draft's exact Model Schema releases.",
       );
     }
     if (
@@ -935,23 +953,17 @@ function assertGovernedRecordConformance(
       !conceptIds.has(conformance.conceptId)
     ) {
       throw new BadRequestException(
-        "A governed World resource references an unavailable Model concept.",
+        "A governed authored resource references an unavailable Model concept.",
       );
     }
-    if (definitionType) {
-      const expectedRole =
-        definitionType === "creature" ? "aow:creature" : "aow:item";
-      const expectedConcept = elements.find(
-        (element) =>
-          element.lineage.kind === "concept" &&
-          element.lineage.semanticRole === expectedRole,
-      );
+    if (expectedRole) {
       if (
-        !expectedConcept ||
-        conformance.conceptId !== expectedConcept.lineage.id
+        matchingConcepts.length === 0 ||
+        !matchingConcepts.some(({ lineage }) =>
+          conformance.conceptId === lineage.id)
       ) {
         throw new BadRequestException(
-          "A governed Definition uses the wrong Model concept.",
+          "A governed authored resource uses the wrong Model concept.",
         );
       }
     }

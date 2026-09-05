@@ -3,13 +3,15 @@ import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import type { NextFunction, Request, Response } from "express";
+import { json, type NextFunction, type Request, type Response } from "express";
 import { AppModule } from "./app.module";
 import { AUTH_COOKIE } from "./auth/auth.types";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+
+  app.use(json({ limit: "5mb" }));
 
   app.setGlobalPrefix("api");
   app.enableCors({

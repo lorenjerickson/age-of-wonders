@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -41,7 +42,9 @@ export class DomainController {
     @Param("resource") resourceValue: string,
     @Body() dto: CreateDomainResourceDto,
   ) {
-    return this.domain.create(assertDomainResource(resourceValue), dto.data);
+    const resource = assertDomainResource(resourceValue);
+    assertLegacyCampaignWriteDisabled(resource);
+    return this.domain.create(resource, dto.data);
   }
 
   @Get()
@@ -66,7 +69,9 @@ export class DomainController {
     @Param("id") id: string,
     @Body() dto: ReplaceDomainResourceDto,
   ) {
-    return this.domain.replace(assertDomainResource(resourceValue), id, dto);
+    const resource = assertDomainResource(resourceValue);
+    assertLegacyCampaignWriteDisabled(resource);
+    return this.domain.replace(resource, id, dto);
   }
 
   @Delete(":id")
@@ -77,6 +82,16 @@ export class DomainController {
     @Param("resource") resourceValue: string,
     @Param("id") id: string,
   ): Promise<void> {
-    await this.domain.remove(assertDomainResource(resourceValue), id);
+    const resource = assertDomainResource(resourceValue);
+    assertLegacyCampaignWriteDisabled(resource);
+    await this.domain.remove(resource, id);
+  }
+}
+
+function assertLegacyCampaignWriteDisabled(resource: string): void {
+  if (resource === "campaigns") {
+    throw new ConflictException(
+      "Legacy Campaign writes are disabled. Use Campaign Definition authoring.",
+    );
   }
 }

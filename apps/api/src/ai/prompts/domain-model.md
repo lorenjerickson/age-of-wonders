@@ -106,6 +106,8 @@ type CampaignDefinitionId = string;
 type CampaignDefinitionRevisionId = string;
 type CampaignDefinitionSnapshotId = string;
 type PlotDefinitionId = string;
+type WorldPlacementDefinitionId = string;
+type CampaignPlacementDefinitionId = string;
 type CampaignInstanceId = string;
 type CampaignInstanceSnapshotId = string;
 type CampaignInstanceRuntimeId = string;
@@ -153,12 +155,16 @@ interface CampaignDefinitionLineage {
 ```
 
 `WorldDefinitionRevision` owns the published root Location, Location membership, definitions,
-legacy schema selections, and required `modelSchemaReleaseIds` for one World revision. Those IDs
+stable `worldPlacementDefinitionIds`, legacy schema selections, and required
+`modelSchemaReleaseIds` for one World revision. World Placement records use the exact snapshot
+resource name `world-placements`. Those IDs
 select exact immutable Model Schema Releases; a World never resolves a mutable registry head or
-embeds editable registry records. `CampaignDefinitionRevision` owns its authored premise,
-introduction, Plot references, and placement references, and captures the exact replicated World
-snapshot against which it was authored. Neither revision resolves a mutable upstream authoring
-head.
+embeds editable registry records. `CampaignDefinitionRevision` owns one complete
+`CampaignDefinitionContent` payload—including its format version, authored premise, introduction,
+Plot and placement references, preparation defaults, extensions, and exact Campaign-scoped
+`modelSchemaReleaseIds`—and captures the replicated World snapshot against which it was authored.
+Campaign releases layer over the exact releases in that World capture; neither revision resolves a
+mutable upstream authoring head.
 
 Snapshots contain complete, content-addressed replicas rather than live pointers:
 
@@ -337,47 +343,65 @@ All draft, lifecycle, fork, list, and detail operations are owner-scoped. Missin
 stale revisions, and unavailable dependencies use neutral human-readable errors without echoing
 opaque identifiers.
 
-### Relational Campaign Definition read API
+### Relational Campaign Definition authoring API
 
-The additive Campaign authoring spine is persisted in `CampaignDefinition`,
-`CampaignDefinitionRevision`, and `CampaignDefinitionSnapshot`. The GM-authorized
-`GET /campaign-definitions` endpoint is a compact library query: it returns each lineage's
-human-readable metadata, lifecycle status, current revision summary, and the captured World
-revision summary while omitting revision content and snapshot manifests. It never selects a
-Campaign Definition by recency and never follows the mutable current World head. List and detail
-queries are scoped to lineages owned by the authenticated GM.
+Campaign authoring is persisted through `CampaignDefinition`, immutable
+`CampaignDefinitionRevision` and `CampaignDefinitionSnapshot` records, and one mutable
+`CampaignDefinitionDraft` per lineage. `GET /campaign-definitions` is a compact, owner-scoped
+library query. `GET /campaign-definitions/:id` returns the selected lineage, human-readable current
+revision and captured-World summaries, revision history, optional draft metadata, and a bounded
+human-readable projection of captured Locations, Creatures, Items, and World Placements. It does
+not return an editable copy of current revision content or follow the mutable World head.
 
-`GET /campaign-definitions/:id` reads one explicitly selected lineage and its immutable current
-revision content. Its World provenance is resolved through the revision's captured
-`WorldDefinitionSnapshot`, so the response remains internally consistent even after newer World
-revisions are published. The endpoint does not substitute current World content for the capture.
-Missing lineages and persistence failures use neutral errors that do not echo opaque identifiers.
-Both GET endpoints are read-only.
+`POST /campaign-definitions` requires a human-readable name and an explicit owned
+`worldDefinitionSnapshotId`. It creates an active Campaign Definition lineage and an unpublished
+draft capturing that exact immutable World snapshot; it does not create revision 1. The server
+verifies World snapshot integrity and ownership before writing. Clients never submit an
+authoritative snapshot manifest or content hash.
 
-`POST /campaign-definitions` creates a new Campaign Definition lineage and its first complete
-immutable revision. The request names an explicit `worldDefinitionSnapshotId` and supplies the
-complete Campaign revision `content` and a complete `snapshotManifest`; it never names a live World
-head. `snapshotManifest` contains `formatVersion` and at least one complete resource record
-with `resourceType`, `sourceId`, optional `sourceRevision`, and `payload`. Callers do not submit
-record or manifest hashes: the server hashes each payload, constructs the required top-level
-`manifest.contentHash`, and stores that same hash as the Campaign snapshot's `contentHash`. One
-authoritative `campaign-definition-revision` record is prepended with payload exactly equal to the
-stored revision content. Publication JSON is limited to 64 nested levels and at most 4,999 caller
-records (5,000 after the authoritative record). One
-serializable transaction creates the owned lineage, revision 1 capturing that
-exact World snapshot, its Campaign snapshot, and then sets `currentRevisionId`. The authenticated GM
-is recorded as lineage owner and revision author. Content and manifest hashes are canonicalized and
-computed by the server rather than trusted from the client.
+Draft operations are explicit and optimistic:
 
-`POST /campaign-definitions/:id/revisions` publishes one complete direct successor. Its request must
-name the current `predecessorRevisionId`, an explicit `worldDefinitionSnapshotId`, a revision name,
-complete replacement content, and a complete replacement manifest. The transaction verifies that
-the predecessor is still the selected Campaign lineage's current head and that the World snapshot
-belongs to the same World Definition lineage. It creates exactly the next revision and snapshot,
-then advances the head with a compare-and-set guard. A stale predecessor, missing snapshot, or
-cross-lineage World migration aborts the whole transaction. This is the all-or-nothing primitive for
-optionally migrating Campaign authoring to a newer World revision; partial-field migration and
-latest-World inference are not supported.
+- `GET /campaign-definitions/:id/draft` reads the owner-scoped working draft.
+- `POST /campaign-definitions/:id/draft` idempotently resumes an existing draft or starts one from
+  the explicitly named current Campaign revision.
+- `PUT /campaign-definitions/:id/draft` replaces the complete draft using
+  `expectedStorageRevision`, a revision name, canonical Campaign content, and complete Campaign-owned
+  records. Saving invalidates prior validation.
+- `POST /campaign-definitions/:id/draft/validate` validates the exact storage revision, recursive
+  Plot hierarchy, Campaign placements, preparation defaults, captured-World references, and model
+  conformance.
+- `POST /campaign-definitions/:id/draft/publish` requires successful validation of that same storage
+  revision, revalidates inside a serializable transaction, constructs the canonical manifest on the
+  server, creates the immutable Campaign revision and snapshot, advances the lineage head with a
+  compare-and-set guard, and advances the draft base. Existing Campaign Instances remain unchanged.
+- `GET /campaign-definitions/:id/draft/impact` reports human-readable draft changes and downstream
+  Instance impact without exposing opaque identifiers as labels.
+
+`POST /campaign-definitions/:id/archive` and `/restore` require the exact metadata revision.
+Archived definitions and their drafts are read-only, while historical revisions, snapshots, and
+Instances remain intact. `POST /campaign-definitions/:id/forks` creates a distinct lineage and draft
+from an explicitly selected owned Campaign snapshot, records immutable provenance, and does not
+create a live link to the source.
+
+World adoption is a separate all-or-nothing workflow. `POST
+/campaign-definitions/:id/world-migrations/preview` accepts the exact draft storage revision, one
+direct-successor World snapshot, bounded mappings, and independent bounded pagination offsets for
+ordinary changes, impacts, and conflicts. It compares the complete immutable World manifests,
+returns truthful human-readable page totals and reconciliation candidates, and computes a hash over
+the complete semantic plan rather than its presentation pages. Large responses shrink the current
+page without skipping unseen rows.
+`POST /campaign-definitions/:id/world-migrations/apply` requires that plan hash, recomputes the full
+plan inside a serializable transaction, rejects unresolved or stale mappings, creates the next
+Campaign revision/snapshot, and writes immutable migration audit provenance. It never cherry-picks
+World changes, crosses World lineages, rewrites prior Campaign snapshots, or changes existing
+Campaign Instances. Compatible World Model release changes rewrite exact Campaign-record
+conformance release selections only when existing concept and field identities still validate;
+incompatible changes or newly required Campaign concepts remain explicit blocking reconciliation
+conflicts rather than failing after an apparently ready preview.
+
+All Campaign Definition routes require GM authorization and constrain nested Campaign, World,
+snapshot, and migration lookups to the authenticated owner. Missing or foreign-owned records,
+stale revisions, and unavailable dependencies use neutral human-readable errors.
 
 ### Campaign Instance creation
 
@@ -463,10 +487,31 @@ include a human-readable `crossBranchRationale`.
 
 Each Plot carries flexible arrays of Objectives, Pressures, Resistances, Discoveries, and
 `PlotLocationContext` records; the contracts do not impose singular cardinality. A Location context
-references a Location in the Campaign revision's captured World snapshot. Its actor and Item
-placement intents are authored source references or roles. `capturedWorldPlacementId` marks an
-intent as a decoration of captured World placement data; it does not transfer ownership of that
-placement to the Campaign.
+references a Location in the Campaign revision's captured World snapshot and may reference stable
+`CampaignPlacementDefinitionId` values. The old nested actor and Item placement-intent arrays are
+deprecated compatibility fields, not authoritative placement storage; validation rejects them in
+new Campaign Definition drafts rather than publishing duplicate placement representations.
+When an applicable selected Model Schema declares an `aow:plot` concept, each Plot carries exact
+`conformance` and `modelValues` that publication validates against the selected World-plus-Campaign
+release closure. Campaign placements follow the same rule for an applicable
+`aow:campaign-placement` concept.
+
+`WorldPlacementDefinition` is immutable World revision data: it locates captured Creature, Item, or
+other registered content and owns its source position and presentation. `CampaignPlacementDefinition`
+is a distinct Campaign-owned overlay associated with zero or more Plots. Its `independent` variant
+places captured content without changing the World. Its `world-decoration` variant names a
+`capturedWorldPlacementId` and owns only Campaign-specific meaning, presentation, or behavior. A
+decoration uses the captured placement's Location. Objects, Traps, and Hazards remain Item families,
+not separate placement kinds. Snapshot record names are exactly `world-placements`, `plots`, and
+`campaign-placements`.
+
+Plots and Campaign placements may carry `conformance` plus `modelValues`. When the selected
+effective releases contain an applicable concept whose semantic role is `aow:plot` or
+`aow:campaign-placement`, respectively, that carrier is required. `conformance` records the exact
+ordered World-plus-Campaign release IDs and the selected concept ID; `modelValues` is keyed by the
+declared fields' stable `storageKey`. Publication rejects missing required fields, undeclared keys,
+wrong value types, and violated cardinality, uniqueness, range, length, pattern, or allowed-value
+constraints. A record must not declare these values when no matching applicable concept exists.
 
 Runtime realizations are deliberately separate. `PlotActorRealization` names a runtime entity,
 `PlotItemRealization` names an Item instance, and both point back to their authored placement-intent
@@ -476,7 +521,8 @@ runtime realization links, per-Creature knowledge, revealed claims, and approved
 not copy Plot parentage into a second runtime hierarchy or turn mutable actors and Items into
 Campaign Definition content.
 
-A `PlotDiscovery` contains claims discriminated as `truth`, `belief`, or `rumor`. Truth claims do
+A `PlotDiscovery` contains at least one claim discriminated as `truth`, `belief`, or `rumor` in a
+publishable Campaign Definition draft. Truth claims do
 not offer a contradiction field. Beliefs and Rumors may name claims they conflict with, and a Rumor's
 `relatedTruthClaimId` is optional because a false Rumor need not resolve to a Truth. Per-Creature
 knowledge is separately discriminated as `knows-truth`, `holds-belief`, or `heard-rumor`; learning a
@@ -485,8 +531,8 @@ claim never changes its epistemic kind.
 Use `validatePlotHierarchy` before accepting an authored Plot set. It reports duplicate identities,
 missing or cross-Definition parents and relationship targets, parent cycles, combined
 prerequisite/dependency cycles, and unexplained cross-branch relationships without mutating input.
-Plot contracts are not yet persistence resources; they are captured through Campaign Definition
-revision content until an aggregate-specific persistence workflow is introduced.
+Plot and placement records are captured through the aggregate-specific Campaign Definition draft,
+revision, and snapshot workflow. They are not unversioned generic domain resources.
 
 ### Relational Campaign Instance participation persistence
 
@@ -938,10 +984,100 @@ Minimal structurally complete root-world example:
 }
 ```
 
-## Campaign definitions and world state
+## Campaign Definition authored content and placements
 
-`CampaignDefinition` is the singleton world's GM-authored story and persistent play context,
-persisted by the `campaigns` resource. It contains `identity`, `name`, the root-world `worldId`, a
+`CampaignDefinitionContent` is the complete authored payload of a draft or immutable revision. It
+contains no World hierarchy copy and no Instance or Session state. Its Location and source-content
+references resolve only against the revision's explicit `capturedWorldSnapshotId`. The content lists
+the exact Plot and Campaign-placement records included in the snapshot, plus exact Campaign-scoped
+Model Schema releases and reusable preparation defaults.
+
+```ts
+interface CampaignDefinitionContent {
+  formatVersion: 1;
+  gmPremise: string;
+  playerIntroduction: string;
+  plotDefinitionIds: PlotDefinitionId[];
+  placementDefinitionIds: CampaignPlacementDefinitionId[];
+  modelSchemaReleaseIds: ModelSchemaReleaseId[];
+  preparation?: {
+    startingLocationId?: LocationId;
+    startingContext?: string;
+    mapVariations?: string;
+    locationCanvases?: CampaignLocationCanvasConfiguration[];
+  };
+}
+
+interface WorldPlacementDefinition {
+  id: WorldPlacementDefinitionId;
+  locationId: LocationId;
+  source:
+    | { kind: "world-creature"; creatureId: CreatureId }
+    | { kind: "world-item"; itemDefinitionId: DefinitionId }
+    | { kind: "registered-content"; definitionId: DefinitionId };
+  name?: string;
+  mapPosition?: NormalizedMapCoordinate;
+  scale?: number;
+  notes?: string;
+  conformance?: ModelConformance;
+  modelValues?: Record<NamespacedKey, JsonValue>;
+}
+
+type CampaignPlacementDefinition =
+  | {
+      id: CampaignPlacementDefinitionId;
+      kind: "independent";
+      locationId: LocationId;
+      plotDefinitionIds: PlotDefinitionId[];
+      source:
+        | WorldPlacementDefinition["source"]
+        | {
+            kind: "actor-role";
+            role: string;
+            suggestedCreatureDefinitionId?: DefinitionId;
+          };
+      name?: string;
+      mapPosition?: NormalizedMapCoordinate;
+      scale?: number;
+      notes?: string;
+      conformance?: ModelConformance;
+      modelValues?: Record<NamespacedKey, JsonValue>;
+    }
+  | {
+      id: CampaignPlacementDefinitionId;
+      kind: "world-decoration";
+      locationId: LocationId;
+      plotDefinitionIds: PlotDefinitionId[];
+      capturedWorldPlacementId: WorldPlacementDefinitionId;
+      name?: string;
+      mapPosition?: NormalizedMapCoordinate;
+      scale?: number;
+      notes?: string;
+      conformance?: ModelConformance;
+      modelValues?: Record<NamespacedKey, JsonValue>;
+    };
+```
+
+`validateCampaignDefinitionContent` checks exact record membership, Plot hierarchy and ownership,
+captured Location and content references, placement-to-Plot relationships, and World-decoration
+identity and Location consistency. Runtime authoring validation additionally compiles the captured
+World and Campaign Model releases. Human-readable validation issues never expose opaque IDs.
+
+Campaign AI generation is proposal-only. The request identifies one immutable World Definition
+snapshot; the server authorizes and verifies that snapshot and constructs the Location, Creature,
+Item, and World Placement catalogs from its manifest. The result carries the same snapshot identity
+and emits `plots` and `campaign-placements` records ready to apply to a Campaign Definition draft. It
+does not persist through the legacy generic `campaigns` resource or infer the latest World.
+`POST /ai/world-definition-snapshots/:worldDefinitionSnapshotId/campaign-definition-draft-proposals`
+returns this proposal and records generation provenance without publishing a Campaign revision.
+
+## Legacy Campaign compatibility (migration only; never generate)
+
+The deprecated `CampaignDefinition` compatibility aggregate below historically represented a
+singleton World's authored story and persistent play context in the generic `campaigns` resource.
+It is retained only to read and migrate old records. New authoring, persistence, and AI output must
+use `CampaignDefinitionLineage`, `CampaignDefinitionContent`, versioned snapshots, Plots, and
+Campaign placements. The legacy shape contains `identity`, `name`, the root-world `worldId`, a
 protected `gmPremise`, a `playerIntroduction`, the materialized world hierarchy in `locationIds`,
 and a required `partyStartingLocationId` within that set. Every world descendant is in editable
 scope; `locationIds` does not create a campaign-specific location silo. The premise and introduction are sanitized rich HTML
@@ -949,8 +1085,8 @@ limited to paragraphs, second- and third-level headings, emphasis, lists, blockq
 and safe links. It does not contain a party roster or starting clock and never prescribes player
 actions.
 
-Campaign definitions own persistent placement records and location discoveries shared by every
-session:
+Legacy Campaign records owned placement and location-discovery arrays that were shared by every
+legacy session:
 
 - `creaturePlacements` associate a world-supplied creature with its current world location and may
   include a persistent normalized `mapPosition` on that location's map plus a positive `scale`
@@ -971,8 +1107,8 @@ session:
   walls, transitions, and orientation. Sessions are journal and timing boundaries; ending one does
   not reset placements, discoveries, or location presentation.
 
-Every campaign location reference must appear in `locationIds`, every world descendant must be
-materialized there, and every entry must resolve within the campaign's `worldId`. Campaign generation must not invent creature, item,
+In this legacy shape, every campaign location reference had to appear in `locationIds`, every world descendant was
+materialized there, and every entry resolved within the campaign's `worldId`. Migration must not invent creature, item,
 object, currency, or location definitions inside a campaign. A location or placement supplies
 context only: presence never reveals a discovery, awards an item, starts combat, or restricts the
 actions available to the party.
@@ -1092,8 +1228,8 @@ interface CampaignDefinition {
 }
 ```
 
-`CampaignState` remains the mutable campaign state embedded in an authoritative `GameState`; it is
-not the aggregate stored by the `campaigns` definition resource.
+The deprecated `CampaignState` is mutable play state embedded in a legacy `GameState`; migration
+maps it to a Campaign Instance runtime, never to Campaign Definition content.
 
 `CampaignState` contains `identity`, `name`, `currentTime`, optional `activeSceneId`, `sceneIds`,
 `partyIds`, `partyLocations`, `rests`, optional active `travel`, `socialAttitudes`,

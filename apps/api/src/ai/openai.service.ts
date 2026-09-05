@@ -5,6 +5,7 @@ import OpenAI from "openai";
 interface RespondInput {
   input: string;
   instructions?: string;
+  maxOutputTokens?: number;
 }
 
 export interface GeneratedImage {
@@ -31,7 +32,7 @@ export class OpenAiService {
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
   }
 
-  async respond({ input, instructions }: RespondInput) {
+  async respond({ input, instructions, maxOutputTokens }: RespondInput) {
     if (!this.client) {
       throw new ServiceUnavailableException(
         "OPENAI_API_KEY is not configured on the API service.",
@@ -42,6 +43,7 @@ export class OpenAiService {
       model: this.model,
       input,
       instructions,
+      max_output_tokens: maxOutputTokens ?? 8_000,
     });
 
     return { output: response.output_text, responseId: response.id };

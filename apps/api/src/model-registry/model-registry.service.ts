@@ -368,6 +368,38 @@ export class ModelRegistryService {
     };
   }
 
+  async resolveEffectiveRootsForCampaign(
+    rootReleaseIds: readonly string[],
+    userId: string,
+    worldDefinitionId: string,
+    campaignDefinitionId: string,
+  ) {
+    if (rootReleaseIds.length === 0)
+      throw new BadRequestException(
+        "Select at least one Model Schema release for this Campaign draft.",
+      );
+    const roots: Array<{
+      compiled: CompiledModelSchema;
+      releaseName: string;
+      registryName: string;
+    }> = [];
+    for (const releaseId of rootReleaseIds)
+      roots.push(await this.compileAccessibleRoot(releaseId, userId));
+    const elements = mergeCompiledRootElements(
+      roots.map(({ compiled }) => compiled),
+    );
+    return {
+      roots,
+      elements: elements.filter(({ lineage }) =>
+        isApplicableToCampaign(
+          lineage.applicability as unknown as Prisma.JsonValue,
+          worldDefinitionId,
+          campaignDefinitionId,
+        ),
+      ),
+    };
+  }
+
   private async compileAccessibleRoot(
     releaseId: string,
     userId: string,
@@ -747,6 +779,21 @@ function isApplicableToWorld(
     !Array.isArray(value) &&
     (value.kind === "global" ||
       (value.kind === "world" && value.worldDefinitionId === worldDefinitionId))
+  );
+}
+export function isApplicableToCampaign(
+  value: Prisma.JsonValue,
+  worldDefinitionId: string,
+  campaignDefinitionId: string,
+): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value.kind === "global" ||
+      (value.kind === "world" && value.worldDefinitionId === worldDefinitionId) ||
+      (value.kind === "campaign-definition" &&
+        value.campaignDefinitionId === campaignDefinitionId))
   );
 }
 function validateCompilationSafely(

@@ -1,6 +1,7 @@
 import {
   mergeCompiledRootElements,
   ModelRegistryService,
+  isApplicableToCampaign,
 } from "./model-registry.service";
 import {
   ConflictException,
@@ -151,6 +152,13 @@ describe("ModelRegistryService", () => {
       (element) => element.currentRevision.presentation.label === "Pack",
     );
     expect(pack).toBeDefined();
+  });
+
+  it("resolves Campaign models across global, captured World, and exact Campaign scopes", () => {
+    expect(isApplicableToCampaign({ kind: "global" }, "world-1", "campaign-1")).toBe(true);
+    expect(isApplicableToCampaign({ kind: "world", worldDefinitionId: "world-1" }, "world-1", "campaign-1")).toBe(true);
+    expect(isApplicableToCampaign({ kind: "campaign-definition", campaignDefinitionId: "campaign-1" }, "world-1", "campaign-1")).toBe(true);
+    expect(isApplicableToCampaign({ kind: "campaign-definition", campaignDefinitionId: "other" }, "world-1", "campaign-1")).toBe(false);
   });
 
   it("refuses to extend a registry the GM does not own", async () => {

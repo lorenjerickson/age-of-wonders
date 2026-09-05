@@ -30,6 +30,7 @@ export function validateWorldDefinitionDraft(
     return { valid: false, issues };
   }
   const ids = new Set<string>();
+  const recordIdentities = new Set<string>();
   const byId = new Map<string, WorldDraftRecordDto>();
   for (const record of records) {
     const subject = recordName(record);
@@ -48,13 +49,15 @@ export function validateWorldDefinitionDraft(
       );
     }
     const key = `${record.resourceType.trim()}\0${record.sourceId.trim()}\0${record.sourceRevision ?? ""}`;
-    if (ids.has(key))
+    const identityKey = `${record.resourceType.trim()}\0${record.sourceId.trim()}`;
+    if (ids.has(key) || recordIdentities.has(identityKey))
       add(
         "duplicate-record",
         subject,
         "The same captured resource appears more than once.",
       );
     ids.add(key);
+    recordIdentities.add(identityKey);
     byId.set(
       `${record.resourceType.trim()}\0${record.sourceId.trim()}`,
       record,
@@ -64,6 +67,11 @@ export function validateWorldDefinitionDraft(
   const locations = stringArray(content, "locationIds", add);
   const definitions = stringArray(content, "definitionIds", add);
   const schemas = stringArray(content, "schemaDefinitionIds", add);
+  const worldPlacements = stringArray(
+    content,
+    "worldPlacementDefinitionIds",
+    add,
+  );
   const modelReleases = stringArray(content, "modelSchemaReleaseIds", add);
   if (modelReleases.length === 0)
     add(
@@ -111,11 +119,206 @@ export function validateWorldDefinitionDraft(
       );
   }
   validateLocationGraph(locations, byId, add);
+  validateWorldPlacements(
+    worldPlacements,
+    locations,
+    definitions,
+    records,
+    byId,
+    add,
+  );
   issues.sort(
     (a, b) =>
       a.code.localeCompare(b.code) || a.subject.localeCompare(b.subject),
   );
   return { valid: issues.length === 0, issues };
+}
+
+function validateWorldPlacements(
+  declaredIds: readonly string[],
+  locationIds: readonly string[],
+  definitionIds: readonly string[],
+  records: readonly WorldDraftRecordDto[],
+  byId: ReadonlyMap<string, WorldDraftRecordDto>,
+  add: (c: string, s: string, d: string) => void,
+): void {
+  const declared = new Set(declaredIds);
+  const locations = new Set(locationIds);
+  const definitions = new Map<string, unknown>();
+  for (const definitionId of definitionIds) {
+    definitions.set(
+      definitionId,
+      byId.get(`definitions\0${definitionId}`)?.payload,
+    );
+  }
+  const legacyCreatures = new Set(
+    records
+      .filter(
+        (record) =>
+          record.resourceType.trim() === "creatures" &&
+          !definitions.has(record.sourceId.trim()),
+      )
+      .map((record) => record.sourceId.trim()),
+  );
+  const placementRecords = records.filter(
+    (record) => record.resourceType.trim() === "world-placements",
+  );
+  for (const id of declaredIds) {
+    if (!byId.has(`world-placements\0${id}`)) {
+      add(
+        "world-placement-record-missing",
+        "World placements",
+        "A declared World placement is missing from the capture.",
+      );
+    }
+  }
+  for (const record of placementRecords) {
+    const subject = recordName(record);
+    const id = record.sourceId.trim();
+    if (!declared.has(id)) {
+      add(
+        "world-placement-membership-mismatch",
+        subject,
+        "Every captured World placement must be declared by this World revision.",
+      );
+    }
+    if (!isWorldPlacement(record.payload, id)) {
+      add(
+        "world-placement-invalid",
+        subject,
+        "The World placement shape, presentation, or coordinates are invalid.",
+      );
+      continue;
+    }
+    if (!locations.has(record.payload.locationId)) {
+      add(
+        "world-placement-location-not-found",
+        subject,
+        "The placement Location is not present in this World revision.",
+      );
+    }
+    if (!worldPlacementSourceExists(
+      record.payload.source,
+      definitions,
+      legacyCreatures,
+    )) {
+      add(
+        "world-placement-source-not-found",
+        subject,
+        "The placed Creature, Item, or registered content is not present in this World revision.",
+      );
+    }
+  }
+}
+
+function isWorldPlacement(
+  value: unknown,
+  sourceId: string,
+): value is Record<string, unknown> & {
+  locationId: string;
+  source: Record<string, unknown>;
+} {
+  if (
+    !isObject(value) ||
+    value.id !== sourceId ||
+    !boundedNonEmpty(value.locationId, 240) ||
+    !onlyKeys(value, [
+      "id",
+      "locationId",
+      "source",
+      "name",
+      "mapPosition",
+      "scale",
+      "notes",
+      "conformance",
+      "modelValues",
+      "extensions",
+    ]) ||
+    (value.name !== undefined &&
+      (typeof value.name !== "string" || value.name.length > 120)) ||
+    (value.notes !== undefined &&
+      (typeof value.notes !== "string" || value.notes.length > 4_000)) ||
+    (value.scale !== undefined &&
+      (!finite(value.scale) || value.scale <= 0 || value.scale > 100)) ||
+    (value.mapPosition !== undefined && !normalizedCoordinate(value.mapPosition)) ||
+    (value.conformance !== undefined && !modelConformance(value.conformance)) ||
+    (value.modelValues !== undefined && !publicationObject(value.modelValues)) ||
+    (value.extensions !== undefined && !isObject(value.extensions))
+  ) {
+    return false;
+  }
+  return isWorldPlacementSource(value.source);
+}
+
+function modelConformance(value: unknown): boolean {
+  return isObject(value) && boundedNonEmpty(value.conceptId, 240) &&
+    Array.isArray(value.modelSchemaReleaseIds) &&
+    value.modelSchemaReleaseIds.every((id) => boundedNonEmpty(id, 240));
+}
+
+function publicationObject(value: unknown): boolean {
+  return isObject(value) && Object.values(value).every(publicationValue);
+}
+
+function publicationValue(value: unknown): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(publicationValue);
+  return publicationObject(value);
+}
+
+function isWorldPlacementSource(value: unknown): value is Record<string, unknown> {
+  if (!isObject(value)) return false;
+  if (value.kind === "world-creature") {
+    return onlyKeys(value, ["kind", "creatureId"]) &&
+      boundedNonEmpty(value.creatureId, 240);
+  }
+  if (value.kind === "world-item") {
+    return onlyKeys(value, ["kind", "itemDefinitionId"]) &&
+      boundedNonEmpty(value.itemDefinitionId, 240);
+  }
+  return value.kind === "registered-content" &&
+    onlyKeys(value, ["kind", "definitionId"]) &&
+    boundedNonEmpty(value.definitionId, 240);
+}
+
+function worldPlacementSourceExists(
+  source: Record<string, unknown>,
+  definitions: ReadonlyMap<string, unknown>,
+  legacyCreatures: ReadonlySet<string>,
+): boolean {
+  if (source.kind === "world-creature") {
+    const id = source.creatureId as string;
+    const definition = definitions.get(id);
+    return definition === undefined
+      ? legacyCreatures.has(id)
+      : isObject(definition) && definition.kind === "creature";
+  }
+  if (source.kind === "world-item") {
+    const definition = definitions.get(source.itemDefinitionId as string);
+    return isObject(definition) && definition.kind === "item";
+  }
+  return definitions.has(source.definitionId as string);
+}
+
+function normalizedCoordinate(value: unknown): boolean {
+  return isObject(value) && onlyKeys(value, ["kind", "x", "y"]) &&
+    value.kind === "normalized-map" &&
+    finite(value.x) && value.x >= 0 && value.x <= 1 &&
+    finite(value.y) && value.y >= 0 && value.y <= 1;
+}
+
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function boundedNonEmpty(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= max;
+}
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const known = new Set(allowed);
+  return Object.keys(value).every((key) => known.has(key));
 }
 
 function validateLocationGraph(
