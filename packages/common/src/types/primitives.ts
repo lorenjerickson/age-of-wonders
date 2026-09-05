@@ -36,6 +36,10 @@ export type CampaignDefinitionRevisionId =
 export type CampaignDefinitionSnapshotId =
   DomainId<"campaign-definition-snapshot">;
 export type PlotDefinitionId = DomainId<"plot-definition">;
+export type WorldPlacementDefinitionId =
+  DomainId<"world-placement-definition">;
+export type CampaignPlacementDefinitionId =
+  DomainId<"campaign-placement-definition">;
 export type CampaignInstanceId = DomainId<"campaign-instance">;
 export type CampaignInstanceSnapshotId = DomainId<"campaign-instance-snapshot">;
 export type CampaignInstanceRuntimeId = DomainId<"campaign-instance-runtime">;

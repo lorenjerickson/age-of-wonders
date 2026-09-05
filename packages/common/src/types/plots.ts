@@ -1,5 +1,6 @@
 import type {
   CampaignDefinitionId,
+  CampaignPlacementDefinitionId,
   CampaignInstanceId,
   CreatureId,
   DefinitionId,
@@ -12,6 +13,7 @@ import type {
   OpenString,
   PlotDefinitionId,
 } from "./primitives";
+import type { ModelConformance } from "./model-registry";
 
 export type PlotParent =
   | { readonly kind: "root" }
@@ -126,7 +128,11 @@ export interface PlotLocationContext<
 > {
   readonly id: string;
   readonly locationId: LocationId;
+  /** Authoritative Campaign placements associated with this Plot context. */
+  readonly placementDefinitionIds?: readonly CampaignPlacementDefinitionId[];
+  /** @deprecated Use placementDefinitionIds and CampaignPlacementDefinition. */
   readonly actorPlacements?: readonly PlotActorPlacementIntent<Extensions>[];
+  /** @deprecated Use placementDefinitionIds and CampaignPlacementDefinition. */
   readonly itemPlacements?: readonly PlotItemPlacementIntent<Extensions>[];
   readonly extensions?: Extensions;
 }
@@ -147,6 +153,10 @@ export interface PlotDefinition<
   readonly locationContexts: readonly PlotLocationContext<Extensions>[];
   readonly prerequisites?: readonly PlotRelationship[];
   readonly dependencies?: readonly PlotRelationship[];
+  /** Required when an applicable Model Schema declares an `aow:plot` concept. */
+  readonly conformance?: ModelConformance;
+  /** Values keyed by the selected Model field's stable storage key. */
+  readonly modelValues?: Readonly<Record<NamespacedKey, JsonValue>>;
   readonly extensions?: Extensions;
 }
 

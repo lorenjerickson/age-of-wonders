@@ -1,5 +1,6 @@
 export * from "./catalog";
 export * from "./campaign";
+export * from "./campaign-definition";
 export * from "./character";
 export * from "./combat";
 export * from "./creatures";
@@ -11,6 +12,7 @@ export * from "./items";
 export * from "./locations";
 export * from "./model-registry";
 export * from "./participation";
+export * from "./placements";
 export * from "./plots";
 export * from "./disciplines";
 export * from "./skills";

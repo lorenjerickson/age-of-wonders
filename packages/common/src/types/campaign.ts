@@ -9,7 +9,7 @@ import type {
 } from "./primitives";
 import type { NormalizedMapCoordinate } from "./locations";
 
-/** A persistent creature placement shared by every session in the world. */
+/** @deprecated Use CampaignPlacementDefinition with a world-creature source. */
 export interface CampaignCreaturePlacement {
   readonly id: string;
   readonly creatureId: CreatureId;
@@ -20,14 +20,14 @@ export interface CampaignCreaturePlacement {
   readonly scale?: number;
 }
 
-/** A persistent world-item placement shared by every session. */
+/** @deprecated Use CampaignPlacementDefinition with a world-item source. */
 export interface CampaignItemPlacement {
   readonly id: string;
   readonly itemDefinitionId: DefinitionId;
   readonly locationId: LocationId;
 }
 
-/** A persistent environmental-object placement shared by every session. */
+/** @deprecated Objects, Traps, and Hazards are Item families; use CampaignPlacementDefinition. */
 export interface CampaignObjectPlacement {
   readonly id: string;
   readonly objectDefinitionId: DefinitionId;
@@ -48,7 +48,7 @@ export type CampaignDiscoveryGrant =
       readonly itemDefinitionId: DefinitionId;
     };
 
-/** GM-controlled information or value authored at one world location. */
+/** @deprecated Use PlotDiscovery claims in a Campaign Definition Plot. */
 export interface CampaignDiscovery {
   readonly id: string;
   readonly name: string;

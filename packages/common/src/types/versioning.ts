@@ -10,13 +10,14 @@ import type {
   JsonValue,
   LocationId,
   ModelSchemaReleaseId,
-  PlotDefinitionId,
   SessionId,
   StateIdentity,
   WorldDefinitionId,
   WorldDefinitionRevisionId,
   WorldDefinitionSnapshotId,
+  WorldPlacementDefinitionId,
 } from "./primitives";
+import type { CampaignDefinitionContent } from "./campaign-definition";
 
 /** Identity of one immutable published revision in a definition lineage. */
 export interface DefinitionRevisionIdentity<
@@ -77,6 +78,8 @@ export interface WorldDefinitionRevision<
   /** Definitions and schemas resolved by this revision are replicated when captured. */
   readonly definitionIds: readonly DefinitionId[];
   readonly schemaDefinitionIds: readonly DefinitionId[];
+  /** World-owned Creature, Item, and registered-content placements. */
+  readonly worldPlacementDefinitionIds: readonly WorldPlacementDefinitionId[];
   /** Exact immutable model releases adopted by this World revision. */
   readonly modelSchemaReleaseIds: readonly ModelSchemaReleaseId[];
   readonly extensions?: Extensions;
@@ -118,11 +121,8 @@ export interface CampaignDefinitionRevision<
   >;
   /** The replicated World capture against which this campaign was authored. */
   readonly capturedWorldSnapshotId: WorldDefinitionSnapshotId;
-  readonly gmPremise: string;
-  readonly playerIntroduction: string;
-  readonly plotDefinitionIds: readonly PlotDefinitionId[];
-  readonly placementDefinitionIds: readonly string[];
-  readonly extensions?: Extensions;
+  /** The complete authored payload persisted and captured for this revision. */
+  readonly content: CampaignDefinitionContent<Extensions>;
 }
 
 /**
