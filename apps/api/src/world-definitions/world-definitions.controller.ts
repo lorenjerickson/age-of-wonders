@@ -5,6 +5,7 @@ import {
   Inject,
   Param,
   Post,
+  Put,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -12,8 +13,15 @@ import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { GmGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
-import { CreateWorldDefinitionDto } from "./dto/create-world-definition.dto";
-import { PublishWorldDefinitionRevisionDto } from "./dto/publish-world-definition-revision.dto";
+import {
+  CreateWorldDraftDto,
+  ExpectedDraftRevisionDto,
+  ExpectedWorldMetadataRevisionDto,
+  ForkWorldDefinitionDto,
+  SaveWorldDraftDto,
+  StartWorldDraftDto,
+} from "./dto/world-definition-authoring.dto";
+import { WorldDefinitionAuthoringService } from "./world-definition-authoring.service";
 import { WorldDefinitionsService } from "./world-definitions.service";
 
 @ApiTags("world definitions")
@@ -22,10 +30,8 @@ import { WorldDefinitionsService } from "./world-definitions.service";
 export class WorldDefinitionsController {
   constructor(
     @Inject(WorldDefinitionsService)
-    private readonly worlds: Pick<
-      WorldDefinitionsService,
-      "list" | "get" | "create" | "publishRevision"
-    >,
+    private readonly worlds: Pick<WorldDefinitionsService, "list" | "get">,
+    private readonly authoring: WorldDefinitionAuthoringService,
   ) {}
 
   @Get()
@@ -38,26 +44,96 @@ export class WorldDefinitionsController {
 
   @Post()
   @ApiOperation({
-    summary: "Create and publish a new World Definition lineage",
+    summary: "Create a World Definition lineage and mutable draft",
   })
   create(
     @Req() request: Request & AuthenticatedRequest,
-    @Body() dto: CreateWorldDefinitionDto,
+    @Body() dto: CreateWorldDraftDto,
   ) {
-    return this.worlds.create(dto, request.user!.id);
+    return this.authoring.create(dto, request.user!.id);
   }
 
-  @Post(":id/revisions")
-  @ApiParam({ name: "id", description: "World Definition lineage ID" })
-  @ApiOperation({
-    summary: "Publish the next complete direct-lineage World revision",
-  })
-  publishRevision(
+  @Get(":id/draft")
+  getDraft(
     @Param("id") id: string,
     @Req() request: Request & AuthenticatedRequest,
-    @Body() dto: PublishWorldDefinitionRevisionDto,
   ) {
-    return this.worlds.publishRevision(id, dto, request.user!.id);
+    return this.authoring.getDraft(id, request.user!.id);
+  }
+
+  @Post(":id/draft")
+  @ApiOperation({
+    summary:
+      "Start or resume a mutable draft from the selected current World revision",
+  })
+  startDraft(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: StartWorldDraftDto,
+  ) {
+    return this.authoring.startDraft(id, dto, request.user!.id);
+  }
+
+  @Put(":id/draft")
+  saveDraft(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: SaveWorldDraftDto,
+  ) {
+    return this.authoring.save(id, dto, request.user!.id);
+  }
+
+  @Post(":id/draft/validate")
+  validateDraft(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedDraftRevisionDto,
+  ) {
+    return this.authoring.validate(id, dto, request.user!.id);
+  }
+
+  @Post(":id/draft/publish")
+  publishDraft(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedDraftRevisionDto,
+  ) {
+    return this.authoring.publish(id, dto, request.user!.id);
+  }
+
+  @Get(":id/draft/impact")
+  impact(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.authoring.impact(id, request.user!.id);
+  }
+
+  @Post(":id/archive")
+  archive(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedWorldMetadataRevisionDto,
+  ) {
+    return this.authoring.archive(id, dto, request.user!.id);
+  }
+
+  @Post(":id/restore")
+  restore(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedWorldMetadataRevisionDto,
+  ) {
+    return this.authoring.restore(id, dto, request.user!.id);
+  }
+
+  @Post(":id/forks")
+  fork(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ForkWorldDefinitionDto,
+  ) {
+    return this.authoring.fork(id, dto, request.user!.id);
   }
 
   @Get(":id")
@@ -65,10 +141,7 @@ export class WorldDefinitionsController {
   @ApiOperation({
     summary: "Get one World Definition lineage, its revisions, and snapshots",
   })
-  get(
-    @Param("id") id: string,
-    @Req() request: Request & AuthenticatedRequest,
-  ) {
+  get(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
     return this.worlds.get(id, request.user!.id);
   }
 }

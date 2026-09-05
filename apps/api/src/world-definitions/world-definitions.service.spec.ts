@@ -109,10 +109,17 @@ describe("WorldDefinitionsService", () => {
         worldDefinitionRevisionId: "world-revision-new",
       },
     });
-    const snapshotData = firstCallArgument(tx.worldDefinitionSnapshot.create) as {
-      data: { contentHash: string; manifest: { contentHash: string; records: unknown[] } };
+    const snapshotData = firstCallArgument(
+      tx.worldDefinitionSnapshot.create,
+    ) as {
+      data: {
+        contentHash: string;
+        manifest: { contentHash: string; records: unknown[] };
+      };
     };
-    expect(snapshotData.data.contentHash).toBe(snapshotData.data.manifest.contentHash);
+    expect(snapshotData.data.contentHash).toBe(
+      snapshotData.data.manifest.contentHash,
+    );
     expect(snapshotData.data.manifest.records).toEqual([
       expect.objectContaining({
         resourceType: "world-definition-revision",
@@ -308,13 +315,23 @@ describe("WorldDefinitionsService", () => {
             description: "A fractured coastal world.",
             status: "ACTIVE",
             archivedAt: null,
+            metadataRevision: 4,
             updatedAt: new Date("2026-09-04T12:00:00.000Z"),
+            draft: {
+              storageRevision: 4,
+              revisionName: "The Glasswake, Second Edition",
+              validationStatus: "VALID",
+              validatedStorageRevision: 4,
+              baseRevisionId: "world-revision-2",
+            },
             currentRevision: {
               id: "world-revision-2",
               revisionNumber: 2,
               name: "The Glasswake, Second Edition",
               contentHash: "hash-2",
               publishedAt: new Date("2026-09-03T12:00:00.000Z"),
+              sourceDraftRevision: 3,
+              snapshots: [{ id: "world-snapshot-2" }],
             },
           },
           {
@@ -323,8 +340,10 @@ describe("WorldDefinitionsService", () => {
             description: null,
             status: "ARCHIVED",
             archivedAt: new Date("2026-09-01T12:00:00.000Z"),
+            metadataRevision: 2,
             updatedAt: new Date("2026-09-01T12:00:00.000Z"),
             currentRevision: null,
+            draft: null,
           },
         ]),
         findUnique: jest.fn(),
@@ -341,13 +360,23 @@ describe("WorldDefinitionsService", () => {
           description: "A fractured coastal world.",
           status: "active",
           archivedAt: undefined,
+          metadataRevision: 4,
           updatedAt: "2026-09-04T12:00:00.000Z",
+          draft: {
+            revisionName: "The Glasswake, Second Edition",
+            storageRevision: 4,
+            validationStatus: "valid",
+            validatedStorageRevision: 4,
+            isCurrentBase: true,
+            hasUnpublishedChanges: false,
+          },
           currentRevision: {
             id: "world-revision-2",
             revisionNumber: 2,
             name: "The Glasswake, Second Edition",
             contentHash: "hash-2",
             publishedAt: "2026-09-03T12:00:00.000Z",
+            snapshotId: "world-snapshot-2",
           },
         },
         {
@@ -356,7 +385,9 @@ describe("WorldDefinitionsService", () => {
           description: undefined,
           status: "archived",
           archivedAt: "2026-09-01T12:00:00.000Z",
+          metadataRevision: 2,
           updatedAt: "2026-09-01T12:00:00.000Z",
+          draft: undefined,
           currentRevision: undefined,
         },
       ],
@@ -371,7 +402,17 @@ describe("WorldDefinitionsService", () => {
         description: true,
         status: true,
         archivedAt: true,
+        metadataRevision: true,
         updatedAt: true,
+        draft: {
+          select: {
+            storageRevision: true,
+            revisionName: true,
+            validationStatus: true,
+            validatedStorageRevision: true,
+            baseRevisionId: true,
+          },
+        },
         currentRevision: {
           select: {
             id: true,
@@ -379,6 +420,12 @@ describe("WorldDefinitionsService", () => {
             name: true,
             contentHash: true,
             publishedAt: true,
+            sourceDraftRevision: true,
+            snapshots: {
+              select: { id: true },
+              orderBy: [{ capturedAt: "desc" }, { id: "asc" }],
+              take: 1,
+            },
           },
         },
       },

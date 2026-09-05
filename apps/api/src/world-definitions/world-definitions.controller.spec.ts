@@ -10,18 +10,26 @@ describe("WorldDefinitionsController", () => {
     const service = {
       list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       get: jest.fn().mockResolvedValue({ name: "The Glasswake" }),
+    };
+    const authoring = {
       create: jest.fn().mockResolvedValue({ name: "The Ember Sea" }),
-      publishRevision: jest
+      publish: jest
         .fn()
         .mockResolvedValue({ name: "The Glasswake, Second Edition" }),
     };
-    const controller = new WorldDefinitionsController(service);
+    const controller = new WorldDefinitionsController(
+      service,
+      authoring as never,
+    );
     const request = {
       headers: {},
       user: { id: "gm-1", displayName: "GM", role: UserRole.GM },
     } as Request & AuthenticatedRequest;
 
-    await expect(controller.list(request)).resolves.toEqual({ items: [], total: 0 });
+    await expect(controller.list(request)).resolves.toEqual({
+      items: [],
+      total: 0,
+    });
     await expect(controller.get("world-lineage-1", request)).resolves.toEqual({
       name: "The Glasswake",
     });
@@ -45,18 +53,13 @@ describe("WorldDefinitionsController", () => {
     await expect(controller.create(request, publication)).resolves.toEqual({
       name: "The Ember Sea",
     });
-    expect(service.create).toHaveBeenCalledWith(publication, "gm-1");
+    expect(authoring.create).toHaveBeenCalledWith(publication, "gm-1");
 
-    const revision = {
-      predecessorRevisionId: "world-revision-1",
-      name: "The Glasswake, Second Edition",
-      content: { rootLocationId: "root-location" },
-      snapshotManifest: publication.snapshotManifest,
-    };
+    const revision = { expectedStorageRevision: 4 };
     await expect(
-      controller.publishRevision("world-lineage-1", request, revision),
+      controller.publishDraft("world-lineage-1", request, revision),
     ).resolves.toEqual({ name: "The Glasswake, Second Edition" });
-    expect(service.publishRevision).toHaveBeenCalledWith(
+    expect(authoring.publish).toHaveBeenCalledWith(
       "world-lineage-1",
       revision,
       "gm-1",

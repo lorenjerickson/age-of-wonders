@@ -23,7 +23,17 @@ const listSelect = {
   description: true,
   status: true,
   archivedAt: true,
+  metadataRevision: true,
   updatedAt: true,
+  draft: {
+    select: {
+      storageRevision: true,
+      revisionName: true,
+      validationStatus: true,
+      validatedStorageRevision: true,
+      baseRevisionId: true,
+    },
+  },
   currentRevision: {
     select: {
       id: true,
@@ -31,6 +41,12 @@ const listSelect = {
       name: true,
       contentHash: true,
       publishedAt: true,
+      sourceDraftRevision: true,
+      snapshots: {
+        select: { id: true },
+        orderBy: [{ capturedAt: "desc" }, { id: "asc" }],
+        take: 1,
+      },
     },
   },
 } as const satisfies Prisma.WorldDefinitionSelect;
@@ -44,6 +60,7 @@ const detailSelect = {
   createdAt: true,
   updatedAt: true,
   archivedAt: true,
+  metadataRevision: true,
   revisions: {
     select: {
       id: true,
@@ -161,7 +178,26 @@ export class WorldDefinitionsService {
         description: row.description ?? undefined,
         status: row.status.toLowerCase() as "active" | "archived",
         archivedAt: iso(row.archivedAt),
+        metadataRevision: row.metadataRevision,
         updatedAt: row.updatedAt.toISOString(),
+        draft: row.draft
+          ? {
+              revisionName: row.draft.revisionName,
+              storageRevision: row.draft.storageRevision,
+              validationStatus: row.draft.validationStatus
+                .toLowerCase()
+                .replaceAll("_", "-"),
+              validatedStorageRevision:
+                row.draft.validatedStorageRevision ?? undefined,
+              isCurrentBase:
+                (row.draft.baseRevisionId ?? null) ===
+                (row.currentRevision?.id ?? null),
+              hasUnpublishedChanges:
+                !row.currentRevision ||
+                row.draft.storageRevision !==
+                  (row.currentRevision.sourceDraftRevision ?? 0) + 1,
+            }
+          : undefined,
         currentRevision: row.currentRevision
           ? {
               id: row.currentRevision.id,
@@ -169,6 +205,7 @@ export class WorldDefinitionsService {
               name: row.currentRevision.name,
               contentHash: row.currentRevision.contentHash,
               publishedAt: row.currentRevision.publishedAt.toISOString(),
+              snapshotId: row.currentRevision.snapshots?.[0]?.id,
             }
           : undefined,
       })),
@@ -202,6 +239,7 @@ export class WorldDefinitionsService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       archivedAt: iso(row.archivedAt),
+      metadataRevision: row.metadataRevision,
       revisions: row.revisions.map((revision) => ({
         id: revision.id,
         revisionNumber: revision.revisionNumber,
