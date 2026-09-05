@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, UserRole } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "../graph/graph.service";
 import type {
@@ -65,7 +65,7 @@ export class DomainService {
     } catch (error) {
       if (this.isPrismaError(error, "P2002")) {
         throw new ConflictException(
-          `${resource} resource '${metadata.id}' already exists`,
+          `The selected ${resource} resource already exists`,
         );
       }
       throw error;
@@ -130,14 +130,14 @@ export class DomainService {
     const metadata = readResourceMetadata(resource, dto.data);
     if (metadata.id !== id) {
       throw new ConflictException(
-        `Route ID '${id}' does not match data ID '${metadata.id}'`,
+        "The selected resource does not match the submitted resource",
       );
     }
 
     const previous = await this.findRaw(resource, id);
     if (!isObject(previous.data)) {
       throw new ConflictException(
-        `${resource} resource '${id}' does not contain an object aggregate`,
+        `The selected ${resource} resource cannot be replaced`,
       );
     }
 
@@ -222,159 +222,17 @@ export class DomainService {
     const world = await this.get("locations", id);
     if (world.kind !== "world") {
       throw new BadRequestException(
-        `Location '${id}' is not a root world and cannot be deleted as one`,
+        "The selected Location is not a root World and cannot be deleted as one",
       );
     }
-
-    const locations = await this.prisma.domainRecord.findMany({
-      where: { resource: "locations" },
-    });
-    const children = new Map<string, string[]>();
-    for (const location of locations) {
-      if (!isObject(location.data)) continue;
-      const placement = isObject(location.data.placement)
-        ? location.data.placement
-        : {};
-      if (
-        placement.kind !== "within-parent" ||
-        typeof placement.parentLocationId !== "string"
-      ) {
-        continue;
-      }
-      const siblings = children.get(placement.parentLocationId) ?? [];
-      siblings.push(location.id);
-      children.set(placement.parentLocationId, siblings);
-    }
-
-    const hierarchyIds = new Set<string>();
-    const deletionOrder: string[] = [];
-    const visit = (locationId: string) => {
-      if (hierarchyIds.has(locationId)) return;
-      hierarchyIds.add(locationId);
-      for (const childId of children.get(locationId) ?? []) visit(childId);
-      deletionOrder.push(locationId);
-    };
-    visit(id);
-
-    const campaigns = await this.prisma.domainRecord.findMany({
-      where: { resource: "campaigns" },
-    });
-    const campaignIds = new Set(
-      campaigns
-        .filter(
-          (campaign) => isObject(campaign.data) && campaign.data.worldId === id,
-        )
-        .map((campaign) => campaign.id),
+    throw new ConflictException(
+      "World deletion is disabled while archive and dependency-safe retention are introduced",
     );
-    const campaignIdList = [...campaignIds];
-
-    if (campaignIdList.length > 0) {
-      const affectedMemberships = await this.prisma.campaignMembership.findMany(
-        {
-          where: { campaignId: { in: campaignIdList } },
-          select: { userId: true },
-        },
-      );
-      await this.prisma.$transaction([
-        this.prisma.campaignInvitation.deleteMany({
-          where: { campaignId: { in: campaignIdList } },
-        }),
-        this.prisma.campaignMembership.deleteMany({
-          where: { campaignId: { in: campaignIdList } },
-        }),
-      ]);
-      const participantIds = [
-        ...new Set(affectedMemberships.map((membership) => membership.userId)),
-      ];
-      if (participantIds.length > 0) {
-        await this.prisma.user.deleteMany({
-          where: {
-            id: { in: participantIds },
-            role: UserRole.PARTICIPANT,
-            memberships: { none: {} },
-          },
-        });
-      }
-    }
-
-    const sessions = await this.prisma.domainRecord.findMany({
-      where: { resource: "sessions" },
-    });
-    for (const session of sessions) {
-      if (
-        isObject(session.data) &&
-        (session.data.worldId === id ||
-          (typeof session.data.campaignId === "string" &&
-            campaignIds.has(session.data.campaignId)))
-      ) {
-        await this.remove("sessions", session.id);
-      }
-    }
-
-    const games = await this.prisma.domainRecord.findMany({
-      where: { resource: "games" },
-    });
-    for (const game of games) {
-      if (!isObject(game.data) || !isObject(game.data.campaign)) continue;
-      const identity = isObject(game.data.campaign.identity)
-        ? game.data.campaign.identity
-        : undefined;
-      if (typeof identity?.id === "string" && campaignIds.has(identity.id)) {
-        await this.remove("games", game.id);
-      }
-    }
-
-    for (const campaign of campaigns) {
-      if (campaignIds.has(campaign.id)) {
-        await this.remove("campaigns", campaign.id);
-      }
-    }
-
-    const connections = await this.prisma.domainRecord.findMany({
-      where: { resource: "location-connections" },
-    });
-    for (const connection of connections) {
-      if (!isObject(connection.data)) continue;
-      const referencedIds = [
-        connection.data.scopeLocationId,
-        connection.data.fromLocationId,
-        connection.data.toLocationId,
-      ];
-      if (
-        referencedIds.some(
-          (value) => typeof value === "string" && hierarchyIds.has(value),
-        )
-      ) {
-        await this.remove("location-connections", connection.id);
-      }
-    }
-    const creatures = await this.prisma.domainRecord.findMany({
-      where: {
-        resource: "creatures",
-        data: { path: ["worldId"], equals: id },
-      },
-    });
-    for (const creature of creatures) {
-      await this.remove("creatures", creature.id);
-    }
-    for (const resource of ["items", "definitions"] as const) {
-      const records = await this.prisma.domainRecord.findMany({
-        where: {
-          resource,
-          data: { path: ["extensions", "aow:worldId"], equals: id },
-        },
-      });
-      for (const record of records) {
-        await this.remove(resource, record.id);
-      }
-    }
-    for (const locationId of deletionOrder) {
-      await this.remove("locations", locationId);
-    }
   }
 
   private notFound(resource: DomainResource, id: string): never {
-    throw new NotFoundException(`${resource} resource '${id}' was not found`);
+    void id;
+    throw new NotFoundException(`The selected ${resource} resource was not found`);
   }
 
   private isPrismaError(error: unknown, code: string): boolean {

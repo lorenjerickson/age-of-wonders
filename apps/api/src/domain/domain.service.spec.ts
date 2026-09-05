@@ -56,175 +56,54 @@ describe("DomainService singleton creation", () => {
   });
 });
 
-describe("DomainService.removeWorld", () => {
-  it("removes connections and descendants before deleting the root world", async () => {
-    const world = location("world-1", "world");
-    const region = location("region-1", "region", "world-1");
-    const site = location("site-1", "site", "region-1");
-    const connection = {
-      ...location("connection-1", "road"),
-      resource: "location-connections",
-      data: {
-        identity: { id: "connection-1" },
-        kind: "road",
-        scopeLocationId: "world-1",
-        fromLocationId: "region-1",
-        toLocationId: "site-1",
-      },
-    };
-    const creature = {
-      ...location("creature-1", "monstrosity"),
-      resource: "creatures",
-      data: {
-        identity: { id: "creature-1" },
-        name: "Prism-Horn Stalker",
-        worldId: "world-1",
-      },
-    };
-    const item = {
-      ...location("item-1", "item-instance"),
-      resource: "items",
-      data: { id: "item-1", extensions: { "aow:worldId": "world-1" } },
-    };
-    const definition = {
-      ...location("definition-1", "item"),
-      resource: "definitions",
-      data: {
-        identity: { id: "definition-1" },
-        kind: "item",
-        extensions: { "aow:worldId": "world-1" },
-      },
-    };
-    const campaign = {
-      ...location("campaign-1", "campaign"),
-      resource: "campaigns",
-      data: {
-        identity: { id: "campaign-1" },
-        name: "The Glasswake",
-        worldId: "world-1",
-      },
-    };
-    const session = {
-      ...location("session-1", "session"),
-      resource: "sessions",
-      data: {
-        identity: { id: "session-1" },
-        name: "Into the Observatory",
-        worldId: "world-1",
-        campaignId: "campaign-1",
-      },
-    };
-    const game = {
-      ...location("campaign-1", "game-state"),
-      resource: "games",
-      data: {
-        campaign: {
-          identity: { id: "campaign-1" },
-          name: "The Glasswake",
-        },
-      },
-    };
-    const otherCampaign = {
-      ...campaign,
-      id: "campaign-2",
-      data: {
-        identity: { id: "campaign-2" },
-        name: "Elsewhere",
-        worldId: "world-2",
-      },
-    };
-    const otherSession = {
-      ...session,
-      id: "session-2",
-      data: {
-        identity: { id: "session-2" },
-        name: "Elsewhere",
-        worldId: "world-2",
-        campaignId: "campaign-2",
-      },
-    };
-    const otherGame = {
-      ...game,
-      id: "campaign-2",
-      data: {
-        campaign: {
-          identity: { id: "campaign-2" },
-          name: "Elsewhere",
-        },
-      },
-    };
-    const records = [
-      world,
-      region,
-      site,
-      connection,
-      creature,
-      item,
-      definition,
-      campaign,
-      session,
-      game,
-      otherCampaign,
-      otherSession,
-      otherGame,
-    ];
-    const deleted: string[] = [];
+describe("DomainService neutral errors", () => {
+  it("does not echo opaque identities in not-found or route/payload mismatch errors", async () => {
+    const opaqueRouteId = "opaque-route-identity";
+    const opaquePayloadId = "opaque-payload-identity";
     const prisma = {
-      campaignMembership: {
-        findMany: jest.fn(() => Promise.resolve([])),
-        deleteMany: jest.fn(() => Promise.resolve({ count: 0 })),
-      },
-      campaignInvitation: {
-        deleteMany: jest.fn(() => Promise.resolve({ count: 0 })),
-      },
-      user: { deleteMany: jest.fn(() => Promise.resolve({ count: 0 })) },
-      $transaction: jest.fn((operations: Promise<unknown>[]) =>
-        Promise.all(operations),
-      ),
+      domainRecord: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const service = new DomainService(prisma, {} as GraphService);
+
+    const missing = service.get("items", opaqueRouteId);
+    await expect(missing).rejects.toThrow(
+      "The selected items resource was not found",
+    );
+    await expect(missing).rejects.not.toThrow(opaqueRouteId);
+
+    const mismatch = service.replace("items", opaqueRouteId, {
+      data: { id: opaquePayloadId },
+    });
+    await expect(mismatch).rejects.toThrow(
+      "The selected resource does not match the submitted resource",
+    );
+    await expect(mismatch).rejects.not.toThrow(
+      new RegExp(`${opaqueRouteId}|${opaquePayloadId}`),
+    );
+  });
+});
+
+describe("DomainService.removeWorld", () => {
+  it("blocks destructive world deletion until archival is available", async () => {
+    const world = location("world-1", "world");
+    const removeDomainResource = jest.fn();
+    const deleteRecord = jest.fn();
+    const prisma = {
       domainRecord: {
         findUnique: jest.fn(() => Promise.resolve(world)),
-        findMany: jest.fn(({ where }: { where: { resource: string } }) =>
-          Promise.resolve(
-            records.filter((record) => record.resource === where.resource),
-          ),
-        ),
-        delete: jest.fn(
-          ({
-            where,
-          }: {
-            where: { resource_id: { resource: string; id: string } };
-          }) => {
-            const record = records.find(
-              (candidate) =>
-                candidate.resource === where.resource_id.resource &&
-                candidate.id === where.resource_id.id,
-            );
-            if (!record) throw new Error("missing test record");
-            deleted.push(`${record.resource}:${record.id}`);
-            return Promise.resolve(record);
-          },
-        ),
+        delete: deleteRecord,
       },
     } as unknown as PrismaService;
     const graph = {
-      removeDomainResource: jest.fn(() => Promise.resolve()),
+      removeDomainResource,
     } as unknown as GraphService;
     const service = new DomainService(prisma, graph);
 
-    await service.removeWorld("world-1");
-
-    expect(deleted).toEqual([
-      "sessions:session-1",
-      "games:campaign-1",
-      "campaigns:campaign-1",
-      "location-connections:connection-1",
-      "creatures:creature-1",
-      "items:item-1",
-      "definitions:definition-1",
-      "locations:site-1",
-      "locations:region-1",
-      "locations:world-1",
-    ]);
+    await expect(service.removeWorld("world-1")).rejects.toThrow(
+      "World deletion is disabled while archive and dependency-safe retention are introduced",
+    );
+    expect(deleteRecord).not.toHaveBeenCalled();
+    expect(removeDomainResource).not.toHaveBeenCalled();
   });
 });
 

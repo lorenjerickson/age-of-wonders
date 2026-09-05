@@ -12,6 +12,9 @@ import { TransferModule } from "./transfer/transfer.module";
 import { AuthModule } from "./auth/auth.module";
 import { CharactersModule } from "./characters/characters.module";
 import { InvitationsModule } from "./invitations/invitations.module";
+import { WorldDefinitionsModule } from "./world-definitions/world-definitions.module";
+import { CampaignDefinitionsModule } from "./campaign-definitions/campaign-definitions.module";
+import { CampaignInstancesModule } from "./campaign-instances/campaign-instances.module";
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { InvitationsModule } from "./invitations/invitations.module";
     TransferModule,
     InvitationsModule,
     CharactersModule,
+    WorldDefinitionsModule,
+    CampaignDefinitionsModule,
+    CampaignInstancesModule,
   ],
   providers: [
     {
