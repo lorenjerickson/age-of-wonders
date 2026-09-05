@@ -82,11 +82,13 @@ Other shared values include:
   `{ "kind": "measured", "amount": number, "unit": "turn" | "round" | "minute" | "hour" | "day" | "week" | "month" | "year" }`,
   or `{ "kind": "special", "description": string }`.
 - `ResourcePool`: `{ "current": number, "maximum": number, "temporary"?: number }`.
-- `AttributeCollection<T>`: `{ "standard": { ...standard attributes }, "custom"?: { [namespacedKey]: T } }`.
-  Standard attributes are `might`, `intellect`, `will`, `hardiness`, `charisma`, `agility`,
-  `fortune`, and `sanity`. `AttributeScore` is always an integer from 0 through 100; approximately
-  50 represents an ordinary adult. It is not a D&D-style 3-through-18 score. The neutral default for
-  every standard attribute is 50.
+- `AttributeCollection<T>` is a legacy compatibility projection:
+  `{ "standard": { ...legacy standard attributes }, "custom"?: { [namespacedKey]: T } }`. Its
+  standard keys remain `might`, `intellect`, `will`, `hardiness`, `charisma`, `agility`, `fortune`,
+  and `sanity` until persisted values migrate. New model authoring uses the exact Model Schema
+  Releases described below. The editable core model defines `wisdom`, not `will`; migration must
+  apply the explicit legacy Will-to-Wisdom mapping and must never silently reinterpret the key.
+  `AttributeScore` remains an integer from 0 through 100, with a neutral default of 50.
 
 ### Definition lineages, revisions, and captured snapshots
 
@@ -107,6 +109,11 @@ type PlotDefinitionId = string;
 type CampaignInstanceId = string;
 type CampaignInstanceSnapshotId = string;
 type CampaignInstanceRuntimeId = string;
+type ModelRegistryId = string;
+type ModelElementId = string;
+type ModelElementRevisionId = string;
+type ModelSchemaReleaseId = string;
+type ModelMigrationPlanId = string;
 ```
 
 A `WorldDefinition` and `CampaignDefinitionLineage` are stable logical identities with mutable
@@ -145,8 +152,10 @@ interface CampaignDefinitionLineage {
 }
 ```
 
-`WorldDefinitionRevision` owns the published root Location, Location membership, definitions, and
-schema selections for one World revision. `CampaignDefinitionRevision` owns its authored premise,
+`WorldDefinitionRevision` owns the published root Location, Location membership, definitions,
+legacy schema selections, and required `modelSchemaReleaseIds` for one World revision. Those IDs
+select exact immutable Model Schema Releases; a World never resolves a mutable registry head or
+embeds editable registry records. `CampaignDefinitionRevision` owns its authored premise,
 introduction, Plot references, and placement references, and captures the exact replicated World
 snapshot against which it was authored. Neither revision resolves a mutable upstream authoring
 head.
@@ -185,6 +194,74 @@ must use the separately branded Definition, Instance, snapshot, and runtime iden
 readers may translate legacy aggregates during the migration window; AI output must not invent a
 relationship between the new contracts by reusing a legacy `CampaignId`.
 
+### Editable Model Registry and exact releases
+
+The Model Registry is the editable meta-model for core and GM-authored structure. It keeps a small,
+fixed set of meta-kinds—`concept`, `field`, `relationship`, `vocabulary`, and
+`vocabulary-option`—while `semanticRole` is an open namespaced key. Therefore Attributes,
+Equipment Slots, movement modes, item families, profession ranks, art roles, Skills, Professions,
+and Backgrounds can grow without adding TypeScript discriminants for every new concept. A GM may,
+for example, publish `loren:attribute-likeable` or `loren:equipment-slot-wings` as a new
+`vocabulary-option` revision.
+
+`ModelRegistry` is a stable registry identity with `system`, `plugin`, or `gm` provenance. System
+and plugin registries are globally applicable and are authored/versioned outside any World or
+Campaign. A GM registry records its owner, and each element lineage declares `global`, `world`, or
+`campaign-definition` applicability. `ModelElementLineage` carries the stable namespaced key,
+fixed kind, open semantic role, lifecycle status, and optional authoring head.
+`ModelElementRevision` is immutable and contains exactly one typed payload plus advisory
+`ModelPresentation`, dependency declarations, provenance, and author attribution.
+
+Field payloads use a safe typed AST rather than executable JavaScript. Atomic values are string,
+integer, number, boolean, bounded JSON, vocabulary-option references, Definition references,
+Entity references, or concept values; fields may also be lists. Cardinality, literal or CEL value
+sources, applicability, allowed values, and validation expressions are data. CEL is identified by
+the fixed `aow:model-expression/v1` profile and declares a typed `resultType` value descriptor, but
+this contract and its deterministic compiler do not execute CEL. Presentation metadata supplies
+labels, help, grouping, ordering, editors, units, media, and layout hints; it does not change
+storage or validation meaning.
+
+A `ModelSchemaRelease` selects one exact immutable revision for each included lineage and locks any
+dependency releases by ID. Its canonical hash covers those selections and dependencies. Compiling
+a release validates hashes, ownership, kind agreement, references, cardinality/default safety,
+dependency conflicts and cycles, and produces a deterministically ordered exact closure. It never
+infers a current element revision. `ModelMigrationPlan` maps one exact source release to one exact
+target release with explicit element mappings and optional typed backfills. A source-only mapping
+explicitly retires an element; a target-only mapping introduces one. A newly required field needs a
+target mapping with a type-correct backfill unless its target revision supplies a default or
+computed value. Adoption is all-or-nothing through a new World Definition revision; content
+governed by a World records the exact release IDs in `ModelConformance`.
+
+The editable core seed supplies Wisdom and the other core Attributes, the documented Equipment
+Slots, movement modes, item families (including Object, Trap, and Hazard), profession ranks, and
+portrait/overhead-token/side-on-token art roles. These are seed data, not closed enums. The seed
+also publishes explicit mappings from legacy `attributes.standard.will` to Wisdom and from legacy
+`paperDollToken` imagery to the side-on-token art role.
+
+The Model Registry uses dedicated relational persistence and is not a generic `DomainRecord`
+resource. At application startup, the Model Registry module idempotently materializes the
+deterministically identified core registry, element lineages, immutable element revisions, and
+core release. Existing deterministic identities are preserved rather than rewritten. Changes to
+the core seed require a new immutable release identity; consumers retain the exact older release
+until they explicitly adopt its successor.
+
+All Model Registry HTTP endpoints require an authenticated GM:
+
+- `GET /model-registries` lists registries owned by that GM plus readable system/plugin registries.
+  `GET /model-registries/:id` returns one accessible registry with its human-readable elements and
+  immutable release history. Neither query grants edit rights to a global or another GM's registry.
+- `POST /model-registries` creates a GM-owned registry from a namespaced key, name, and optional
+  description. The authenticated GM becomes the provenance owner.
+- `POST /model-registries/:id/releases/extend` is the bounded convenience workflow currently used
+  by contextual World editors. It creates new elements, carries forward the predecessor release's
+  exact selections, locks the installed core release dependency, validates the complete effective
+  closure, and publishes one successor transactionally.
+- `GET /model-registries/effective?worldDefinitionId=...` reads the explicitly selected release
+  roots from that GM's mutable World draft, compiles accessible exact releases and their locked
+  dependencies, rejects overlapping stable keys, filters by global/World applicability, and returns
+  human-readable Attribute, Equipment Slot, and general element projections. It does not infer a
+  latest release and does not read a Campaign Instance-local schema.
+
 ### Relational World Definition API
 
 The additive World lineage spine is persisted in the relational `WorldDefinition`,
@@ -204,27 +281,61 @@ order does not establish a current World and clients must explicitly select a li
 their captured snapshots, including immutable revision content and snapshot manifests. Missing
 lineages and persistence failures use neutral errors that do not echo the requested opaque ID.
 
-`POST /world-definitions` creates a new, independently selectable World Definition lineage and its
-first complete immutable revision. The request supplies a human-readable lineage name, optional
-description, complete revision `content`, and a complete snapshot-manifest input. Manifest input
-contains `formatVersion` and at least one record with `resourceType`, `sourceId`, optional
-`sourceRevision`, and `payload`. Callers do not submit revision, record, manifest, or snapshot
-hashes. The server canonicalizes and hashes the revision content and every record payload, builds
-the completed manifest with its required top-level `contentHash`, and stores that same hash on the
-World snapshot row. The server also prepends one authoritative `world-definition-revision` record
-whose payload is exactly the stored revision content, preventing the content and manifest from
-describing different publications. Publication JSON is limited to 64 nested levels and at most
-4,999 caller records (5,000 after the authoritative record). One serializable transaction creates the GM-owned lineage, revision 1, its
-snapshot, and advances `currentRevisionId`; it does not consult or alter legacy singleton guards.
+World authoring is draft-first. `POST /world-definitions` creates one independently selectable,
+GM-owned World lineage and one mutable working draft in a serializable transaction; it does not
+publish revision 1. When content and records are omitted, the service seeds a root World Location,
+the complete top-level collections, and the installed core Model Schema Release. Optional supplied
+content and records become the complete initial draft rather than a patch over another World.
 
-`POST /world-definitions/:id/revisions` publishes one complete direct successor, never a partial or
-cherry-picked revision. Its request names the explicit current `predecessorRevisionId`, a
-human-readable revision name, complete replacement content, and complete replacement manifest
-input. The serializable transaction verifies that the predecessor belongs to the selected lineage
-and remains its current head, creates exactly the next revision and snapshot, and uses a guarded
-head update so concurrent publication cannot silently fork or skip lineage. The authenticated GM
-is recorded as revision author. Archived lineages cannot publish, and not-found/conflict failures
-remain human-readable without echoing opaque IDs.
+Each World has at most one mutable draft:
+
+- `POST /world-definitions/:id/draft` starts or resumes the authenticated owner's draft. If a
+  draft already exists, it returns that draft without creating another. Otherwise the request must
+  name the World's exact current `baseRevisionId`; the service verifies the current revision's
+  canonical snapshot manifest and authoritative revision record, then seeds the draft from that
+  immutable capture. A legacy revision without Model Schema selections receives the installed core
+  release as its explicit draft selection; publication still requires normal validation and
+  conformance. Archived Worlds and stale bases cannot start a draft.
+- `GET /world-definitions/:id/draft` returns the authenticated owner's complete working content,
+  snapshot records, base revision/snapshot metadata, optimistic storage revision, and validation
+  status.
+- `PUT /world-definitions/:id/draft` replaces the complete draft content and record collection. It
+  requires `expectedStorageRevision`, increments that revision atomically, and invalidates any
+  earlier validation report. A stale save conflicts rather than overwriting another edit.
+- `POST /world-definitions/:id/draft/validate` validates the exact requested storage revision. It
+  checks bounded JSON, reserved server records, collection/record completeness, the root Location,
+  and the Location containment graph, then stores a report tied to that same revision.
+- `GET /world-definitions/:id/draft/impact` compares the draft records with its captured base and
+  reports additions, changes, removals, and human-readable downstream Campaign Definition
+  migration eligibility. It is analysis only and changes no published state.
+- `POST /world-definitions/:id/draft/publish` publishes the complete draft, never a partial patch.
+  It requires the exact optimistic draft revision, recomputes validation, verifies that the draft
+  is based on the current World head, and checks that selected Model Schema Releases are readable
+  by the GM. In one serializable transaction it creates the next immutable World revision, stores
+  its ordered exact release selections, builds a content-addressed snapshot with a server-owned
+  `world-definition-revision` record, guarded-advances the World head, and advances the draft base.
+  `sourceDraftRevision` makes retrying an already successful publication idempotent. No Campaign
+  Definition or Campaign Instance is migrated automatically.
+
+Publication record payloads are bounded JSON. Callers never submit revision, record, manifest, or
+snapshot hashes; the server computes canonical revision and record hashes and the complete manifest
+hash. At most 4,999 caller records are accepted so the authoritative server record keeps the final
+snapshot within the 5,000-record limit.
+
+World lineage lifecycle and copying are also explicit:
+
+- `POST /world-definitions/:id/archive` and `POST /world-definitions/:id/restore` require the exact
+  `expectedMetadataRevision`. Archiving hides the World from normal active selection and freezes
+  draft editing, validation, and publication without deleting revisions, snapshots, or downstream
+  Campaign captures.
+- `POST /world-definitions/:id/forks` requires an explicit snapshot from a World owned by the GM.
+  It creates a new World lineage and unpublished draft, remaps captured resource identities and
+  references, and stores immutable fork provenance. It does not establish a live link or alter the
+  source World.
+
+All draft, lifecycle, fork, list, and detail operations are owner-scoped. Missing resources,
+stale revisions, and unavailable dependencies use neutral human-readable errors without echoing
+opaque identifiers.
 
 ### Relational Campaign Definition read API
 
@@ -384,17 +495,17 @@ or removing legacy Campaign membership, invitation, Character draft, or `session
 These relational tables are not generic domain resources and do not yet imply public authoring or
 play APIs:
 
-| Contract or protected boundary | Relational table | Integrity boundary |
-| ------------------------------ | ---------------- | ------------------ |
-| `PlayerProfile` | `PlayerProfile` | One durable profile per authenticated User; server standing is independent of Instance membership and contact fields are encrypted/hashed, never returned by the shared profile contract |
-| Protected authentication-provider association | `AuthenticationProviderAssociation` | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle |
-| `CampaignInstanceHumanMembership` | `CampaignInstanceHumanMembership` | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one |
-| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation` | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology |
-| Non-human Agent identity | `AgentIdentity` | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials |
-| `CampaignInstanceAgentParticipation` | `CampaignInstanceAgentParticipation` | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and contain only open namespaced string keys |
-| `CampaignInstanceSession` | `CampaignInstanceSession` | Explicit Instance FK with lifecycle-consistent start/conclusion/cancellation timestamps, schedule, event-log, summary, and extension metadata |
-| `SessionParticipation` | `SessionParticipation` | Exactly one human membership or Agent participation; composite FKs require it and its Session to share the same Instance |
-| `CampaignInstanceCharacterAssociation` | `CampaignInstanceCharacterAssociation` | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs |
+| Contract or protected boundary                  | Relational table                       | Integrity boundary                                                                                                                                                                                                |
+| ----------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlayerProfile`                                 | `PlayerProfile`                        | One durable profile per authenticated User; server standing is independent of Instance membership and contact fields are encrypted/hashed, never returned by the shared profile contract                          |
+| Protected authentication-provider association   | `AuthenticationProviderAssociation`    | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle |
+| `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`      | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                              |
+| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`           | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                           |
+| Non-human Agent identity                        | `AgentIdentity`                        | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                            |
+| `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`   | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and contain only open namespaced string keys                                                                             |
+| `CampaignInstanceSession`                       | `CampaignInstanceSession`              | Explicit Instance FK with lifecycle-consistent start/conclusion/cancellation timestamps, schedule, event-log, summary, and extension metadata                                                                     |
+| `SessionParticipation`                          | `SessionParticipation`                 | Exactly one human membership or Agent participation; composite FKs require it and its Session to share the same Instance                                                                                          |
+| `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation` | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                       |
 
 Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
 namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
@@ -1556,8 +1667,9 @@ field exists. Never invent related skill, training, or source IDs.
 
 `RulesCatalog` combines definitions, rule variants, and content packs. `GameSystemDefinition` adds
 supported editions, engine schema version, enabled variants, configuration, and extensions.
-`ExtensionSchema` supplies JSON Schema for namespaced data and declares the aggregate types to which
-it applies.
+`ExtensionSchema` supplies legacy JSON Schema for namespaced extension data and declares the
+aggregate types to which it applies. It remains a compatibility contract while newly editable
+domain structure uses typed Model Registry elements and exact Model Schema Releases.
 
 ## Executable rules model
 

@@ -112,6 +112,17 @@ enum DefinitionLineageStatus {
   ARCHIVED
 }
 
+enum DefinitionDraftValidationStatus {
+  NOT_VALIDATED
+  VALID
+  BLOCKED
+}
+
+enum ModelElementLifecycleStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum CampaignInstanceStatus {
   PREPARING
   ACTIVE
@@ -236,6 +247,13 @@ model User {
   capturedCampaignInstanceSnapshots   CampaignInstanceSnapshot[]        @relation("CampaignSnapshotAuthor")
   initiatedInstallationRollouts       InstallationRolloutState[]        @relation("InstallationRolloutInitiator")
   installationRolloutAuditEvents      InstallationRolloutAudit[]        @relation("InstallationRolloutAuditActor")
+  createdWorldDefinitionDrafts        WorldDefinitionDraft[]            @relation("WorldDraftCreator")
+  updatedWorldDefinitionDrafts        WorldDefinitionDraft[]            @relation("WorldDraftUpdater")
+  createdWorldDefinitionForks         WorldDefinitionForkProvenance[]   @relation("WorldForkCreator")
+  ownedModelRegistries                ModelRegistry[]                   @relation("ModelRegistryOwner")
+  authoredModelElementRevisions       ModelElementRevision[]            @relation("ModelElementRevisionAuthor")
+  publishedModelSchemaReleases        ModelSchemaRelease[]              @relation("ModelSchemaReleasePublisher")
+  createdModelMigrationPlans          ModelMigrationPlan[]              @relation("ModelMigrationPlanCreator")
   playerProfile                       PlayerProfile?
   campaignInstanceMemberships         CampaignInstanceHumanMembership[]
   createdCampaignInstanceInvitations  CampaignInstanceInvitation[]      @relation("CampaignInstanceInvitationCreator")
@@ -414,19 +432,23 @@ model CharacterCreationDraft {
 
 /// Stable identity for a World across its immutable published revisions.
 model WorldDefinition {
-  id                String                    @id @default(uuid())
+  id                String                          @id @default(uuid())
   name              String
   description       String?
-  status            DefinitionLineageStatus   @default(ACTIVE)
-  currentRevisionId String?                   @unique
+  status            DefinitionLineageStatus         @default(ACTIVE)
+  currentRevisionId String?                         @unique
   ownerUserId       String?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
   archivedAt        DateTime?
-  owner             User?                     @relation("WorldDefinitionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  revisions         WorldDefinitionRevision[] @relation("WorldDefinitionRevisions")
-  currentRevision   WorldDefinitionRevision?  @relation("WorldDefinitionCurrentRevision", fields: [id, currentRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  owner             User?                           @relation("WorldDefinitionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  revisions         WorldDefinitionRevision[]       @relation("WorldDefinitionRevisions")
+  currentRevision   WorldDefinitionRevision?        @relation("WorldDefinitionCurrentRevision", fields: [id, currentRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
   campaigns         CampaignDefinition[]
+  draft             WorldDefinitionDraft?
+  forkProvenance    WorldDefinitionForkProvenance?  @relation("ForkTargetWorld")
+  forkSources       WorldDefinitionForkProvenance[] @relation("ForkSourceWorld")
+  metadataRevision  Int                             @default(1)
 
   @@unique([id, currentRevisionId])
   @@index([status, updatedAt])
@@ -435,7 +457,7 @@ model WorldDefinition {
 
 /// Immutable, published content for one World Definition lineage.
 model WorldDefinitionRevision {
-  id                    String                    @id @default(uuid())
+  id                    String                                      @id @default(uuid())
   worldDefinitionId     String
   revisionNumber        Int
   predecessorRevisionId String?
@@ -443,17 +465,21 @@ model WorldDefinitionRevision {
   content               Json
   contentHash           String
   createdByUserId       String?
-  createdAt             DateTime                  @default(now())
-  publishedAt           DateTime                  @default(now())
-  worldDefinition       WorldDefinition           @relation("WorldDefinitionRevisions", fields: [worldDefinitionId], references: [id], onDelete: Restrict)
-  currentForWorld       WorldDefinition?          @relation("WorldDefinitionCurrentRevision")
-  predecessorRevision   WorldDefinitionRevision?  @relation("WorldRevisionLineage", fields: [worldDefinitionId, predecessorRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
-  successorRevisions    WorldDefinitionRevision[] @relation("WorldRevisionLineage")
-  createdBy             User?                     @relation("WorldRevisionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt             DateTime                                    @default(now())
+  publishedAt           DateTime                                    @default(now())
+  worldDefinition       WorldDefinition                             @relation("WorldDefinitionRevisions", fields: [worldDefinitionId], references: [id], onDelete: Restrict)
+  currentForWorld       WorldDefinition?                            @relation("WorldDefinitionCurrentRevision")
+  predecessorRevision   WorldDefinitionRevision?                    @relation("WorldRevisionLineage", fields: [worldDefinitionId, predecessorRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  successorRevisions    WorldDefinitionRevision[]                   @relation("WorldRevisionLineage")
+  createdBy             User?                                       @relation("WorldRevisionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
   snapshots             WorldDefinitionSnapshot[]
+  sourceDraftRevision   Int?
+  worldDefinitionDrafts WorldDefinitionDraft[]
+  modelSchemaSelections WorldDefinitionRevisionModelSchemaRelease[]
 
   @@unique([worldDefinitionId, revisionNumber])
   @@unique([worldDefinitionId, id])
+  @@unique([worldDefinitionId, sourceDraftRevision])
   @@index([predecessorRevisionId])
   @@index([contentHash])
   @@index([publishedAt])
@@ -461,21 +487,194 @@ model WorldDefinitionRevision {
 
 /// Immutable, content-addressed replica of one published World revision.
 model WorldDefinitionSnapshot {
-  id                        String                       @id @default(uuid())
+  id                        String                          @id @default(uuid())
   worldDefinitionId         String
   worldDefinitionRevisionId String
   manifest                  Json
   contentHash               String
-  capturedAt                DateTime                     @default(now())
-  worldDefinitionRevision   WorldDefinitionRevision      @relation(fields: [worldDefinitionId, worldDefinitionRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  capturedAt                DateTime                        @default(now())
+  worldDefinitionRevision   WorldDefinitionRevision         @relation(fields: [worldDefinitionId, worldDefinitionRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
   campaignRevisions         CampaignDefinitionRevision[]
   campaignSnapshots         CampaignDefinitionSnapshot[]
   instanceSnapshots         CampaignInstanceSnapshot[]
+  basedDrafts               WorldDefinitionDraft[]
+  forkSources               WorldDefinitionForkProvenance[]
 
   @@unique([id, worldDefinitionId])
+  @@unique([id, worldDefinitionId, worldDefinitionRevisionId])
+  @@unique([worldDefinitionId, worldDefinitionRevisionId])
   @@index([worldDefinitionId, worldDefinitionRevisionId])
   @@index([contentHash])
   @@index([capturedAt])
+}
+
+/// Mutable complete working state for the next publication in one World lineage.
+model WorldDefinitionDraft {
+  id                       String                          @id @default(uuid())
+  worldDefinitionId        String                          @unique
+  baseRevisionId           String?
+  baseSnapshotId           String?
+  revisionName             String
+  content                  Json
+  snapshotRecords          Json                            @default("[]")
+  storageRevision          Int                             @default(1)
+  validationStatus         DefinitionDraftValidationStatus @default(NOT_VALIDATED)
+  validatedStorageRevision Int?
+  validationReport         Json?
+  createdByUserId          String
+  updatedByUserId          String
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
+  worldDefinition          WorldDefinition                 @relation(fields: [worldDefinitionId], references: [id], onDelete: Restrict)
+  baseRevision             WorldDefinitionRevision?        @relation(fields: [worldDefinitionId, baseRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  baseSnapshot             WorldDefinitionSnapshot?        @relation(fields: [baseSnapshotId, worldDefinitionId, baseRevisionId], references: [id, worldDefinitionId, worldDefinitionRevisionId], onDelete: Restrict)
+  createdBy                User                            @relation("WorldDraftCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy                User                            @relation("WorldDraftUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([worldDefinitionId, validationStatus])
+  @@index([baseSnapshotId])
+}
+
+/// Immutable provenance for a new World lineage copied from a selected snapshot.
+model WorldDefinitionForkProvenance {
+  targetWorldDefinitionId String                  @id
+  sourceWorldDefinitionId String
+  sourceSnapshotId        String
+  identityMapping         Json
+  createdByUserId         String
+  createdAt               DateTime                @default(now())
+  targetWorldDefinition   WorldDefinition         @relation("ForkTargetWorld", fields: [targetWorldDefinitionId], references: [id], onDelete: Restrict)
+  sourceWorldDefinition   WorldDefinition         @relation("ForkSourceWorld", fields: [sourceWorldDefinitionId], references: [id], onDelete: Restrict)
+  sourceSnapshot          WorldDefinitionSnapshot @relation(fields: [sourceSnapshotId, sourceWorldDefinitionId], references: [id, worldDefinitionId], onDelete: Restrict)
+  createdBy               User                    @relation("WorldForkCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([sourceWorldDefinitionId, sourceSnapshotId])
+}
+
+/// Versioned registry of GM, system, or plugin-defined model elements.
+model ModelRegistry {
+  id               String                @id @default(uuid())
+  key              String
+  name             String
+  description      String?
+  provenance       Json
+  ownerUserId      String?
+  metadataRevision Int                   @default(1)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  owner            User?                 @relation("ModelRegistryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  elements         ModelElementLineage[]
+  releases         ModelSchemaRelease[]
+  migrationPlans   ModelMigrationPlan[]
+
+  @@unique([ownerUserId, key])
+  @@index([ownerUserId, name])
+}
+
+model ModelElementLineage {
+  id                String                      @id @default(uuid())
+  registryId        String
+  key               String
+  kind              String
+  semanticRole      String
+  applicability     Json
+  status            ModelElementLifecycleStatus @default(ACTIVE)
+  currentRevisionId String?                     @unique
+  metadataRevision  Int                         @default(1)
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  archivedAt        DateTime?
+  registry          ModelRegistry               @relation(fields: [registryId], references: [id], onDelete: Restrict)
+  revisions         ModelElementRevision[]      @relation("ModelElementRevisions")
+  currentRevision   ModelElementRevision?       @relation("ModelElementCurrentRevision", fields: [id, currentRevisionId], references: [elementId, id], onDelete: Restrict)
+
+  @@unique([registryId, key])
+  @@unique([id, currentRevisionId])
+  @@index([registryId, kind, status])
+  @@index([semanticRole])
+}
+
+/// Immutable payload and presentation for one model element revision.
+model ModelElementRevision {
+  id                    String                 @id @default(uuid())
+  elementId             String
+  revisionNumber        Int
+  predecessorRevisionId String?
+  payload               Json
+  presentation          Json
+  dependencies          Json                   @default("[]")
+  source                Json?
+  contentHash           String
+  authoredByUserId      String?
+  createdAt             DateTime               @default(now())
+  publishedAt           DateTime               @default(now())
+  element               ModelElementLineage    @relation("ModelElementRevisions", fields: [elementId], references: [id], onDelete: Restrict)
+  currentForElement     ModelElementLineage?   @relation("ModelElementCurrentRevision")
+  predecessorRevision   ModelElementRevision?  @relation("ModelElementRevisionLineage", fields: [elementId, predecessorRevisionId], references: [elementId, id], onDelete: Restrict)
+  successorRevisions    ModelElementRevision[] @relation("ModelElementRevisionLineage")
+  authoredBy            User?                  @relation("ModelElementRevisionAuthor", fields: [authoredByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([elementId, revisionNumber])
+  @@unique([elementId, id])
+  @@index([predecessorRevisionId])
+  @@index([contentHash])
+}
+
+/// Immutable exact selection of model element revisions.
+model ModelSchemaRelease {
+  id                      String                                      @id @default(uuid())
+  registryId              String
+  revisionNumber          Int
+  predecessorRevisionId   String?
+  name                    String
+  elementSelections       Json
+  dependencies            Json                                        @default("[]")
+  contentHash             String
+  publishedByUserId       String?
+  createdAt               DateTime                                    @default(now())
+  publishedAt             DateTime                                    @default(now())
+  registry                ModelRegistry                               @relation(fields: [registryId], references: [id], onDelete: Restrict)
+  predecessorRevision     ModelSchemaRelease?                         @relation("ModelSchemaReleaseLineage", fields: [registryId, predecessorRevisionId], references: [registryId, id], onDelete: Restrict)
+  successorRevisions      ModelSchemaRelease[]                        @relation("ModelSchemaReleaseLineage")
+  publishedBy             User?                                       @relation("ModelSchemaReleasePublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  migrationSources        ModelMigrationPlan[]                        @relation("ModelMigrationSource")
+  migrationTargets        ModelMigrationPlan[]                        @relation("ModelMigrationTarget")
+  worldRevisionSelections WorldDefinitionRevisionModelSchemaRelease[]
+
+  @@unique([registryId, revisionNumber])
+  @@unique([registryId, id])
+  @@index([predecessorRevisionId])
+  @@index([contentHash])
+}
+
+/// Exact ordered Model Schema Release selection adopted by a published World revision.
+model WorldDefinitionRevisionModelSchemaRelease {
+  worldDefinitionRevisionId String
+  modelSchemaReleaseId      String
+  selectionOrder            Int
+  worldDefinitionRevision   WorldDefinitionRevision @relation(fields: [worldDefinitionRevisionId], references: [id], onDelete: Restrict)
+  modelSchemaRelease        ModelSchemaRelease      @relation(fields: [modelSchemaReleaseId], references: [id], onDelete: Restrict)
+
+  @@id([worldDefinitionRevisionId, modelSchemaReleaseId])
+  @@unique([worldDefinitionRevisionId, selectionOrder])
+  @@index([modelSchemaReleaseId])
+}
+
+model ModelMigrationPlan {
+  id              String             @id @default(uuid())
+  registryId      String
+  sourceReleaseId String
+  targetReleaseId String
+  mappings        Json
+  createdByUserId String
+  createdAt       DateTime           @default(now())
+  registry        ModelRegistry      @relation(fields: [registryId], references: [id], onDelete: Restrict)
+  sourceRelease   ModelSchemaRelease @relation("ModelMigrationSource", fields: [registryId, sourceReleaseId], references: [registryId, id], onDelete: Restrict)
+  targetRelease   ModelSchemaRelease @relation("ModelMigrationTarget", fields: [registryId, targetReleaseId], references: [registryId, id], onDelete: Restrict)
+  createdBy       User               @relation("ModelMigrationPlanCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([registryId, sourceReleaseId, targetReleaseId])
+  @@index([targetReleaseId])
 }
 
 /// Stable identity for a Campaign Definition across authored revisions.

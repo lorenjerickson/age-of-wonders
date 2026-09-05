@@ -57,6 +57,11 @@ export type SceneId = DomainId<"scene">;
 export type LocationId = DomainId<"location">;
 export type LocationConnectionId = DomainId<"location-connection">;
 export type MediaAssetId = DomainId<"media-asset">;
+export type ModelRegistryId = DomainId<"model-registry">;
+export type ModelElementId = DomainId<"model-element">;
+export type ModelElementRevisionId = DomainId<"model-element-revision">;
+export type ModelSchemaReleaseId = DomainId<"model-schema-release">;
+export type ModelMigrationPlanId = DomainId<"model-migration-plan">;
 
 export type RulesEdition = "2014" | "2024" | `homebrew:${string}`;
 export type RulesNamespace = string;

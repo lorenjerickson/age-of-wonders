@@ -15,6 +15,7 @@ import { InvitationsModule } from "./invitations/invitations.module";
 import { WorldDefinitionsModule } from "./world-definitions/world-definitions.module";
 import { CampaignDefinitionsModule } from "./campaign-definitions/campaign-definitions.module";
 import { CampaignInstancesModule } from "./campaign-instances/campaign-instances.module";
+import { ModelRegistryModule } from "./model-registry/model-registry.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { CampaignInstancesModule } from "./campaign-instances/campaign-instances
     WorldDefinitionsModule,
     CampaignDefinitionsModule,
     CampaignInstancesModule,
+    ModelRegistryModule,
   ],
   providers: [
     {

@@ -9,6 +9,7 @@ import type {
   ExtensionData,
   JsonValue,
   LocationId,
+  ModelSchemaReleaseId,
   PlotDefinitionId,
   SessionId,
   StateIdentity,
@@ -76,6 +77,8 @@ export interface WorldDefinitionRevision<
   /** Definitions and schemas resolved by this revision are replicated when captured. */
   readonly definitionIds: readonly DefinitionId[];
   readonly schemaDefinitionIds: readonly DefinitionId[];
+  /** Exact immutable model releases adopted by this World revision. */
+  readonly modelSchemaReleaseIds: readonly ModelSchemaReleaseId[];
   readonly extensions?: Extensions;
 }
 
