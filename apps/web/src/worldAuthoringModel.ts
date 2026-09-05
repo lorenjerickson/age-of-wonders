@@ -6,6 +6,57 @@ import type {
   WorldDraftRecord,
   WorldModelOption,
 } from "./api";
+import { quickStartKeyFromSearch } from "./quickStartModel";
+
+export function campaignReturnContext(search: string) {
+  const params = new URLSearchParams(search.replace(/^\?/, ""));
+  const href = params.get("campaignReturnTo") ?? "";
+  const label = params.get("campaignReturnLabel")?.trim() ?? "";
+  if (
+    !/^\/campaigns\/definitions\/[^/?#]+(?:\/(?:plots(?:\/[^/?#]+)?|placements|preparation|versions(?:\/draft\/review|\/migrate)?))?$/.test(
+      href,
+    )
+  )
+    return undefined;
+  return {
+    href,
+    label:
+      label &&
+      label.length <= 120 &&
+      !/^(?:[a-z-]+:)?[0-9a-f-]{24,}$/i.test(label)
+        ? label
+        : "Campaign Definition",
+  };
+}
+
+export function worldWorkspaceSuffix(search: string) {
+  const result = new URLSearchParams();
+  const quickStart = quickStartKeyFromSearch(search);
+  if (quickStart) result.set("quickStart", quickStart);
+  const context = campaignReturnContext(search);
+  if (context) {
+    result.set("campaignReturnTo", context.href);
+    result.set("campaignReturnLabel", context.label);
+  }
+  const value = result.toString();
+  return value ? `?${value}` : "";
+}
+
+export function campaignReturnSuffix(
+  campaignPath: string,
+  campaignName: string,
+  search: string,
+) {
+  const params = new URLSearchParams();
+  const quickStart = quickStartKeyFromSearch(search);
+  if (quickStart) params.set("quickStart", quickStart);
+  params.set("campaignReturnTo", campaignPath);
+  params.set(
+    "campaignReturnLabel",
+    campaignName.trim() || "Campaign Definition",
+  );
+  return `?${params.toString()}`;
+}
 
 export function projectEffectiveModels(
   response: EffectiveWorldModelResponse,
@@ -325,11 +376,78 @@ export function draftWithIndexedRecord(
       ...new Set([...stringList(content.definitionIds), record.sourceId]),
     ];
   }
+  if (record.resourceType === "world-placements") {
+    content.worldPlacementDefinitionIds = [
+      ...new Set([
+        ...stringList(content.worldPlacementDefinitionIds),
+        record.sourceId,
+      ]),
+    ];
+  }
   return {
     ...draft,
     content,
     records: upsertDraftRecord(draft.records, record),
   };
+}
+
+export function draftWithoutWorldPlacement(
+  draft: WorldDefinitionDraft,
+  sourceId: string,
+): WorldDefinitionDraft {
+  return {
+    ...draft,
+    content: {
+      ...draft.content,
+      worldPlacementDefinitionIds: stringList(
+        draft.content.worldPlacementDefinitionIds,
+      ).filter((id) => id !== sourceId),
+    },
+    records: draft.records.filter(
+      (record) =>
+        record.resourceType !== "world-placements" ||
+        record.sourceId !== sourceId,
+    ),
+  };
+}
+
+export function worldPlacementRecordsForLocation(
+  records: readonly WorldDraftRecord[],
+  locationId: string,
+) {
+  return records.filter(
+    (record) =>
+      record.resourceType === "world-placements" &&
+      recordPayload(record).locationId === locationId,
+  );
+}
+
+export function worldPlacementSourceId(record: WorldDraftRecord) {
+  const source = recordPayload(record).source;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return;
+  const value = source as Record<string, unknown>;
+  if (value.kind === "world-creature" && typeof value.creatureId === "string")
+    return value.creatureId;
+  if (value.kind === "world-item" && typeof value.itemDefinitionId === "string")
+    return value.itemDefinitionId;
+  if (
+    value.kind === "registered-content" &&
+    typeof value.definitionId === "string"
+  )
+    return value.definitionId;
+}
+
+export function worldPlacementSourceKind(record: WorldDraftRecord) {
+  const source = recordPayload(record).source;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return;
+  const kind = (source as Record<string, unknown>).kind;
+  return typeof kind === "string" ? kind : undefined;
+}
+
+export function worldPlacementSourceIsEditable(record: WorldDraftRecord) {
+  return ["world-creature", "world-item"].includes(
+    worldPlacementSourceKind(record) ?? "",
+  );
 }
 
 function stringList(value: unknown): string[] {

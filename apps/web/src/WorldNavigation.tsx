@@ -7,6 +7,10 @@ import {
   type WorldNavigationGroup,
 } from "./gmNavigationModel";
 import { quickStartStorageKey, quickStartSuffix } from "./quickStartModel";
+import {
+  campaignReturnContext,
+  worldWorkspaceSuffix,
+} from "./worldAuthoringModel";
 
 export function WorldSecondaryNavigation({
   worldId,
@@ -21,7 +25,8 @@ export function WorldSecondaryNavigation({
 }) {
   const location = useLocation();
   const pathname = location.pathname;
-  const guideSuffix = quickStartSuffix(location.searchStr);
+  const guideSuffix = worldWorkspaceSuffix(location.searchStr);
+  const campaignReturn = campaignReturnContext(location.searchStr);
   const groups = worldNavigationForPath(worldId, pathname);
   const activeKey = groups.find(({ active }) => active)?.key;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -102,6 +107,14 @@ export function WorldSecondaryNavigation({
           </li>
         </ul>
       </nav>
+      {campaignReturn && (
+        <InternalLink
+          className="btn btn-outline mb-4 min-h-11 w-full"
+          href={`${campaignReturn.href}${quickStartSuffix(location.searchStr)}`}
+        >
+          Back to {campaignReturn.label}
+        </InternalLink>
+      )}
       <Button
         type="button"
         tone="outline"

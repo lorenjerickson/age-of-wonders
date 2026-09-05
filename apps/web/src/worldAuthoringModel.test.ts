@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   attributeNumberConfig,
+  campaignReturnContext,
+  campaignReturnSuffix,
   draftContextLabel,
   contentAdoptingRegistryRelease,
   definitionConformance,
   draftAdoptingRegistryRelease,
   draftWithIndexedRecord,
+  draftWithoutWorldPlacement,
   effectiveModelOptions,
   filterWorlds,
   hierarchyRows,
@@ -21,6 +24,11 @@ import {
   worldCreationInput,
   worldDraftLabel,
   worldDraftStartLabel,
+  worldPlacementRecordsForLocation,
+  worldPlacementSourceId,
+  worldPlacementSourceIsEditable,
+  worldPlacementSourceKind,
+  worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
 import type { JsonValue, WorldDefinitionDraft, WorldDraftRecord } from "./api";
 
@@ -31,6 +39,23 @@ const record = (
 ): WorldDraftRecord => ({ resourceType, sourceId, payload });
 
 describe("World authoring projection", () => {
+  it("preserves only validated Campaign return context", () => {
+    const suffix = campaignReturnSuffix(
+      "/campaigns/definitions/bells/plots",
+      "Bells Beneath the Flood",
+      "?quickStart=review-campaign-definition",
+    );
+    expect(campaignReturnContext(suffix)).toEqual({
+      href: "/campaigns/definitions/bells/plots",
+      label: "Bells Beneath the Flood",
+    });
+    expect(worldWorkspaceSuffix(suffix)).toContain("quickStart=");
+    expect(
+      campaignReturnContext(
+        "?campaignReturnTo=https%3A%2F%2Fevil.example&campaignReturnLabel=Unsafe",
+      ),
+    ).toBeUndefined();
+  });
   it("keeps resource-qualified identities distinct", () => {
     expect(recordKey(record("locations", "same", { name: "Vale" }))).not.toBe(
       recordKey(record("creatures", "same", { name: "Vale" })),
@@ -102,6 +127,44 @@ describe("World authoring projection", () => {
         ({ sourceId }) => sourceId,
       ),
     ).toEqual(["dragon"]);
+  });
+
+  it("indexes and removes stable World placements through authoritative membership", () => {
+    const draft = {
+      storageRevision: 1,
+      revisionName: "Draft",
+      content: { worldPlacementDefinitionIds: [] },
+      records: [],
+    } satisfies WorldDefinitionDraft;
+    const placement = record("world-placements", "placement-a", {
+      id: "placement-a",
+      locationId: "harbor",
+      source: { kind: "world-creature", creatureId: "dragon" },
+      name: "Old Ember at the quay",
+    });
+    const indexed = draftWithIndexedRecord(draft, placement);
+    expect(indexed.content.worldPlacementDefinitionIds).toEqual([
+      "placement-a",
+    ]);
+    expect(worldPlacementRecordsForLocation(indexed.records, "harbor")).toEqual(
+      [placement],
+    );
+    expect(worldPlacementSourceId(placement)).toBe("dragon");
+    const removed = draftWithoutWorldPlacement(indexed, "placement-a");
+    expect(removed.content.worldPlacementDefinitionIds).toEqual([]);
+    expect(removed.records).toEqual([]);
+  });
+
+  it("identifies registered World placement sources without coercing them", () => {
+    const placement = record("world-placements", "placement-registered", {
+      source: { kind: "registered-content", definitionId: "weather-front" },
+    });
+    expect(worldPlacementSourceKind(placement)).toBe("registered-content");
+    expect(worldPlacementSourceId(placement)).toBe("weather-front");
+    expect(worldPlacementSourceIsEditable(placement)).toBe(false);
+    expect(placement.payload).toEqual({
+      source: { kind: "registered-content", definitionId: "weather-front" },
+    });
   });
 
   it("builds a stable location hierarchy with human labels", () => {

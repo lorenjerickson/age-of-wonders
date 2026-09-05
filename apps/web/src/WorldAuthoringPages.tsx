@@ -49,10 +49,13 @@ import {
   recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
   recordsForLibrary,
+  worldPlacementRecordsForLocation,
+  worldPlacementSourceId,
+  worldPlacementSourceIsEditable,
+  worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
 import type { ReadSection } from "./server/readModels";
 import { safeDateLabel } from "./worldDefinitionModel";
-import { quickStartSuffix } from "./quickStartModel";
 
 const objectValue = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -62,7 +65,7 @@ const objectValue = (value: unknown): Record<string, unknown> =>
 export function WorldOverviewPage() {
   const { definition, draft, canEdit } = useWorldAuthoring();
   const base = `/worlds/${encodeURIComponent(definition.id)}`;
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
@@ -133,7 +136,7 @@ export function WorldOverviewPage() {
 export function WorldVersionsPage() {
   const { definition, draft, canEdit } = useWorldAuthoring();
   const base = `/worlds/${encodeURIComponent(definition.id)}`;
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
@@ -217,7 +220,7 @@ export function WorldImpactReviewPage({
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
   const [validationIssues, setValidationIssues] = useState<string[]>([]);
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   async function publish() {
     if (!draft || !result.ok) return;
     setPublishing(true);
@@ -367,7 +370,7 @@ export function WorldImpactReviewPage({
 export function AtlasPage() {
   const { definition, draft } = useWorldAuthoring();
   const rows = hierarchyRows(draft?.records ?? []);
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
     <LibraryPage
       eyebrow="Atlas"
@@ -483,7 +486,7 @@ function LibraryPage({
   createHref: string;
   children: ReactNode;
 }) {
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const { canEdit } = useWorldAuthoring();
   return (
     <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
@@ -516,7 +519,7 @@ function CardGrid({
   records: WorldDraftRecord[];
   href: (record: WorldDraftRecord) => string;
 }) {
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
     <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {records.map((record) => (
@@ -558,7 +561,7 @@ export function DraftRecordEditor({
   const { definition, draft, saveRecord, canEdit, markDirty } =
     useWorldAuthoring();
   const navigate = useInternalNavigate();
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const existing = recordsForLibrary(draft?.records ?? [], kind).find(
     (record) => record.sourceId === sourceId,
   );
@@ -718,11 +721,15 @@ export function DraftRecordEditor({
           )}
         </h1>
         <Alert tone="warning" className="mt-8">
-          This World is archived and read only. Restore it from the World header
-          before editing.
+          {draft?.status === "stale"
+            ? "This World draft changed elsewhere or its published base advanced. Reload the latest draft before editing."
+            : "This World is archived and read only. Restore it from the World header before editing."}
         </Alert>
         {description && (
           <p className="mt-6 text-base-content/70">{description}</p>
+        )}
+        {kind === "locations" && existing && (
+          <WorldLocationPlacements location={existing} />
         )}
       </main>
     );
@@ -924,7 +931,407 @@ export function DraftRecordEditor({
           </div>
         </form>
       </DraftRequired>
+      {kind === "locations" && existing && (
+        <WorldLocationPlacements location={existing} />
+      )}
     </main>
+  );
+}
+
+function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
+  const { draft, canEdit, saveRecord, removeWorldPlacement, markDirty } =
+    useWorldAuthoring();
+  const placements = worldPlacementRecordsForLocation(
+    draft?.records ?? [],
+    location.sourceId,
+  );
+  const creatures = recordsForLibrary(draft?.records ?? [], "creatures");
+  const items = recordsForLibrary(draft?.records ?? [], "items");
+  const [editingId, setEditingId] = useState("");
+  const [name, setName] = useState("");
+  const [sourceKey, setSourceKey] = useState("");
+  const [x, setX] = useState("");
+  const [y, setY] = useState("");
+  const [scale, setScale] = useState("");
+  const [notes, setNotes] = useState("");
+  const [message, setMessage] = useState("");
+  const blankSnapshot = JSON.stringify({
+    editingId: "",
+    name: "",
+    sourceKey: "",
+    x: "",
+    y: "",
+    scale: "",
+    notes: "",
+  });
+  const editorSnapshot = JSON.stringify({
+    editingId,
+    name,
+    sourceKey,
+    x,
+    y,
+    scale,
+    notes,
+  });
+  const [savedSnapshot, setSavedSnapshot] = useState(blankSnapshot);
+  const dirty = editorSnapshot !== savedSnapshot;
+  useBlocker({
+    shouldBlockFn: () =>
+      dirty && !window.confirm("Leave without saving this World placement?"),
+    enableBeforeUnload: dirty,
+  });
+  useEffect(() => {
+    if (dirty) markDirty();
+  }, [dirty, markDirty]);
+
+  const labelForSource = (record: WorldDraftRecord) => {
+    const id = worldPlacementSourceId(record);
+    const source = [...creatures, ...items].find(
+      (candidate) => candidate.sourceId === id,
+    );
+    return source
+      ? recordName(source, "Unnamed World content")
+      : "Unavailable World content";
+  };
+
+  function resetEditor() {
+    setEditingId("");
+    setName("");
+    setSourceKey("");
+    setX("");
+    setY("");
+    setScale("");
+    setNotes("");
+    setMessage("");
+    setSavedSnapshot(blankSnapshot);
+  }
+
+  function edit(record: WorldDraftRecord) {
+    const payload = recordPayload(record);
+    const source = objectValue(payload.source);
+    const position = objectValue(payload.mapPosition);
+    const sourceId = worldPlacementSourceId(record) ?? "";
+    const next = {
+      editingId: record.sourceId,
+      name: recordName(record, "Unnamed World placement"),
+      sourceKey: `${String(source.kind ?? "world-creature")}\u0000${sourceId}`,
+      x: typeof position.x === "number" ? String(position.x) : "",
+      y: typeof position.y === "number" ? String(position.y) : "",
+      scale: typeof payload.scale === "number" ? String(payload.scale) : "",
+      notes: typeof payload.notes === "string" ? payload.notes : "",
+    };
+    setEditingId(next.editingId);
+    setName(next.name);
+    setSourceKey(next.sourceKey);
+    setX(next.x);
+    setY(next.y);
+    setScale(next.scale);
+    setNotes(next.notes);
+    setMessage("");
+    setSavedSnapshot(JSON.stringify(next));
+  }
+
+  async function remove(record: WorldDraftRecord) {
+    if (
+      !window.confirm(
+        `Remove ${recordName(record, "this World placement")} from the working World revision?`,
+      )
+    )
+      return;
+    if (await removeWorldPlacement(record.sourceId)) {
+      if (editingId === record.sourceId) resetEditor();
+      setMessage("World placement removed from the working revision.");
+    }
+  }
+
+  const [sourceKind, sourceId] = sourceKey.split("\u0000");
+  const positionValid =
+    (!x && !y) ||
+    (x !== "" &&
+      y !== "" &&
+      Number(x) >= 0 &&
+      Number(x) <= 1 &&
+      Number(y) >= 0 &&
+      Number(y) <= 1);
+  const scaleValid = scale === "" || Number(scale) > 0;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (
+      !draft ||
+      !canEdit ||
+      !name.trim() ||
+      !sourceId ||
+      !positionValid ||
+      !scaleValid
+    )
+      return;
+    const id = editingId || `world-placement:${crypto.randomUUID()}`;
+    const existing = placements.find((record) => record.sourceId === editingId);
+    const payload: Record<string, unknown> = {
+      ...recordPayload(
+        existing ?? {
+          resourceType: "world-placements",
+          sourceId: id,
+          payload: {},
+        },
+      ),
+      id,
+      locationId: location.sourceId,
+      name: name.trim(),
+      source:
+        sourceKind === "world-item"
+          ? { kind: "world-item", itemDefinitionId: sourceId }
+          : { kind: "world-creature", creatureId: sourceId },
+    };
+    if (x && y) {
+      payload.mapPosition = {
+        kind: "normalized-map",
+        x: Number(x),
+        y: Number(y),
+      };
+    } else delete payload.mapPosition;
+    if (scale) payload.scale = Number(scale);
+    else delete payload.scale;
+    if (notes.trim()) payload.notes = notes.trim();
+    else delete payload.notes;
+    const didSave = await saveRecord({
+      resourceType: "world-placements",
+      sourceId: id,
+      payload: payload as WorldDraftRecord["payload"],
+    });
+    if (!didSave) return;
+    resetEditor();
+    setMessage("World placement saved to the working revision.");
+  }
+
+  return (
+    <section
+      className="mt-10 border-t border-base-300 pt-8"
+      aria-labelledby="world-placement-heading"
+    >
+      <div>
+        <p className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
+          Atlas · Location content
+        </p>
+        <h2
+          id="world-placement-heading"
+          className="mt-2 text-2xl font-semibold"
+        >
+          World placements
+        </h2>
+        <p className="mt-2 text-sm text-base-content/60">
+          Place a named World Creature or Item in{" "}
+          {recordName(location, "this Location")}. These stable placements are
+          captured with published World revisions.
+        </p>
+      </div>
+      <div className="mt-5 space-y-3">
+        {placements.length ? (
+          placements.map((record) => {
+            const payload = recordPayload(record);
+            const position = objectValue(payload.mapPosition);
+            return (
+              <article
+                key={record.sourceId}
+                className="rounded-box border border-base-300 bg-base-200 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">
+                      {recordName(record, "Unnamed World placement")}
+                    </h3>
+                    <p className="mt-1 text-sm text-base-content/60">
+                      {labelForSource(record)}
+                    </p>
+                    {(typeof position.x === "number" &&
+                      typeof position.y === "number") ||
+                    typeof payload.scale === "number" ? (
+                      <p className="mt-1 text-xs text-base-content/55">
+                        {typeof position.x === "number" &&
+                        typeof position.y === "number"
+                          ? `Map position ${Math.round(position.x * 100)}% × ${Math.round(position.y * 100)}%`
+                          : "No map position"}
+                        {typeof payload.scale === "number"
+                          ? ` · Scale ${payload.scale}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                  {canEdit && (
+                    <div className="flex flex-wrap gap-2">
+                      {worldPlacementSourceIsEditable(record) ? (
+                        <Button
+                          type="button"
+                          tone="outline"
+                          size="sm"
+                          onClick={() => edit(record)}
+                        >
+                          Edit placement
+                        </Button>
+                      ) : (
+                        <Badge tone="warning">
+                          Source preserved · read only
+                        </Badge>
+                      )}
+                      <Button
+                        type="button"
+                        tone="danger"
+                        size="sm"
+                        onClick={() => void remove(record)}
+                      >
+                        Remove placement
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {typeof payload.notes === "string" && payload.notes.trim() && (
+                  <p className="mt-3 text-sm">{payload.notes}</p>
+                )}
+              </article>
+            );
+          })
+        ) : (
+          <Alert>No World placements are authored at this Location.</Alert>
+        )}
+      </div>
+      {canEdit && (
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="mt-6 rounded-box border border-base-300 bg-base-200 p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-xl font-semibold">
+              {editingId ? "Edit World placement" : "Add World placement"}
+            </h3>
+            {editingId && (
+              <Button
+                type="button"
+                tone="ghost"
+                size="sm"
+                onClick={resetEditor}
+              >
+                Cancel editing
+              </Button>
+            )}
+          </div>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <Field label="Placement name" required className="sm:col-span-2">
+              <Input
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="mt-2 w-full"
+              />
+            </Field>
+            <Field label="Creature or Item" required className="sm:col-span-2">
+              <Select
+                required
+                value={sourceKey}
+                onChange={(event) => setSourceKey(event.target.value)}
+                className="mt-2 w-full"
+              >
+                <option value="">Choose named World content</option>
+                <optgroup label="Creatures">
+                  {creatures.map((record) => (
+                    <option
+                      key={record.sourceId}
+                      value={`world-creature\u0000${record.sourceId}`}
+                    >
+                      {recordName(record, "Unnamed Creature")}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Items">
+                  {items.map((record) => (
+                    <option
+                      key={record.sourceId}
+                      value={`world-item\u0000${record.sourceId}`}
+                    >
+                      {recordName(record, "Unnamed Item")}
+                    </option>
+                  ))}
+                </optgroup>
+              </Select>
+            </Field>
+            <Field
+              label="Horizontal map position"
+              help="Optional value from 0 to 1. Enter both coordinates or leave both blank."
+            >
+              <Input
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={x}
+                onChange={(event) => setX(event.target.value)}
+                className="mt-2 w-full"
+              />
+            </Field>
+            <Field
+              label="Vertical map position"
+              help="Optional value from 0 to 1. Enter both coordinates or leave both blank."
+            >
+              <Input
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={y}
+                onChange={(event) => setY(event.target.value)}
+                className="mt-2 w-full"
+              />
+            </Field>
+            <Field
+              label="Token scale"
+              help="Optional positive multiplier, such as 1 or 1.5."
+            >
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={scale}
+                onChange={(event) => setScale(event.target.value)}
+                className="mt-2 w-full"
+              />
+            </Field>
+            <Field label="Presentation notes" className="sm:col-span-2">
+              <Textarea
+                rows={4}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                className="mt-2 w-full"
+              />
+            </Field>
+          </div>
+          {!positionValid && (
+            <Alert tone="warning" className="mt-4">
+              Enter both map coordinates between 0 and 1, or leave both blank.
+            </Alert>
+          )}
+          {!scaleValid && (
+            <Alert tone="warning" className="mt-4">
+              Token scale must be greater than zero.
+            </Alert>
+          )}
+          <Button
+            type="submit"
+            tone="primary"
+            className="mt-5"
+            disabled={
+              !name.trim() || !sourceId || !positionValid || !scaleValid
+            }
+          >
+            {editingId ? "Save placement" : "Add placement"}
+          </Button>
+        </form>
+      )}
+      {message && (
+        <p className="mt-4 text-sm" aria-live="polite">
+          {message}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -969,7 +1376,7 @@ function ModelCard({
   values: string[];
   href: string;
 }) {
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
     <section className="card border border-base-300 bg-base-200">
       <div className="card-body">
@@ -1099,8 +1506,9 @@ export function WorldModelEditor({
           {kind === "attributes" ? "Attributes" : "Equipment Slots"}
         </h1>
         <Alert tone="warning" className="mt-8">
-          This World is archived and read only. Restore it before publishing or
-          adopting Model releases.
+          {draft?.status === "stale"
+            ? "This World draft changed elsewhere. Reload it before publishing or adopting Model releases."
+            : "This World is archived and read only. Restore it before publishing or adopting Model releases."}
         </Alert>
       </main>
     );

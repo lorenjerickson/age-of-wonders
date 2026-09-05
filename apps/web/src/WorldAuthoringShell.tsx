@@ -12,13 +12,14 @@ import {
 } from "./api";
 import { RouterButtonLink } from "./navigation";
 import { useLocation, useRouter } from "@tanstack/react-router";
-import { quickStartSuffix } from "./quickStartModel";
 import {
   draftContextLabel,
+  draftWithoutWorldPlacement,
   draftWithIndexedRecord,
   mergeSavedDraft,
   projectEffectiveModels,
   worldDraftStartLabel,
+  worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "stale" | "error";
@@ -31,6 +32,7 @@ interface WorldAuthoringContextValue {
   canEdit: boolean;
   saveDraft(next: WorldDefinitionDraft): Promise<boolean>;
   saveRecord(record: WorldDraftRecord): Promise<boolean>;
+  removeWorldPlacement(sourceId: string): Promise<boolean>;
   adoptDraft(next: WorldDefinitionDraft): void;
   refreshEffectiveModels(): Promise<void>;
   markDirty(): void;
@@ -60,7 +62,9 @@ export function WorldAuthoringProvider({
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
-  const canEdit = definition.status.toLocaleLowerCase() !== "archived";
+  const canEdit =
+    definition.status.toLocaleLowerCase() !== "archived" &&
+    draft?.status !== "stale";
 
   async function saveDraft(next: WorldDefinitionDraft) {
     if (!draft || draft.status === "stale" || !canEdit) return false;
@@ -98,6 +102,11 @@ export function WorldAuthoringProvider({
     return saveDraft(draftWithIndexedRecord(draft, record));
   }
 
+  async function removeWorldPlacement(sourceId: string) {
+    if (!draft) return false;
+    return saveDraft(draftWithoutWorldPlacement(draft, sourceId));
+  }
+
   function adoptDraft(next: WorldDefinitionDraft) {
     setDraft(next);
     setSaveState("saved");
@@ -130,6 +139,7 @@ export function WorldAuthoringProvider({
         canEdit,
         saveDraft,
         saveRecord,
+        removeWorldPlacement,
         adoptDraft,
         refreshEffectiveModels,
         markDirty,
@@ -150,7 +160,7 @@ export function WorldContextBar() {
     adoptDraft,
     refreshEffectiveModels,
   } = useWorldAuthoring();
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const router = useRouter();
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState("");
@@ -235,8 +245,10 @@ export function WorldContextBar() {
                         : "Read only"
           }
         />
-        {!canEdit && <Badge tone="warning">Archived · read only</Badge>}
-        {!canEdit && (
+        {definition.status.toLocaleLowerCase() === "archived" && (
+          <Badge tone="warning">Archived · read only</Badge>
+        )}
+        {definition.status.toLocaleLowerCase() === "archived" && (
           <Button
             tone="primary"
             size="sm"
@@ -304,9 +316,37 @@ export function WorldContextBar() {
 }
 
 export function DraftRequired({ children }: { children: ReactNode }) {
-  const { definition, draft } = useWorldAuthoring();
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
-  if (draft) return children;
+  const { definition, draft, canEdit } = useWorldAuthoring();
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
+  if (draft && canEdit) return children;
+  if (draft?.status === "stale") {
+    return (
+      <Alert tone="warning" className="mt-8">
+        <div>
+          <p>
+            This World draft changed elsewhere or its published base advanced.
+            Authoring is read only until you reload the latest draft.
+          </p>
+          <Button
+            tone="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => window.location.reload()}
+          >
+            Reload latest draft
+          </Button>
+        </div>
+      </Alert>
+    );
+  }
+  if (definition.status.toLocaleLowerCase() === "archived") {
+    return (
+      <Alert tone="warning" className="mt-8">
+        This World is archived and read only. Restore it from the World header
+        before editing.
+      </Alert>
+    );
+  }
   return (
     <Alert tone="warning" className="mt-8">
       <div>

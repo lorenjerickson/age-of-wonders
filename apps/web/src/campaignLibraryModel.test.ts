@@ -32,9 +32,7 @@ describe("Campaign library presentation", () => {
       },
     });
 
-    expect(card.href).toBe(
-      "/campaigns/definitions/definition-opaque-id",
-    );
+    expect(card.href).toBe("/campaigns/definitions/definition-opaque-id");
     expect(card.actionLabel).toBe("Open Definition");
     expect(visibleCardText(card)).not.toMatch(/opaque-id|secret-hash/);
     expect(visibleCardText(card)).toContain("Greyhaven · World revision 7");
@@ -60,6 +58,30 @@ describe("Campaign library presentation", () => {
     expect(card.actionLabel).toBe("Manage Instance");
     expect(visibleCardText(card)).not.toMatch(/opaque-id|Continue|Resume/);
   });
+
+  it("surfaces draft and World migration context without identifiers", () => {
+    const card = campaignDefinitionCard({
+      id: "definition-secret",
+      name: "Flooded City",
+      status: "draft",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+      draft: {
+        storageRevision: 4,
+        revisionName: "Bell tower revision",
+        validationStatus: "not-validated",
+        hasUnpublishedChanges: true,
+      },
+      availableWorldMigration: {
+        worldName: "Age of Wonders",
+        revisionNumber: 3,
+      },
+    });
+    expect(card.contextLabels).toEqual([
+      "Working draft · Bell tower revision",
+      "World update available · Age of Wonders revision 3",
+    ]);
+    expect(card.contextLabels.join(" ")).not.toContain("definition-secret");
+  });
 });
 
 function visibleCardText(card: ReturnType<typeof campaignDefinitionCard>) {
@@ -69,6 +91,7 @@ function visibleCardText(card: ReturnType<typeof campaignDefinitionCard>) {
     card.statusLabel,
     card.primaryMetadata,
     card.secondaryMetadata,
+    ...card.contextLabels,
     card.actionLabel,
   ].join(" ");
 }

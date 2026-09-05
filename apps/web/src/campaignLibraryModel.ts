@@ -1,7 +1,4 @@
-import type {
-  CampaignDefinitionSummary,
-  CampaignInstanceSummary,
-} from "./api";
+import type { CampaignDefinitionSummary, CampaignInstanceSummary } from "./api";
 
 export interface CampaignLibraryCard {
   readonly key: string;
@@ -11,14 +8,15 @@ export interface CampaignLibraryCard {
   readonly statusLabel: string;
   readonly primaryMetadata: string;
   readonly secondaryMetadata: string;
+  readonly contextLabels: readonly string[];
   readonly actionLabel: "Open Definition" | "Manage Instance";
 }
 
 const humanName = (value: string | undefined, fallback: string) =>
   value?.trim() || fallback;
 
-export const statusLabel = (value: string) =>
-  value
+export const statusLabel = (value?: string) =>
+  (value ?? "")
     .split("_")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
@@ -48,8 +46,20 @@ export function campaignDefinitionCard(
       ? `Campaign revision ${revision.revisionNumber}`
       : "No published Campaign revision",
     secondaryMetadata: revision
-      ? `${humanName(revision.capturedWorld.name, "Unnamed World")} · World revision ${revision.capturedWorld.revisionNumber}`
+      ? `${humanName(revision.capturedWorld.worldName ?? revision.capturedWorld.name, "Unnamed World")} · World revision ${revision.capturedWorld.revisionNumber}`
       : "World capture pending",
+    contextLabels: [
+      ...(definition.draft
+        ? [
+            `Working draft · ${humanName(definition.draft.revisionName, "Unpublished changes")}`,
+          ]
+        : []),
+      ...(definition.availableWorldMigration
+        ? [
+            `World update available · ${humanName(definition.availableWorldMigration.worldName, "Unnamed World")} revision ${definition.availableWorldMigration.revisionNumber}`,
+          ]
+        : []),
+    ],
     actionLabel: "Open Definition",
   };
 }
@@ -69,6 +79,7 @@ export function campaignInstanceCard(
     secondaryMetadata: snapshot
       ? `${humanName(snapshot.worldDefinition.name, "Unnamed World")} · World revision ${snapshot.worldDefinition.revisionNumber}`
       : "World capture pending",
+    contextLabels: [],
     actionLabel: "Manage Instance",
   };
 }

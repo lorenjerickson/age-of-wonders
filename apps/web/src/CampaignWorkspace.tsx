@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { InternalLink } from "./navigation";
+import { Button } from "@aow/ui";
 
 const DEFINITION_SECTIONS = [
   "Plots",
@@ -44,7 +45,7 @@ export function CampaignWorkspaceShell({
           {name}
         </p>
         <p className="mt-1 text-xs leading-5 text-base-content/45">{context}</p>
-        <button
+        <Button
           type="button"
           className="btn btn-outline mt-4 min-h-11 w-full justify-between lg:hidden"
           aria-expanded={mobileOpen}
@@ -53,7 +54,7 @@ export function CampaignWorkspaceShell({
         >
           Campaign navigation
           <span aria-hidden="true">{mobileOpen ? "−" : "+"}</span>
-        </button>
+        </Button>
         <nav
           id="campaign-workspace-navigation"
           aria-label={`${name} ${kind} navigation`}

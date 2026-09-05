@@ -24,6 +24,26 @@ export function CampaignUnavailable({
   );
 }
 
+export function LegacyCampaignRoute() {
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-20">
+      <p className="text-xs font-semibold tracking-[0.18em] text-warning uppercase">
+        Campaign link needs reselection
+      </p>
+      <h1 className="mt-3 text-3xl font-semibold">
+        Choose the Campaign workspace you intended
+      </h1>
+      <p className="mt-4 text-base-content/65">
+        Older links did not distinguish reusable Campaign Definitions from
+        played Campaign Instances. For safety, the application will not guess.
+      </p>
+      <Link className="btn btn-primary mt-7" to="/campaigns">
+        Choose from Campaigns
+      </Link>
+    </main>
+  );
+}
+
 export function FactPanel({
   title,
   children,

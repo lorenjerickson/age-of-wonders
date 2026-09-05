@@ -67,4 +67,28 @@ describe("World authoring context", () => {
     expect(html).toContain("Read only");
     expect(html).not.toContain("opaque-world-id");
   });
+
+  it("makes a stale World draft read only until it is reloaded", () => {
+    const definition = {
+      id: "opaque-world-id",
+      name: "The Shattered Coast",
+      status: "active",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      revisions: [],
+    } satisfies WorldDefinitionDetail;
+    const draft = {
+      storageRevision: 1,
+      revisionName: "Gathering storm",
+      status: "stale",
+      content: {},
+      records: [],
+    } satisfies WorldDefinitionDraft;
+    const html = renderToStaticMarkup(
+      <WorldAuthoringProvider definition={definition} initialDraft={draft}>
+        <ContextProbe />
+      </WorldAuthoringProvider>,
+    );
+    expect(html).toContain("Read only");
+  });
 });

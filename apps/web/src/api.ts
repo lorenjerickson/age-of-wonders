@@ -56,7 +56,10 @@ export interface CapturedWorldSummary {
   worldDefinitionId: string;
   worldDefinitionRevisionId: string;
   revisionNumber: number;
-  name: string;
+  name?: string;
+  worldName?: string;
+  revisionName?: string;
+  publishedAt?: string;
 }
 
 export interface WorldDefinitionRevisionSummary {
@@ -82,7 +85,7 @@ export interface WorldDefinitionSummary {
     validationStatus: string;
     validatedStorageRevision?: number;
     isCurrentBase: boolean;
-    hasUnpublishedChanges: boolean;
+    hasUnpublishedChanges?: boolean;
   };
   downstreamCampaignCount?: number;
   metadataRevision?: number;
@@ -242,6 +245,18 @@ export interface CampaignDefinitionSummary {
     publishedAt: string;
     capturedWorld: CapturedWorldSummary;
   };
+  draft?: {
+    storageRevision: number;
+    revisionName: string;
+    validationStatus: string;
+    validatedStorageRevision?: number;
+    hasUnpublishedChanges: boolean;
+  };
+  availableWorldMigration?: {
+    worldName: string;
+    revisionNumber: number;
+  };
+  metadataRevision?: number;
 }
 
 export interface CampaignDefinitionList {
@@ -258,17 +273,131 @@ export interface CampaignDefinitionDetail {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
-  currentRevision?: CampaignDefinitionSummary["currentRevision"] & {
-    predecessorRevisionId?: string;
-    content: JsonValue;
-    createdAt: string;
-    capturedWorld: CapturedWorldSummary & {
-      snapshotContentHash: string;
-      capturedAt: string;
-      revisionContentHash: string;
-      publishedAt: string;
+  revisions?: Array<
+    NonNullable<CampaignDefinitionSummary["currentRevision"]> & {
+      predecessorRevisionId?: string;
+      reason?: string;
+      createdAt?: string;
+      snapshot?: { id: string; contentHash: string; capturedAt: string };
+    }
+  >;
+  metadataRevision?: number;
+}
+
+export interface CampaignDefinitionDraft {
+  id?: string;
+  campaignDefinitionId?: string;
+  baseRevisionId?: string;
+  baseSnapshotId?: string;
+  capturedWorldSnapshotId?: string;
+  capturedWorld: CapturedWorldSummary;
+  capturedWorldContent?: {
+    locations: Array<{
+      id: string;
+      name: string;
+      kind?: string;
+      parentLocationId?: string;
+    }>;
+    creatures: Array<{ id: string; name: string; kind?: string }>;
+    items: Array<{ id: string; name: string; kind?: string }>;
+    placements: Array<{
+      id: string;
+      name: string;
+      kind?: string;
+      locationId?: string;
+    }>;
+  };
+  revisionName: string;
+  content: Record<string, JsonValue>;
+  records: Array<{
+    resourceType: string;
+    sourceId: string;
+    sourceRevision?: number;
+    payload: JsonValue;
+  }>;
+  storageRevision: number;
+  validationStatus: string;
+  validatedStorageRevision?: number;
+  validationReport?: JsonValue;
+  createdAt?: string;
+  updatedAt?: string;
+  status?: "current" | "stale";
+}
+
+export interface CampaignMigrationPreview {
+  planHash: string;
+  sourceWorld: CapturedWorldSummary;
+  targetWorld: CapturedWorldSummary;
+  changes: {
+    added: Array<{ name: string; resourceType: string; typeLabel: string }>;
+    changed: Array<{ name: string; resourceType: string; typeLabel: string }>;
+    removed: Array<{ name: string; resourceType: string; typeLabel: string }>;
+  };
+  changeSummary: {
+    added: number;
+    changed: number;
+    removed: number;
+    returned: { added: number; changed: number; removed: number };
+    offset: number;
+    nextOffset?: number;
+    truncated: boolean;
+  };
+  conflicts: Array<{
+    code: string;
+    subject: string;
+    detail: string;
+    source?: { resourceType: string; id: string };
+    sourceLabel?: string;
+    candidates?: Array<{ id: string; label: string; typeLabel: string }>;
+    candidateSummary?: {
+      total: number;
+      returned: number;
+      offset: number;
+      truncated: boolean;
+    };
+  }>;
+  conflictSummary?: {
+    total: number;
+    returned: number;
+    offset: number;
+    nextOffset?: number;
+    truncated: boolean;
+  };
+  impact: {
+    offset: number;
+    nextOffset?: number;
+    presentationTruncated: boolean;
+    summary: {
+      locationMoves: number;
+      affectedPlots: number;
+      affectedReferences: number;
+      modelReleasesAdded: number;
+      modelReleasesRemoved: number;
+    };
+    locationMoves: Array<{
+      locationName: string;
+      fromParentName: string;
+      toParentName: string;
+    }>;
+    affectedPlots: Array<{ plotName: string; reasons: string[] }>;
+    affectedReferences: Array<{
+      name: string;
+      typeLabel: string;
+      change: "changed" | "removed";
+    }>;
+    modelReleases: {
+      added: Array<{ name: string }>;
+      removed: Array<{ name: string }>;
     };
   };
+  presentationTruncated?: boolean;
+  ready: boolean;
+}
+
+export interface CampaignDraftImpact {
+  draftStorageRevision: number;
+  changes: { added: number; changed: number; removed: number };
+  downstreamInstances: Array<{ name: string; status: string }>;
 }
 
 export interface CapturedDefinitionSummary {
@@ -632,6 +761,215 @@ export function getCampaignDefinition(campaignDefinitionId: string) {
   );
 }
 
+export function createCampaignDefinition(input: {
+  name: string;
+  description?: string;
+  worldDefinitionSnapshotId: string;
+}) {
+  return request<{
+    id: string;
+    name: string;
+    description?: string;
+    metadataRevision: number;
+    draft: CampaignDefinitionDraft;
+  }>("/campaign-definitions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function getCampaignDefinitionDraft(campaignDefinitionId: string) {
+  return request<CampaignDefinitionDraft>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+  );
+}
+
+export function startCampaignDefinitionDraft(
+  campaignDefinitionId: string,
+  baseRevisionId: string,
+) {
+  return request<CampaignDefinitionDraft>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseRevisionId }),
+    },
+  );
+}
+
+export function saveCampaignDefinitionDraft(
+  campaignDefinitionId: string,
+  draft: Pick<
+    CampaignDefinitionDraft,
+    "storageRevision" | "revisionName" | "content" | "records"
+  >,
+) {
+  return request<CampaignDefinitionDraft>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expectedStorageRevision: draft.storageRevision,
+        revisionName: draft.revisionName,
+        content: draft.content,
+        records: draft.records,
+      }),
+    },
+  );
+}
+
+export function resetCampaignDefinitionDraft(
+  campaignDefinitionId: string,
+  expectedStorageRevision: number,
+) {
+  return request<CampaignDefinitionDraft>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/reset`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStorageRevision }),
+    },
+  );
+}
+
+export function getCampaignDefinitionDraftImpact(campaignDefinitionId: string) {
+  return request<CampaignDraftImpact>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/impact`,
+  );
+}
+
+export function forkCampaignDefinition(
+  campaignDefinitionId: string,
+  input: { sourceSnapshotId: string; name: string; description?: string },
+) {
+  return request<{
+    id: string;
+    name: string;
+    description?: string;
+    metadataRevision: number;
+    draft: CampaignDefinitionDraft;
+    forkedFrom?: { revisionName: string };
+  }>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/forks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function validateCampaignDefinitionDraft(
+  campaignDefinitionId: string,
+  expectedStorageRevision: number,
+) {
+  return request<{
+    valid: boolean;
+    issues: Array<{ code: string; subject: string; detail: string }>;
+  }>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/validate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStorageRevision }),
+    },
+  );
+}
+
+export function publishCampaignDefinitionDraft(
+  campaignDefinitionId: string,
+  expectedStorageRevision: number,
+) {
+  return request<NonNullable<CampaignDefinitionSummary["currentRevision"]>>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/publish`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStorageRevision }),
+    },
+  );
+}
+
+function campaignLifecycleAction(
+  campaignDefinitionId: string,
+  action: "archive" | "restore",
+  expectedMetadataRevision: number,
+) {
+  return request<CampaignDefinitionSummary>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/${action}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedMetadataRevision }),
+    },
+  );
+}
+
+export const archiveCampaignDefinition = (
+  campaignDefinitionId: string,
+  expectedMetadataRevision: number,
+) =>
+  campaignLifecycleAction(
+    campaignDefinitionId,
+    "archive",
+    expectedMetadataRevision,
+  );
+
+export const restoreCampaignDefinition = (
+  campaignDefinitionId: string,
+  expectedMetadataRevision: number,
+) =>
+  campaignLifecycleAction(
+    campaignDefinitionId,
+    "restore",
+    expectedMetadataRevision,
+  );
+
+export function previewCampaignWorldMigration(
+  campaignDefinitionId: string,
+  input: {
+    expectedStorageRevision: number;
+    targetWorldDefinitionSnapshotId: string;
+    mappings?: Array<{
+      resourceType: string;
+      sourceId: string;
+      targetId: string;
+    }>;
+    conflictOffset?: number;
+    candidateOffset?: number;
+    impactOffset?: number;
+    changeOffset?: number;
+  },
+) {
+  return request<CampaignMigrationPreview>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/world-migrations/preview`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function applyCampaignWorldMigration(
+  campaignDefinitionId: string,
+  input: Parameters<typeof previewCampaignWorldMigration>[1] & {
+    expectedPlanHash: string;
+  },
+) {
+  return request<NonNullable<CampaignDefinitionSummary["currentRevision"]>>(
+    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/world-migrations/apply`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function listCampaignInstances() {
   return request<CampaignInstanceList>("/campaign-instances");
 }
@@ -871,9 +1209,17 @@ export function createWorldWithAi(prompt: string) {
   });
 }
 
-export function createCampaignWithAi(worldId: string, prompt: string) {
-  return request<{ campaign: DomainRecord }>(
-    `/ai/worlds/${encodeURIComponent(worldId)}/campaigns`,
+export function createCampaignDefinitionDraftProposal(
+  worldDefinitionSnapshotId: string,
+  prompt: string,
+) {
+  return request<{
+    draftProposal: {
+      content: Record<string, JsonValue>;
+      records: CampaignDefinitionDraft["records"];
+    };
+  }>(
+    `/ai/world-definition-snapshots/${encodeURIComponent(worldDefinitionSnapshotId)}/campaign-definition-draft-proposals`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

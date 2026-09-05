@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type {
   CampaignDefinitionDetail,
+  CampaignDefinitionDraft,
   CampaignDefinitionList,
   CampaignInstanceDetail,
   CampaignInstanceList,
@@ -255,6 +256,32 @@ export const readCampaignDefinition = createServerFn({ method: "GET" })
         `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}`,
       );
       return { found: true as const, definition };
+    } catch (error) {
+      if (error instanceof ServerApiError && error.status === 404) {
+        return { found: false as const };
+      }
+      throw error;
+    }
+  });
+
+export const readCampaignDefinitionAuthoring = createServerFn({ method: "GET" })
+  .validator((data: { campaignDefinitionId: string }) => ({
+    campaignDefinitionId: data.campaignDefinitionId.trim(),
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const definition = await serverApiRequest<CampaignDefinitionDetail>(
+        `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}`,
+      );
+      let draft: CampaignDefinitionDraft | undefined;
+      try {
+        draft = await serverApiRequest<CampaignDefinitionDraft>(
+          `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}/draft`,
+        );
+      } catch (error) {
+        if (!(error instanceof ServerApiError) || error.status !== 404) throw error;
+      }
+      return { found: true as const, definition, draft };
     } catch (error) {
       if (error instanceof ServerApiError && error.status === 404) {
         return { found: false as const };

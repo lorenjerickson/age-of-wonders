@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CampaignEditorPage } from "../Campaigns";
+import { LegacyCampaignRoute } from "../CampaignDetailPanels";
 
 export const Route = createFileRoute("/_gm/campaigns/$campaignId/locations")({
   ssr: false,
@@ -7,7 +7,5 @@ export const Route = createFileRoute("/_gm/campaigns/$campaignId/locations")({
 });
 
 function CampaignLocationsRoute() {
-  return (
-    <CampaignEditorPage id={Route.useParams().campaignId} view="locations" />
-  );
+  return <LegacyCampaignRoute />;
 }

@@ -13,14 +13,16 @@ export const QUICK_START_ACTIVITIES = [
   },
   {
     key: "review-campaign-definition",
-    title: "Review a Campaign Definition",
+    title: "Author your first Campaign Definition",
     description:
-      "Open authoring material and verify its captured World provenance.",
-    href: "/campaigns?quickStart=review-campaign-definition",
+      "Create real authoring material against one explicitly captured World revision.",
+    href: "/campaigns/definitions/new?quickStart=review-campaign-definition",
     steps: [
-      "Find the Definitions section.",
-      "Open a Campaign Definition.",
-      "Review its Campaign and captured World revisions.",
+      "Choose a published World revision.",
+      "Create the Campaign Definition working draft.",
+      "Add the GM premise and player-safe introduction.",
+      "Add at least one root Plot.",
+      "Validate and publish the first Campaign revision.",
     ],
   },
   {
