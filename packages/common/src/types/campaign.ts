@@ -156,10 +156,11 @@ export interface CampaignLocationCanvasConfiguration {
 }
 
 /**
- * The singleton world's GM-authored story and persistent play context.
- *
- * Sessions are journal boundaries over this context; ending a session does not
- * reset placements, discoveries, or location-canvas presentation state.
+ * @deprecated Legacy compatibility aggregate that conflates authored Campaign
+ * Definition content with persistent play context and uses CampaignId for both.
+ * New work uses CampaignDefinitionLineage, CampaignDefinitionRevision,
+ * CampaignInstance, and CampaignInstanceRuntime. This shape remains available
+ * until stored legacy campaigns and their callers have migrated.
  */
 export interface CampaignDefinition<
   Extensions extends ExtensionData = ExtensionData,

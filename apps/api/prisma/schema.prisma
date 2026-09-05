@@ -107,18 +107,201 @@ enum CharacterDraftStatus {
   COMPLETE
 }
 
-/// Authenticated people. Contact details remain encrypted on invitations and
-/// memberships rather than being exposed through the generic domain API.
+enum DefinitionLineageStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CampaignInstanceStatus {
+  PREPARING
+  ACTIVE
+  PAUSED
+  CONCLUDED
+  ARCHIVED
+}
+
+enum InstanceSnapshotReason {
+  INITIAL
+  MIGRATION
+  RESTORE
+}
+
+enum InstallationRolloutPhase {
+  PLANNED
+  PREFLIGHT_READY
+  BLOCKED
+  SHADOW_WRITING
+  READY_FOR_CUTOVER
+  CUTOVER_IN_PROGRESS
+  COMPLETE
+  FAILED
+}
+
+enum PlayerServerStanding {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum AuthenticationProviderAssociationStatus {
+  PENDING
+  ASSOCIATED
+  DISABLED
+}
+
+enum CampaignInstanceHumanRole {
+  GM
+  PLAYER
+  SPECTATOR
+}
+
+enum CampaignInstanceMembershipStatus {
+  ACTIVE
+  INACTIVE
+  LEFT
+  BANNED
+}
+
+enum CampaignInstanceInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum AgentIdentityStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CampaignInstanceAgentParticipationStatus {
+  CONFIGURED
+  AUTHORIZED
+  ACTIVE
+  PAUSED
+  REVOKED
+}
+
+enum CampaignInstanceSessionStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  CONCLUDED
+  CANCELLED
+}
+
+enum SessionResponseStatus {
+  NOT_REQUESTED
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum SessionAttendanceStatus {
+  PENDING
+  NOT_ATTENDED
+  ATTENDED
+  EXCUSED
+}
+
+enum CampaignInstanceCharacterStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  RETIRED
+  DEAD
+}
+
+enum CharacterAssociationOrigin {
+  CREATED_IN_INSTANCE
+  ONE_WAY_IMPORT
+}
+
+/// Authenticated people. Protected contact data remains outside generic resources.
 model User {
-  id                  String               @id @default(uuid())
-  displayName         String
-  role                UserRole
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  authSessions        AuthSession[]
-  memberships         CampaignMembership[]
-  createdInvitations  CampaignInvitation[] @relation("InvitationCreator")
-  acceptedInvitations CampaignInvitation[] @relation("InvitationAcceptor")
+  id                                  String                            @id @default(uuid())
+  displayName                         String
+  role                                UserRole
+  createdAt                           DateTime                          @default(now())
+  updatedAt                           DateTime                          @updatedAt
+  authSessions                        AuthSession[]
+  memberships                         CampaignMembership[]
+  createdInvitations                  CampaignInvitation[]              @relation("InvitationCreator")
+  acceptedInvitations                 CampaignInvitation[]              @relation("InvitationAcceptor")
+  ownedWorldDefinitions               WorldDefinition[]                 @relation("WorldDefinitionOwner")
+  authoredWorldDefinitionRevisions    WorldDefinitionRevision[]         @relation("WorldRevisionAuthor")
+  ownedCampaignDefinitions            CampaignDefinition[]              @relation("CampaignDefinitionOwner")
+  authoredCampaignDefinitionRevisions CampaignDefinitionRevision[]      @relation("CampaignRevisionAuthor")
+  createdCampaignInstances            CampaignInstance[]                @relation("CampaignInstanceCreator")
+  capturedCampaignInstanceSnapshots   CampaignInstanceSnapshot[]        @relation("CampaignSnapshotAuthor")
+  initiatedInstallationRollouts       InstallationRolloutState[]        @relation("InstallationRolloutInitiator")
+  installationRolloutAuditEvents      InstallationRolloutAudit[]        @relation("InstallationRolloutAuditActor")
+  playerProfile                       PlayerProfile?
+  campaignInstanceMemberships         CampaignInstanceHumanMembership[]
+  createdCampaignInstanceInvitations  CampaignInstanceInvitation[]      @relation("CampaignInstanceInvitationCreator")
+  invitedCampaignInstanceInvitations  CampaignInstanceInvitation[]      @relation("CampaignInstanceInvitationUser")
+  ownedAgentIdentities                AgentIdentity[]                   @relation("AgentIdentityOwner")
+}
+
+/// Durable server-wide Player role, separate from any Campaign Instance.
+model PlayerProfile {
+  id                   String                              @id @default(uuid())
+  userId               String                              @unique
+  displayName          String
+  standing             PlayerServerStanding                @default(ACTIVE)
+  emailEncrypted       String?
+  emailHash            String?
+  phoneEncrypted       String?
+  phoneHash            String?
+  createdAt            DateTime                            @default(now())
+  updatedAt            DateTime                            @updatedAt
+  user                 User                                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  providerAssociations AuthenticationProviderAssociation[]
+  campaignMemberships  CampaignInstanceHumanMembership[]
+
+  @@unique([id, userId])
+  @@index([standing, displayName])
+  @@index([emailHash])
+  @@index([phoneHash])
+}
+
+/// Protected identity-provider linkage. Provider subjects and credentials are
+/// retained only as encrypted, hashed, or external-reference values. Database
+/// checks keep pending, associated, and disabled timestamps lifecycle-consistent.
+model AuthenticationProviderAssociation {
+  id                       String                                  @id @default(uuid())
+  playerProfileId          String
+  providerKey              String
+  providerSubjectHash      String
+  providerSubjectEncrypted String?
+  credentialReference      String?
+  status                   AuthenticationProviderAssociationStatus @default(PENDING)
+  associatedAt             DateTime?
+  disabledAt               DateTime?
+  createdAt                DateTime                                @default(now())
+  updatedAt                DateTime                                @updatedAt
+  playerProfile            PlayerProfile                           @relation(fields: [playerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([providerKey, providerSubjectHash])
+  @@index([playerProfileId, status])
+}
+
+/// Stable identity for a non-human process. Execution credentials remain
+/// outside this table and are addressed only by a protected reference.
+model AgentIdentity {
+  id                     String                               @id @default(uuid())
+  ownerUserId            String
+  name                   String
+  description            String?
+  status                 AgentIdentityStatus                  @default(ACTIVE)
+  configurationReference String?
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+  owner                  User                                 @relation("AgentIdentityOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  instanceParticipations CampaignInstanceAgentParticipation[]
+
+  @@index([ownerUserId, status])
+  @@index([name])
 }
 
 model AuthSession {
@@ -227,4 +410,453 @@ model CharacterCreationDraft {
 
   @@index([membershipId, status])
   @@index([characterId])
+}
+
+/// Stable identity for a World across its immutable published revisions.
+model WorldDefinition {
+  id                String                    @id @default(uuid())
+  name              String
+  description       String?
+  status            DefinitionLineageStatus   @default(ACTIVE)
+  currentRevisionId String?                   @unique
+  ownerUserId       String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  archivedAt        DateTime?
+  owner             User?                     @relation("WorldDefinitionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  revisions         WorldDefinitionRevision[] @relation("WorldDefinitionRevisions")
+  currentRevision   WorldDefinitionRevision?  @relation("WorldDefinitionCurrentRevision", fields: [id, currentRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  campaigns         CampaignDefinition[]
+
+  @@unique([id, currentRevisionId])
+  @@index([status, updatedAt])
+  @@index([ownerUserId, status])
+}
+
+/// Immutable, published content for one World Definition lineage.
+model WorldDefinitionRevision {
+  id                    String                    @id @default(uuid())
+  worldDefinitionId     String
+  revisionNumber        Int
+  predecessorRevisionId String?
+  name                  String
+  content               Json
+  contentHash           String
+  createdByUserId       String?
+  createdAt             DateTime                  @default(now())
+  publishedAt           DateTime                  @default(now())
+  worldDefinition       WorldDefinition           @relation("WorldDefinitionRevisions", fields: [worldDefinitionId], references: [id], onDelete: Restrict)
+  currentForWorld       WorldDefinition?          @relation("WorldDefinitionCurrentRevision")
+  predecessorRevision   WorldDefinitionRevision?  @relation("WorldRevisionLineage", fields: [worldDefinitionId, predecessorRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  successorRevisions    WorldDefinitionRevision[] @relation("WorldRevisionLineage")
+  createdBy             User?                     @relation("WorldRevisionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  snapshots             WorldDefinitionSnapshot[]
+
+  @@unique([worldDefinitionId, revisionNumber])
+  @@unique([worldDefinitionId, id])
+  @@index([predecessorRevisionId])
+  @@index([contentHash])
+  @@index([publishedAt])
+}
+
+/// Immutable, content-addressed replica of one published World revision.
+model WorldDefinitionSnapshot {
+  id                        String                       @id @default(uuid())
+  worldDefinitionId         String
+  worldDefinitionRevisionId String
+  manifest                  Json
+  contentHash               String
+  capturedAt                DateTime                     @default(now())
+  worldDefinitionRevision   WorldDefinitionRevision      @relation(fields: [worldDefinitionId, worldDefinitionRevisionId], references: [worldDefinitionId, id], onDelete: Restrict)
+  campaignRevisions         CampaignDefinitionRevision[]
+  campaignSnapshots         CampaignDefinitionSnapshot[]
+  instanceSnapshots         CampaignInstanceSnapshot[]
+
+  @@unique([id, worldDefinitionId])
+  @@index([worldDefinitionId, worldDefinitionRevisionId])
+  @@index([contentHash])
+  @@index([capturedAt])
+}
+
+/// Stable identity for a Campaign Definition across authored revisions.
+model CampaignDefinition {
+  id                String                       @id @default(uuid())
+  worldDefinitionId String
+  name              String
+  description       String?
+  status            DefinitionLineageStatus      @default(ACTIVE)
+  currentRevisionId String?                      @unique
+  ownerUserId       String?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  archivedAt        DateTime?
+  worldDefinition   WorldDefinition              @relation(fields: [worldDefinitionId], references: [id], onDelete: Restrict)
+  owner             User?                        @relation("CampaignDefinitionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  revisions         CampaignDefinitionRevision[] @relation("CampaignDefinitionRevisions")
+  currentRevision   CampaignDefinitionRevision?  @relation("CampaignDefinitionCurrentRevision", fields: [id, currentRevisionId], references: [campaignDefinitionId, id], onDelete: Restrict)
+  instances         CampaignInstance[]
+
+  @@unique([id, worldDefinitionId])
+  @@unique([id, currentRevisionId])
+  @@index([worldDefinitionId, status])
+  @@index([ownerUserId, status])
+}
+
+/// Immutable Campaign content and the World snapshot used to author it.
+model CampaignDefinitionRevision {
+  id                      String                       @id @default(uuid())
+  campaignDefinitionId    String
+  worldDefinitionId       String
+  capturedWorldSnapshotId String
+  revisionNumber          Int
+  predecessorRevisionId   String?
+  name                    String
+  content                 Json
+  contentHash             String
+  createdByUserId         String?
+  createdAt               DateTime                     @default(now())
+  publishedAt             DateTime                     @default(now())
+  campaignDefinition      CampaignDefinition           @relation("CampaignDefinitionRevisions", fields: [campaignDefinitionId, worldDefinitionId], references: [id, worldDefinitionId], onDelete: Restrict)
+  currentForCampaign      CampaignDefinition?          @relation("CampaignDefinitionCurrentRevision")
+  capturedWorldSnapshot   WorldDefinitionSnapshot      @relation(fields: [capturedWorldSnapshotId, worldDefinitionId], references: [id, worldDefinitionId], onDelete: Restrict)
+  predecessorRevision     CampaignDefinitionRevision?  @relation("CampaignRevisionLineage", fields: [campaignDefinitionId, predecessorRevisionId], references: [campaignDefinitionId, id], onDelete: Restrict)
+  successorRevisions      CampaignDefinitionRevision[] @relation("CampaignRevisionLineage")
+  createdBy               User?                        @relation("CampaignRevisionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  snapshots               CampaignDefinitionSnapshot[]
+
+  @@unique([campaignDefinitionId, revisionNumber])
+  @@unique([campaignDefinitionId, id])
+  @@unique([id, campaignDefinitionId, capturedWorldSnapshotId])
+  @@index([capturedWorldSnapshotId, worldDefinitionId])
+  @@index([predecessorRevisionId])
+  @@index([contentHash])
+  @@index([publishedAt])
+}
+
+/// Immutable, content-addressed replica of one published Campaign revision.
+model CampaignDefinitionSnapshot {
+  id                           String                     @id @default(uuid())
+  campaignDefinitionId         String
+  campaignDefinitionRevisionId String
+  capturedWorldSnapshotId      String
+  manifest                     Json
+  contentHash                  String
+  capturedAt                   DateTime                   @default(now())
+  campaignDefinitionRevision   CampaignDefinitionRevision @relation(fields: [campaignDefinitionRevisionId, campaignDefinitionId, capturedWorldSnapshotId], references: [id, campaignDefinitionId, capturedWorldSnapshotId], onDelete: Restrict)
+  capturedWorldSnapshot        WorldDefinitionSnapshot    @relation(fields: [capturedWorldSnapshotId], references: [id], onDelete: Restrict)
+  instanceSnapshots            CampaignInstanceSnapshot[]
+
+  @@unique([id, campaignDefinitionId, capturedWorldSnapshotId])
+  @@index([campaignDefinitionRevisionId, campaignDefinitionId, capturedWorldSnapshotId])
+  @@index([capturedWorldSnapshotId])
+  @@index([contentHash])
+  @@index([capturedAt])
+}
+
+/// One played realization of a Campaign Definition for a durable group and history.
+model CampaignInstance {
+  id                     String                                 @id @default(uuid())
+  campaignDefinitionId   String
+  name                   String
+  status                 CampaignInstanceStatus                 @default(PREPARING)
+  currentSnapshotId      String?                                @unique
+  createdByUserId        String?
+  createdAt              DateTime                               @default(now())
+  updatedAt              DateTime                               @updatedAt
+  concludedAt            DateTime?
+  archivedAt             DateTime?
+  campaignDefinition     CampaignDefinition                     @relation(fields: [campaignDefinitionId], references: [id], onDelete: Restrict)
+  createdBy              User?                                  @relation("CampaignInstanceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  snapshots              CampaignInstanceSnapshot[]             @relation("CampaignInstanceSnapshots")
+  currentSnapshot        CampaignInstanceSnapshot?              @relation("CampaignInstanceCurrentSnapshot", fields: [id, currentSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  runtime                CampaignInstanceRuntime?
+  humanMemberships       CampaignInstanceHumanMembership[]
+  invitations            CampaignInstanceInvitation[]
+  agentParticipations    CampaignInstanceAgentParticipation[]
+  sessions               CampaignInstanceSession[]
+  characters             CampaignInstanceCharacterAssociation[] @relation("CharacterInstance")
+  characterImportSources CampaignInstanceCharacterAssociation[] @relation("CharacterImportSourceInstance")
+
+  @@unique([id, campaignDefinitionId])
+  @@unique([id, currentSnapshotId])
+  @@index([campaignDefinitionId, status])
+  @@index([createdByUserId, status])
+}
+
+/// Durable human participation in exactly one Campaign Instance.
+model CampaignInstanceHumanMembership {
+  id                    String                                 @id @default(uuid())
+  campaignInstanceId    String
+  userId                String
+  playerProfileId       String?
+  displayName           String
+  role                  CampaignInstanceHumanRole
+  status                CampaignInstanceMembershipStatus       @default(ACTIVE)
+  activeCharacterId     String?
+  joinedAt              DateTime                               @default(now())
+  leftAt                DateTime?
+  createdAt             DateTime                               @default(now())
+  updatedAt             DateTime                               @updatedAt
+  campaignInstance      CampaignInstance                       @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  user                  User                                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  playerProfile         PlayerProfile?                         @relation(fields: [playerProfileId, userId], references: [id, userId], onDelete: Restrict)
+  acceptedInvitations   CampaignInstanceInvitation[]
+  characters            CampaignInstanceCharacterAssociation[] @relation("MembershipCharacters")
+  activeCharacter       CampaignInstanceCharacterAssociation?  @relation("MembershipActiveCharacter", fields: [campaignInstanceId, id, activeCharacterId], references: [campaignInstanceId, playerMembershipId, characterId], onDelete: Restrict)
+  sessionParticipations SessionParticipation[]
+
+  @@unique([campaignInstanceId, userId])
+  @@unique([campaignInstanceId, id])
+  @@unique([campaignInstanceId, id, role])
+  @@unique([campaignInstanceId, id, activeCharacterId])
+  @@index([playerProfileId, status])
+  @@index([campaignInstanceId, role, status])
+  @@index([activeCharacterId])
+}
+
+/// Instance-scoped invitation. Contact values and invitation credentials are
+/// never stored in plaintext. Database checks bind acceptance/revocation
+/// timestamps and membership presence to the invitation status.
+model CampaignInstanceInvitation {
+  id                   String                           @id @default(uuid())
+  campaignInstanceId   String
+  role                 CampaignInstanceHumanRole
+  invitedName          String?
+  invitedUserId        String?
+  emailEncrypted       String?
+  emailHash            String?
+  phoneEncrypted       String?
+  phoneHash            String?
+  tokenHash            String                           @unique
+  deliveryReference    String?
+  status               CampaignInstanceInvitationStatus @default(PENDING)
+  expiresAt            DateTime
+  acceptedMembershipId String?
+  createdByUserId      String
+  acceptedAt           DateTime?
+  revokedAt            DateTime?
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+  campaignInstance     CampaignInstance                 @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  invitedUser          User?                            @relation("CampaignInstanceInvitationUser", fields: [invitedUserId], references: [id], onDelete: Restrict)
+  createdBy            User                             @relation("CampaignInstanceInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  acceptedMembership   CampaignInstanceHumanMembership? @relation(fields: [campaignInstanceId, acceptedMembershipId, role], references: [campaignInstanceId, id, role], onDelete: Restrict)
+
+  @@index([campaignInstanceId, status])
+  @@index([campaignInstanceId, emailHash])
+  @@index([campaignInstanceId, phoneHash])
+  @@index([invitedUserId, status])
+  @@index([expiresAt])
+}
+
+/// Least-privilege authorization for one non-human Agent in one Instance.
+/// Capability JSON is database-checked as arrays of open namespaced string keys.
+model CampaignInstanceAgentParticipation {
+  id                    String                                   @id @default(uuid())
+  campaignInstanceId    String
+  agentId               String
+  agentName             String
+  participantKind       String                                   @default("non-human-agent")
+  status                CampaignInstanceAgentParticipationStatus @default(CONFIGURED)
+  observeCapabilities   Json                                     @default("[]")
+  actCapabilities       Json                                     @default("[]")
+  createdAt             DateTime                                 @default(now())
+  updatedAt             DateTime                                 @updatedAt
+  campaignInstance      CampaignInstance                         @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  agent                 AgentIdentity                            @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  sessionParticipations SessionParticipation[]
+
+  @@unique([campaignInstanceId, agentId])
+  @@unique([campaignInstanceId, id])
+  @@index([campaignInstanceId, status])
+  @@index([agentId, status])
+}
+
+/// A scheduled or historical Session owned by one Campaign Instance. Database
+/// checks keep lifecycle timestamps consistent with the Session status.
+model CampaignInstanceSession {
+  id                 String                        @id @default(uuid())
+  campaignInstanceId String
+  name               String
+  status             CampaignInstanceSessionStatus @default(PLANNED)
+  scheduledFor       DateTime?
+  startedAt          DateTime?
+  concludedAt        DateTime?
+  cancelledAt        DateTime?
+  eventLog           Json                          @default("[]")
+  summary            Json?
+  extensions         Json                          @default("{}")
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  campaignInstance   CampaignInstance              @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  participations     SessionParticipation[]
+
+  @@unique([campaignInstanceId, id])
+  @@index([campaignInstanceId, status, scheduledFor])
+  @@index([status, updatedAt])
+}
+
+/// Session attendance is separate from durable Instance membership. Exactly
+/// one human membership or Agent participation is referenced.
+model SessionParticipation {
+  id                   String                              @id @default(uuid())
+  campaignInstanceId   String
+  sessionId            String
+  humanMembershipId    String?
+  agentParticipationId String?
+  participantName      String
+  scheduledAt          DateTime?
+  response             SessionResponseStatus               @default(NOT_REQUESTED)
+  attendance           SessionAttendanceStatus             @default(PENDING)
+  joinedAt             DateTime?
+  leftAt               DateTime?
+  acted                Boolean                             @default(false)
+  createdAt            DateTime                            @default(now())
+  updatedAt            DateTime                            @updatedAt
+  session              CampaignInstanceSession             @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  humanMembership      CampaignInstanceHumanMembership?    @relation(fields: [campaignInstanceId, humanMembershipId], references: [campaignInstanceId, id], onDelete: Restrict)
+  agentParticipation   CampaignInstanceAgentParticipation? @relation(fields: [campaignInstanceId, agentParticipationId], references: [campaignInstanceId, id], onDelete: Restrict)
+
+  @@unique([sessionId, humanMembershipId])
+  @@unique([sessionId, agentParticipationId])
+  @@index([campaignInstanceId, sessionId])
+  @@index([campaignInstanceId, humanMembershipId])
+  @@index([campaignInstanceId, agentParticipationId])
+  @@index([sessionId, attendance])
+}
+
+/// Exactly-one-Instance Character ownership plus optional one-way import provenance.
+model CampaignInstanceCharacterAssociation {
+  characterId                String                                 @id
+  characterName              String
+  campaignInstanceId         String
+  playerMembershipId         String
+  playerMembershipRole       CampaignInstanceHumanRole              @default(PLAYER)
+  status                     CampaignInstanceCharacterStatus        @default(DRAFT)
+  origin                     CharacterAssociationOrigin             @default(CREATED_IN_INSTANCE)
+  sourceCampaignInstanceId   String?
+  sourceCharacterId          String?
+  sourceCampaignInstanceName String?
+  sourceCharacterName        String?
+  importedAt                 DateTime?
+  createdAt                  DateTime                               @default(now())
+  updatedAt                  DateTime                               @updatedAt
+  campaignInstance           CampaignInstance                       @relation("CharacterInstance", fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  playerMembership           CampaignInstanceHumanMembership        @relation("MembershipCharacters", fields: [campaignInstanceId, playerMembershipId, playerMembershipRole], references: [campaignInstanceId, id, role], onDelete: Restrict)
+  activeForMembership        CampaignInstanceHumanMembership?       @relation("MembershipActiveCharacter")
+  sourceCampaignInstance     CampaignInstance?                      @relation("CharacterImportSourceInstance", fields: [sourceCampaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignInstanceCharacterAssociation_sourceInstance_fkey")
+  sourceAssociation          CampaignInstanceCharacterAssociation?  @relation("CharacterImportSource", fields: [sourceCampaignInstanceId, sourceCharacterId], references: [campaignInstanceId, characterId], onDelete: Restrict, map: "CampaignInstanceCharacterAssociation_sourceAssociation_fkey")
+  importedAssociations       CampaignInstanceCharacterAssociation[] @relation("CharacterImportSource")
+
+  @@unique([campaignInstanceId, characterId])
+  @@unique([campaignInstanceId, playerMembershipId, characterId])
+  @@index([campaignInstanceId, playerMembershipId, status])
+  @@index([sourceCampaignInstanceId, sourceCharacterId])
+}
+
+/// Immutable compatible Campaign/World capture used by a Campaign Instance.
+model CampaignInstanceSnapshot {
+  id                           String                     @id @default(uuid())
+  campaignInstanceId           String
+  campaignDefinitionId         String
+  campaignDefinitionSnapshotId String
+  worldDefinitionSnapshotId    String
+  snapshotNumber               Int
+  predecessorSnapshotId        String?
+  reason                       InstanceSnapshotReason
+  manifest                     Json
+  contentHash                  String
+  migrationPlan                Json?
+  createdByUserId              String?
+  adoptedAt                    DateTime                   @default(now())
+  campaignInstance             CampaignInstance           @relation("CampaignInstanceSnapshots", fields: [campaignInstanceId, campaignDefinitionId], references: [id, campaignDefinitionId], onDelete: Restrict)
+  currentForInstance           CampaignInstance?          @relation("CampaignInstanceCurrentSnapshot")
+  campaignDefinitionSnapshot   CampaignDefinitionSnapshot @relation(fields: [campaignDefinitionSnapshotId, campaignDefinitionId, worldDefinitionSnapshotId], references: [id, campaignDefinitionId, capturedWorldSnapshotId], onDelete: Restrict)
+  worldDefinitionSnapshot      WorldDefinitionSnapshot    @relation(fields: [worldDefinitionSnapshotId], references: [id], onDelete: Restrict)
+  predecessorSnapshot          CampaignInstanceSnapshot?  @relation("CampaignInstanceSnapshotLineage", fields: [campaignInstanceId, predecessorSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  subsequentSnapshots          CampaignInstanceSnapshot[] @relation("CampaignInstanceSnapshotLineage")
+  createdBy                    User?                      @relation("CampaignSnapshotAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  runtime                      CampaignInstanceRuntime?
+
+  @@unique([campaignInstanceId, snapshotNumber])
+  @@unique([campaignInstanceId, id])
+  @@index([campaignDefinitionSnapshotId, campaignDefinitionId, worldDefinitionSnapshotId])
+  @@index([worldDefinitionSnapshotId])
+  @@index([predecessorSnapshotId])
+  @@index([contentHash])
+  @@index([adoptedAt])
+}
+
+/// Mutable continuing state for one Campaign Instance and its adopted snapshot.
+model CampaignInstanceRuntime {
+  id                         String                   @id @default(uuid())
+  campaignInstanceId         String                   @unique
+  campaignInstanceSnapshotId String                   @unique
+  state                      Json
+  extensions                 Json                     @default("{}")
+  revision                   Int                      @default(1)
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  campaignInstance           CampaignInstance         @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  campaignInstanceSnapshot   CampaignInstanceSnapshot @relation(fields: [campaignInstanceId, campaignInstanceSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+
+  @@unique([campaignInstanceId, campaignInstanceSnapshotId])
+  @@index([updatedAt])
+}
+
+/// Idempotent bridge from legacy resource identities to new aggregate identities.
+/// targetType is deliberately open because a single legacy campaign may map to
+/// both a Campaign Definition and a distinct Campaign Instance.
+model LegacyIdentityMap {
+  id                   String   @id @default(uuid())
+  legacyResource       String
+  legacyId             String
+  targetType           String
+  targetId             String
+  targetRevisionId     String?
+  sourceDomainRevision Int?
+  mappingMetadata      Json     @default("{}")
+  createdAt            DateTime @default(now())
+
+  @@unique([legacyResource, legacyId, targetType])
+  @@index([targetType, targetId])
+  @@index([targetRevisionId])
+}
+
+/// Durable checkpoint for an additive installation-level data rollout.
+model InstallationRolloutState {
+  id                String                     @id @default(uuid())
+  installationKey   String
+  migrationKey      String
+  phase             InstallationRolloutPhase   @default(PLANNED)
+  sourceVersion     String?
+  targetVersion     String
+  preflightReport   Json?
+  checkpoint        Json                       @default("{}")
+  initiatedByUserId String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  initiatedBy       User?                      @relation("InstallationRolloutInitiator", fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  auditEvents       InstallationRolloutAudit[]
+
+  @@unique([installationKey, migrationKey])
+  @@index([phase, updatedAt])
+}
+
+/// Append-only operator-visible history for rollout preflight, checkpoints, and cutover.
+model InstallationRolloutAudit {
+  id             String                   @id @default(uuid())
+  rolloutStateId String
+  phase          InstallationRolloutPhase
+  action         String
+  details        Json                     @default("{}")
+  actorUserId    String?
+  createdAt      DateTime                 @default(now())
+  rolloutState   InstallationRolloutState @relation(fields: [rolloutStateId], references: [id], onDelete: Restrict)
+  actor          User?                    @relation("InstallationRolloutAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([rolloutStateId, createdAt])
+  @@index([phase, createdAt])
 }

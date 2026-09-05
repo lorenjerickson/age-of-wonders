@@ -88,34 +88,350 @@ Other shared values include:
   50 represents an ordinary adult. It is not a D&D-style 3-through-18 score. The neutral default for
   every standard attribute is 50.
 
+### Definition lineages, revisions, and captured snapshots
+
+The shared contracts now include the additive identity and version spine for the domain-model
+realignment. These contracts coexist with the legacy persisted campaign and world shapes while
+storage and callers migrate; they are not yet generic domain API resource categories.
+
+IDs for each role are separately branded and must never be interchanged:
+
+```ts
+type WorldDefinitionId = string;
+type WorldDefinitionRevisionId = string;
+type WorldDefinitionSnapshotId = string;
+type CampaignDefinitionId = string;
+type CampaignDefinitionRevisionId = string;
+type CampaignDefinitionSnapshotId = string;
+type PlotDefinitionId = string;
+type CampaignInstanceId = string;
+type CampaignInstanceSnapshotId = string;
+type CampaignInstanceRuntimeId = string;
+```
+
+A `WorldDefinition` and `CampaignDefinitionLineage` are stable logical identities with mutable
+authoring-head metadata. Their published revisions are immutable and use
+`DefinitionRevisionIdentity`, which records the lineage ID, a monotonically increasing revision
+number, the direct predecessor revision, publication time, and a content hash. A revision may only
+name a predecessor from its own lineage.
+
+```ts
+interface DefinitionRevisionIdentity<LineageId, RevisionId> {
+  id: RevisionId;
+  lineageId: LineageId;
+  revisionNumber: number;
+  predecessorRevisionId?: RevisionId;
+  publishedAt: string;
+  contentHash: string;
+}
+
+interface WorldDefinition {
+  identity: StateIdentity; // WorldDefinitionId
+  name: string;
+  description?: string;
+  currentRevisionId?: WorldDefinitionRevisionId;
+  archivedAt?: string;
+  extensions?: Record<NamespacedKey, JsonValue>;
+}
+
+interface CampaignDefinitionLineage {
+  identity: StateIdentity; // CampaignDefinitionId
+  name: string;
+  description?: string;
+  worldDefinitionId: WorldDefinitionId;
+  currentRevisionId?: CampaignDefinitionRevisionId;
+  archivedAt?: string;
+  extensions?: Record<NamespacedKey, JsonValue>;
+}
+```
+
+`WorldDefinitionRevision` owns the published root Location, Location membership, definitions, and
+schema selections for one World revision. `CampaignDefinitionRevision` owns its authored premise,
+introduction, Plot references, and placement references, and captures the exact replicated World
+snapshot against which it was authored. Neither revision resolves a mutable upstream authoring
+head.
+
+Snapshots contain complete, content-addressed replicas rather than live pointers:
+
+```ts
+interface SnapshotResourceRecord {
+  resourceType: string;
+  sourceId: string;
+  sourceRevision?: number;
+  contentHash: string;
+  payload: JsonValue;
+}
+
+interface SnapshotManifest {
+  formatVersion: number;
+  contentHash: string;
+  records: SnapshotResourceRecord[];
+}
+```
+
+A `WorldDefinitionSnapshot` identifies its source World lineage and revision. A
+`CampaignDefinitionSnapshot` identifies its source Campaign Definition lineage and revision and
+the captured World snapshot required by that revision. A `CampaignInstance` is a distinct played
+realization and points to its current immutable `CampaignInstanceSnapshot`. That Instance snapshot
+captures both a Campaign Definition snapshot and the same World snapshot required by the captured
+Campaign Definition; migration creates the next snapshot with a direct predecessor and preserves
+the old snapshot. `CampaignInstanceRuntime` is the mutable continuing state identity and always
+names both its Campaign Instance and the Instance snapshot against which its records conform.
+
+`CampaignId`, `CampaignDefinition`, `CampaignState`, and their `campaignId` relationships remain
+legacy compatibility contracts for existing storage and callers. `CampaignId` is deprecated
+because it historically identifies both authored campaign content and mutable play state. New code
+must use the separately branded Definition, Instance, snapshot, and runtime identifiers. Compatibility
+readers may translate legacy aggregates during the migration window; AI output must not invent a
+relationship between the new contracts by reusing a legacy `CampaignId`.
+
+### Relational World Definition API
+
+The additive World lineage spine is persisted in the relational `WorldDefinition`,
+`WorldDefinitionRevision`, and `WorldDefinitionSnapshot` models rather than the generic
+`DomainRecord` resource table. This preserves referential constraints between a lineage, its
+current immutable revision, direct revision ancestry, and content-addressed snapshots while the
+legacy root-Location representation remains available during migration.
+
+The GM-authorized `GET /world-definitions` endpoint lists every active and archived lineage owned
+by the authenticated GM; another GM's lineage is neither listed nor returned by explicit lookup. Each
+item includes its transport ID, human-readable name and description, lifecycle status, archive and
+update metadata, and—when published—human-readable current-revision metadata. It deliberately omits
+revision `content` and snapshot `manifest` payloads. The endpoint is a library query only: response
+order does not establish a current World and clients must explicitly select a lineage.
+
+`GET /world-definitions/:id` reads one explicitly selected lineage and returns its revisions and
+their captured snapshots, including immutable revision content and snapshot manifests. Missing
+lineages and persistence failures use neutral errors that do not echo the requested opaque ID.
+
+`POST /world-definitions` creates a new, independently selectable World Definition lineage and its
+first complete immutable revision. The request supplies a human-readable lineage name, optional
+description, complete revision `content`, and a complete snapshot-manifest input. Manifest input
+contains `formatVersion` and at least one record with `resourceType`, `sourceId`, optional
+`sourceRevision`, and `payload`. Callers do not submit revision, record, manifest, or snapshot
+hashes. The server canonicalizes and hashes the revision content and every record payload, builds
+the completed manifest with its required top-level `contentHash`, and stores that same hash on the
+World snapshot row. The server also prepends one authoritative `world-definition-revision` record
+whose payload is exactly the stored revision content, preventing the content and manifest from
+describing different publications. Publication JSON is limited to 64 nested levels and at most
+4,999 caller records (5,000 after the authoritative record). One serializable transaction creates the GM-owned lineage, revision 1, its
+snapshot, and advances `currentRevisionId`; it does not consult or alter legacy singleton guards.
+
+`POST /world-definitions/:id/revisions` publishes one complete direct successor, never a partial or
+cherry-picked revision. Its request names the explicit current `predecessorRevisionId`, a
+human-readable revision name, complete replacement content, and complete replacement manifest
+input. The serializable transaction verifies that the predecessor belongs to the selected lineage
+and remains its current head, creates exactly the next revision and snapshot, and uses a guarded
+head update so concurrent publication cannot silently fork or skip lineage. The authenticated GM
+is recorded as revision author. Archived lineages cannot publish, and not-found/conflict failures
+remain human-readable without echoing opaque IDs.
+
+### Relational Campaign Definition read API
+
+The additive Campaign authoring spine is persisted in `CampaignDefinition`,
+`CampaignDefinitionRevision`, and `CampaignDefinitionSnapshot`. The GM-authorized
+`GET /campaign-definitions` endpoint is a compact library query: it returns each lineage's
+human-readable metadata, lifecycle status, current revision summary, and the captured World
+revision summary while omitting revision content and snapshot manifests. It never selects a
+Campaign Definition by recency and never follows the mutable current World head. List and detail
+queries are scoped to lineages owned by the authenticated GM.
+
+`GET /campaign-definitions/:id` reads one explicitly selected lineage and its immutable current
+revision content. Its World provenance is resolved through the revision's captured
+`WorldDefinitionSnapshot`, so the response remains internally consistent even after newer World
+revisions are published. The endpoint does not substitute current World content for the capture.
+Missing lineages and persistence failures use neutral errors that do not echo opaque identifiers.
+Both GET endpoints are read-only.
+
+`POST /campaign-definitions` creates a new Campaign Definition lineage and its first complete
+immutable revision. The request names an explicit `worldDefinitionSnapshotId` and supplies the
+complete Campaign revision `content` and a complete `snapshotManifest`; it never names a live World
+head. `snapshotManifest` contains `formatVersion` and at least one complete resource record
+with `resourceType`, `sourceId`, optional `sourceRevision`, and `payload`. Callers do not submit
+record or manifest hashes: the server hashes each payload, constructs the required top-level
+`manifest.contentHash`, and stores that same hash as the Campaign snapshot's `contentHash`. One
+authoritative `campaign-definition-revision` record is prepended with payload exactly equal to the
+stored revision content. Publication JSON is limited to 64 nested levels and at most 4,999 caller
+records (5,000 after the authoritative record). One
+serializable transaction creates the owned lineage, revision 1 capturing that
+exact World snapshot, its Campaign snapshot, and then sets `currentRevisionId`. The authenticated GM
+is recorded as lineage owner and revision author. Content and manifest hashes are canonicalized and
+computed by the server rather than trusted from the client.
+
+`POST /campaign-definitions/:id/revisions` publishes one complete direct successor. Its request must
+name the current `predecessorRevisionId`, an explicit `worldDefinitionSnapshotId`, a revision name,
+complete replacement content, and a complete replacement manifest. The transaction verifies that
+the predecessor is still the selected Campaign lineage's current head and that the World snapshot
+belongs to the same World Definition lineage. It creates exactly the next revision and snapshot,
+then advances the head with a compare-and-set guard. A stale predecessor, missing snapshot, or
+cross-lineage World migration aborts the whole transaction. This is the all-or-nothing primitive for
+optionally migrating Campaign authoring to a newer World revision; partial-field migration and
+latest-World inference are not supported.
+
+### Campaign Instance creation
+
+The GM-authorized `POST /campaign-instances` endpoint creates one played Campaign Instance from an
+explicit immutable Campaign Definition snapshot. Its request contains only a human-readable `name`
+and `campaignDefinitionSnapshotId`. It never accepts the ambiguous legacy `campaignId`, selects a
+snapshot by recency, or substitutes the mutable current Campaign or World authoring head.
+
+Creation is one serializable transaction. The service loads a selected Campaign Definition
+snapshot, its immutable Campaign revision, and the exact captured World snapshot and World revision
+required by that Campaign snapshot, scoped through a Campaign Definition owned by the authenticated
+GM. It verifies both source manifests and their persisted hashes before writing, and rejects missing,
+foreign-owned, or inconsistent provenance.
+It then creates a `PREPARING` Campaign Instance, an initial `CampaignInstanceSnapshot` with
+`snapshotNumber: 1` and `reason: "INITIAL"`, a mutable `CampaignInstanceRuntime` bound to that
+snapshot, and finally records the snapshot as the Instance's current snapshot.
+The authenticated GM is recorded as the creator of both the Campaign Instance and its initial
+snapshot; ownership/audit identity is never accepted from the request body.
+
+The initial Instance snapshot manifest is a deterministic compatibility capture. It replicates the
+complete Campaign Definition and World snapshot manifests together with their snapshot/revision
+identities, capture times, revision numbers, and content hashes. Its own content hash is derived
+from that complete manifest. This makes the Instance reproducible even after either authoring
+lineage advances. The runtime begins with `state: { "formatVersion": 1 }`; mutable play state is not
+written into Definition snapshots. Failure rolls back the whole transaction, so no Instance,
+snapshot, or runtime may exist alone.
+
+### Relational Campaign Instance read API
+
+`GET /campaign-instances` lists each played realization by human-readable name and lifecycle status,
+with compact names and revision numbers for the Campaign Definition and World Definition captured
+by its current `CampaignInstanceSnapshot`. It omits runtime state and snapshot manifests. The query
+walks only the stored snapshot relationships; it never follows mutable Definition heads and never
+selects an Instance by recency.
+
+`GET /campaign-instances/:id` returns one explicitly selected Instance, its immutable compatible
+Campaign/World snapshot provenance, and non-payload runtime metadata such as storage revision and
+last update time. It does not return the mutable runtime JSON. Active Session state is currently
+omitted because the relational Instance-to-Session relationship has not yet been introduced; the
+API must not guess through a legacy `campaignId`. Both endpoints require GM authorization and use
+neutral not-found/unavailable responses that do not echo opaque identifiers. Both reads are scoped
+to Instances created by the authenticated GM; selecting another GM's Instance behaves as not found.
+
+### Legacy realignment shadow materialization
+
+The legacy conversion preflight inventories every generic `DomainRecord` resource. The deterministic
+shadow planner assigns World-owned resources to exact World captures, rebinds known Instance
+dependents, and explicitly retains resources whose target aggregate is deferred; it never silently
+drops an unclassified record. Revision content hashes are computed from the exact JSON persisted in
+the revision row, while every proposed snapshot uses the same canonical `SnapshotManifest` hash
+contract as live publication.
+
+Shadow application is idempotent only when an existing deterministic row is field-equivalent to the
+plan. A duplicate identity with different content aborts the transaction instead of being hidden by
+`skipDuplicates`. Successful shadow writing advances the installation rollout only to
+`READY_FOR_CUTOVER`, with no completion timestamp; validation and explicit cutover remain separate
+work.
+
+Every dry run and apply operation requires one explicitly selected, persisted GM owner; the CLI
+accepts this through `AOW_REALIGNMENT_OWNER_USER_ID`. The service validates that identity's GM role
+and never guesses among server users. New World and Campaign lineages are owned by that GM, their
+revisions name that GM as author, and migrated Campaign Instances and initial Instance snapshots name
+that GM as creator. For an earlier unattributed shadow attempt, recovery may adopt only the mutable
+World/Campaign lineage owner and Campaign Instance creator fields. It never updates immutable
+revision or Instance-snapshot authorship: a matching historical row may retain a null author, while
+a non-null different author or any differing content aborts the transaction. Fresh immutable inserts
+still record the selected GM. The rollout state and audits record the same initiating GM.
+
+The first apply fixes the rollout capture time. Later applies for the same installation and migration
+reuse that stored start time even if the caller supplies a newer time, so immutable revision,
+snapshot, runtime, and identity-map rows remain byte-equivalent on an unchanged rerun. A rollout
+already initiated by a different GM cannot be silently adopted.
+
+### Campaign Definition Plots and Instance progress
+
+`PlotDefinitionId` is a separately branded identity. A `PlotDefinition` belongs to one
+`CampaignDefinitionId` and declares either `{ kind: "root" }` or a subplot parent in that same
+Campaign Definition. A Campaign Definition may have several roots, and every subplot is a complete
+Plot that may itself have children. Parent cycles and cross-Definition parentage are invalid.
+Prerequisites and dependencies also stay inside one Campaign Definition and form one acyclic
+relationship graph. They normally target a parent or ancestor; a cross-branch relationship must
+include a human-readable `crossBranchRationale`.
+
+Each Plot carries flexible arrays of Objectives, Pressures, Resistances, Discoveries, and
+`PlotLocationContext` records; the contracts do not impose singular cardinality. A Location context
+references a Location in the Campaign revision's captured World snapshot. Its actor and Item
+placement intents are authored source references or roles. `capturedWorldPlacementId` marks an
+intent as a decoration of captured World placement data; it does not transfer ownership of that
+placement to the Campaign.
+
+Runtime realizations are deliberately separate. `PlotActorRealization` names a runtime entity,
+`PlotItemRealization` names an Item instance, and both point back to their authored placement-intent
+IDs. They occur only inside `CampaignInstancePlotProgress`, which is keyed by both
+`CampaignInstanceId` and `PlotDefinitionId`. Instance progress owns status, Objective progress,
+runtime realization links, per-Creature knowledge, revealed claims, and approved overrides. It does
+not copy Plot parentage into a second runtime hierarchy or turn mutable actors and Items into
+Campaign Definition content.
+
+A `PlotDiscovery` contains claims discriminated as `truth`, `belief`, or `rumor`. Truth claims do
+not offer a contradiction field. Beliefs and Rumors may name claims they conflict with, and a Rumor's
+`relatedTruthClaimId` is optional because a false Rumor need not resolve to a Truth. Per-Creature
+knowledge is separately discriminated as `knows-truth`, `holds-belief`, or `heard-rumor`; learning a
+claim never changes its epistemic kind.
+
+Use `validatePlotHierarchy` before accepting an authored Plot set. It reports duplicate identities,
+missing or cross-Definition parents and relationship targets, parent cycles, combined
+prerequisite/dependency cycles, and unexplained cross-branch relationships without mutating input.
+Plot contracts are not yet persistence resources; they are captured through Campaign Definition
+revision content until an aggregate-specific persistence workflow is introduced.
+
+### Relational Campaign Instance participation persistence
+
+The additive participation spine persists the current Instance-scoped contracts without rebinding
+or removing legacy Campaign membership, invitation, Character draft, or `sessions` resource rows.
+These relational tables are not generic domain resources and do not yet imply public authoring or
+play APIs:
+
+| Contract or protected boundary | Relational table | Integrity boundary |
+| ------------------------------ | ---------------- | ------------------ |
+| `PlayerProfile` | `PlayerProfile` | One durable profile per authenticated User; server standing is independent of Instance membership and contact fields are encrypted/hashed, never returned by the shared profile contract |
+| Protected authentication-provider association | `AuthenticationProviderAssociation` | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle |
+| `CampaignInstanceHumanMembership` | `CampaignInstanceHumanMembership` | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one |
+| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation` | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology |
+| Non-human Agent identity | `AgentIdentity` | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials |
+| `CampaignInstanceAgentParticipation` | `CampaignInstanceAgentParticipation` | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and contain only open namespaced string keys |
+| `CampaignInstanceSession` | `CampaignInstanceSession` | Explicit Instance FK with lifecycle-consistent start/conclusion/cancellation timestamps, schedule, event-log, summary, and extension metadata |
+| `SessionParticipation` | `SessionParticipation` | Exactly one human membership or Agent participation; composite FKs require it and its Session to share the same Instance |
+| `CampaignInstanceCharacterAssociation` | `CampaignInstanceCharacterAssociation` | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs |
+
+Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
+namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
+chronology, and complete one-way Character import provenance. A PostgreSQL partial unique index
+permits many active Campaign Instances but no more than one `ACTIVE` relational Session across the
+installation. Runtime code must not infer an active Session from legacy `campaignId` data.
+
 ## Persisted API resources
 
-The generic domain API persists these resources. The identifier used by the API is derived as shown.
-An active installation contains exactly one root `locations` record with kind `world` and exactly
-one `campaigns` record. It may contain many `sessions` records. Ordinary creation rejects a second
-world or campaign; resetting the world removes its campaign, sessions, authoritative game snapshot,
-owned content, and location hierarchy.
+The generic domain API persists the legacy compatibility resources below. The identifier used by
+that API is derived as shown. During additive realignment, an existing installation may still have
+one legacy root `locations` World and one legacy `campaigns` record, but this is not the target
+cardinality: the relational Definition APIs support multiple World and Campaign Definition
+lineages. Legacy destructive World deletion is disabled while archive and dependency-safe
+retention replace the old cascade. Sessions and runtime ownership must move to Campaign Instances
+before the legacy singleton guards and ambiguous `campaignId` contracts are removed.
 
-| Resource               | Aggregate                 | Stored ID              | Stored kind/name                                |
-| ---------------------- | ------------------------- | ---------------------- | ----------------------------------------------- |
-| `definitions`          | `GameDefinition`          | `identity.id`          | `kind`, `identity.name`                         |
-| `rule-variants`        | `RuleVariant`             | `id`                   | `rule-variant`, `name`                          |
-| `content-packs`        | `ContentPackManifest`     | `id`                   | `content-pack`, `name`                          |
-| `extension-schemas`    | `ExtensionSchema`         | `id`                   | `extension-schema`, `key`                       |
-| `systems`              | `GameSystemDefinition`    | `id`                   | `game-system`, `name`                           |
-| `games`                | `GameState`               | `campaign.identity.id` | `game-state`, campaign name                     |
-| `campaigns`            | `CampaignDefinition`      | `identity.id`          | name                                            |
-| `sessions`             | `SessionState`            | `identity.id`          | name                                            |
-| `characters`           | `CharacterState`          | `identity.id`          | name                                            |
-| `creatures`            | `CreatureState`           | `identity.id`          | name                                            |
-| `items`                | `ItemInstance`            | `id`                   | `item-instance`, name override or definition ID |
-| `objects`              | `ObjectState`             | `identity.id`          | name                                            |
-| `scenes`               | `SceneState`              | `identity.id`          | name                                            |
-| `locations`            | `LocationState`           | `identity.id`          | `kind`, name                                    |
-| `location-connections` | `LocationConnectionState` | `identity.id`          | `kind`                                          |
-| `encounters`           | `EncounterState`          | `identity.id`          | name                                            |
-| `pending-decisions`    | `PendingDecision`         | `id`                   | `pending-decision`                              |
-| `game-events`          | `GameEvent`               | `id`                   | `type`                                          |
+| Resource               | Aggregate                                   | Stored ID              | Stored kind/name                                |
+| ---------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------- |
+| `definitions`          | `GameDefinition`                            | `identity.id`          | `kind`, `identity.name`                         |
+| `rule-variants`        | `RuleVariant`                               | `id`                   | `rule-variant`, `name`                          |
+| `content-packs`        | `ContentPackManifest`                       | `id`                   | `content-pack`, `name`                          |
+| `extension-schemas`    | `ExtensionSchema`                           | `id`                   | `extension-schema`, `key`                       |
+| `systems`              | `GameSystemDefinition`                      | `id`                   | `game-system`, `name`                           |
+| `games`                | `GameState`                                 | `campaign.identity.id` | `game-state`, campaign name                     |
+| `campaigns`            | `CampaignDefinition` (legacy compatibility) | `identity.id`          | name                                            |
+| `sessions`             | `SessionState`                              | `identity.id`          | name                                            |
+| `characters`           | `CharacterState`                            | `identity.id`          | name                                            |
+| `creatures`            | `CreatureState`                             | `identity.id`          | name                                            |
+| `items`                | `ItemInstance`                              | `id`                   | `item-instance`, name override or definition ID |
+| `objects`              | `ObjectState`                               | `identity.id`          | name                                            |
+| `scenes`               | `SceneState`                                | `identity.id`          | name                                            |
+| `locations`            | `LocationState`                             | `identity.id`          | `kind`, name                                    |
+| `location-connections` | `LocationConnectionState`                   | `identity.id`          | `kind`                                          |
+| `encounters`           | `EncounterState`                            | `identity.id`          | name                                            |
+| `pending-decisions`    | `PendingDecision`                           | `id`                   | `pending-decision`                              |
+| `game-events`          | `GameEvent`                                 | `id`                   | `type`                                          |
 
 Fields ending in `Id` or `Ids` become graph relationships automatically. Keep references in those
 fields rather than inventing parallel reference structures.
@@ -713,23 +1029,49 @@ Character heritage records an origin region and zero to three immutable-at-creat
 selections. Character profession state records current expertise, how it was acquired, advancement
 awards/spends, and action use counts.
 
-Campaign participation is distinct from character identity. A player `CampaignMembership` owns
-`characterIds` for its complete character history and has at most one `activeCharacterId`. A dead or
-retired character remains in that history; the membership persists and can create a replacement.
-Every `CharacterState.ownerMembershipId` points back to that owning membership. GM and spectator
-participants do not own character collections through the player-membership contract; the initial
-GM is the campaign owner rather than an invited campaign membership.
+Participation has four separate scopes; never collapse them into one Campaign participant record:
 
-`CharacterCreationDraft` is a resumable, revisioned input aggregate for creating one character. It
-may contain partial selections, imagery, attribute rolls and assignments, starting equipment, and
-biography. A complete `CharacterState` still requires the complete inherited `CreatureImages` and
-all other creature invariants. The draft's horizontal side-view image becomes
-`CreatureImages.paperDollToken`; there is no separate `horizontalToken` property.
+- `PlayerProfile` is the durable server-wide Player role. Its `standing` (`active`, `inactive`, or
+  `banned`) is independent of Campaign membership and Session attendance. A profile references
+  non-sensitive `AuthenticationProviderAssociation` summaries. Provider subject identifiers,
+  credentials, email addresses, phone numbers, and recovery data remain behind protected identity
+  service boundaries.
+- `CampaignInstanceHumanMembership` is the durable relationship between a person and exactly one
+  Campaign Instance, with role `gm`, `player`, or `spectator`. A Player membership references its
+  Player profile and owns its full Instance-bound Character history; GM and Spectator memberships
+  do not. Invitation workflow is Instance-scoped and does not substitute for membership.
+- `CampaignInstanceAgentParticipation` authorizes one non-human Agent process in exactly one
+  Campaign Instance. Observe and act capability keys are separately explicit and least-privilege.
+  The contract has no human user, membership, role, or impersonation target; implementations must
+  never turn an Agent capability into human credentials or attribute Agent actions to a person.
+- `SessionParticipation` separately records response, attendance, join/leave, and whether a human
+  membership or Agent acted in one Session. It always names the same Campaign Instance as the
+  Session and the referenced membership/Agent authorization. The GM is both operator and a human
+  Session participant; fictional GM actions are attributed to the Instance Creatures they control.
 
-The shared `CampaignInvitationPreview` and `CampaignInvitationDeliverySummary` contracts are
-deliberately non-sensitive. Do not add email addresses, phone numbers, plaintext invitation tokens,
-or token hashes to those types or to generic domain resources. Authentication and invitation-secret
-storage belong behind dedicated protected service boundaries.
+`CampaignInstanceCharacterAssociation` binds each Character to exactly one Campaign Instance and
+one Player-role membership in that Instance. Its discriminated `origin` is either
+`created-in-instance` or `one-way-import`. Import provenance records the source but creates a new
+destination Character identity in a different Campaign Instance, with no synchronization or
+back-transfer. The membership's optional
+active Character must occur in its Character history and resolve to an association for that same
+membership and Instance. Every Character in the membership's full history must likewise resolve to
+an association owned by that membership in that Instance. `validateParticipationConsistency` checks these Character invariants plus
+same-Instance Session, human-membership, and Agent-participation relationships without putting
+opaque identifiers into its human-readable issues.
+
+`CampaignMembership`, `PlayerCampaignMembership`, `NonPlayerCampaignMembership`, and
+`CharacterCreationDraft` remain deprecated compatibility contracts because their `CampaignId`
+association conflates definition and runtime scope. Existing callers may continue to use them, but
+new work uses the Campaign Instance contracts. `CharacterCreationDraft` remains a resumable,
+revisioned legacy input aggregate until an Instance-safe replacement is introduced.
+
+`CampaignInvitationPreview`, `CampaignInstanceInvitationPreview`,
+`CampaignInstanceInvitation`, and `CampaignInvitationDeliverySummary` are deliberately
+non-sensitive. Do not add email addresses, phone numbers, authentication-provider subject IDs,
+plaintext invitation tokens, token hashes, credentials, or recovery data to these shared contracts
+or generic domain resources. Invitation/contact/secret storage belongs behind dedicated protected
+service boundaries.
 
 Skills are definitions, never free-form strings in state or tests:
 

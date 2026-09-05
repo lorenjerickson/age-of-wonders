@@ -22,8 +22,34 @@ export type DecisionId = DomainId<"decision">;
 export type EventId = DomainId<"event">;
 export type PlayerId = DomainId<"player">;
 export type UserId = DomainId<"user">;
+export type PlayerProfileId = DomainId<"player-profile">;
+export type AuthenticationProviderAssociationId =
+  DomainId<"authentication-provider-association">;
+/** @deprecated Compatibility identifier that historically conflates campaign definition and play state. */
 export type CampaignId = DomainId<"campaign">;
+export type WorldDefinitionId = DomainId<"world-definition">;
+export type WorldDefinitionRevisionId = DomainId<"world-definition-revision">;
+export type WorldDefinitionSnapshotId = DomainId<"world-definition-snapshot">;
+export type CampaignDefinitionId = DomainId<"campaign-definition">;
+export type CampaignDefinitionRevisionId =
+  DomainId<"campaign-definition-revision">;
+export type CampaignDefinitionSnapshotId =
+  DomainId<"campaign-definition-snapshot">;
+export type PlotDefinitionId = DomainId<"plot-definition">;
+export type CampaignInstanceId = DomainId<"campaign-instance">;
+export type CampaignInstanceSnapshotId = DomainId<"campaign-instance-snapshot">;
+export type CampaignInstanceRuntimeId = DomainId<"campaign-instance-runtime">;
+export type CampaignInstanceMembershipId =
+  DomainId<"campaign-instance-membership">;
+export type CampaignInstanceInvitationId =
+  DomainId<"campaign-instance-invitation">;
+export type AgentId = DomainId<"agent">;
+export type CampaignInstanceAgentParticipationId =
+  DomainId<"campaign-instance-agent-participation">;
+export type SessionParticipationId = DomainId<"session-participation">;
+/** @deprecated Use CampaignInstanceMembershipId for definition/instance-safe participation. */
 export type CampaignMembershipId = DomainId<"campaign-membership">;
+/** @deprecated Use CampaignInstanceInvitationId for definition/instance-safe invitations. */
 export type CampaignInvitationId = DomainId<"campaign-invitation">;
 export type CharacterCreationDraftId = DomainId<"character-creation-draft">;
 export type SessionId = DomainId<"session">;
