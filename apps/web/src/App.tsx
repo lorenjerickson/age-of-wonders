@@ -27,19 +27,13 @@ import {
   replaceDomainRecord,
   type WorldDefinitionList,
 } from "./api";
-import {
-  InternalLink,
-  RouterButtonLink,
-} from "./navigation";
+import { InternalLink, RouterButtonLink } from "./navigation";
 import {
   primaryNavigationForPath,
   type PrimaryNavigationItem,
 } from "./gmNavigationModel";
 import { QuickStartGuide } from "./QuickStart";
-import {
-  quickStartActivity,
-  quickStartKeyFromSearch,
-} from "./quickStartModel";
+import { quickStartActivity, quickStartKeyFromSearch } from "./quickStartModel";
 import type { ReadSection } from "./server/readModels";
 import { statusLabel } from "./campaignLibraryModel";
 
@@ -104,8 +98,11 @@ export function AppShell({
     segments[0] === "campaigns" && segments[2] === "locations";
   const primaryNavigation = primaryNavigationForPath(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const drawerTrigger = useRef<HTMLLabelElement>(null);
   const drawerPanel = useRef<HTMLElement>(null);
+  const guideTrigger = useRef<HTMLButtonElement>(null);
+  const guidePanel = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -129,6 +126,33 @@ export function AppShell({
     if (event.key !== "Tab") return;
     const focusable = drawerPanel.current?.querySelectorAll<HTMLElement>(
       "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function closeGuide() {
+    setGuideOpen(false);
+    requestAnimationFrame(() => guideTrigger.current?.focus());
+  }
+
+  function handleGuideKeys(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeGuide();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = guidePanel.current?.querySelectorAll<HTMLElement>(
+      "a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])",
     );
     if (!focusable?.length) return;
     const first = focusable[0];
@@ -171,9 +195,48 @@ export function AppShell({
         >
           <div className="min-w-0">{children}</div>
           {guide && (
-            <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+            <div className="hidden xl:block">
+              <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+            </div>
           )}
         </div>
+        {guide && (
+          <Button
+            ref={guideTrigger}
+            tone="primary"
+            className="fixed right-4 bottom-4 z-30 min-h-11 shadow-xl xl:hidden"
+            aria-expanded={guideOpen}
+            aria-controls="quick-start-mobile-guide"
+            onClick={() => setGuideOpen(true)}
+          >
+            Quick Start guide
+          </Button>
+        )}
+        {guide && guideOpen && (
+          <div
+            className="fixed inset-0 z-50 flex justify-end bg-black/50 xl:hidden"
+            onMouseDown={(event) => {
+              if (event.currentTarget === event.target) closeGuide();
+            }}
+          >
+            <section
+              ref={guidePanel}
+              id="quick-start-mobile-guide"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Quick Start guide"
+              className="h-full w-full max-w-sm overflow-y-auto bg-base-100 shadow-2xl"
+              onKeyDown={handleGuideKeys}
+            >
+              <div className="sticky top-0 z-10 flex justify-end border-b border-base-300 bg-base-100 p-2">
+                <Button autoFocus tone="ghost" onClick={closeGuide}>
+                  Close guide
+                </Button>
+              </div>
+              <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+            </section>
+          </div>
+        )}
       </div>
       <div
         id="app-navigation-panel"
@@ -312,55 +375,101 @@ export function LandingPage({
                 Complete guided tasks inside the real World, Campaign, and
                 Players workspaces.
               </p>
-              <RouterButtonLink href="/quick-start" tone="primary" className="mt-3">
+              <RouterButtonLink
+                href="/quick-start"
+                tone="primary"
+                className="mt-3"
+              >
                 Open Quick Start
               </RouterButtonLink>
             </div>
           </article>
         </section>
 
-        <section className="border-t border-white/10 pt-10" aria-labelledby="world-choice-heading">
-          <h2 id="world-choice-heading" className="text-2xl font-semibold">Choose a World</h2>
+        <section
+          className="border-t border-white/10 pt-10"
+          aria-labelledby="world-choice-heading"
+        >
+          <h2 id="world-choice-heading" className="text-2xl font-semibold">
+            Choose a World
+          </h2>
           <p className="mt-2 text-base-content/60">
-            World selection is deliberate; the dashboard does not infer a current World.
+            World selection is deliberate; the dashboard does not infer a
+            current World.
           </p>
           {!initialWorlds.ok ? (
-            <Alert tone="error" className="mt-5">{initialWorlds.message}</Alert>
+            <Alert tone="error" className="mt-5">
+              {initialWorlds.message}
+            </Alert>
           ) : (
             <p className="mt-5 text-sm text-base-content/60">
-              {initialWorlds.data.total} World {initialWorlds.data.total === 1 ? "Definition" : "Definitions"} available.
+              {initialWorlds.data.total} World{" "}
+              {initialWorlds.data.total === 1 ? "Definition" : "Definitions"}{" "}
+              available.
             </p>
           )}
-          <RouterButtonLink href="/worlds" tone="outline" className="mt-5">Choose a World Definition</RouterButtonLink>
+          <RouterButtonLink href="/worlds" tone="outline" className="mt-5">
+            Choose a World Definition
+          </RouterButtonLink>
         </section>
 
         <section className="py-10" aria-labelledby="continue-heading">
-          <h2 id="continue-heading" className="text-2xl font-semibold">Continue Campaigns</h2>
+          <h2 id="continue-heading" className="text-2xl font-semibold">
+            Continue Campaigns
+          </h2>
           <p className="mt-2 max-w-3xl text-base-content/60">
-            Every active Campaign Instance appears here. Continue remains unavailable until an Instance has an explicit resumable Session relationship.
+            Every active Campaign Instance appears here. Continue remains
+            unavailable until an Instance has an explicit resumable Session
+            relationship.
           </p>
           {!initialInstances.ok ? (
-            <Alert tone="error" className="mt-5">{initialInstances.message}</Alert>
+            <Alert tone="error" className="mt-5">
+              {initialInstances.message}
+            </Alert>
           ) : activeInstances.length ? (
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {activeInstances.map((instance, index) => (
-                <article key={instance.id} className="card border border-base-300 bg-base-200">
+                <article
+                  key={instance.id}
+                  className="card border border-base-300 bg-base-200"
+                >
                   <div className="card-body">
                     <div className="flex items-start justify-between gap-4">
-                      <h3 className="card-title">{instance.name.trim() || "Unnamed Campaign Instance"}</h3>
+                      <h3 className="card-title">
+                        {instance.name.trim() || "Unnamed Campaign Instance"}
+                      </h3>
                       <Badge outline>{statusLabel(instance.status)}</Badge>
                     </div>
                     <div className="card-actions mt-4 items-center">
-                      <RouterButtonLink href={`/campaigns/instances/${encodeURIComponent(instance.id)}`} tone="outline" size="sm">Manage Instance</RouterButtonLink>
-                      <Button disabled size="sm" aria-describedby={`continue-campaign-${index}`}>Continue</Button>
+                      <RouterButtonLink
+                        href={`/campaigns/instances/${encodeURIComponent(instance.id)}`}
+                        tone="outline"
+                        size="sm"
+                      >
+                        Manage Instance
+                      </RouterButtonLink>
+                      <Button
+                        disabled
+                        size="sm"
+                        aria-describedby={`continue-campaign-${index}`}
+                      >
+                        Continue
+                      </Button>
                     </div>
-                    <p id={`continue-campaign-${index}`} className="text-xs text-base-content/50">No resumable Session is linked yet.</p>
+                    <p
+                      id={`continue-campaign-${index}`}
+                      className="text-xs text-base-content/50"
+                    >
+                      No resumable Session is linked yet.
+                    </p>
                   </div>
                 </article>
               ))}
             </div>
           ) : (
-            <p className="mt-5 text-sm text-base-content/55">No active Campaign Instances are available.</p>
+            <p className="mt-5 text-sm text-base-content/55">
+              No active Campaign Instances are available.
+            </p>
           )}
         </section>
       </div>

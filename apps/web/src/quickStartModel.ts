@@ -2,7 +2,8 @@ export const QUICK_START_ACTIVITIES = [
   {
     key: "choose-world",
     title: "Choose a World Definition",
-    description: "Open the World you want to author and review its revision context.",
+    description:
+      "Open the World you want to author and review its revision context.",
     href: "/worlds?quickStart=choose-world",
     steps: [
       "Open the Worlds library.",
@@ -13,7 +14,8 @@ export const QUICK_START_ACTIVITIES = [
   {
     key: "review-campaign-definition",
     title: "Review a Campaign Definition",
-    description: "Open authoring material and verify its captured World provenance.",
+    description:
+      "Open authoring material and verify its captured World provenance.",
     href: "/campaigns?quickStart=review-campaign-definition",
     steps: [
       "Find the Definitions section.",
@@ -24,7 +26,8 @@ export const QUICK_START_ACTIVITIES = [
   {
     key: "review-campaign-instance",
     title: "Review a Campaign Instance",
-    description: "Open a played realization without entering Definition authoring.",
+    description:
+      "Open a played realization without entering Definition authoring.",
     href: "/campaigns?quickStart=review-campaign-instance",
     steps: [
       "Find the Instances section.",
@@ -35,7 +38,8 @@ export const QUICK_START_ACTIVITIES = [
   {
     key: "invite-players",
     title: "Prepare your players",
-    description: "Visit the stable Players destination and review participation readiness.",
+    description:
+      "Visit the stable Players destination and review participation readiness.",
     href: "/players?quickStart=invite-players",
     steps: [
       "Open Players.",
@@ -72,6 +76,13 @@ export function quickStartStorageKey(gmScope: string) {
     hash = Math.imul(hash, 16777619);
   }
   return `aow.quick-start.v1.${(hash >>> 0).toString(36)}`;
+}
+
+export function quickStartActivityIsComplete(
+  completedSteps: ReadonlySet<number>,
+  stepCount: number,
+) {
+  return stepCount > 0 && completedSteps.size === stepCount;
 }
 
 export function parseQuickStartProgress(value: string | null) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseQuickStartProgress,
+  quickStartActivityIsComplete,
   quickStartKeyFromSearch,
   quickStartStorageKey,
   quickStartSuffix,
@@ -23,8 +24,14 @@ describe("Quick Start context", () => {
     );
     expect(quickStartStorageKey("game master")).not.toContain("game");
     expect([...parseQuickStartProgress("not json")]).toEqual([]);
-    expect(
-      [...parseQuickStartProgress('["choose-world","not-an-activity"]')],
-    ).toEqual(["choose-world"]);
+    expect([
+      ...parseQuickStartProgress('["choose-world","not-an-activity"]'),
+    ]).toEqual(["choose-world"]);
+  });
+
+  it("derives activity completion from every individual step", () => {
+    expect(quickStartActivityIsComplete(new Set([0, 1]), 3)).toBe(false);
+    expect(quickStartActivityIsComplete(new Set([0, 1, 2]), 3)).toBe(true);
+    expect(quickStartActivityIsComplete(new Set(), 0)).toBe(false);
   });
 });

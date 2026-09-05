@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { Button } from "@aow/ui";
 import { InternalLink } from "./navigation";
 import {
   worldNavigationForPath,
   type WorldNavigationGroup,
 } from "./gmNavigationModel";
-import { quickStartStorageKey } from "./quickStartModel";
+import { quickStartStorageKey, quickStartSuffix } from "./quickStartModel";
 
 export function WorldSecondaryNavigation({
   worldId,
@@ -18,7 +19,9 @@ export function WorldSecondaryNavigation({
   revisionLabel: string;
   gmScope: string;
 }) {
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const location = useLocation();
+  const pathname = location.pathname;
+  const guideSuffix = quickStartSuffix(location.searchStr);
   const groups = worldNavigationForPath(worldId, pathname);
   const activeKey = groups.find(({ active }) => active)?.key;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -30,9 +33,17 @@ export function WorldSecondaryNavigation({
 
   useEffect(() => {
     try {
-      const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+      const saved: unknown = JSON.parse(
+        localStorage.getItem(storageKey) ?? "[]",
+      );
       if (Array.isArray(saved)) {
-        const valid = new Set(["atlas", "bestiary", "items", "characters", "rules"]);
+        const valid = new Set([
+          "atlas",
+          "bestiary",
+          "items",
+          "characters",
+          "rules",
+        ]);
         setExpanded(
           new Set(
             saved.filter(
@@ -71,18 +82,37 @@ export function WorldSecondaryNavigation({
         <p className="mt-2 truncate text-lg font-semibold" title={worldName}>
           {worldName}
         </p>
-        <p className="mt-1 text-xs text-base-content/45">{revisionLabel}</p>
+        <p className="mt-1 text-xs text-base-content/60">{revisionLabel}</p>
       </div>
-      <button
+      <nav aria-label={`${worldName} workspace`} className="mb-4 px-1">
+        <ul className="menu gap-1 p-0">
+          <li>
+            <InternalLink
+              href={`/worlds/${encodeURIComponent(worldId)}${guideSuffix}`}
+            >
+              Overview
+            </InternalLink>
+          </li>
+          <li>
+            <InternalLink
+              href={`/worlds/${encodeURIComponent(worldId)}/versions${guideSuffix}`}
+            >
+              Versions
+            </InternalLink>
+          </li>
+        </ul>
+      </nav>
+      <Button
         type="button"
-        className="btn btn-outline mb-3 min-h-11 w-full justify-between lg:hidden"
+        tone="outline"
+        className="mb-3 min-h-11 w-full justify-between lg:hidden"
         aria-expanded={mobileOpen}
         aria-controls="world-secondary-navigation"
         onClick={() => setMobileOpen((current) => !current)}
       >
         World navigation
         <span aria-hidden="true">{mobileOpen ? "−" : "+"}</span>
-      </button>
+      </Button>
       <nav
         id="world-secondary-navigation"
         aria-label={`${worldName} navigation`}
@@ -93,6 +123,8 @@ export function WorldSecondaryNavigation({
             <WorldNavigationDisclosure
               key={group.key}
               group={group}
+              guideSuffix={guideSuffix}
+              pathname={pathname}
               expanded={expanded.has(group.key)}
               onToggle={() =>
                 setExpanded((current) => {
@@ -114,10 +146,14 @@ function WorldNavigationDisclosure({
   group,
   expanded,
   onToggle,
+  guideSuffix,
+  pathname,
 }: {
   group: WorldNavigationGroup;
   expanded: boolean;
   onToggle: () => void;
+  guideSuffix: string;
+  pathname: string;
 }) {
   const contentId = `world-navigation-${group.key}`;
   return (
@@ -126,22 +162,24 @@ function WorldNavigationDisclosure({
         className={`flex items-center rounded-lg ${group.active ? "bg-primary/10 text-primary" : "hover:bg-base-200"}`}
       >
         <InternalLink
-          href={group.href}
-          aria-current={group.active ? "page" : undefined}
+          href={`${group.href}${guideSuffix}`}
+          aria-current={pathname === group.href ? "page" : undefined}
           className="min-w-0 flex-1 px-3 py-2 text-sm font-semibold"
         >
           {group.label}
         </InternalLink>
-        <button
+        <Button
           type="button"
-          className="btn btn-ghost btn-xs mr-1"
+          tone="ghost"
+          size="xs"
+          className="mr-1"
           aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label} navigation`}
           aria-expanded={expanded}
           aria-controls={contentId}
           onClick={onToggle}
         >
           <span aria-hidden="true">{expanded ? "−" : "+"}</span>
-        </button>
+        </Button>
       </div>
       {expanded && (
         <ul id={contentId} className="mt-1 space-y-1 px-2 pb-2">
@@ -149,7 +187,13 @@ function WorldNavigationDisclosure({
             <li key={child.label}>
               {child.href ? (
                 <InternalLink
-                  href={child.href}
+                  href={`${child.href}${guideSuffix}`}
+                  aria-current={
+                    pathname === child.href ||
+                    pathname.startsWith(`${child.href}/`)
+                      ? "page"
+                      : undefined
+                  }
                   className="block rounded-md px-3 py-1.5 text-sm text-base-content/65 hover:bg-base-200 hover:text-base-content"
                 >
                   {child.label}
@@ -158,7 +202,7 @@ function WorldNavigationDisclosure({
                 <div className="flex items-start justify-between gap-2 px-3 py-1.5 text-sm text-base-content/55">
                   <span>{child.label}</span>
                   {child.note && (
-                    <span className="text-[0.65rem] tracking-wide text-base-content/35 uppercase">
+                    <span className="text-[0.65rem] tracking-wide text-base-content/60 uppercase">
                       {child.note}
                     </span>
                   )}

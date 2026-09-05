@@ -50,7 +50,7 @@ describe("World secondary navigation", () => {
       "Characters",
       "Rules",
     ]);
-    expect(groups.find(({ label }) => label === "Atlas")?.expanded).toBe(true);
+    expect(groups.some(({ expanded }) => expanded)).toBe(false);
     expect(
       JSON.stringify(
         groups.map(({ label, children }) => ({
@@ -65,7 +65,9 @@ describe("World secondary navigation", () => {
   });
 
   it.each([
-    ["/worlds/world-internal", "Atlas"],
+    ["/worlds/world-internal/atlas", "Atlas"],
+    ["/worlds/world-internal/bestiary", "Bestiary"],
+    ["/worlds/world-internal/item-compendium", "Item Compendium"],
     ["/worlds/world-internal/creatures", "Bestiary"],
     ["/worlds/world-internal/items/new", "Item Compendium"],
     ["/worlds/world-internal/characters", "Characters"],

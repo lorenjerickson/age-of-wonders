@@ -6,10 +6,14 @@ import type {
   CampaignInstanceList,
   CurrentUser,
   DomainResource,
+  EffectiveWorldModelResponse,
   JsonValue,
   WorldDefinitionDetail,
+  WorldDefinitionDraft,
   WorldDefinitionList,
+  WorldDraftImpact,
 } from "../api";
+import { projectEffectiveModels } from "../worldAuthoringModel";
 import { ServerApiError, serverApiRequest } from "./api";
 
 export type SessionResult =
@@ -61,8 +65,7 @@ function listPath(
 const recentOptions = { limit: 1, sort: "updatedAt", order: "desc" } as const;
 
 export type ReadSection<T> =
-  | { ok: true; data: T }
-  | { ok: false; message: string };
+  { ok: true; data: T } | { ok: false; message: string };
 
 async function readSection<T>(
   read: () => Promise<T>,
@@ -129,6 +132,69 @@ export const readWorldDefinition = createServerFn({ method: "GET" })
     }
   });
 
+export const readWorldAuthoring = createServerFn({ method: "GET" })
+  .validator((data: { worldDefinitionId: string }) => ({
+    worldDefinitionId: data.worldDefinitionId.trim(),
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const definition = await serverApiRequest<WorldDefinitionDetail>(
+        `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}`,
+      );
+      const [draft, effective] = await Promise.all([
+        serverApiRequest<WorldDefinitionDraft>(
+          `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}/draft`,
+        ).catch((error: unknown) => {
+          if (error instanceof ServerApiError && error.status === 404)
+            return undefined;
+          throw error;
+        }),
+        serverApiRequest<EffectiveWorldModelResponse>(
+          `/model-registries/effective?worldDefinitionId=${encodeURIComponent(data.worldDefinitionId)}`,
+        ).catch(() => undefined),
+      ]);
+      return {
+        found: true as const,
+        definition,
+        draft: draft
+          ? {
+              ...draft,
+              baseRevisionNumber: definition.revisions.find(
+                (revision) => revision.id === draft.baseRevisionId,
+              )?.revisionNumber,
+              status:
+                (draft.baseRevisionId ?? undefined) ===
+                (definition.currentRevisionId ?? undefined)
+                  ? ("current" as const)
+                  : ("stale" as const),
+              effectiveModels: effective
+                ? projectEffectiveModels(effective)
+                : undefined,
+            }
+          : undefined,
+      };
+    } catch (error) {
+      if (error instanceof ServerApiError && error.status === 404) {
+        return { found: false as const };
+      }
+      throw error;
+    }
+  });
+
+export const readWorldDraftImpact = createServerFn({ method: "GET" })
+  .validator((data: { worldDefinitionId: string }) => ({
+    worldDefinitionId: data.worldDefinitionId.trim(),
+  }))
+  .handler(async ({ data }): Promise<ReadSection<WorldDraftImpact>> =>
+    readSection(
+      () =>
+        serverApiRequest<WorldDraftImpact>(
+          `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}/draft/impact`,
+        ),
+      "Draft impact could not be calculated.",
+    ),
+  );
+
 export const readResourceList = createServerFn({ method: "GET" })
   .validator(
     (data: { resource: DomainResource; kind?: string; limit?: number }) => data,
@@ -167,8 +233,7 @@ export const readCampaignLibrary = createServerFn({ method: "GET" }).handler(
   async () => {
     const [definitions, instances] = await Promise.all([
       readSection(
-        () =>
-          serverApiRequest<CampaignDefinitionList>("/campaign-definitions"),
+        () => serverApiRequest<CampaignDefinitionList>("/campaign-definitions"),
         "Campaign Definitions could not be loaded.",
       ),
       readSection(

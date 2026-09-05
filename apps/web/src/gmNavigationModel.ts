@@ -46,15 +46,17 @@ export function worldNavigationForPath(
   const base = `/worlds/${encodedWorldId}`;
   const nestedSection = pathname.split("/").filter(Boolean)[2];
   const activeKey =
-    nestedSection === "creatures"
-      ? "bestiary"
-      : nestedSection === "items"
-        ? "items"
-        : nestedSection === "characters"
-          ? "characters"
-          : nestedSection === "rules"
-            ? "rules"
-            : "atlas";
+    nestedSection === "atlas"
+      ? "atlas"
+      : nestedSection === "bestiary" || nestedSection === "creatures"
+        ? "bestiary"
+        : nestedSection === "item-compendium" || nestedSection === "items"
+          ? "items"
+          : nestedSection === "characters"
+            ? "characters"
+            : nestedSection === "rules"
+              ? "rules"
+              : undefined;
 
   const groups: ReadonlyArray<
     Omit<WorldNavigationGroup, "active" | "expanded">
@@ -62,23 +64,23 @@ export function worldNavigationForPath(
     {
       key: "atlas",
       label: "Atlas",
-      href: base,
-      children: [{ label: "Locations & maps", href: base }],
+      href: `${base}/atlas`,
+      children: [{ label: "Locations & maps", href: `${base}/atlas` }],
     },
     {
       key: "bestiary",
       label: "Bestiary",
-      href: `${base}/creatures`,
-      children: [{ label: "Creatures", href: `${base}/creatures` }],
+      href: `${base}/bestiary`,
+      children: [{ label: "Creatures", href: `${base}/bestiary` }],
     },
     {
       key: "items",
       label: "Item Compendium",
-      href: `${base}/items`,
+      href: `${base}/item-compendium`,
       children: [
         {
           label: "Items, objects & hazards",
-          href: `${base}/items`,
+          href: `${base}/item-compendium`,
         },
       ],
     },
@@ -90,7 +92,7 @@ export function worldNavigationForPath(
         { label: "Skills", note: "Advanced models" },
         { label: "Professions", note: "Advanced models" },
         { label: "Backgrounds & heritages", note: "Advanced models" },
-        { label: "Models & taxonomies", note: "Advanced" },
+        { label: "Models & taxonomies", href: `${base}/characters` },
       ],
     },
     {

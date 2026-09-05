@@ -1,14 +1,15 @@
 import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
 import { WorldSecondaryNavigation } from "../WorldNavigation";
-import { readWorldDefinition } from "../server/readModels";
+import { readWorldAuthoring } from "../server/readModels";
+import { currentWorldRevision, humanWorldName } from "../worldDefinitionModel";
 import {
-  currentWorldRevision,
-  humanWorldName,
-} from "../worldDefinitionModel";
+  WorldAuthoringProvider,
+  WorldContextBar,
+} from "../WorldAuthoringShell";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId")({
   loader: ({ params }) =>
-    readWorldDefinition({ data: { worldDefinitionId: params.worldId } }),
+    readWorldAuthoring({ data: { worldDefinitionId: params.worldId } }),
   component: WorldLayout,
 });
 
@@ -37,19 +38,32 @@ function WorldLayout() {
   }
   const worldName = humanWorldName(result.definition.name);
   const revision = currentWorldRevision(result.definition);
+  const contextLabel = result.draft
+    ? result.draft.baseRevisionNumber
+      ? `Draft · based on revision ${result.draft.baseRevisionNumber}`
+      : "Initial unpublished draft"
+    : revision
+      ? `Published revision ${revision.revisionNumber} · read only`
+      : "Unpublished · read only";
   return (
-    <div className="min-h-full lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <WorldSecondaryNavigation
-        worldId={worldId}
-        worldName={worldName}
-        revisionLabel={
-          revision ? `Revision ${revision.revisionNumber}` : "Unpublished"
-        }
-        gmScope={session.authenticated ? session.user.displayName : "local-gm"}
-      />
-      <div className="min-w-0">
-        <Outlet />
+    <WorldAuthoringProvider
+      definition={result.definition}
+      initialDraft={result.draft}
+    >
+      <div className="min-h-full lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <WorldSecondaryNavigation
+          worldId={worldId}
+          worldName={worldName}
+          revisionLabel={contextLabel}
+          gmScope={
+            session.authenticated ? session.user.displayName : "local-gm"
+          }
+        />
+        <div className="min-w-0">
+          <WorldContextBar />
+          <Outlet />
+        </div>
       </div>
-    </div>
+    </WorldAuthoringProvider>
   );
 }

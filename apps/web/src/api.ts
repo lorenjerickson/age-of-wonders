@@ -65,6 +65,7 @@ export interface WorldDefinitionRevisionSummary {
   name: string;
   contentHash: string;
   publishedAt: string;
+  snapshotId?: string;
 }
 
 export interface WorldDefinitionSummary {
@@ -75,6 +76,125 @@ export interface WorldDefinitionSummary {
   archivedAt?: string;
   updatedAt: string;
   currentRevision?: WorldDefinitionRevisionSummary;
+  draft?: {
+    storageRevision: number;
+    revisionName: string;
+    validationStatus: string;
+    validatedStorageRevision?: number;
+    isCurrentBase: boolean;
+    hasUnpublishedChanges: boolean;
+  };
+  downstreamCampaignCount?: number;
+  metadataRevision?: number;
+}
+
+export interface WorldDraftRecord {
+  resourceType: string;
+  sourceId: string;
+  sourceRevision?: number;
+  payload: JsonValue;
+}
+
+export interface WorldModelOption {
+  key: string;
+  name: string;
+  description?: string;
+  sourceLabel?: string;
+  elementId?: string;
+  registryId?: string;
+  semanticRole?: string;
+  sourceReleaseId?: string;
+  payload?: Record<string, JsonValue>;
+}
+
+export interface EffectiveModelElementResponse {
+  id: string;
+  registryId: string;
+  key: string;
+  kind: string;
+  semanticRole: string;
+  status: string;
+  sourceReleaseId?: string;
+  currentRevision?: {
+    presentation?: Record<string, JsonValue>;
+    payload?: Record<string, JsonValue>;
+  };
+}
+
+export interface EffectiveWorldModelResponse {
+  releases: Array<{
+    id: string;
+    registryId: string;
+    name: string;
+    registryName: string;
+    revisionNumber: number;
+    contentHash: string;
+  }>;
+  attributes: EffectiveModelElementResponse[];
+  equipmentSlots: EffectiveModelElementResponse[];
+  elements: EffectiveModelElementResponse[];
+}
+
+export interface EffectiveWorldModels {
+  attributes: WorldModelOption[];
+  equipmentSlots: WorldModelOption[];
+  itemFamilies: WorldModelOption[];
+  selectedReleaseNames?: string[];
+  elements?: WorldModelOption[];
+  releases?: Array<{
+    id: string;
+    registryId: string;
+    name: string;
+    registryName: string;
+    revisionNumber: number;
+  }>;
+}
+
+export interface ModelRegistrySummary {
+  identity: { id: string; version: { revision: number; updatedAt: string } };
+  key: string;
+  name: string;
+  description?: string;
+  provenance: { kind: string; [key: string]: JsonValue | undefined };
+}
+
+export interface ModelRegistryDetail extends ModelRegistrySummary {
+  releases: Array<{
+    identity: {
+      id: string;
+      lineageId: string;
+      revisionNumber: number;
+      predecessorRevisionId?: string;
+      publishedAt: string;
+    };
+    name: string;
+    dependencies?: Array<{ releaseId: string }>;
+  }>;
+}
+
+export interface WorldDefinitionDraft {
+  id?: string;
+  worldDefinitionId?: string;
+  storageRevision: number;
+  revisionName: string;
+  baseRevisionId?: string;
+  baseRevisionNumber?: number;
+  status?: "current" | "stale";
+  validationStatus?: string;
+  validatedStorageRevision?: number;
+  content: Record<string, JsonValue>;
+  records: WorldDraftRecord[];
+  effectiveModels?: EffectiveWorldModels;
+  updatedAt?: string;
+}
+
+export interface WorldDraftImpact {
+  draftStorageRevision: number;
+  changes: { added: number; changed: number; removed: number };
+  downstreamCampaigns: Array<{
+    name: string;
+    eligibility: "eligible-after-publication" | "not-direct-successor";
+  }>;
 }
 
 export interface WorldDefinitionList {
@@ -91,6 +211,7 @@ export interface WorldDefinitionDetail {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
+  metadataRevision?: number;
   revisions: Array<
     WorldDefinitionRevisionSummary & {
       predecessorRevisionId?: string;
@@ -296,6 +417,208 @@ export function listWorldDefinitions() {
 export function getWorldDefinition(worldDefinitionId: string) {
   return request<WorldDefinitionDetail>(
     `/world-definitions/${encodeURIComponent(worldDefinitionId)}`,
+  );
+}
+
+export function createWorldDefinitionDraft(input: {
+  name: string;
+  description?: string;
+  content?: Record<string, JsonValue>;
+  records?: WorldDraftRecord[];
+}) {
+  return request<WorldDefinitionSummary & { draft: WorldDefinitionDraft }>(
+    "/world-definitions",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getWorldDefinitionDraft(worldDefinitionId: string) {
+  return request<WorldDefinitionDraft>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+  );
+}
+
+export function startWorldDefinitionDraft(
+  worldDefinitionId: string,
+  baseRevisionId: string,
+) {
+  return request<WorldDefinitionDraft>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseRevisionId }),
+    },
+  );
+}
+
+export function getEffectiveWorldModels(worldDefinitionId: string) {
+  return request<EffectiveWorldModelResponse>(
+    `/model-registries/effective?worldDefinitionId=${encodeURIComponent(worldDefinitionId)}`,
+  );
+}
+
+export function listModelRegistries() {
+  return request<{ items: ModelRegistrySummary[]; total: number }>(
+    "/model-registries",
+  );
+}
+
+export function createModelRegistry(input: {
+  key: string;
+  name: string;
+  description?: string;
+}) {
+  return request<ModelRegistrySummary>("/model-registries", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function getModelRegistry(registryId: string) {
+  return request<ModelRegistryDetail>(
+    `/model-registries/${encodeURIComponent(registryId)}`,
+  );
+}
+
+export function extendModelRegistryRelease(
+  registryId: string,
+  input: {
+    name: string;
+    predecessorRevisionId?: string;
+    elements: Array<{
+      key: string;
+      kind: "vocabulary-option";
+      semanticRole: string;
+      applicability: Record<string, JsonValue>;
+      payload: Record<string, JsonValue>;
+      presentation: Record<string, JsonValue>;
+    }>;
+  },
+) {
+  return request<{
+    release: {
+      identity: {
+        id: string;
+        lineageId: string;
+        revisionNumber: number;
+        predecessorRevisionId?: string;
+      };
+      name: string;
+      dependencies?: Array<{ releaseId: string }>;
+    };
+    addedElements: Array<{ id: string; key: string }>;
+  }>(`/model-registries/${encodeURIComponent(registryId)}/releases/extend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function saveWorldDefinitionDraft(
+  worldDefinitionId: string,
+  draft: Pick<
+    WorldDefinitionDraft,
+    "storageRevision" | "revisionName" | "content" | "records"
+  >,
+) {
+  return request<WorldDefinitionDraft>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expectedStorageRevision: draft.storageRevision,
+        revisionName: draft.revisionName,
+        content: draft.content,
+        records: draft.records,
+      }),
+    },
+  );
+}
+
+export function getWorldDraftImpact(worldDefinitionId: string) {
+  return request<WorldDraftImpact>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/impact`,
+  );
+}
+
+export function validateWorldDefinitionDraft(
+  worldDefinitionId: string,
+  expectedStorageRevision: number,
+) {
+  return request<{
+    valid: boolean;
+    issues: Array<{ code: string; subject: string; detail: string }>;
+  }>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/validate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStorageRevision }),
+    },
+  );
+}
+
+export function publishWorldDefinitionDraft(
+  worldDefinitionId: string,
+  expectedStorageRevision: number,
+) {
+  return request<
+    WorldDefinitionRevisionSummary & {
+      snapshot?: { id: string; capturedAt: string };
+    }
+  >(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/publish`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStorageRevision }),
+    },
+  );
+}
+
+function worldLifecycleAction(
+  worldDefinitionId: string,
+  action: "archive" | "restore",
+  expectedMetadataRevision: number,
+) {
+  return request<WorldDefinitionSummary>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/${action}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedMetadataRevision }),
+    },
+  );
+}
+
+export const archiveWorldDefinition = (
+  worldDefinitionId: string,
+  expectedMetadataRevision: number,
+) =>
+  worldLifecycleAction(worldDefinitionId, "archive", expectedMetadataRevision);
+export const restoreWorldDefinition = (
+  worldDefinitionId: string,
+  expectedMetadataRevision: number,
+) =>
+  worldLifecycleAction(worldDefinitionId, "restore", expectedMetadataRevision);
+export function forkWorldDefinition(
+  worldDefinitionId: string,
+  input: { sourceSnapshotId: string; name: string; description?: string },
+) {
+  return request<WorldDefinitionSummary & { draft: WorldDefinitionDraft }>(
+    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/forks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
   );
 }
 
