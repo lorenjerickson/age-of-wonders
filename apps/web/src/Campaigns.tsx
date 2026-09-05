@@ -8,6 +8,18 @@ import {
   useState,
 } from "react";
 import {
+  ActionCard,
+  Button,
+  Details,
+  Input,
+  Label,
+  RichTextEditor,
+  Select,
+  Summary,
+  TextInput,
+  Textarea,
+} from "@aow/ui";
+import {
   createCampaignWithAi,
   createCreatureWithAi,
   createDomainRecord,
@@ -17,6 +29,8 @@ import {
   listDomainRecords,
   replaceDomainRecord,
 } from "./api";
+import { CampaignParticipants } from "./CampaignParticipants";
+import { InternalLink, useInternalNavigate } from "./navigation";
 import {
   creatureTokenArtworkView,
   SESSION_CANVAS_LAYERS,
@@ -192,14 +206,14 @@ function SessionContextControls({
       <span className="badge badge-ghost hidden sm:inline-flex">
         {active ? `${active.name ?? "Session"} in progress` : "Authoring"}
       </span>
-      <button
+      <Button
         type="button"
         className={`btn btn-sm ${active ? "btn-error btn-outline" : "btn-primary"}`}
         disabled={busy}
         onClick={() => void (active ? endSession() : startSession())}
       >
         {busy ? "Working…" : active ? "End session" : "Start session"}
-      </button>
+      </Button>
       {message && (
         <span
           role="status"
@@ -264,19 +278,19 @@ function LocationDetailsInspector({
 
   return (
     <section className="rounded-box border border-base-300 bg-base-100 p-3">
-      <label className="text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
+      <Label className="text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
         Location description
-        <textarea
-          className="textarea textarea-bordered mt-2 min-h-28 w-full text-sm leading-6 normal-case"
+        <Textarea
+          className="textarea mt-2 min-h-28 w-full text-sm leading-6 normal-case"
           value={description}
           placeholder="Describe what the GM needs to know about this place."
           onChange={(event) => setDescription(event.currentTarget.value)}
         />
-      </label>
-      <label className="mt-3 block text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
+      </Label>
+      <Label className="mt-3 block text-xs font-semibold tracking-[0.12em] text-base-content/55 uppercase">
         Map perspective
-        <select
-          className="select select-bordered mt-2 w-full text-sm font-normal normal-case"
+        <Select
+          className="select mt-2 w-full text-sm font-normal normal-case"
           value={orientation}
           onChange={(event) =>
             setOrientation(
@@ -287,13 +301,13 @@ function LocationDetailsInspector({
           <option value="overhead">Overhead</option>
           <option value="side-on">Side-on</option>
           <option value="scenic">Scenic</option>
-        </select>
-      </label>
+        </Select>
+      </Label>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span role="status" className="truncate text-xs text-base-content/50">
           {message}
         </span>
-        <button
+        <Button
           type="button"
           className="btn btn-ghost btn-sm"
           disabled={
@@ -304,7 +318,7 @@ function LocationDetailsInspector({
           onClick={() => void saveLocation()}
         >
           {saving ? "Saving…" : "Save location"}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -1009,127 +1023,6 @@ function dataFrom(record: DomainRecord, draft: CampaignDraft): JsonObject {
   };
 }
 
-function FieldLabel({ children }: { children: string }) {
-  return <span className="block text-sm font-medium">{children}</span>;
-}
-
-function RichTextEditor({
-  label,
-  help,
-  value,
-  placeholder,
-  onChange,
-  tone = "default",
-}: {
-  label: string;
-  help: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-  tone?: "default" | "protected";
-}) {
-  const editor = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!editor.current || document.activeElement === editor.current) return;
-    const sanitized = sanitizeRichText(value);
-    if (editor.current.innerHTML !== sanitized) {
-      editor.current.innerHTML = sanitized;
-    }
-  }, [value]);
-
-  function command(name: string, argument?: string) {
-    editor.current?.focus();
-    document.execCommand(name, false, argument);
-    if (editor.current) onChange(editor.current.innerHTML);
-  }
-
-  const toolbar = [
-    { label: "Bold", icon: "B", command: "bold" },
-    { label: "Italic", icon: "I", command: "italic" },
-    { label: "Heading", icon: "H2", command: "formatBlock", value: "h2" },
-    {
-      label: "Bulleted list",
-      icon: "• List",
-      command: "insertUnorderedList",
-    },
-    {
-      label: "Numbered list",
-      icon: "1. List",
-      command: "insertOrderedList",
-    },
-    { label: "Quote", icon: "❝", command: "formatBlock", value: "blockquote" },
-  ] as const;
-
-  return (
-    <div className="form-control">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <FieldLabel>{label}</FieldLabel>
-          <p className="mt-1 text-xs leading-5 text-base-content/50">{help}</p>
-        </div>
-        {tone === "protected" && (
-          <span className="badge badge-warning badge-outline gap-1.5">
-            <span aria-hidden>◉</span> GM only
-          </span>
-        )}
-      </div>
-      <div className="mt-3 overflow-hidden rounded-box border border-base-300 bg-base-100 focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/10">
-        <div
-          role="toolbar"
-          aria-label={`${label} formatting`}
-          className="flex flex-wrap gap-1 border-b border-base-300 bg-base-200/70 p-2"
-        >
-          {toolbar.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              className={`btn btn-ghost btn-xs ${item.command === "italic" ? "italic" : ""}`}
-              aria-label={item.label}
-              title={item.label}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() =>
-                command(item.command, "value" in item ? item.value : undefined)
-              }
-            >
-              {item.icon}
-            </button>
-          ))}
-          <span className="mx-1 h-6 w-px bg-base-300" aria-hidden />
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => command("removeFormat")}
-          >
-            Clear style
-          </button>
-        </div>
-        <div className="relative">
-          {!richTextPlainText(value) && (
-            <p className="pointer-events-none absolute top-4 left-5 text-sm text-base-content/35">
-              {placeholder}
-            </p>
-          )}
-          <div
-            ref={editor}
-            contentEditable
-            suppressContentEditableWarning
-            role="textbox"
-            aria-label={label}
-            aria-multiline="true"
-            className="campaign-rich-text min-h-52 px-5 py-4 text-[1.143333rem] leading-7 outline-none"
-            onInput={(event) => onChange(event.currentTarget.innerHTML)}
-            onBlur={(event) =>
-              onChange(sanitizeRichText(event.currentTarget.innerHTML))
-            }
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function useLocationMapUrl(location?: DomainRecord) {
   const image = objectAt(location?.data.image);
   const assetId = stringAt(image.assetId);
@@ -1167,9 +1060,9 @@ function CampaignHeader({
     return (
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 pb-4">
         <div className="min-w-0">
-          <a href="/campaigns" className="text-sm text-primary">
+          <InternalLink href="/campaigns" className="text-sm text-primary">
             ← Campaigns
-          </a>
+          </InternalLink>
           <div className="mt-1 flex min-w-0 items-center gap-2">
             <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
               Campaign studio
@@ -1180,9 +1073,9 @@ function CampaignHeader({
             </h1>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary btn-sm">
+        <Button type="submit" className="btn btn-primary btn-sm">
           {saving ? "Saving…" : "Save campaign"}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -1190,9 +1083,9 @@ function CampaignHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-6 border-b border-base-300 pb-8">
       <div className="max-w-3xl">
-        <a href="/campaigns" className="text-sm text-amber-300">
+        <InternalLink href="/campaigns" className="text-sm text-amber-300">
           ← Back to campaigns
-        </a>
+        </InternalLink>
         <div className="mt-6 flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-primary">
             ✦
@@ -1209,9 +1102,9 @@ function CampaignHeader({
           before the first session.
         </p>
       </div>
-      <button className="btn btn-primary btn-lg" disabled={saving}>
+      <Button className="btn btn-primary btn-lg" disabled={saving}>
         {saving ? "Saving…" : "Save campaign"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1237,22 +1130,18 @@ function OverviewFields({
             player introduction remain separate by design.
           </p>
         </div>
-        <label className="form-control xl:col-span-2">
-          <FieldLabel>Campaign name</FieldLabel>
-          <input
-            className="input input-bordered mt-2"
-            value={draft.name}
-            onChange={(event) =>
-              setDraft({ ...draft, name: event.target.value })
-            }
-            placeholder="The Hound of Greybridge"
-          />
-        </label>
+        <TextInput
+          label="Campaign name"
+          fieldClassName="xl:col-span-2"
+          value={draft.name}
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          placeholder="The Hound of Greybridge"
+        />
         <RichTextEditor
           label="GM premise"
           help="Protected context, tensions, people, and circumstances for the GM."
           value={draft.gmPremise}
-          tone="protected"
+          protectedContent
           onChange={(gmPremise) => setDraft({ ...draft, gmPremise })}
           placeholder="Describe the starting situation, important tensions, and protected context."
         />
@@ -1378,8 +1267,8 @@ function VisualRecordPicker({
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const selected = records.find((record) => record.id === value);
   return (
-    <details ref={detailsRef} className="dropdown w-full">
-      <summary className="block cursor-pointer list-none rounded-box outline-none focus-visible:ring-2 focus-visible:ring-primary">
+    <Details ref={detailsRef} className="dropdown w-full">
+      <Summary className="block cursor-pointer list-none rounded-box outline-none focus-visible:ring-2 focus-visible:ring-primary">
         {selected ? (
           <VisualRecordCard record={selected} kind={kind} />
         ) : (
@@ -1387,28 +1276,28 @@ function VisualRecordPicker({
             {placeholder}
           </span>
         )}
-      </summary>
+      </Summary>
       <div
         role="listbox"
         className="dropdown-content z-30 mt-2 grid max-h-96 w-full min-w-80 gap-2 overflow-y-auto rounded-box border border-base-300 bg-base-200 p-2 shadow-2xl"
       >
         {records.map((record) => (
-          <button
+          <ActionCard
             key={record.id}
             type="button"
             role="option"
             aria-selected={record.id === value}
-            className={`rounded-box transition hover:ring-2 hover:ring-primary/40 ${record.id === value ? "ring-2 ring-primary" : ""}`}
+            className={`w-full rounded-box transition hover:ring-2 hover:ring-primary/40 ${record.id === value ? "ring-2 ring-primary" : ""}`}
             onClick={() => {
               onChange(record.id);
               if (detailsRef.current) detailsRef.current.open = false;
             }}
           >
             <VisualRecordCard record={record} kind={kind} />
-          </button>
+          </ActionCard>
         ))}
       </div>
-    </details>
+    </Details>
   );
 }
 
@@ -1483,22 +1372,22 @@ function PlacementSection({
           </div>
           <div className="flex flex-wrap gap-2">
             {onCreateWithAi && (
-              <button
+              <Button
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => setEditingPlacementId("ai")}
               >
                 ✦ Create with AI
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               className="btn btn-secondary btn-sm"
               disabled={sources.length === 0}
               onClick={() => setEditingPlacementId("new")}
             >
               + Add existing
-            </button>
+            </Button>
           </div>
         </div>
         {sources.length === 0 && (
@@ -1509,19 +1398,19 @@ function PlacementSection({
         <div className="grid gap-3 xl:grid-cols-2">
           {editingPlacementId === "ai" && onCreateWithAi && (
             <div className="rounded-box border border-primary/30 bg-primary/[0.06] p-3 xl:col-span-2">
-              <label
+              <Label
                 className="text-sm font-semibold"
                 htmlFor="ai-creature-prompt"
               >
                 Create and place a new {sourceLabel.toLowerCase()}
-              </label>
+              </Label>
               <p className="mt-1 text-xs leading-5 text-base-content/55">
                 The current location is included as context. The new creature is
                 added here without leaving the workspace.
               </p>
-              <textarea
+              <Textarea
                 id="ai-creature-prompt"
-                className="textarea textarea-bordered mt-3 min-h-24 w-full"
+                className="textarea mt-3 min-h-24 w-full"
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.currentTarget.value)}
                 placeholder="A wary tunnel scavenger adapted to this location…"
@@ -1532,21 +1421,21 @@ function PlacementSection({
                 </p>
               )}
               <div className="mt-3 flex justify-end gap-2">
-                <button
+                <Button
                   type="button"
                   className="btn btn-ghost btn-sm"
                   onClick={() => setEditingPlacementId(undefined)}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   className="btn btn-primary btn-sm"
                   disabled={creatingWithAi || aiPrompt.trim().length < 3}
                   onClick={() => void createAndPlace()}
                 >
                   {creatingWithAi ? "Creating…" : "Create and place"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1568,13 +1457,13 @@ function PlacementSection({
                   setEditingPlacementId(undefined);
                 }}
               />
-              <button
+              <Button
                 type="button"
                 className="btn btn-ghost btn-sm mt-2"
                 onClick={() => setEditingPlacementId(undefined)}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           )}
           {locationPlacements.map((placement) => {
@@ -1603,7 +1492,7 @@ function PlacementSection({
                   }
                 />
                 <div className="mt-2 flex justify-between gap-2">
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost btn-sm text-error"
                     onClick={() => {
@@ -1616,21 +1505,21 @@ function PlacementSection({
                     }}
                   >
                     Remove
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     className="btn btn-primary btn-sm"
                     onClick={() => setEditingPlacementId(undefined)}
                   >
                     Done
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <button
+              <ActionCard
                 key={placement.id}
                 type="button"
-                className="rounded-box text-left transition hover:-translate-y-0.5 hover:ring-2 hover:ring-primary/40"
+                className="w-full rounded-box text-left transition hover:-translate-y-0.5 hover:ring-2 hover:ring-primary/40"
                 onClick={() => setEditingPlacementId(placement.id)}
               >
                 {source ? (
@@ -1640,7 +1529,7 @@ function PlacementSection({
                     Unavailable {sourceLabel.toLowerCase()}
                   </span>
                 )}
-              </button>
+              </ActionCard>
             );
           })}
           {locationPlacements.length === 0 && sources.length > 0 && (
@@ -1739,13 +1628,13 @@ function DiscoverySection({
               not reveal anything automatically.
             </p>
           </div>
-          <button
+          <Button
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={addDiscovery}
           >
             + Add discovery
-          </button>
+          </Button>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
@@ -1753,10 +1642,10 @@ function DiscoverySection({
             const editing = editingDiscoveryId === discovery.id;
             if (!editing) {
               return (
-                <button
+                <ActionCard
                   key={discovery.id}
                   type="button"
-                  className="card border border-base-300 bg-base-100 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
+                  className="border border-base-300 bg-base-100 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
                   onClick={() => setEditingDiscoveryId(discovery.id)}
                 >
                   <span className="card-body gap-4 p-5">
@@ -1794,7 +1683,7 @@ function DiscoverySection({
                       )}
                     </span>
                   </span>
-                </button>
+                </ActionCard>
               );
             }
 
@@ -1804,13 +1693,13 @@ function DiscoverySection({
                 className="card border border-primary/30 bg-primary/[0.06] shadow-lg xl:col-span-2"
               >
                 <div className="card-body gap-5 p-5">
-                  <label className="block">
+                  <Label className="block">
                     <span className="block text-sm font-semibold">
                       Discovery name
                     </span>
-                    <input
+                    <Input
                       autoFocus
-                      className="input input-bordered mt-2 w-full bg-base-100"
+                      className="input mt-2 w-full bg-base-100"
                       value={discovery.name}
                       placeholder="The constable's ledger"
                       onChange={(event) =>
@@ -1820,7 +1709,7 @@ function DiscoverySection({
                         }))
                       }
                     />
-                  </label>
+                  </Label>
 
                   <div className="grid gap-3">
                     {discovery.grants.map((grant) => (
@@ -1835,7 +1724,7 @@ function DiscoverySection({
                             </span>
                             {GRANT_PRESENTATION[grant.kind].label}
                           </span>
-                          <button
+                          <Button
                             type="button"
                             className="btn btn-ghost btn-xs text-error"
                             onClick={() =>
@@ -1848,18 +1737,18 @@ function DiscoverySection({
                             }
                           >
                             Remove
-                          </button>
+                          </Button>
                         </div>
                         {grant.kind === "money" ? (
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="block">
+                            <Label className="block">
                               <span className="block text-sm font-medium">
                                 Amount
                               </span>
-                              <input
+                              <Input
                                 type="number"
                                 min="0"
-                                className="input input-bordered mt-2 w-full"
+                                className="input mt-2 w-full"
                                 value={grant.amount}
                                 onChange={(event) =>
                                   updateDiscovery(discovery.id, (current) => ({
@@ -1876,13 +1765,13 @@ function DiscoverySection({
                                   }))
                                 }
                               />
-                            </label>
-                            <label className="block">
+                            </Label>
+                            <Label className="block">
                               <span className="block text-sm font-medium">
                                 World currency
                               </span>
-                              <input
-                                className="input input-bordered mt-2 w-full"
+                              <Input
+                                className="input mt-2 w-full"
                                 value={grant.denomination}
                                 onChange={(event) =>
                                   updateDiscovery(discovery.id, (current) => ({
@@ -1899,7 +1788,7 @@ function DiscoverySection({
                                   }))
                                 }
                               />
-                            </label>
+                            </Label>
                           </div>
                         ) : grant.kind === "item" ? (
                           <VisualRecordPicker
@@ -1920,12 +1809,12 @@ function DiscoverySection({
                             }
                           />
                         ) : (
-                          <label className="block">
+                          <Label className="block">
                             <span className="block text-sm font-medium">
                               {GRANT_PRESENTATION[grant.kind].label} text
                             </span>
-                            <textarea
-                              className="textarea textarea-bordered mt-2 min-h-24 w-full resize-y leading-6"
+                            <Textarea
+                              className="textarea mt-2 min-h-24 w-full resize-y leading-6"
                               placeholder={`Write the ${GRANT_PRESENTATION[grant.kind].label.toLowerCase()}`}
                               value={grant.text}
                               onChange={(event) =>
@@ -1943,7 +1832,7 @@ function DiscoverySection({
                                 }))
                               }
                             />
-                          </label>
+                          </Label>
                         )}
                       </div>
                     ))}
@@ -1959,7 +1848,7 @@ function DiscoverySection({
                         "item",
                       ] as const
                     ).map((kind) => (
-                      <button
+                      <Button
                         key={kind}
                         type="button"
                         className="btn btn-outline btn-sm"
@@ -1967,12 +1856,12 @@ function DiscoverySection({
                       >
                         <span aria-hidden>{GRANT_PRESENTATION[kind].icon}</span>
                         Add {GRANT_PRESENTATION[kind].label.toLowerCase()}
-                      </button>
+                      </Button>
                     ))}
                   </div>
 
                   <div className="card-actions justify-between">
-                    <button
+                    <Button
                       type="button"
                       className="btn btn-ghost btn-sm text-error"
                       onClick={() => {
@@ -1985,14 +1874,14 @@ function DiscoverySection({
                       }}
                     >
                       Remove discovery
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       className="btn btn-primary btn-sm"
                       onClick={() => setEditingDiscoveryId(undefined)}
                     >
                       Done
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </article>
@@ -2108,10 +1997,10 @@ function CampaignLocationsWorkspace({
                   (placement) => stringAt(placement.locationId) === location.id,
                 ).length;
               return (
-                <button
+                <ActionCard
                   key={location.id}
                   type="button"
-                  className="card border border-base-300 bg-base-200 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
+                  className="border border-base-300 bg-base-200 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
                   onClick={() => openLocation(location.id)}
                 >
                   <span className="card-body gap-3 p-5">
@@ -2137,7 +2026,7 @@ function CampaignLocationsWorkspace({
                       Manage location →
                     </span>
                   </span>
-                </button>
+                </ActionCard>
               );
             })}
           </div>
@@ -2335,7 +2224,7 @@ function CampaignLocationsWorkspace({
   return (
     <div className="relative h-dvh min-h-0 overflow-hidden">
       <div className="location-breadcrumb-overlay pointer-events-none absolute top-3 right-[23rem] left-14 z-30 flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/55 px-2 shadow-[0_8px_28px_rgba(0,0,0,.5)] backdrop-blur-md">
-        <button
+        <Button
           type="button"
           className="btn btn-ghost btn-square btn-sm pointer-events-auto"
           aria-label="Browse world locations"
@@ -2343,7 +2232,7 @@ function CampaignLocationsWorkspace({
           onClick={() => setSelectedLocationId(undefined)}
         >
           ←
-        </button>
+        </Button>
         <nav aria-label="Location hierarchy" className="min-w-0 flex-1">
           <ol className="pointer-events-auto flex flex-wrap items-center gap-1 text-sm">
             {selectedPath.map((location) => (
@@ -2352,7 +2241,7 @@ function CampaignLocationsWorkspace({
                 {includedLocations.some(
                   (included) => included.id === location.id,
                 ) && location.id !== selectedLocation.id ? (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost btn-sm max-w-48 px-2 font-normal"
                     onClick={() => openLocation(location.id)}
@@ -2360,7 +2249,7 @@ function CampaignLocationsWorkspace({
                     <span className="truncate">
                       {location.name ?? "Untitled location"}
                     </span>
-                  </button>
+                  </Button>
                 ) : (
                   <span
                     className={`max-w-56 truncate px-2 py-1 ${
@@ -2381,9 +2270,9 @@ function CampaignLocationsWorkspace({
             worldId={draft.worldId}
             campaignId={campaignId}
           />
-          <button type="submit" className="btn btn-ghost btn-sm">
+          <Button type="submit" className="btn btn-ghost btn-sm">
             {saving ? "Saving…" : "Save"}
-          </button>
+          </Button>
           {saveMessage && (
             <span className="badge badge-ghost max-w-48 truncate">
               {saveMessage}
@@ -2434,7 +2323,7 @@ function CampaignLocationsWorkspace({
                   }
                 />
                 {selectedLocation.id !== draft.partyStartingLocationId && (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost btn-sm mt-2"
                     onClick={() =>
@@ -2445,7 +2334,7 @@ function CampaignLocationsWorkspace({
                     }
                   >
                     Set as party starting location
-                  </button>
+                  </Button>
                 )}
               </div>
               <PlacementSection
@@ -2558,6 +2447,7 @@ function validationMessage(draft: CampaignDraft): string | undefined {
 }
 
 export function CampaignCreatePage() {
+  const navigate = useInternalNavigate();
   const [worlds, setWorlds] = useState<DomainRecord[]>([]);
   const [worldId, setWorldId] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -2595,9 +2485,7 @@ export function CampaignCreatePage() {
     setMessage("");
     try {
       const result = await createCampaignWithAi(worldId, prompt.trim());
-      window.location.assign(
-        `/campaigns/${encodeURIComponent(result.campaign.id)}`,
-      );
+      await navigate(`/campaigns/${encodeURIComponent(result.campaign.id)}`);
     } catch (caught) {
       setMessage(
         caught instanceof Error
@@ -2612,9 +2500,9 @@ export function CampaignCreatePage() {
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="w-full px-6 py-8 lg:px-10">
         <header className="border-b border-base-300 pb-8">
-          <a href="/campaigns" className="text-sm text-primary">
+          <InternalLink href="/campaigns" className="text-sm text-primary">
             ← Campaigns
-          </a>
+          </InternalLink>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight">
             Create campaign
           </h1>
@@ -2649,11 +2537,11 @@ export function CampaignCreatePage() {
               </p>
             </div>
 
-            <label className="block max-w-sm">
+            <Label className="block max-w-sm">
               <span className="block text-sm font-medium">World</span>
-              <select
+              <Select
                 required
-                className="select select-bordered mt-2 w-full"
+                className="select mt-2 w-full"
                 value={worldId}
                 onChange={(event) => setWorldId(event.target.value)}
               >
@@ -2663,30 +2551,30 @@ export function CampaignCreatePage() {
                     {world.name ?? "Unnamed world"}
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="mt-2 block text-xs text-base-content/50">
                 Uses this world’s existing locations, creatures, and items.
               </span>
-            </label>
+            </Label>
 
-            <label className="block">
+            <Label className="block">
               <span className="block text-sm font-medium">Campaign idea</span>
-              <textarea
+              <Textarea
                 required
                 minLength={3}
-                className="textarea textarea-bordered mt-2 min-h-56 w-full resize-y text-base leading-7"
+                className="textarea mt-2 min-h-56 w-full resize-y text-base leading-7"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="A celebrated detective vanished beneath a flooded city. The party arrives as old alliances fracture, strange bells ring below the streets, and every witness remembers a different version of the night…"
               />
-            </label>
+            </Label>
 
             <div className="card-actions items-center justify-between gap-4">
               <span className="max-w-xl text-xs leading-5 text-base-content/50">
                 Keeps GM-only details private and leaves party decisions to the
                 players.
               </span>
-              <button
+              <Button
                 className="btn btn-primary"
                 disabled={saving || !worldId || prompt.trim().length < 3}
               >
@@ -2694,7 +2582,7 @@ export function CampaignCreatePage() {
                   <span className="loading loading-spinner loading-sm" />
                 )}
                 Generate campaign
-              </button>
+              </Button>
             </div>
 
             {worlds.length === 0 && (
@@ -2806,9 +2694,9 @@ export function CampaignEditorPage({
     return (
       <main className="min-h-screen bg-base-100 px-6 py-12 text-base-content">
         <div className="w-full">
-          <a href="/campaigns" className="text-sm text-amber-300">
+          <InternalLink href="/campaigns" className="text-sm text-amber-300">
             ← Back to campaigns
-          </a>
+          </InternalLink>
           <p className="mt-8">{message || "Loading campaign…"}</p>
         </div>
       </main>
@@ -2837,7 +2725,10 @@ export function CampaignEditorPage({
           className={`${view === "locations" ? "h-full min-h-0" : "mt-8"} grid gap-6`}
         >
           {view === "definition" ? (
-            <OverviewFields draft={draft} setDraft={setCampaignDraft} />
+            <>
+              <OverviewFields draft={draft} setDraft={setCampaignDraft} />
+              <CampaignParticipants campaignId={id} worldId={draft.worldId} />
+            </>
           ) : (
             <CampaignLocationsWorkspace
               campaignRecord={record}

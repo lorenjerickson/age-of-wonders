@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
@@ -15,9 +16,11 @@ import {
   PutGraphTriplesDto,
 } from "./dto/graph.dto";
 import { GraphService } from "./graph.service";
+import { GmGuard } from "../auth/auth.guard";
 
 @ApiTags("graph")
 @Controller("graph/tuples")
+@UseGuards(GmGuard)
 export class GraphController {
   constructor(private readonly graph: GraphService) {}
 

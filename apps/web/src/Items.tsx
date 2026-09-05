@@ -1,4 +1,19 @@
 import { ITEM_QUALITIES } from "@aow/common";
+import {
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  CompactInput,
+  Field,
+  FieldLabel,
+  FileInput,
+  HelpText,
+  Input,
+  Select,
+  Tab,
+  Textarea,
+} from "@aow/ui";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createDomainRecord,
@@ -13,6 +28,11 @@ import {
   replaceDomainRecord,
   uploadMedia,
 } from "./api";
+import {
+  InternalLink,
+  RouterButtonLink,
+  useInternalNavigate,
+} from "./navigation";
 
 type CreationMode = "ai" | "manual";
 
@@ -297,12 +317,12 @@ export function ItemListPage({ worldId }: { worldId: string }) {
       <div className="w-full px-6 py-8 lg:px-10">
         <header className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-8">
           <div>
-            <a
+            <InternalLink
               href={`/worlds/${encodeURIComponent(worldId)}`}
               className="text-sm text-primary"
             >
               {world?.name ?? "World"}
-            </a>
+            </InternalLink>
             <h1 className="mt-3 text-5xl font-semibold tracking-tight">
               Items
             </h1>
@@ -310,31 +330,28 @@ export function ItemListPage({ worldId }: { worldId: string }) {
               The reusable item types created for this world.
             </p>
           </div>
-          <a
+          <RouterButtonLink
             href={`/worlds/${encodeURIComponent(worldId)}/items/new`}
-            className="btn btn-primary"
+            tone="primary"
           >
             + Create item
-          </a>
+          </RouterButtonLink>
         </header>
 
         <section
           aria-label="Item filters"
           className="mt-8 grid gap-3 rounded-box border border-base-300 bg-base-200 p-4 md:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(9rem,auto))]"
         >
-          <label className="input input-bordered flex items-center gap-2">
-            <span aria-hidden="true">⌕</span>
-            <input
-              type="search"
-              className="grow"
-              placeholder="Search items"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <select
+          <CompactInput
+            label={<span aria-hidden="true">⌕</span>}
+            type="search"
+            placeholder="Search items"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <Select
             aria-label="Filter by category"
-            className="select select-bordered w-full"
+
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           >
@@ -342,10 +359,10 @@ export function ItemListPage({ worldId }: { worldId: string }) {
             {categories.map((value) => (
               <option key={value}>{value}</option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Filter by rarity"
-            className="select select-bordered w-full"
+
             value={rarity}
             onChange={(event) => setRarity(event.target.value)}
           >
@@ -353,10 +370,10 @@ export function ItemListPage({ worldId }: { worldId: string }) {
             {RARITIES.map((value) => (
               <option key={value}>{value}</option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Filter by operating basis"
-            className="select select-bordered w-full"
+
             value={operatingBasis}
             onChange={(event) => setOperatingBasis(event.target.value)}
           >
@@ -364,10 +381,14 @@ export function ItemListPage({ worldId }: { worldId: string }) {
             {OPERATING_BASES.map((value) => (
               <option key={value}>{value}</option>
             ))}
-          </select>
+          </Select>
         </section>
 
-        {error && <div className="alert alert-error mt-6">{error}</div>}
+        {error && (
+          <Alert tone="error" className="mt-6">
+            {error}
+          </Alert>
+        )}
         {loading ? (
           <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(180px,200px))] justify-start gap-4">
             {[0, 1, 2].map((value) => (
@@ -382,7 +403,7 @@ export function ItemListPage({ worldId }: { worldId: string }) {
             {filtered.map((item) => {
               const details = itemDetails(item);
               return (
-                <a
+                <InternalLink
                   key={item.id}
                   href={`/worlds/${encodeURIComponent(worldId)}/items/${encodeURIComponent(item.id)}`}
                   className="card w-full max-w-[200px] overflow-hidden border border-base-300 bg-base-200 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
@@ -393,26 +414,25 @@ export function ItemListPage({ worldId }: { worldId: string }) {
                       <h2 className="line-clamp-2 text-base leading-5 font-semibold">
                         {details.name}
                       </h2>
-                      <span className="badge badge-primary badge-outline badge-sm mt-2 max-w-full truncate">
+                      <Badge
+                        tone="primary"
+                        outline
+                        size="sm"
+                        className="mt-2 max-w-full truncate"
+                      >
                         {details.operatingBasis}
-                      </span>
+                      </Badge>
                     </div>
                     <p className="line-clamp-2 text-xs leading-5 text-base-content/55">
                       {details.description || "No description yet."}
                     </p>
                     <div className="mt-auto flex flex-wrap gap-1 pt-1">
-                      <span className="badge badge-ghost badge-sm">
-                        {details.category}
-                      </span>
-                      <span className="badge badge-ghost badge-sm">
-                        {details.rarity}
-                      </span>
-                      <span className="badge badge-ghost badge-sm">
-                        {details.quality}
-                      </span>
+                      <Badge size="sm">{details.category}</Badge>
+                      <Badge size="sm">{details.rarity}</Badge>
+                      <Badge size="sm">{details.quality}</Badge>
                     </div>
                   </div>
-                </a>
+                </InternalLink>
               );
             })}
           </div>
@@ -431,12 +451,13 @@ export function ItemListPage({ worldId }: { worldId: string }) {
                   : "Create an item manually or let AI design one from this world’s context."}
               </p>
               {!items.length && (
-                <a
+                <RouterButtonLink
                   href={`/worlds/${encodeURIComponent(worldId)}/items/new`}
-                  className="btn btn-primary mt-3"
+                  tone="primary"
+                  className="mt-3"
                 >
                   Create your first item
-                </a>
+                </RouterButtonLink>
               )}
             </div>
           </div>
@@ -447,6 +468,7 @@ export function ItemListPage({ worldId }: { worldId: string }) {
 }
 
 export function ItemCreatePage({ worldId }: { worldId: string }) {
+  const navigate = useInternalNavigate();
   const [world, setWorld] = useState<DomainRecord>();
   const [mode, setMode] = useState<CreationMode>("ai");
   const [generationType, setGenerationType] = useState<"item" | "weapon">(
@@ -499,7 +521,7 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
         generationType === "weapon"
           ? await createWeaponWithAi(worldId, prompt.trim())
           : await createItemWithAi(worldId, prompt.trim());
-      window.location.assign(
+      await navigate(
         `/worlds/${encodeURIComponent(worldId)}/items/${encodeURIComponent(result.definition.id)}`,
       );
     } catch (caught) {
@@ -633,7 +655,7 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
         },
         extensions: { "aow:worldId": worldId },
       });
-      window.location.assign(
+      await navigate(
         `/worlds/${encodeURIComponent(worldId)}/items/${encodeURIComponent(definition.id)}`,
       );
     } catch (caught) {
@@ -649,12 +671,12 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="w-full px-6 py-8 lg:px-10">
         <header className="border-b border-base-300 pb-8">
-          <a
+          <InternalLink
             href={`/worlds/${encodeURIComponent(worldId)}/items`}
             className="text-sm text-primary"
           >
             ← {world?.name ?? "Items"}
-          </a>
+          </InternalLink>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight">
             Create item
           </h1>
@@ -665,24 +687,26 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
         </header>
 
         <div role="tablist" className="tabs tabs-box mt-8 w-fit">
-          <button
+          <Tab
             type="button"
-            role="tab"
-            className={`tab ${mode === "ai" ? "tab-active" : ""}`}
+            active={mode === "ai"}
             onClick={() => setMode("ai")}
           >
             Create with AI
-          </button>
-          <button
+          </Tab>
+          <Tab
             type="button"
-            role="tab"
-            className={`tab ${mode === "manual" ? "tab-active" : ""}`}
+            active={mode === "manual"}
             onClick={() => setMode("manual")}
           >
             Create manually
-          </button>
+          </Tab>
         </div>
-        {error && <div className="alert alert-error mt-6">{error}</div>}
+        {error && (
+          <Alert tone="error" className="mt-6">
+            {error}
+          </Alert>
+        )}
 
         {mode === "ai" ? (
           <form
@@ -697,10 +721,12 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                   project’s item-generation prompt.
                 </p>
               </div>
-              <label className="fieldset max-w-sm">
-                <span className="fieldset-legend">Item type</span>
-                <select
-                  className="select select-bordered w-full"
+              <Field
+                className="max-w-sm"
+                label="Item type"
+                help="Weapons use the dedicated range, damage, wielding, and hit-dice generation contract."
+              >
+                <Select
                   value={generationType}
                   onChange={(event) =>
                     setGenerationType(event.target.value as "item" | "weapon")
@@ -708,17 +734,13 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                 >
                   <option value="item">General item</option>
                   <option value="weapon">Weapon</option>
-                </select>
-                <span className="label text-xs text-base-content/50">
-                  Weapons use the dedicated range, damage, wielding, and
-                  hit-dice generation contract.
-                </span>
-              </label>
-              <textarea
+                </Select>
+              </Field>
+              <Textarea
                 autoFocus
                 required
                 minLength={3}
-                className="textarea textarea-bordered min-h-56 w-full text-base leading-7"
+                className="min-h-56 w-full text-base leading-7"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="A practical piece of survey equipment used by expeditions crossing the glass marshes…"
@@ -731,15 +753,16 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                     : "create-item.md"}{" "}
                   + full world context
                 </span>
-                <button
-                  className="btn btn-primary"
+                <Button
+                  type="submit"
+                  tone="primary"
                   disabled={working || prompt.trim().length < 3}
                 >
                   {working && (
                     <span className="loading loading-spinner loading-sm" />
                   )}
                   Generate item
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -750,115 +773,98 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
           >
             <div className="card-body gap-5">
               <div className="grid gap-5 sm:grid-cols-2">
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Name</span>
-                  <input
+                <Field className="sm:col-span-2" label={<>Name</>}>
+                  <Input
                     required
-                    className="input input-bordered w-full"
+
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                   />
-                </label>
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Description</span>
-                  <textarea
+                </Field>
+                <Field className="sm:col-span-2" label={<>Description</>}>
+                  <Textarea
                     required
-                    className="textarea textarea-bordered min-h-32 w-full"
+                    className="min-h-32 w-full"
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                   />
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Category</span>
-                  <select
-                    className="select select-bordered w-full"
+                </Field>
+                <Field label={<>Category</>}>
+                  <Select
                     value={category}
                     onChange={(event) => setCategory(event.target.value)}
                   >
                     {ITEM_CATEGORIES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Rarity</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Rarity</>}>
+                  <Select
                     value={rarity}
                     onChange={(event) => setRarity(event.target.value)}
                   >
                     {RARITIES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Quality</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Quality</>}>
+                  <Select
                     value={quality}
                     onChange={(event) => setQuality(event.target.value)}
                   >
                     {ITEM_QUALITIES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Operating basis</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Operating basis</>}>
+                  <Select
                     value={operatingBasis}
                     onChange={(event) => setOperatingBasis(event.target.value)}
                   >
                     {OPERATING_BASES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Understanding</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Understanding</>}>
+                  <Select
                     value={understanding}
                     onChange={(event) => setUnderstanding(event.target.value)}
                   >
                     {UNDERSTANDING_STATES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Inventory image</span>
-                  <input
-                    type="file"
+                  </Select>
+                </Field>
+                <Field
+                  className="sm:col-span-2"
+                  label="Inventory image"
+                  help="Use a clear square view of the complete standalone item."
+                >
+                  <FileInput
                     required
                     accept="image/*"
-                    className="file-input file-input-bordered w-full"
+
                     onChange={(event) => setImageFile(event.target.files?.[0])}
                   />
-                  <span className="label text-xs text-base-content/50">
-                    Use a clear square view of the complete standalone item.
-                  </span>
-                </label>
+                </Field>
                 {category === "armor" && (
                   <>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Equipment slot</span>
-                      <select
-                        className="select select-bordered w-full"
+                    <Field label={<>Equipment slot</>}>
+                      <Select
                         value={slot}
                         onChange={(event) => setSlot(event.target.value)}
                       >
                         {ARMOR_SLOTS.map((value) => (
                           <option key={value}>{value}</option>
                         ))}
-                      </select>
-                    </label>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Defense die</span>
-                      <select
-                        className="select select-bordered w-full"
+                      </Select>
+                    </Field>
+                    <Field label={<>Defense die</>}>
+                      <Select
                         value={defenseDie}
                         onChange={(event) =>
                           setDefenseDie(Number(event.target.value))
@@ -869,8 +875,8 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                             1d{value}
                           </option>
                         ))}
-                      </select>
-                    </label>
+                      </Select>
+                    </Field>
                   </>
                 )}
                 {category === "weapon" && (
@@ -878,10 +884,8 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                     <h3 className="font-semibold sm:col-span-2">
                       Weapon mechanics
                     </h3>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Weapon category</span>
-                      <select
-                        className="select select-bordered w-full"
+                    <Field label={<>Weapon category</>}>
+                      <Select
                         value={weaponCategory}
                         onChange={(event) =>
                           setWeaponCategory(event.target.value)
@@ -890,12 +894,10 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                         {WEAPON_CATEGORIES.map((value) => (
                           <option key={value}>{value}</option>
                         ))}
-                      </select>
-                    </label>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Wielding</span>
-                      <select
-                        className="select select-bordered w-full"
+                      </Select>
+                    </Field>
+                    <Field label={<>Wielding</>}>
+                      <Select
                         value={wieldingKind}
                         onChange={(event) =>
                           setWieldingKind(
@@ -905,12 +907,10 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                       >
                         <option value="one-handed">One handed</option>
                         <option value="two-handed">Two handed</option>
-                      </select>
-                    </label>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Range type</span>
-                      <select
-                        className="select select-bordered w-full"
+                      </Select>
+                    </Field>
+                    <Field label={<>Range type</>}>
+                      <Select
                         value={weaponRangeKind}
                         onChange={(event) =>
                           setWeaponRangeKind(
@@ -920,51 +920,46 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                       >
                         <option value="melee">Melee</option>
                         <option value="ranged">Ranged</option>
-                      </select>
-                    </label>
+                      </Select>
+                    </Field>
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Minimum (ft)</span>
-                        <input
+                      <Field label={<>Minimum (ft)</>}>
+                        <Input
                           type="number"
                           min={0}
-                          className="input input-bordered w-full"
+
                           value={minimumRange}
                           onChange={(event) =>
                             setMinimumRange(Number(event.target.value))
                           }
                         />
-                      </label>
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Maximum (ft)</span>
-                        <input
+                      </Field>
+                      <Field label={<>Maximum (ft)</>}>
+                        <Input
                           type="number"
                           min={0}
-                          className="input input-bordered w-full"
+
                           value={maximumRange}
                           onChange={(event) =>
                             setMaximumRange(Number(event.target.value))
                           }
                         />
-                      </label>
+                      </Field>
                     </div>
                     <div className="grid grid-cols-3 gap-3 sm:col-span-2">
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Damage dice</span>
-                        <input
+                      <Field label={<>Damage dice</>}>
+                        <Input
                           type="number"
                           min={1}
-                          className="input input-bordered w-full"
+
                           value={damageCount}
                           onChange={(event) =>
                             setDamageCount(Number(event.target.value))
                           }
                         />
-                      </label>
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Die size</span>
-                        <select
-                          className="select select-bordered w-full"
+                      </Field>
+                      <Field label={<>Die size</>}>
+                        <Select
                           value={damageDie}
                           onChange={(event) =>
                             setDamageDie(Number(event.target.value))
@@ -975,36 +970,31 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                               d{value}
                             </option>
                           ))}
-                        </select>
-                      </label>
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Damage type</span>
-                        <input
+                        </Select>
+                      </Field>
+                      <Field label={<>Damage type</>}>
+                        <Input
                           list="damage-type-options"
-                          className="input input-bordered w-full"
+
                           value={damageType}
                           onChange={(event) =>
                             setDamageType(event.target.value)
                           }
                         />
-                      </label>
+                      </Field>
                     </div>
-                    <label className="label cursor-pointer justify-start gap-3 sm:col-span-2">
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-primary"
+                    <div className="sm:col-span-2">
+                      <Checkbox
+                        label="Add an uncommon hit-die contribution"
                         checked={addsHitDice}
                         onChange={(event) =>
                           setAddsHitDice(event.target.checked)
                         }
                       />
-                      <span>Add an uncommon hit-die contribution</span>
-                    </label>
+                    </div>
                     {addsHitDice && (
-                      <label className="fieldset max-w-xs">
-                        <span className="fieldset-legend">Hit die</span>
-                        <select
-                          className="select select-bordered w-full"
+                      <Field className="max-w-xs" label={<>Hit die</>}>
+                        <Select
                           value={hitDie}
                           onChange={(event) =>
                             setHitDie(Number(event.target.value))
@@ -1015,8 +1005,8 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                               1d{value}
                             </option>
                           ))}
-                        </select>
-                      </label>
+                        </Select>
+                      </Field>
                     )}
                   </section>
                 )}
@@ -1027,15 +1017,16 @@ export function ItemCreatePage({ worldId }: { worldId: string }) {
                 </datalist>
               </div>
               <div className="card-actions justify-end">
-                <button
-                  className="btn btn-primary"
+                <Button
+                  type="submit"
+                  tone="primary"
                   disabled={working || !name.trim() || !description.trim()}
                 >
                   {working && (
                     <span className="loading loading-spinner loading-sm" />
                   )}
                   Create item
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -1071,16 +1062,17 @@ function DiceTermsField({
               <span className="text-sm">
                 Calculated {String(term.kind ?? "unknown")} term
               </span>
-              <button
+              <Button
                 type="button"
-                className="btn btn-ghost btn-xs"
+                tone="ghost"
+                size="xs"
                 disabled={terms.length === 1}
                 onClick={() =>
                   onChange(terms.filter((_, item) => item !== index))
                 }
               >
                 Remove
-              </button>
+              </Button>
             </div>
           );
         }
@@ -1089,22 +1081,19 @@ function DiceTermsField({
             key={index}
             className="grid gap-3 rounded-box border border-base-300 bg-base-100/50 p-3 sm:grid-cols-[7rem_8rem_minmax(10rem,1fr)_auto]"
           >
-            <label className="fieldset">
-              <span className="fieldset-legend">Count</span>
-              <input
+            <Field label={<>Count</>}>
+              <Input
                 type="number"
                 min={1}
-                className="input input-bordered w-full"
+
                 value={typeof term.count === "number" ? term.count : 1}
                 onChange={(event) =>
                   update(index, "count", Number(event.target.value))
                 }
               />
-            </label>
-            <label className="fieldset">
-              <span className="fieldset-legend">Die</span>
-              <select
-                className="select select-bordered w-full"
+            </Field>
+            <Field label={<>Die</>}>
+              <Select
                 value={typeof term.size === "number" ? term.size : 4}
                 onChange={(event) =>
                   update(index, "size", Number(event.target.value))
@@ -1115,38 +1104,40 @@ function DiceTermsField({
                     d{value}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="fieldset">
-              <span className="fieldset-legend">Label</span>
-              <input
-                className="input input-bordered w-full"
+              </Select>
+            </Field>
+            <Field label={<>Label</>}>
+              <Input
                 value={typeof term.label === "string" ? term.label : ""}
                 onChange={(event) => update(index, "label", event.target.value)}
               />
-            </label>
-            <button
+            </Field>
+            <Button
               type="button"
-              className="btn btn-ghost btn-sm self-end"
+              tone="ghost"
+              size="sm"
+              className="self-end"
               disabled={terms.length === 1}
               onClick={() =>
                 onChange(terms.filter((_, item) => item !== index))
               }
             >
               Remove
-            </button>
+            </Button>
           </div>
         );
       })}
-      <button
+      <Button
         type="button"
-        className="btn btn-outline btn-sm w-fit"
+        tone="outline"
+        size="sm"
+        className="w-fit"
         onClick={() =>
           onChange([...terms, { kind: "dice", count: 1, size: 4, label: "" }])
         }
       >
         + Add die
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1375,26 +1366,27 @@ export function ItemEditorPage({
       >
         <header className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-7">
           <div>
-            <a
+            <InternalLink
               href={`/worlds/${encodeURIComponent(worldId)}/items`}
               className="text-sm text-primary"
             >
               ← Back to items
-            </a>
+            </InternalLink>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight">
               Edit item
             </h1>
           </div>
-          <button
-            className="btn btn-primary"
+          <Button
+            type="submit"
+            tone="primary"
             disabled={saving || uploadingImage || generatingImage || !record}
           >
             {saving && <span className="loading loading-spinner loading-sm" />}
             {saving ? "Saving…" : "Save changes"}
-          </button>
+          </Button>
         </header>
-        {error && <div className="alert alert-error">{error}</div>}
-        {message && <div className="alert alert-success">{message}</div>}
+        {error && <Alert tone="error">{error}</Alert>}
+        {message && <Alert tone="success">{message}</Alert>}
         {record && (
           <>
             <section className="card border border-base-300 bg-base-200">
@@ -1403,31 +1395,29 @@ export function ItemEditorPage({
                   data={draft}
                   name={String(identity.name ?? "item")}
                 />
-                <div className="fieldset">
-                  <span className="fieldset-legend">
-                    Replace inventory image
-                  </span>
-                  <input
-                    type="file"
+                <div className="grid gap-2">
+                  <FieldLabel>Replace inventory image</FieldLabel>
+                  <FileInput
                     accept="image/*"
-                    className="file-input file-input-bordered w-full"
+
                     disabled={uploadingImage || generatingImage}
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void replaceImage(file);
                     }}
                   />
-                  <span className="label text-xs text-base-content/50">
+                  <HelpText>
                     {uploadingImage
                       ? "Uploading…"
                       : "Square transparent artwork works best."}
-                  </span>
+                  </HelpText>
                   <div className="divider my-1 text-xs text-base-content/40">
                     or
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-secondary w-full"
+                    tone="secondary"
+                    className="w-full"
                     disabled={uploadingImage || generatingImage}
                     onClick={() => void generateImage()}
                   >
@@ -1437,20 +1427,19 @@ export function ItemEditorPage({
                     {generatingImage
                       ? "Generating image…"
                       : "Generate image with AI"}
-                  </button>
-                  <span className="label text-xs text-base-content/50">
+                  </Button>
+                  <HelpText>
                     Uses the item description and its saved visual brief.
-                  </span>
+                  </HelpText>
                 </div>
               </div>
             </section>
             <section className="card border border-base-300 bg-base-200">
               <div className="card-body grid gap-5 sm:grid-cols-2">
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Name</span>
-                  <input
+                <Field className="sm:col-span-2" label={<>Name</>}>
+                  <Input
                     required
-                    className="input input-bordered w-full"
+
                     value={
                       typeof identity.name === "string" ? identity.name : ""
                     }
@@ -1458,11 +1447,10 @@ export function ItemEditorPage({
                       patch(["identity", "name"], event.target.value)
                     }
                   />
-                </label>
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Description</span>
-                  <textarea
-                    className="textarea textarea-bordered min-h-36 w-full"
+                </Field>
+                <Field className="sm:col-span-2" label={<>Description</>}>
+                  <Textarea
+                    className="min-h-36 w-full"
                     value={
                       typeof identity.description === "string"
                         ? identity.description
@@ -1472,23 +1460,20 @@ export function ItemEditorPage({
                       patch(["identity", "description"], event.target.value)
                     }
                   />
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Category</span>
-                  <input
+                </Field>
+                <Field label={<>Category</>}>
+                  <Input
                     readOnly
-                    className="input input-bordered w-full opacity-70"
+                    className="opacity-70"
                     value={
                       typeof components.category === "string"
                         ? components.category
                         : ""
                     }
                   />
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Rarity</span>
-                  <select
-                    className="select select-bordered w-full"
+                </Field>
+                <Field label={<>Rarity</>}>
+                  <Select
                     value={
                       typeof components.rarity === "string"
                         ? components.rarity
@@ -1501,12 +1486,10 @@ export function ItemEditorPage({
                     {RARITIES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Quality</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Quality</>}>
+                  <Select
                     value={
                       typeof components.quality === "string"
                         ? components.quality
@@ -1519,12 +1502,10 @@ export function ItemEditorPage({
                     {ITEM_QUALITIES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset sm:col-span-2">
-                  <span className="fieldset-legend">Tags</span>
-                  <input
-                    className="input input-bordered w-full"
+                  </Select>
+                </Field>
+                <Field className="sm:col-span-2" label={<>Tags</>}>
+                  <Input
                     value={tags}
                     onChange={(event) =>
                       patch(
@@ -1536,11 +1517,9 @@ export function ItemEditorPage({
                       )
                     }
                   />
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Operating basis</span>
-                  <select
-                    className="select select-bordered w-full"
+                </Field>
+                <Field label={<>Operating basis</>}>
+                  <Select
                     value={
                       typeof components.operatingBasis === "string"
                         ? components.operatingBasis
@@ -1556,12 +1535,10 @@ export function ItemEditorPage({
                     {OPERATING_BASES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
-                <label className="fieldset">
-                  <span className="fieldset-legend">Understanding</span>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Understanding</>}>
+                  <Select
                     value={
                       typeof components.understanding === "string"
                         ? components.understanding
@@ -1574,22 +1551,15 @@ export function ItemEditorPage({
                     {UNDERSTANDING_STATES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </label>
+                  </Select>
+                </Field>
                 {category === "armor" && (
                   <>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Equipment slot</span>
-                      <input
-                        readOnly
-                        className="input input-bordered w-full opacity-70"
-                        value={slot}
-                      />
-                    </label>
-                    <label className="fieldset">
-                      <span className="fieldset-legend">Defense die</span>
-                      <select
-                        className="select select-bordered w-full"
+                    <Field label={<>Equipment slot</>}>
+                      <Input readOnly className="opacity-70" value={slot} />
+                    </Field>
+                    <Field label={<>Defense die</>}>
+                      <Select
                         value={
                           typeof firstTerm.size === "number"
                             ? firstTerm.size
@@ -1621,8 +1591,8 @@ export function ItemEditorPage({
                             1d{value}
                           </option>
                         ))}
-                      </select>
-                    </label>
+                      </Select>
+                    </Field>
                   </>
                 )}
                 {category === "weapon" && (
@@ -1638,10 +1608,8 @@ export function ItemEditorPage({
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Weapon category</span>
-                        <select
-                          className="select select-bordered w-full"
+                      <Field label={<>Weapon category</>}>
+                        <Select
                           value={
                             typeof weapon.category === "string"
                               ? weapon.category
@@ -1657,12 +1625,10 @@ export function ItemEditorPage({
                           {WEAPON_CATEGORIES.map((value) => (
                             <option key={value}>{value}</option>
                           ))}
-                        </select>
-                      </label>
-                      <label className="fieldset">
-                        <span className="fieldset-legend">Range type</span>
-                        <select
-                          className="select select-bordered w-full"
+                        </Select>
+                      </Field>
+                      <Field label={<>Range type</>}>
+                        <Select
                           value={
                             weaponRange.kind === "ranged" ? "ranged" : "melee"
                           }
@@ -1675,8 +1641,8 @@ export function ItemEditorPage({
                         >
                           <option value="melee">Melee</option>
                           <option value="ranged">Ranged</option>
-                        </select>
-                      </label>
+                        </Select>
+                      </Field>
                       {[
                         ["minimum", "Minimum range", minimumRange],
                         ["maximum", "Maximum range", maximumRange],
@@ -1687,14 +1653,11 @@ export function ItemEditorPage({
                             key={String(key)}
                             className="grid grid-cols-[1fr_8rem] gap-3"
                           >
-                            <label className="fieldset">
-                              <span className="fieldset-legend">
-                                {String(label)}
-                              </span>
-                              <input
+                            <Field label={<>{String(label)}</>}>
+                              <Input
                                 type="number"
                                 min={0}
-                                className="input input-bordered w-full"
+
                                 value={
                                   typeof value.value === "number"
                                     ? value.value
@@ -1713,11 +1676,9 @@ export function ItemEditorPage({
                                   )
                                 }
                               />
-                            </label>
-                            <label className="fieldset">
-                              <span className="fieldset-legend">Unit</span>
-                              <select
-                                className="select select-bordered w-full"
+                            </Field>
+                            <Field label={<>Unit</>}>
+                              <Select
                                 value={
                                   typeof value.unit === "string"
                                     ? value.unit
@@ -1739,8 +1700,8 @@ export function ItemEditorPage({
                                 {DISTANCE_UNITS.map((unit) => (
                                   <option key={unit}>{unit}</option>
                                 ))}
-                              </select>
-                            </label>
+                              </Select>
+                            </Field>
                           </div>
                         );
                       })}
@@ -1748,10 +1709,17 @@ export function ItemEditorPage({
 
                     <div className="divider my-0" />
                     <section className="grid gap-3">
-                      <label className="label cursor-pointer justify-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-primary"
+                      <div>
+                        <Checkbox
+                          label={
+                            <>
+                              Weapon contributes additional hit dice
+                              <span className="ml-2 text-xs text-base-content/45">
+                                Uncommon; normally fine, exquisite, or very
+                                rare.
+                              </span>
+                            </>
+                          }
                           checked={hitDiceTerms.length > 0}
                           onChange={(event) =>
                             patch(
@@ -1771,13 +1739,7 @@ export function ItemEditorPage({
                             )
                           }
                         />
-                        <span>
-                          Weapon contributes additional hit dice
-                          <span className="ml-2 text-xs text-base-content/45">
-                            Uncommon; normally fine, exquisite, or very rare.
-                          </span>
-                        </span>
-                      </label>
+                      </div>
                       {hitDiceTerms.length > 0 && (
                         <DiceTermsField
                           terms={hitDiceTerms}
@@ -1795,9 +1757,10 @@ export function ItemEditorPage({
                     <section className="grid gap-4">
                       <div className="flex items-center justify-between gap-4">
                         <h3 className="font-semibold">Damage components</h3>
-                        <button
+                        <Button
                           type="button"
-                          className="btn btn-outline btn-sm"
+                          tone="outline"
+                          size="sm"
                           onClick={() =>
                             patch(
                               ["components", "weapon", "damage"],
@@ -1816,7 +1779,7 @@ export function ItemEditorPage({
                           }
                         >
                           + Add damage type
-                        </button>
+                        </Button>
                       </div>
                       {damageComponents.map((candidate, index) => {
                         const component = objectAt(candidate);
@@ -1833,13 +1796,10 @@ export function ItemEditorPage({
                             className="grid gap-4 rounded-box border border-base-300 bg-base-200/60 p-4"
                           >
                             <div className="flex items-end justify-between gap-4">
-                              <label className="fieldset grow">
-                                <span className="fieldset-legend">
-                                  Damage type
-                                </span>
-                                <input
+                              <Field className="grow" label={<>Damage type</>}>
+                                <Input
                                   list="damage-type-options"
-                                  className="input input-bordered w-full"
+
                                   value={
                                     typeof component.damageType === "string"
                                       ? component.damageType
@@ -1851,10 +1811,11 @@ export function ItemEditorPage({
                                     })
                                   }
                                 />
-                              </label>
-                              <button
+                              </Field>
+                              <Button
                                 type="button"
-                                className="btn btn-ghost btn-sm"
+                                tone="ghost"
+                                size="sm"
                                 disabled={damageComponents.length === 1}
                                 onClick={() =>
                                   patch(
@@ -1866,7 +1827,7 @@ export function ItemEditorPage({
                                 }
                               >
                                 Remove component
-                              </button>
+                              </Button>
                             </div>
                             <DiceTermsField
                               terms={terms}
@@ -1876,10 +1837,9 @@ export function ItemEditorPage({
                                 })
                               }
                             />
-                            <label className="label cursor-pointer justify-start gap-3">
-                              <input
-                                type="checkbox"
-                                className="checkbox checkbox-primary"
+                            <div>
+                              <Checkbox
+                                label="Requires a saving throw after the hit"
                                 checked={Object.keys(savingThrow).length > 0}
                                 onChange={(event) =>
                                   updateDamageComponent(index, {
@@ -1899,16 +1859,11 @@ export function ItemEditorPage({
                                   })
                                 }
                               />
-                              <span>Requires a saving throw after the hit</span>
-                            </label>
+                            </div>
                             {Object.keys(savingThrow).length > 0 && (
                               <div className="grid gap-3 sm:grid-cols-3">
-                                <label className="fieldset">
-                                  <span className="fieldset-legend">
-                                    Save attribute
-                                  </span>
-                                  <input
-                                    className="input input-bordered w-full"
+                                <Field label={<>Save attribute</>}>
+                                  <Input
                                     value={
                                       typeof test.attribute === "string"
                                         ? test.attribute
@@ -1927,15 +1882,12 @@ export function ItemEditorPage({
                                       })
                                     }
                                   />
-                                </label>
-                                <label className="fieldset">
-                                  <span className="fieldset-legend">
-                                    Difficulty
-                                  </span>
-                                  <input
+                                </Field>
+                                <Field label={<>Difficulty</>}>
+                                  <Input
                                     type="number"
                                     min={0}
-                                    className="input input-bordered w-full"
+
                                     value={
                                       typeof difficultyClass.value === "number"
                                         ? difficultyClass.value
@@ -1957,13 +1909,9 @@ export function ItemEditorPage({
                                       })
                                     }
                                   />
-                                </label>
-                                <label className="fieldset">
-                                  <span className="fieldset-legend">
-                                    On success
-                                  </span>
-                                  <select
-                                    className="select select-bordered w-full"
+                                </Field>
+                                <Field label={<>On success</>}>
+                                  <Select
                                     value={
                                       savingThrow.onSuccess === "negates"
                                         ? "negates"
@@ -1982,8 +1930,8 @@ export function ItemEditorPage({
                                       Half damage
                                     </option>
                                     <option value="negates">Negates</option>
-                                  </select>
-                                </label>
+                                  </Select>
+                                </Field>
                               </div>
                             )}
                           </div>
@@ -2003,13 +1951,9 @@ export function ItemEditorPage({
                               ["dual-wield", "Dual wield"],
                             ] as const
                           ).map(([kind, label]) => (
-                            <label
-                              key={kind}
-                              className="label cursor-pointer justify-start gap-3"
-                            >
-                              <input
-                                type="checkbox"
-                                className="checkbox checkbox-primary"
+                            <div key={kind}>
+                              <Checkbox
+                                label={label}
                                 checked={wieldingModes.some(
                                   (candidate) =>
                                     objectAt(candidate).kind === kind,
@@ -2018,17 +1962,16 @@ export function ItemEditorPage({
                                   setWieldingMode(kind, event.target.checked)
                                 }
                               />
-                              <span>{label}</span>
-                            </label>
+                            </div>
                           ))}
                         </div>
                       </div>
-                      <label className="fieldset">
-                        <span className="fieldset-legend">
-                          Weapon properties
-                        </span>
-                        <textarea
-                          className="textarea textarea-bordered min-h-28 w-full"
+                      <Field
+                        label="Weapon properties"
+                        help="Separate properties with commas."
+                      >
+                        <Textarea
+                          className="min-h-28 w-full"
                           value={properties.join(", ")}
                           onChange={(event) =>
                             patch(
@@ -2041,10 +1984,7 @@ export function ItemEditorPage({
                           }
                           placeholder="ammunition, loading, two-handed"
                         />
-                        <span className="label text-xs text-base-content/50">
-                          Separate properties with commas.
-                        </span>
-                      </label>
+                      </Field>
                     </section>
                     <datalist id="damage-type-options">
                       {DAMAGE_TYPES.map((value) => (

@@ -17,7 +17,7 @@ EXPOSE 3000 9229
 
 FROM base AS build
 COPY . .
-RUN pnpm --filter @aow/api db:generate && pnpm --filter @aow/api... build
+RUN pnpm --filter @aow/api db:generate && pnpm --filter @aow/api build
 
 FROM node:22-alpine AS production
 ENV NODE_ENV=production
@@ -31,4 +31,4 @@ COPY --from=build /workspace/apps/api ./apps/api
 COPY --from=build /workspace/packages/common ./packages/common
 COPY --from=build /workspace/prompts ./prompts
 EXPOSE 3000
-CMD ["pnpm", "--filter", "@aow/api", "start"]
+CMD ["sh", "-c", "pnpm --filter @aow/api db:deploy && pnpm --filter @aow/api start"]

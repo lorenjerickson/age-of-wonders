@@ -1,4 +1,16 @@
 import { EQUIPMENT_SLOTS, type EquipmentSlot } from "@aow/common";
+import {
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Field,
+  FileInput,
+  Input,
+  Select,
+  Tab,
+  Textarea,
+} from "@aow/ui";
 import { FormEvent, useEffect, useState } from "react";
 import {
   createArmorSetWithAi,
@@ -13,6 +25,11 @@ import {
   uploadMedia,
 } from "./api";
 import { ItemArtwork } from "./Items";
+import {
+  InternalLink,
+  RouterButtonLink,
+  useInternalNavigate,
+} from "./navigation";
 
 type CreationMode = "ai" | "manual";
 type ImageRole = "portrait" | "overheadToken" | "paperDollToken";
@@ -268,7 +285,7 @@ function EquipmentSlotPicker({
 
   return (
     <div className="group relative">
-      <button
+      <Button
         type="button"
         aria-label={`${label}: ${equipped ? presentation.name : "empty"}`}
         aria-expanded={isOpen}
@@ -284,7 +301,7 @@ function EquipmentSlotPicker({
         ) : (
           <span className="text-2xl text-base-content/25">＋</span>
         )}
-      </button>
+      </Button>
 
       {!isOpen && (
         <div className="pointer-events-none absolute bottom-[calc(100%+0.6rem)] left-1/2 z-30 w-64 -translate-x-1/2 rounded-box border border-base-300 bg-neutral p-3 text-neutral-content opacity-0 shadow-xl transition group-hover:opacity-100 group-focus-within:opacity-100">
@@ -315,19 +332,20 @@ function EquipmentSlotPicker({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {equipped && (
-              <button
+              <Button
                 type="button"
-                className="btn btn-ghost h-auto min-h-12 w-full justify-start px-3 py-2 text-left text-sm"
+                tone="ghost"
+                className="h-auto min-h-12 w-full justify-start px-3 py-2 text-left text-sm"
                 onClick={() => onSelect()}
               >
                 Remove item
-              </button>
+              </Button>
             )}
             {compatible.map((option) => {
               const details = definitionPresentation(option.definition);
               const selected = option.item.id === equipped?.item.id;
               return (
-                <button
+                <Button
                   key={option.item.id}
                   type="button"
                   className={`grid h-20 w-full grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-3 rounded-box px-2 text-left transition hover:bg-base-300 ${selected ? "bg-primary/10 ring-1 ring-primary/30" : ""}`}
@@ -348,7 +366,7 @@ function EquipmentSlotPicker({
                       {details.description || "No description available."}
                     </span>
                   </span>
-                </button>
+                </Button>
               );
             })}
             {!loading && !compatible.length && (
@@ -869,12 +887,12 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
       <div className="w-full px-6 py-8 lg:px-10">
         <div className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-8">
           <div>
-            <a
+            <InternalLink
               href={`/worlds/${encodeURIComponent(worldId)}`}
               className="text-sm text-primary"
             >
               {world?.name ?? "World"}
-            </a>
+            </InternalLink>
             <h1 className="mt-3 text-5xl font-semibold tracking-tight">
               Creatures
             </h1>
@@ -882,15 +900,19 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
               Every creature created for this world.
             </p>
           </div>
-          <a
+          <RouterButtonLink
             href={`/worlds/${encodeURIComponent(worldId)}/creatures/new`}
-            className="btn btn-primary"
+            tone="primary"
           >
             + Create creature
-          </a>
+          </RouterButtonLink>
         </div>
 
-        {error && <div className="alert alert-error mt-8">{error}</div>}
+        {error && (
+          <Alert tone="error" className="mt-8">
+            {error}
+          </Alert>
+        )}
         {loading ? (
           <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,200px))] justify-start gap-4">
             {[0, 1, 2].map((item) => (
@@ -903,7 +925,7 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
         ) : creatures.length ? (
           <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,200px))] justify-start gap-4">
             {creatures.map((creature) => (
-              <a
+              <InternalLink
                 key={creature.id}
                 href={`/worlds/${encodeURIComponent(worldId)}/creatures/${encodeURIComponent(creature.id)}`}
                 className="card w-full max-w-[200px] overflow-hidden border border-base-300 bg-base-200 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xl"
@@ -914,15 +936,15 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
                     <h2 className="line-clamp-2 text-base leading-5 font-semibold">
                       {creature.name}
                     </h2>
-                    <span className="badge badge-ghost badge-sm mt-2 max-w-full truncate">
+                    <Badge size="sm" className="mt-2 max-w-full truncate">
                       {String(creature.data.size ?? "unknown")}
-                    </span>
+                    </Badge>
                   </div>
                   <p className="line-clamp-2 text-xs leading-5 text-base-content/55">
                     {creatureClassificationLabel(creature.data)}
                   </p>
                 </div>
-              </a>
+              </InternalLink>
             ))}
           </div>
         ) : (
@@ -936,12 +958,13 @@ export function CreatureListPage({ worldId }: { worldId: string }) {
                 Create one manually or let the AI design a creature grounded in
                 this world.
               </p>
-              <a
+              <RouterButtonLink
                 href={`/worlds/${encodeURIComponent(worldId)}/creatures/new`}
-                className="btn btn-primary mt-4"
+                tone="primary"
+                className="mt-4"
               >
                 Create your first creature
-              </a>
+              </RouterButtonLink>
             </div>
           </div>
         )}
@@ -1004,16 +1027,20 @@ function CreatureImageEditor({
             ◈
           </div>
         )}
-        <label className="btn btn-neutral btn-sm absolute right-3 bottom-3 cursor-pointer shadow-lg">
-          {uploading ? (
-            <span className="loading loading-spinner loading-xs" />
-          ) : (
-            "Replace"
-          )}
-          <input
-            type="file"
+        <div className="absolute right-3 bottom-3 shadow-lg">
+          <Button
+            tone="neutral"
+            size="sm"
+            loading={uploading}
+            tabIndex={-1}
+            aria-hidden="true"
+          >
+            Replace
+          </Button>
+          <FileInput
+            aria-label={`Replace ${field.label.toLowerCase()}`}
             accept="image/*"
-            className="hidden"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -1021,7 +1048,7 @@ function CreatureImageEditor({
               event.target.value = "";
             }}
           />
-        </label>
+        </div>
       </figure>
       <div className="card-body gap-3 p-4">
         <div>
@@ -1030,14 +1057,13 @@ function CreatureImageEditor({
             {field.help}
           </p>
         </div>
-        <label className="fieldset">
-          <span className="fieldset-legend">Alternative text</span>
-          <textarea
-            className="textarea textarea-bordered min-h-20 w-full text-sm"
+        <Field label={<>Alternative text</>}>
+          <Textarea
+            className="min-h-20 w-full text-sm"
             value={typeof image.altText === "string" ? image.altText : ""}
             onChange={(event) => onAltText(event.target.value)}
           />
-        </label>
+        </Field>
         <p className="text-xs text-base-content/40">
           {typeof image.width === "number" && typeof image.height === "number"
             ? `${image.width} × ${image.height}`
@@ -1234,9 +1260,9 @@ export function CreatureEditorPage({
       >
         <header className="flex flex-wrap items-end justify-between gap-5 border-b border-base-300 pb-7">
           <div>
-            <a href={backHref} className="text-sm text-primary">
+            <InternalLink href={backHref} className="text-sm text-primary">
               ← Back to creatures
-            </a>
+            </InternalLink>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight">
               Edit creature
             </h1>
@@ -1244,33 +1270,31 @@ export function CreatureEditorPage({
               Revision {record?.revision}
             </p>
           </div>
-          <button
-            className="btn btn-primary"
+          <Button
+            type="submit"
+            tone="primary"
             disabled={saving || Boolean(uploadingRole) || !record}
           >
             {saving && <span className="loading loading-spinner loading-sm" />}
             {saving ? "Saving…" : "Save changes"}
-          </button>
+          </Button>
         </header>
 
-        {error && <div className="alert alert-error">{error}</div>}
-        {message && <div className="alert alert-success">{message}</div>}
+        {error && <Alert tone="error">{error}</Alert>}
+        {message && <Alert tone="success">{message}</Alert>}
 
         <section className="card border border-base-300 bg-base-200">
           <div className="card-body grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="fieldset sm:col-span-2">
-              <span className="fieldset-legend">Name</span>
-              <input
+            <Field className="sm:col-span-2" label={<>Name</>}>
+              <Input
                 required
-                className="input input-bordered w-full text-lg font-semibold"
+                className="text-lg font-semibold"
                 value={typeof draft.name === "string" ? draft.name : ""}
                 onChange={(event) => patch(["name"], event.target.value)}
               />
-            </label>
-            <label className="fieldset">
-              <span className="fieldset-legend">Size</span>
-              <select
-                className="select select-bordered w-full"
+            </Field>
+            <Field label={<>Size</>}>
+              <Select
                 value={typeof draft.size === "string" ? draft.size : "medium"}
                 onChange={(event) => patch(["size"], event.target.value)}
               >
@@ -1279,12 +1303,10 @@ export function CreatureEditorPage({
                     <option key={value}>{value}</option>
                   ),
                 )}
-              </select>
-            </label>
-            <label className="fieldset">
-              <span className="fieldset-legend">Physical nature</span>
-              <select
-                className="select select-bordered w-full"
+              </Select>
+            </Field>
+            <Field label={<>Physical nature</>}>
+              <Select
                 value={
                   typeof classification.nature === "string"
                     ? classification.nature
@@ -1297,12 +1319,10 @@ export function CreatureEditorPage({
                 {CREATURE_NATURES.map((value) => (
                   <option key={value}>{value}</option>
                 ))}
-              </select>
-            </label>
-            <label className="fieldset">
-              <span className="fieldset-legend">Morphology</span>
-              <input
-                className="input input-bordered w-full"
+              </Select>
+            </Field>
+            <Field label={<>Morphology</>}>
+              <Input
                 value={
                   typeof classification.morphology === "string"
                     ? classification.morphology
@@ -1312,11 +1332,13 @@ export function CreatureEditorPage({
                   patch(["classification", "morphology"], event.target.value)
                 }
               />
-            </label>
-            <label className="fieldset sm:col-span-2 lg:col-span-4">
-              <span className="fieldset-legend">Description</span>
-              <textarea
-                className="textarea textarea-bordered min-h-32 w-full text-base leading-7"
+            </Field>
+            <Field
+              className="sm:col-span-2 lg:col-span-4"
+              label={<>Description</>}
+            >
+              <Textarea
+                className="min-h-32 w-full text-base leading-7"
                 value={
                   typeof profile.description === "string"
                     ? profile.description
@@ -1329,7 +1351,7 @@ export function CreatureEditorPage({
                   )
                 }
               />
-            </label>
+            </Field>
           </div>
         </section>
 
@@ -1365,12 +1387,11 @@ export function CreatureEditorPage({
                 ["Current HP", "current", hitPoints.current],
                 ["Maximum HP", "maximum", hitPoints.maximum],
               ].map(([label, key, value]) => (
-                <label key={String(key)} className="fieldset">
-                  <span className="fieldset-legend">{String(label)}</span>
-                  <input
+                <Field key={String(key)} label={String(label)}>
+                  <Input
                     type="number"
                     min={key === "maximum" ? 1 : undefined}
-                    className="input input-bordered w-full"
+
                     value={typeof value === "number" ? value : 0}
                     onChange={(event) =>
                       patch(
@@ -1381,7 +1402,7 @@ export function CreatureEditorPage({
                       )
                     }
                   />
-                </label>
+                </Field>
               ))}
             </div>
           </div>
@@ -1398,9 +1419,10 @@ export function CreatureEditorPage({
                   roll.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
-                className="btn btn-primary btn-sm"
+                tone="primary"
+                size="sm"
                 disabled={
                   generatingArmor ||
                   !record ||
@@ -1413,7 +1435,7 @@ export function CreatureEditorPage({
                   <span className="loading loading-spinner loading-xs" />
                 )}
                 {generatingArmor ? "Creating armor…" : "Create AI armor set"}
-              </button>
+              </Button>
             </div>
             <div className="mt-5">
               <EquipmentPaperDoll
@@ -1455,12 +1477,13 @@ export function CreatureEditorPage({
                         {(["score", "modifier", "savingThrow"] as const).map(
                           (field) => (
                             <td key={field}>
-                              <input
+                              <Input
                                 aria-label={`${attribute} ${field}`}
                                 type="number"
                                 min={field === "score" ? 0 : undefined}
                                 max={field === "score" ? 100 : undefined}
-                                className="input input-bordered input-sm w-24"
+                                controlSize="sm"
+                                className="w-24"
                                 value={
                                   typeof state[field] === "number"
                                     ? state[field]
@@ -1482,10 +1505,9 @@ export function CreatureEditorPage({
                           ),
                         )}
                         <td>
-                          <input
+                          <Checkbox
                             aria-label={`${attribute} save proficiency`}
-                            type="checkbox"
-                            className="checkbox checkbox-primary"
+
                             checked={state.proficientInSave === true}
                             onChange={(event) =>
                               patch(
@@ -1523,6 +1545,7 @@ function defaultAttribute(score = 10) {
 }
 
 export function CreatureCreatePage({ worldId }: { worldId: string }) {
+  const navigate = useInternalNavigate();
   const [world, setWorld] = useState<DomainRecord>();
   const [mode, setMode] = useState<CreationMode>("ai");
   const [prompt, setPrompt] = useState("");
@@ -1552,7 +1575,7 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
     setError("");
     try {
       const result = await createCreatureWithAi(worldId, prompt.trim());
-      window.location.assign(
+      await navigate(
         `/worlds/${encodeURIComponent(worldId)}/creatures/${encodeURIComponent(result.creature.id)}`,
       );
     } catch (caught) {
@@ -1655,7 +1678,7 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
           "aow:creature-profile": { description: description.trim() },
         },
       });
-      window.location.assign(
+      await navigate(
         `/worlds/${encodeURIComponent(worldId)}/creatures/${encodeURIComponent(creature.id)}`,
       );
     } catch (caught) {
@@ -1674,12 +1697,12 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
       <div className="w-full px-6 py-8 lg:px-10">
         <header className="flex flex-wrap items-start justify-between gap-5 border-b border-base-300 pb-8">
           <div>
-            <a
+            <InternalLink
               href={`/worlds/${encodeURIComponent(worldId)}/creatures`}
               className="text-sm text-primary"
             >
               ← {world?.name ?? "Creatures"}
-            </a>
+            </InternalLink>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight">
               Create creature
             </h1>
@@ -1691,25 +1714,27 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
         </header>
 
         <div role="tablist" className="tabs tabs-box mt-8 w-fit">
-          <button
+          <Tab
             type="button"
-            role="tab"
-            className={`tab ${mode === "ai" ? "tab-active" : ""}`}
+            active={mode === "ai"}
             onClick={() => setMode("ai")}
           >
             Create with AI
-          </button>
-          <button
+          </Tab>
+          <Tab
             type="button"
-            role="tab"
-            className={`tab ${mode === "manual" ? "tab-active" : ""}`}
+            active={mode === "manual"}
             onClick={() => setMode("manual")}
           >
             Create manually
-          </button>
+          </Tab>
         </div>
 
-        {error && <div className="alert alert-error mt-6">{error}</div>}
+        {error && (
+          <Alert tone="error" className="mt-6">
+            {error}
+          </Alert>
+        )}
 
         {mode === "ai" ? (
           <form
@@ -1725,11 +1750,11 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
                   portrait, overhead token, and paper-doll token.
                 </p>
               </div>
-              <textarea
+              <Textarea
                 autoFocus
                 required
                 minLength={3}
-                className="textarea textarea-bordered min-h-56 w-full text-base leading-7"
+                className="min-h-56 w-full text-base leading-7"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="A glass-scaled ambush predator that nests in the moonlit reefs. Its antlers split light into false silhouettes, but crack audibly before it attacks…"
@@ -1738,15 +1763,16 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
                 <span className="text-xs text-base-content/50">
                   Uses create-creature.md + full world context
                 </span>
-                <button
-                  className="btn btn-primary"
+                <Button
+                  type="submit"
+                  tone="primary"
                   disabled={working || prompt.trim().length < 3}
                 >
                   {working && (
                     <span className="loading loading-spinner loading-sm" />
                   )}
                   Generate creature and images
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -1757,19 +1783,16 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
           >
             <div className="card-body gap-5">
               <div className="grid gap-5 sm:grid-cols-2">
-                <fieldset className="fieldset sm:col-span-2">
-                  <legend className="fieldset-legend">Name</legend>
-                  <input
+                <Field className="sm:col-span-2" label={<>Name</>}>
+                  <Input
                     required
-                    className="input input-bordered w-full"
+
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                   />
-                </fieldset>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Size</legend>
-                  <select
-                    className="select select-bordered w-full"
+                </Field>
+                <Field label={<>Size</>}>
+                  <Select
                     value={size}
                     onChange={(event) => setSize(event.target.value)}
                   >
@@ -1783,67 +1806,60 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
                     ].map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </fieldset>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Physical nature</legend>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Physical nature</>}>
+                  <Select
                     value={creatureNature}
                     onChange={(event) => setCreatureNature(event.target.value)}
                   >
                     {CREATURE_NATURES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </fieldset>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Morphology</legend>
-                  <input
-                    className="input input-bordered w-full"
+                  </Select>
+                </Field>
+                <Field label={<>Morphology</>}>
+                  <Input
                     value={morphology}
                     onChange={(event) => setMorphology(event.target.value)}
                   />
-                </fieldset>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Hit points</legend>
-                  <input
+                </Field>
+                <Field label={<>Hit points</>}>
+                  <Input
                     required
                     min={1}
                     type="number"
-                    className="input input-bordered w-full"
+
                     value={hitPoints}
                     onChange={(event) =>
                       setHitPoints(Number(event.target.value))
                     }
                   />
-                </fieldset>
-                <fieldset className="fieldset sm:col-span-2">
-                  <legend className="fieldset-legend">Description</legend>
-                  <textarea
-                    className="textarea textarea-bordered min-h-28 w-full"
+                </Field>
+                <Field className="sm:col-span-2" label={<>Description</>}>
+                  <Textarea
+                    className="min-h-28 w-full"
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                   />
-                </fieldset>
+                </Field>
               </div>
 
               <div className="divider">Required images</div>
               <div className="grid gap-4 sm:grid-cols-3">
                 {IMAGE_FIELDS.map((field) => (
-                  <label
+                  <Field
                     key={field.role}
-                    className="card cursor-pointer border border-base-300 bg-base-100 p-4"
+                    label={field.label}
+                    help={field.help}
+                    className="card border border-base-300 bg-base-100 p-4"
                   >
-                    <span className="font-semibold">{field.label}</span>
-                    <span className="mt-1 min-h-10 text-xs leading-5 text-base-content/55">
-                      {field.help}
-                    </span>
-                    <input
+                    <FileInput
                       required
-                      type="file"
+
                       accept="image/*"
-                      className="file-input file-input-bordered file-input-sm mt-4 w-full"
+                      controlSize="sm"
+                      className="mt-4 w-full"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         setFiles((current) => ({
@@ -1852,12 +1868,13 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
                         }));
                       }}
                     />
-                  </label>
+                  </Field>
                 ))}
               </div>
               <div className="card-actions justify-end pt-3">
-                <button
-                  className="btn btn-primary"
+                <Button
+                  type="submit"
+                  tone="primary"
                   disabled={
                     working || !name.trim() || !world || world.kind !== "world"
                   }
@@ -1866,7 +1883,7 @@ export function CreatureCreatePage({ worldId }: { worldId: string }) {
                     <span className="loading loading-spinner loading-sm" />
                   )}
                   Create creature
-                </button>
+                </Button>
               </div>
             </div>
           </form>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { PrismaService } from "../prisma/prisma.service";
 import { GenerateContentDto } from "./dto/generate-content.dto";
@@ -19,9 +19,11 @@ import { ItemGenerationService } from "./item-generation.service";
 import { WeaponGenerationService } from "./weapon-generation.service";
 import { CampaignGenerationService } from "./campaign-generation.service";
 import { CreateCampaignDto } from "./dto/create-campaign.dto";
+import { GmGuard } from "../auth/auth.guard";
 
 @ApiTags("ai")
 @Controller("ai")
+@UseGuards(GmGuard)
 export class AiController {
   constructor(
     private readonly openAi: OpenAiService,

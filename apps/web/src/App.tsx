@@ -1,4 +1,15 @@
 import { FormEvent, type ReactNode, useEffect, useState } from "react";
+import { Link, useLocation } from "@tanstack/react-router";
+import {
+  Alert,
+  Badge,
+  Button,
+  Label,
+  StatusIndicator,
+  StructuralCheckbox,
+  Textarea,
+  TextareaField,
+} from "@aow/ui";
 import {
   checkHealth,
   createWorldWithAi,
@@ -9,15 +20,11 @@ import {
   listDomainRecords,
   replaceDomainRecord,
 } from "./api";
-import { WorldEditor } from "./WorldEditor";
 import {
-  CreatureCreatePage,
-  CreatureEditorPage,
-  CreatureListPage,
-} from "./Creatures";
-import { ItemCreatePage, ItemEditorPage, ItemListPage } from "./Items";
-import { CampaignCreatePage, CampaignEditorPage } from "./Campaigns";
-import { SessionCanvasHarness } from "./SessionCanvasHarness";
+  InternalLink,
+  RouterButtonLink,
+  useInternalNavigate,
+} from "./navigation";
 
 type PrimaryNavigationLabel =
   "Location" | "Campaign" | "Sessions" | "Creatures" | "Items";
@@ -95,59 +102,149 @@ function NavigationIcon({ item }: { item: PrimaryNavigationLabel }) {
   );
 }
 
-function AppShell({ children }: { children: ReactNode }) {
-  const segments = window.location.pathname.split("/").filter(Boolean);
+function PrimaryNavigationLink({
+  item,
+  active,
+  world,
+  campaign,
+}: {
+  item: PrimaryNavigationLabel;
+  active: boolean;
+  world?: DomainRecord;
+  campaign?: DomainRecord;
+}) {
+  const className = active ? "menu-active font-semibold" : undefined;
+  const content = (
+    <>
+      <NavigationIcon item={item} />
+      {item}
+    </>
+  );
+  if (item === "Location") {
+    if (campaign) {
+      return (
+        <Link
+          to="/campaigns/$campaignId/locations"
+          params={{ campaignId: campaign.id }}
+          aria-current={active ? "page" : undefined}
+          className={className}
+        >
+          {content}
+        </Link>
+      );
+    }
+    if (world) {
+      return (
+        <Link
+          to="/worlds/$worldId"
+          params={{ worldId: world.id }}
+          aria-current={active ? "page" : undefined}
+          className={className}
+        >
+          {content}
+        </Link>
+      );
+    }
+    return (
+      <Link
+        to="/worlds"
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (item === "Campaign") {
+    return campaign ? (
+      <Link
+        to="/campaigns/$campaignId"
+        params={{ campaignId: campaign.id }}
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    ) : (
+      <Link
+        to="/campaigns"
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (item === "Sessions") {
+    return (
+      <Link
+        to="/sessions"
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (item === "Creatures" && world) {
+    return (
+      <Link
+        to="/worlds/$worldId/creatures"
+        params={{ worldId: world.id }}
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (item === "Items" && world) {
+    return (
+      <Link
+        to="/worlds/$worldId/items"
+        params={{ worldId: world.id }}
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <Link
+      to={item === "Creatures" ? "/creatures" : "/items"}
+      aria-current={active ? "page" : undefined}
+      className={className}
+    >
+      {content}
+    </Link>
+  );
+}
+
+export function AppShell({
+  children,
+  initialWorld,
+  initialCampaign,
+}: {
+  children: ReactNode;
+  initialWorld?: DomainRecord;
+  initialCampaign?: DomainRecord;
+}) {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const segments = pathname.split("/").filter(Boolean);
   const activeSection = segments[0];
   const nestedSection = activeSection === "worlds" ? segments[2] : undefined;
-  const [world, setWorld] = useState<DomainRecord>();
-  const [campaign, setCampaign] = useState<DomainRecord>();
+  const world = initialWorld;
+  const campaign = initialCampaign;
   const locationWorkspaceActive =
     activeSection === "campaigns" && segments[2] === "locations";
 
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      listDomainRecords("locations", {
-        kind: "world",
-        limit: 1,
-        sort: "updatedAt",
-        order: "desc",
-      }),
-      listDomainRecords("campaigns", {
-        limit: 1,
-        sort: "updatedAt",
-        order: "desc",
-      }),
-    ]).then(
-      ([worlds, campaigns]) => {
-        if (!active) return;
-        setWorld(worlds.items[0]);
-        setCampaign(campaigns.items[0]);
-      },
-      () => undefined,
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const worldHref = world
-    ? `/worlds/${encodeURIComponent(world.id)}`
-    : "/worlds";
-  const campaignHref = campaign
-    ? `/campaigns/${encodeURIComponent(campaign.id)}`
-    : "/campaigns";
-  const locationWorkspaceHref = campaign
-    ? `${campaignHref}/locations`
-    : worldHref;
   const primaryNavigation: ReadonlyArray<{
     label: PrimaryNavigationLabel;
-    href: string;
     active: boolean;
   }> = [
     {
       label: "Location",
-      href: locationWorkspaceHref,
       active:
         !activeSection ||
         (activeSection === "campaigns" && segments[2] === "locations") ||
@@ -158,24 +255,20 @@ function AppShell({ children }: { children: ReactNode }) {
     },
     {
       label: "Campaign",
-      href: campaignHref,
       active: activeSection === "campaigns" && segments[2] !== "locations",
     },
     {
       label: "Sessions",
-      href: "/sessions",
       active: activeSection === "sessions",
     },
     {
       label: "Creatures",
-      href: world ? `${worldHref}/creatures` : "/creatures",
       active:
         activeSection === "creatures" ||
         (activeSection === "worlds" && nestedSection === "creatures"),
     },
     {
       label: "Items",
-      href: world ? `${worldHref}/items` : "/items",
       active:
         activeSection === "items" ||
         (activeSection === "worlds" && nestedSection === "items"),
@@ -184,21 +277,21 @@ function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="drawer h-dvh overflow-hidden lg:drawer-open">
-      <input id="app-drawer" type="checkbox" className="drawer-toggle" />
+      <StructuralCheckbox id="app-drawer" />
       <div
         className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
       >
-        <label
+        <Label
           htmlFor="app-drawer"
           aria-label="Open navigation"
           className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
         >
           <span aria-hidden="true">☰</span>
-        </label>
+        </Label>
         {children}
       </div>
       <div className="drawer-side z-40">
-        <label
+        <Label
           htmlFor="app-drawer"
           aria-label="Close navigation"
           className="drawer-overlay"
@@ -219,16 +312,12 @@ function AppShell({ children }: { children: ReactNode }) {
             <ul className="menu w-full gap-1 p-0">
               {primaryNavigation.map((item) => (
                 <li key={item.label}>
-                  <a
-                    href={item.href}
-                    aria-current={item.active ? "page" : undefined}
-                    className={
-                      item.active ? "menu-active font-semibold" : undefined
-                    }
-                  >
-                    <NavigationIcon item={item.label} />
-                    {item.label}
-                  </a>
+                  <PrimaryNavigationLink
+                    item={item.label}
+                    active={item.active}
+                    world={world}
+                    campaign={campaign}
+                  />
                 </li>
               ))}
             </ul>
@@ -267,9 +356,10 @@ function twoSentenceSummary(
 function Header({ healthy }: { healthy?: boolean }) {
   return (
     <header className="navbar border-b border-base-300 px-0 pb-6">
-      <a
+      <RouterButtonLink
         href="/"
-        className="btn btn-ghost h-auto flex-col items-start gap-0 px-0"
+        tone="ghost"
+        className="h-auto flex-col items-start gap-0 px-0"
       >
         <p className="text-xs font-semibold tracking-[0.28em] text-amber-300 uppercase">
           Age of Wonders
@@ -277,15 +367,14 @@ function Header({ healthy }: { healthy?: boolean }) {
         <p className="mt-2 text-lg font-medium text-zinc-100 transition group-hover:text-white">
           World studio
         </p>
-      </a>
+      </RouterButtonLink>
       <div className="ml-auto">
         {healthy !== undefined && (
-          <div className="badge badge-ghost gap-2 py-3 text-xs">
-            <span
-              className={`h-2 w-2 rounded-full ${healthy ? "bg-emerald-400" : "bg-rose-400"}`}
-            />
-            {healthy ? "Workspace ready" : "Services unavailable"}
-          </div>
+          <StatusIndicator
+            tone={healthy ? "success" : "error"}
+            label={healthy ? "Workspace ready" : "Services unavailable"}
+            className="py-3 text-xs"
+          />
         )}
       </div>
     </header>
@@ -330,12 +419,13 @@ function RecentCard({
             <p className="mt-4 flex-1 text-base leading-7 text-zinc-400">
               {summary}
             </p>
-            <a
-              href={href}
-              className="btn btn-link mt-7 w-fit px-0 text-primary"
+            <RouterButtonLink
+              href={href ?? "/"}
+              tone="ghost"
+              className="mt-7 w-fit px-0 text-primary"
             >
               Edit {isWorld ? "world" : "campaign"} <span aria-hidden>→</span>
-            </a>
+            </RouterButtonLink>
           </>
         ) : (
           <p className="mt-5 max-w-sm text-base leading-7 text-zinc-500">
@@ -347,39 +437,56 @@ function RecentCard({
   );
 }
 
-function LandingPage() {
-  const [healthy, setHealthy] = useState(false);
-  const [worlds, setWorlds] = useState<DomainList>();
-  const [campaigns, setCampaigns] = useState<DomainList>();
+export function LandingPage({
+  initialHealthy,
+  initialWorlds,
+  initialCampaigns,
+}: {
+  initialHealthy?: boolean;
+  initialWorlds?: DomainList;
+  initialCampaigns?: DomainList;
+} = {}) {
+  const navigate = useInternalNavigate();
+  const [healthy, setHealthy] = useState(initialHealthy ?? false);
+  const [worlds, setWorlds] = useState<DomainList | undefined>(initialWorlds);
+  const [campaigns, setCampaigns] = useState<DomainList | undefined>(
+    initialCampaigns,
+  );
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    void checkHealth().then(
-      () => setHealthy(true),
-      () => setHealthy(false),
-    );
-    void listDomainRecords("locations", {
-      kind: "world",
-      limit: 1,
-      sort: "updatedAt",
-      order: "desc",
-    }).then(setWorlds, (caught: unknown) =>
-      setError(
-        caught instanceof Error ? caught.message : "Could not load worlds",
-      ),
-    );
-    void listDomainRecords("campaigns", {
-      limit: 1,
-      sort: "updatedAt",
-      order: "desc",
-    }).then(setCampaigns, (caught: unknown) =>
-      setError(
-        caught instanceof Error ? caught.message : "Could not load campaigns",
-      ),
-    );
-  }, []);
+    if (initialHealthy === undefined) {
+      void checkHealth().then(
+        () => setHealthy(true),
+        () => setHealthy(false),
+      );
+    }
+    if (!initialWorlds) {
+      void listDomainRecords("locations", {
+        kind: "world",
+        limit: 1,
+        sort: "updatedAt",
+        order: "desc",
+      }).then(setWorlds, (caught: unknown) =>
+        setError(
+          caught instanceof Error ? caught.message : "Could not load worlds",
+        ),
+      );
+    }
+    if (!initialCampaigns) {
+      void listDomainRecords("campaigns", {
+        limit: 1,
+        sort: "updatedAt",
+        order: "desc",
+      }).then(setCampaigns, (caught: unknown) =>
+        setError(
+          caught instanceof Error ? caught.message : "Could not load campaigns",
+        ),
+      );
+    }
+  }, [initialCampaigns, initialHealthy, initialWorlds]);
 
   async function createWorld(event: FormEvent) {
     event.preventDefault();
@@ -387,7 +494,7 @@ function LandingPage() {
     setError("");
     try {
       const result = await createWorldWithAi(prompt);
-      window.location.assign(`/worlds/${encodeURIComponent(result.world.id)}`);
+      await navigate(`/worlds/${encodeURIComponent(result.world.id)}`);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "World creation failed",
@@ -421,38 +528,34 @@ function LandingPage() {
             className="card border border-primary/20 bg-primary/[0.07] shadow-xl"
           >
             <div className="card-body">
-              <label
-                htmlFor="world-prompt"
-                className="text-lg font-semibold text-white"
-              >
-                Create a new world with AI
-              </label>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Describe the mood, premise, people, or conflict you want to
-                explore.
-              </p>
-              <textarea
+              <TextareaField
                 id="world-prompt"
+                label="Create a new world with AI"
+                help="Describe the mood, premise, people, or conflict you want to explore."
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="A rain-soaked empire built inside the skeleton of a sleeping god…"
                 rows={4}
-                className="textarea textarea-bordered mt-5 w-full resize-none text-base leading-7"
+                resize="none"
+                className="text-base"
               />
-              <button
+              <Button
+                type="submit"
+                tone="primary"
                 disabled={loading || prompt.trim().length < 3}
-                className="btn btn-primary mt-4"
+                loading={loading}
+                className="mt-4"
               >
-                {loading ? "Creating your world…" : "Create world"}
-              </button>
+                Create world
+              </Button>
             </div>
           </form>
         </section>
 
         {error && (
-          <p role="alert" className="alert alert-error mb-6 text-sm">
+          <Alert tone="error" className="mb-6">
             {error}
-          </p>
+          </Alert>
         )}
 
         <section className="grid gap-6 border-t border-white/10 pt-10 md:grid-cols-2">
@@ -478,9 +581,11 @@ function LandingPage() {
           />
         </section>
         <nav className="flex flex-wrap gap-6 py-8 text-sm font-medium text-zinc-300">
-          {(worlds?.total ?? 0) > 1 && <a href="/worlds">View all worlds →</a>}
+          {(worlds?.total ?? 0) > 1 && (
+            <InternalLink href="/worlds">View all worlds →</InternalLink>
+          )}
           {(campaigns?.total ?? 0) > 1 && (
-            <a href="/campaigns">View all campaigns →</a>
+            <InternalLink href="/campaigns">View all campaigns →</InternalLink>
           )}
         </nav>
       </div>
@@ -488,21 +593,24 @@ function LandingPage() {
   );
 }
 
-function ResourceListPage({
+export function ResourceListPage({
   resource,
   label,
   basePath,
   kind,
+  initialResult,
 }: {
   resource: DomainResource;
   label: string;
   basePath: string;
   kind?: string;
+  initialResult?: DomainList;
 }) {
-  const [result, setResult] = useState<DomainList>();
+  const [result, setResult] = useState<DomainList | undefined>(initialResult);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (initialResult) return;
     void listDomainRecords(resource, {
       ...(kind ? { kind } : {}),
       limit: 200,
@@ -513,7 +621,7 @@ function ResourceListPage({
         caught instanceof Error ? caught.message : `Could not load ${label}`,
       ),
     );
-  }, [kind, label, resource]);
+  }, [initialResult, kind, label, resource]);
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
@@ -528,19 +636,15 @@ function ResourceListPage({
             <p className="mt-3 text-zinc-500">Most recently edited first.</p>
           </div>
           {resource === "campaigns" && (
-            <a href="/campaigns/new" className="btn btn-primary">
+            <RouterButtonLink href="/campaigns/new" tone="primary">
               Create campaign
-            </a>
+            </RouterButtonLink>
           )}
         </div>
-        {error && (
-          <p role="alert" className="alert alert-error">
-            {error}
-          </p>
-        )}
+        {error && <Alert tone="error">{error}</Alert>}
         <div className="grid gap-4">
           {result?.items.map((record) => (
-            <a
+            <InternalLink
               key={record.id}
               href={`/${basePath}/${encodeURIComponent(record.id)}`}
               className="card card-side flex-row items-center justify-between border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/30"
@@ -550,11 +654,17 @@ function ResourceListPage({
                   {record.name}
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Updated {new Date(record.updatedAt).toLocaleString()}
+                  Updated{" "}
+                  {new Intl.DateTimeFormat("en-US", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                    timeZone: "UTC",
+                  }).format(new Date(record.updatedAt))}{" "}
+                  UTC
                 </p>
               </div>
               <span className="text-amber-300">Edit →</span>
-            </a>
+            </InternalLink>
           ))}
           {result && result.items.length === 0 && (
             <div className="rounded-box border border-dashed border-base-300 bg-base-200/50 px-6 py-14 text-center text-base-content/60">
@@ -569,23 +679,28 @@ function ResourceListPage({
   );
 }
 
-function ResourceEditorPage({
+export function ResourceEditorPage({
   resource,
   id,
   label,
   basePath,
+  initialRecord,
 }: {
   resource: DomainResource;
   id: string;
   label: string;
   basePath: string;
+  initialRecord?: DomainRecord;
 }) {
-  const [record, setRecord] = useState<DomainRecord>();
-  const [draft, setDraft] = useState("");
+  const [record, setRecord] = useState<DomainRecord | undefined>(initialRecord);
+  const [draft, setDraft] = useState(() =>
+    initialRecord ? JSON.stringify(initialRecord.data, null, 2) : "",
+  );
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (initialRecord) return;
     void getDomainRecord(resource, id).then(
       (loaded) => {
         setRecord(loaded);
@@ -596,7 +711,7 @@ function ResourceEditorPage({
           caught instanceof Error ? caught.message : "Could not load record",
         ),
     );
-  }, [id, resource]);
+  }, [id, initialRecord, resource]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -626,9 +741,12 @@ function ResourceEditorPage({
         <form onSubmit={save} className="py-12">
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
-              <a href={`/${basePath}`} className="text-sm text-amber-300">
+              <InternalLink
+                href={`/${basePath}`}
+                className="text-sm text-amber-300"
+              >
                 ← Back to {label.toLowerCase()}
-              </a>
+              </InternalLink>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight">
                 {record?.name ?? "Loading…"}
               </h1>
@@ -638,30 +756,46 @@ function ResourceEditorPage({
                 </p>
               )}
             </div>
-            <button disabled={!record || saving} className="btn btn-primary">
-              {saving ? "Saving…" : "Save changes"}
-            </button>
+            <Button
+              type="submit"
+              tone="primary"
+              loading={saving}
+              disabled={!record}
+            >
+              Save changes
+            </Button>
           </div>
-          <textarea
+          <Textarea
             aria-label="Domain aggregate JSON"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             spellCheck={false}
-            className="textarea textarea-bordered mt-8 min-h-[60vh] w-full resize-y p-5 font-mono text-sm leading-6"
+            className="mt-8 min-h-[60vh] p-5 font-mono text-sm leading-6"
           />
-          {message && <p className="mt-4 text-sm text-zinc-300">{message}</p>}
+          {message && <Alert className="mt-4">{message}</Alert>}
         </form>
       </div>
     </main>
   );
 }
 
-function SessionsPage() {
-  const [sessions, setSessions] = useState<DomainRecord[]>([]);
-  const [campaign, setCampaign] = useState<DomainRecord>();
-  const [loading, setLoading] = useState(true);
+export function SessionsPage({
+  initialSessions,
+  initialCampaign,
+}: {
+  initialSessions?: DomainRecord[];
+  initialCampaign?: DomainRecord;
+} = {}) {
+  const [sessions, setSessions] = useState<DomainRecord[]>(
+    initialSessions ?? [],
+  );
+  const [campaign, setCampaign] = useState<DomainRecord | undefined>(
+    initialCampaign,
+  );
+  const [loading, setLoading] = useState(initialSessions === undefined);
 
   useEffect(() => {
+    if (initialSessions) return;
     void Promise.all([
       listDomainRecords("sessions", {
         limit: 100,
@@ -688,7 +822,7 @@ function SessionsPage() {
       },
       () => setLoading(false),
     );
-  }, []);
+  }, [initialSessions]);
 
   const workspaceHref = campaign
     ? `/campaigns/${encodeURIComponent(campaign.id)}/locations`
@@ -708,9 +842,9 @@ function SessionsPage() {
               between them.
             </p>
           </div>
-          <a href={workspaceHref} className="btn btn-primary">
+          <RouterButtonLink href={workspaceHref} tone="primary">
             Open location workspace
-          </a>
+          </RouterButtonLink>
         </div>
         {loading ? (
           <p className="py-10 text-sm text-base-content/50">
@@ -727,11 +861,11 @@ function SessionsPage() {
                   <h2 className="font-semibold">
                     {session.name ?? "Untitled session"}
                   </h2>
-                  <span className="badge badge-outline capitalize">
+                  <Badge outline className="capitalize">
                     {typeof session.data.status === "string"
                       ? session.data.status.replaceAll("-", " ")
                       : "Recorded"}
-                  </span>
+                  </Badge>
                 </div>
                 <p className="mt-3 text-sm text-base-content/50">
                   {typeof session.data.notes === "string" &&
@@ -752,194 +886,5 @@ function SessionsPage() {
         )}
       </div>
     </main>
-  );
-}
-
-function WorkspaceEntryPage() {
-  const [showSetup, setShowSetup] = useState(false);
-
-  useEffect(() => {
-    void listDomainRecords("campaigns", {
-      limit: 1,
-      sort: "updatedAt",
-      order: "desc",
-    }).then(
-      (result) => {
-        const current = result.items[0];
-        if (!current) {
-          setShowSetup(true);
-          return;
-        }
-        window.location.replace(
-          `/campaigns/${encodeURIComponent(current.id)}/locations`,
-        );
-      },
-      () => setShowSetup(true),
-    );
-  }, []);
-
-  if (showSetup) return <LandingPage />;
-  return (
-    <main className="grid min-h-[calc(100dvh-3rem)] place-items-center bg-base-100">
-      <p className="text-sm text-base-content/55">Opening your world…</p>
-    </main>
-  );
-}
-
-function AppContent() {
-  const segments = window.location.pathname.split("/").filter(Boolean);
-  if (
-    segments[0] === "worlds" &&
-    segments[1] &&
-    segments[2] === "items" &&
-    segments[3] === "new"
-  ) {
-    return <ItemCreatePage worldId={decodeURIComponent(segments[1])} />;
-  }
-  if (
-    segments[0] === "worlds" &&
-    segments[1] &&
-    segments[2] === "items" &&
-    segments[3]
-  ) {
-    return (
-      <ItemEditorPage
-        itemId={decodeURIComponent(segments[3])}
-        worldId={decodeURIComponent(segments[1])}
-      />
-    );
-  }
-  if (segments[0] === "worlds" && segments[1] && segments[2] === "items") {
-    return <ItemListPage worldId={decodeURIComponent(segments[1])} />;
-  }
-  if (
-    segments[0] === "worlds" &&
-    segments[1] &&
-    segments[2] === "creatures" &&
-    segments[3] === "new"
-  ) {
-    return <CreatureCreatePage worldId={decodeURIComponent(segments[1])} />;
-  }
-  if (
-    segments[0] === "worlds" &&
-    segments[1] &&
-    segments[2] === "creatures" &&
-    segments[3]
-  ) {
-    const worldId = decodeURIComponent(segments[1]);
-    return (
-      <CreatureEditorPage
-        creatureId={decodeURIComponent(segments[3])}
-        worldId={worldId}
-      />
-    );
-  }
-  if (segments[0] === "worlds" && segments[1] && segments[2] === "creatures") {
-    return <CreatureListPage worldId={decodeURIComponent(segments[1])} />;
-  }
-  if (segments[0] === "worlds" && segments[1]) {
-    return <WorldEditor id={decodeURIComponent(segments[1])} />;
-  }
-  if (segments[0] === "campaigns" && segments[1] === "new")
-    return <CampaignCreatePage />;
-  if (segments[0] === "campaigns" && segments[1])
-    return (
-      <CampaignEditorPage
-        id={decodeURIComponent(segments[1])}
-        view={segments[2] === "locations" ? "locations" : "definition"}
-      />
-    );
-  if (segments[0] === "locations" && segments[1]) {
-    return (
-      <ResourceEditorPage
-        resource="locations"
-        id={decodeURIComponent(segments[1])}
-        label="Locations"
-        basePath="locations"
-      />
-    );
-  }
-  if (segments[0] === "creatures" && segments[1]) {
-    return <CreatureEditorPage creatureId={decodeURIComponent(segments[1])} />;
-  }
-  if (segments[0] === "items" && segments[1]) {
-    return (
-      <ResourceEditorPage
-        resource="definitions"
-        id={decodeURIComponent(segments[1])}
-        label="Items"
-        basePath="items"
-      />
-    );
-  }
-  if (segments[0] === "systems" && segments[1]) {
-    return (
-      <ResourceEditorPage
-        resource="systems"
-        id={decodeURIComponent(segments[1])}
-        label="Systems"
-        basePath="systems"
-      />
-    );
-  }
-  if (segments[0] === "worlds")
-    return (
-      <ResourceListPage
-        resource="locations"
-        label="Worlds"
-        basePath="worlds"
-        kind="world"
-      />
-    );
-  if (segments[0] === "campaigns")
-    return (
-      <ResourceListPage
-        resource="campaigns"
-        label="Campaigns"
-        basePath="campaigns"
-      />
-    );
-  if (segments[0] === "locations")
-    return (
-      <ResourceListPage
-        resource="locations"
-        label="Locations"
-        basePath="locations"
-      />
-    );
-  if (segments[0] === "creatures")
-    return (
-      <ResourceListPage
-        resource="creatures"
-        label="Creatures"
-        basePath="creatures"
-      />
-    );
-  if (segments[0] === "items")
-    return (
-      <ResourceListPage
-        resource="definitions"
-        label="Items"
-        basePath="items"
-        kind="item"
-      />
-    );
-  if (segments[0] === "systems")
-    return (
-      <ResourceListPage resource="systems" label="Systems" basePath="systems" />
-    );
-  if (segments[0] === "sessions") return <SessionsPage />;
-  return <WorkspaceEntryPage />;
-}
-
-export function App() {
-  const segments = window.location.pathname.split("/").filter(Boolean);
-  if (segments.length === 1 && segments[0] === "session-canvas-lab") {
-    return <SessionCanvasHarness />;
-  }
-  return (
-    <AppShell>
-      <AppContent />
-    </AppShell>
   );
 }

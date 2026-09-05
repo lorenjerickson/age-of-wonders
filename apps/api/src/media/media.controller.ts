@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import {
@@ -26,9 +27,11 @@ import {
 import { MediaService } from "./media.service";
 import type { MediaUploadRequest } from "./media-upload.types";
 import { S3UploadInterceptor } from "./s3-upload.interceptor";
+import { GmGuard } from "../auth/auth.guard";
 
 @ApiTags("media")
 @Controller("media")
+@UseGuards(GmGuard)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
 

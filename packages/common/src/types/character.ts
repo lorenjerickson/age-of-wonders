@@ -1,36 +1,25 @@
 import type { DiceExpression, NumericExpression } from "./dice";
 import type { Predicate } from "./expressions";
-import type { EquipmentState, InventoryState } from "./items";
-import type {
-  DisciplineState,
-  OperatingBasis,
-  UnderstandingState,
-} from "./disciplines";
+import type { EquipmentState } from "./items";
+import type { OperatingBasis, UnderstandingState } from "./disciplines";
 import type { CharacterHeritageState } from "./heritage";
 import type {
   Attribute,
   AttributeCollection,
   AttributeScore,
+  CampaignMembershipId,
   CharacterId,
-  ConditionType,
   Definition,
   DefinitionId,
   Distance,
-  EntityId,
   ExtensionData,
   OpenString,
   ResourcePool,
   SenseType,
-  SizeCategory,
-  StateIdentity,
 } from "./primitives";
-import type {
-  ActiveEffect,
-  ChoiceDefinition,
-  RuleModifier,
-  TraitDefinition,
-} from "./rules";
+import type { ChoiceDefinition, TraitDefinition } from "./rules";
 import type { CharacterProfessionState } from "./professions";
+import type { CreatureState } from "./creatures";
 
 export type ProficiencyRank =
   "none" | "half" | "proficient" | "expertise" | "custom";
@@ -209,12 +198,11 @@ export interface CharacterState<
   Profession extends CharacterProfessionState = CharacterProfessionState,
   Heritage extends CharacterHeritageState = CharacterHeritageState,
   Equipment extends EquipmentState = EquipmentState,
-> {
-  readonly identity: StateIdentity<CharacterId>;
-  readonly entityId: EntityId;
-  readonly name: string;
-  readonly playerId?: string;
-  readonly controllerIds: readonly string[];
+> extends CreatureState<Extensions, Equipment, CharacterId> {
+  /** Campaign membership that owns this character, including inactive predecessors. */
+  readonly ownerMembershipId: CampaignMembershipId;
+  /** Whether this character may currently represent its owning player in play. */
+  readonly campaignStatus: "active" | "retired" | "dead";
   readonly level: number;
   readonly experiencePoints?: number;
   readonly milestoneCount?: number;
@@ -224,30 +212,11 @@ export interface CharacterState<
   readonly creationFeatId?: DefinitionId;
   readonly alignment?: Alignment;
   readonly deity?: string;
-  readonly size: SizeCategory;
   readonly classes: readonly ClassLevelState[];
-  readonly attributes: AttributeCollection<AttributeState>;
-  readonly skills: readonly SkillState[];
-  readonly proficiencyBonus: number;
-  readonly proficiencies: readonly ProficiencyEntry[];
-  readonly armorClass: number;
-  readonly initiativeBonus: number;
-  readonly hitPoints: HitPointState;
   readonly deathSaves?: DeathSaveState;
   readonly exhaustionLevel?: number;
-  readonly speeds: readonly MovementSpeed[];
-  readonly senses: readonly SenseState[];
-  readonly languages: readonly string[];
-  readonly inventory: InventoryState;
-  readonly equipment: Equipment;
-  readonly disciplines?: DisciplineState;
   readonly featureIds: readonly DefinitionId[];
   readonly featIds: readonly DefinitionId[];
   readonly professions: readonly Profession[];
-  readonly activeEffects: readonly ActiveEffect[];
-  readonly conditions: readonly ConditionType[];
-  readonly resources: Readonly<Record<string, ResourcePool>>;
-  readonly modifiers?: readonly RuleModifier[];
   readonly biography?: Readonly<Record<string, string>>;
-  readonly extensions?: Extensions;
 }

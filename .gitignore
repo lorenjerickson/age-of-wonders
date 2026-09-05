@@ -9,3 +9,4 @@ coverage
 .idea
 .vscode/*.local.json
 apps/web/dist
+**/.output

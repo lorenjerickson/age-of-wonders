@@ -1,5 +1,28 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
+  ActionCard,
+  ActionSurface,
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Dialog,
+  Disclosure,
+  Field,
+  FieldError,
+  Fieldset,
+  FileInput,
+  FileInputTrigger,
+  IconButton,
+  Input,
+  Legend,
+  Select,
+  StatusIndicator,
+  Tab,
+  Textarea,
+  Toggle,
+} from "@aow/ui";
+import {
   createDomainRecord,
   createLocationWithAi,
   deleteWorld,
@@ -11,6 +34,7 @@ import {
   replaceDomainRecord,
   uploadMedia,
 } from "./api";
+import { RouterButtonLink, useInternalNavigate } from "./navigation";
 import { visibilityPolygon } from "./mapGeometry";
 
 type JsonObject = Record<string, unknown>;
@@ -156,20 +180,21 @@ function EditableText({
 
   if (editing) {
     return multiline ? (
-      <textarea
+      <Textarea
         autoFocus
         aria-label={label}
-        className="textarea textarea-bordered min-h-28 w-full text-base leading-7"
+        className="min-h-28 w-full text-base leading-7"
         value={draft}
         placeholder={placeholder}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={finish}
       />
     ) : (
-      <input
+      <Input
         autoFocus
         aria-label={label}
-        className={`input input-bordered w-full ${prominent ? "input-lg text-3xl font-semibold" : ""}`}
+        controlSize={prominent ? "lg" : "md"}
+        className={prominent ? "text-3xl font-semibold" : undefined}
         value={draft}
         placeholder={placeholder}
         onChange={(event) => setDraft(event.target.value)}
@@ -183,16 +208,17 @@ function EditableText({
   }
 
   return (
-    <button
+    <Button
       type="button"
-      className={`btn btn-ghost h-auto min-h-0 w-full justify-start whitespace-normal px-2 py-1 text-left ${
+      tone="ghost"
+      className={`h-auto min-h-0 w-full justify-start whitespace-normal px-2 py-1 text-left ${
         prominent ? "text-4xl font-semibold tracking-tight" : "text-base"
       }`}
       onClick={begin}
       title={`Edit ${label}`}
     >
       {value || <span className="text-base-content/40">{placeholder}</span>}
-    </button>
+    </Button>
   );
 }
 
@@ -215,10 +241,10 @@ function EditableList({
 
   if (editing) {
     return variant === "lines" ? (
-      <textarea
+      <Textarea
         autoFocus
         aria-label={label}
-        className="textarea textarea-bordered min-h-32 w-full text-sm leading-6"
+        className="min-h-32 w-full text-sm leading-6"
         value={draft}
         placeholder={`${placeholder}, one per line`}
         onChange={(event) => setDraft(event.target.value)}
@@ -236,10 +262,10 @@ function EditableList({
         }}
       />
     ) : (
-      <input
+      <Input
         autoFocus
         aria-label={label}
-        className="input input-bordered w-full"
+
         value={draft}
         placeholder={placeholder}
         onChange={(event) => setDraft(event.target.value)}
@@ -261,9 +287,10 @@ function EditableList({
   }
 
   return (
-    <button
+    <Button
       type="button"
-      className="btn btn-ghost min-h-12 w-full items-start justify-start whitespace-normal px-3 py-2 text-left"
+      tone="ghost"
+      className="min-h-12 w-full items-start justify-start whitespace-normal px-3 py-2 text-left"
       style={{ height: "auto" }}
       onClick={() => {
         setDraft(values.join(separator));
@@ -285,16 +312,16 @@ function EditableList({
                 {value}
               </span>
             ) : (
-              <span key={value} className="badge badge-outline badge-lg">
+              <Badge key={value} outline size="lg">
                 {value}
-              </span>
+              </Badge>
             ),
           )
         ) : (
           <span className="text-base-content/40">{placeholder}</span>
         )}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -357,15 +384,17 @@ function LocationBreadcrumbs({
               {record.name ?? "Untitled location"}
             </span>
           ) : (
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost btn-sm min-w-0 max-w-48 px-2 font-normal"
+              tone="ghost"
+              size="sm"
+              className="min-w-0 max-w-48 px-2 font-normal"
               onClick={() => onSelect(record.id)}
             >
               <span className="truncate">
                 {record.name ?? "Untitled location"}
               </span>
-            </button>
+            </Button>
           )}
         </li>
       ) : (
@@ -421,21 +450,17 @@ function ChildLocations({
               : "No child locations yet"}
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          onClick={onAdd}
-        >
+        <Button type="button" tone="primary" size="sm" onClick={onAdd}>
           + Add location
-        </button>
+        </Button>
       </div>
       {children.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {children.map((child) => (
-            <button
+            <ActionCard
               key={child.id}
               type="button"
-              className="card border border-base-300 bg-base-200 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
+              className="border border-base-300 bg-base-200 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
               onClick={() => onSelect(child.id)}
             >
               <span className="card-body gap-2 p-4">
@@ -443,9 +468,9 @@ function ChildLocations({
                   <span className="font-semibold">
                     {child.name ?? "Untitled location"}
                   </span>
-                  <span className="badge badge-ghost badge-sm shrink-0">
+                  <Badge size="sm" className="shrink-0">
                     {child.kind}
-                  </span>
+                  </Badge>
                 </span>
                 <span className="line-clamp-2 text-sm leading-5 text-base-content/60">
                   {stringAt(child.data, ["description"]) ||
@@ -455,7 +480,7 @@ function ChildLocations({
                   Open location →
                 </span>
               </span>
-            </button>
+            </ActionCard>
           ))}
         </div>
       )}
@@ -697,7 +722,7 @@ function ContainedMap({
         className="h-full w-full object-contain"
       />
       {frame.width > 0 && onMapClick && (
-        <button
+        <ActionSurface
           type="button"
           className={`absolute z-10 ${interactionClassName}`}
           style={frame}
@@ -733,7 +758,7 @@ function ContainedMap({
             </>
           );
           return onPinSelect ? (
-            <button
+            <ActionSurface
               key={pin.id}
               type="button"
               className="absolute z-20 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1 pb-1 transition hover:scale-105"
@@ -742,7 +767,7 @@ function ContainedMap({
               onClick={() => onPinSelect(pin.id)}
             >
               {content}
-            </button>
+            </ActionSurface>
           ) : (
             <span
               key={pin.id}
@@ -850,43 +875,40 @@ function LocationMap({
           </div>
         )}
         {resolvedUrl && (
-          <button
+          <Button
             type="button"
-            className="btn btn-neutral btn-sm absolute top-4 right-4 z-10 shadow-lg"
+            tone="neutral"
+            size="sm"
+            className="absolute top-4 right-4 z-10 shadow-lg"
             onClick={() => setExpanded(true)}
           >
             Expand map
-          </button>
+          </Button>
         )}
         <div className="absolute right-4 bottom-4 z-10 flex flex-wrap justify-end gap-2">
-          <button
+          <Button
             type="button"
-            className="btn btn-secondary btn-sm shadow-lg"
+            tone="secondary"
+            size="sm"
+            loading={generating}
+            className="shadow-lg"
             disabled={generating || uploading}
             onClick={() => {
               setGenerating(true);
               void onGenerate().finally(() => setGenerating(false));
             }}
           >
-            {generating && (
-              <span className="loading loading-spinner loading-xs" />
-            )}
             {resolvedUrl ? "Regenerate with AI" : "Generate map with AI"}
-          </button>
-          <label className="btn btn-primary btn-sm cursor-pointer shadow-lg">
-            {uploading ? (
-              <span className="loading loading-spinner loading-xs" />
-            ) : (
-              "Upload map"
-            )}
-            <input
-              type="file"
+          </Button>
+          <FileInputTrigger tone="primary" size="sm" className="shadow-lg">
+            {uploading ? "Uploading…" : "Upload map"}
+            <FileInput
               accept="image/*"
               className="hidden"
               onChange={choose}
               disabled={uploading || generating}
             />
-          </label>
+          </FileInputTrigger>
         </div>
       </figure>
       <div className="card-body p-4">
@@ -901,7 +923,7 @@ function LocationMap({
         />
       </div>
       {expanded && resolvedUrl && (
-        <dialog open className="modal modal-open z-50 p-0">
+        <Dialog open className="modal-open z-50 p-0">
           <div className="fixed inset-0 flex flex-col bg-black/95 p-3 sm:p-6">
             <div className="mb-3 flex items-center justify-between gap-4 text-white">
               <div className="min-w-0">
@@ -910,14 +932,15 @@ function LocationMap({
                 </p>
                 <p className="text-xs text-white/60">Map preview</p>
               </div>
-              <button
+              <IconButton
                 type="button"
-                className="btn btn-circle btn-sm"
+                shape="circle"
+                size="sm"
                 aria-label="Close expanded map"
                 onClick={() => setExpanded(false)}
               >
                 ✕
-              </button>
+              </IconButton>
             </div>
             <div className="min-h-0 flex-1">
               <ContainedMap
@@ -934,7 +957,7 @@ function LocationMap({
               />
             </div>
           </div>
-        </dialog>
+        </Dialog>
       )}
     </div>
   );
@@ -1227,7 +1250,7 @@ function SiteWallEditor({
   const vertexHeight = fit.height ? (6 / (fit.height * zoom)) * 1000 : 6;
 
   return (
-    <dialog open className="modal modal-open z-50 p-0">
+    <Dialog open className="modal-open z-50 p-0">
       <div className="fixed inset-0 flex min-h-0 flex-col bg-base-100">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 bg-base-200 px-4 py-3 sm:px-6">
           <div className="min-w-0">
@@ -1247,22 +1270,25 @@ function SiteWallEditor({
                   ["invisible-wall", "Invisible wall"],
                 ] as const
               ).map(([kind, label]) => (
-                <button
+                <Button
                   key={kind}
                   type="button"
-                  className={`btn btn-sm join-item ${tool === kind ? "btn-primary" : "btn-outline"}`}
+                  tone={tool === kind ? "primary" : "outline"}
+                  size="sm"
+                  className="join-item"
                   onClick={() => beginWall(kind)}
                 >
                   {label}
                   <kbd className="kbd kbd-xs">
                     {kind === "wall" ? "W" : kind === "door" ? "D" : "V"}
                   </kbd>
-                </button>
+                </Button>
               ))}
             </div>
-            <button
+            <Button
               type="button"
-              className={`btn btn-sm ${tool === "transition" ? "btn-secondary" : "btn-outline"}`}
+              tone={tool === "transition" ? "secondary" : "outline"}
+              size="sm"
               onClick={() => {
                 if (draft.length) finishDraft();
                 setSelectedWallId(undefined);
@@ -1271,10 +1297,11 @@ function SiteWallEditor({
               }}
             >
               Transition <kbd className="kbd kbd-xs">T</kbd>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={`btn btn-sm ${tool === "observer" ? "btn-accent" : "btn-outline"}`}
+              tone={tool === "observer" ? "accent" : "outline"}
+              size="sm"
               onClick={() => {
                 if (draft.length) finishDraft();
                 if (tool === "observer") {
@@ -1287,10 +1314,10 @@ function SiteWallEditor({
               }}
             >
               Observer <kbd className="kbd kbd-xs">O</kbd>
-            </button>
-            <select
+            </Button>
+            <Select
               aria-label="Map orientation"
-              className="select select-bordered select-sm"
+              controlSize="sm"
               value={orientation}
               onChange={(event) => {
                 const next = event.currentTarget
@@ -1301,40 +1328,48 @@ function SiteWallEditor({
               <option value="scenic">Scenic</option>
               <option value="overhead">Overhead</option>
               <option value="side-on">Side-on · gravity</option>
-            </select>
+            </Select>
             <div className="join">
-              <button
+              <Button
                 type="button"
-                className="btn btn-sm join-item"
+                size="sm"
+                className="join-item"
                 aria-label="Zoom out"
                 disabled={zoom <= 1}
                 onClick={() => setZoom((value) => Math.max(1, value / 1.25))}
               >
                 −
-              </button>
-              <span className="btn btn-sm join-item pointer-events-none min-w-20">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-sm join-item"
+                size="sm"
+                className="join-item min-w-20"
+                disabled
+              >
+                {Math.round(zoom * 100)}%
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="join-item"
                 aria-label="Zoom in"
                 disabled={zoom >= 6}
                 onClick={() => setZoom((value) => Math.min(6, value * 1.25))}
               >
                 +
-              </button>
+              </Button>
             </div>
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost btn-sm"
+              tone="ghost"
+              size="sm"
               onClick={() => {
                 setZoom(1);
                 setPan({ x: 0, y: 0 });
               }}
             >
               Reset view
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -1638,22 +1673,23 @@ function SiteWallEditor({
                 tool === "door" ||
                 tool === "invisible-wall" ||
                 draft.length > 0) && (
-                <button
+                <Button
                   type="button"
-                  className="btn btn-primary btn-sm"
+                  tone="primary"
+                  size="sm"
                   onClick={() => finishDraft()}
                 >
                   Finish wall
-                </button>
+                </Button>
               )}
             </div>
 
             <div className="mt-4 grid gap-2">
               {walls.map((wall, index) => (
-                <button
+                <ActionCard
                   key={wall.id}
                   type="button"
-                  className={`card border text-left transition ${
+                  className={`border text-left transition ${
                     selectedWallId === wall.id
                       ? "border-primary bg-primary/10"
                       : "border-base-300 bg-base-100 hover:border-base-content/30"
@@ -1683,7 +1719,7 @@ function SiteWallEditor({
                       {wall.vertices.length} vertices
                     </span>
                   </span>
-                </button>
+                </ActionCard>
               ))}
               {!walls.length && tool === "select" && (
                 <p className="rounded-box border border-dashed border-base-300 p-4 text-sm text-base-content/60">
@@ -1697,10 +1733,8 @@ function SiteWallEditor({
               (draft.length
                 ? draftKind !== "invisible-wall"
                 : selectedWall?.kind !== "invisible-wall") && (
-                <fieldset className="fieldset mt-5 rounded-box border border-base-300 bg-base-100 p-3">
-                  <legend className="fieldset-legend px-1">
-                    This wall blocks
-                  </legend>
+                <Fieldset className="mt-5 rounded-box border border-base-300 bg-base-100 p-3">
+                  <Legend className="px-1">This wall blocks</Legend>
                   {(
                     [
                       ["sight", "Line of sight"],
@@ -1709,51 +1743,50 @@ function SiteWallEditor({
                       ["environmentalEffects", "Environmental effects"],
                     ] as const
                   ).map(([key, label]) => (
-                    <label key={key} className="label justify-start gap-3 py-2">
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-primary checkbox-sm"
-                        checked={activeBlocks[key]}
-                        onChange={(event) =>
-                          updateBlocking(key, event.currentTarget.checked)
-                        }
-                      />
-                      <span>{label}</span>
-                    </label>
+                    <Checkbox
+                      key={key}
+                      label={label}
+                      controlSize="sm"
+                      wrapperClassName="py-2"
+                      checked={activeBlocks[key]}
+                      onChange={(event) =>
+                        updateBlocking(key, event.currentTarget.checked)
+                      }
+                    />
                   ))}
-                </fieldset>
+                </Fieldset>
               )}
 
             {selectedWall && (
               <div className="mt-4 grid gap-2">
                 {selectedWall.kind === "door" && (
-                  <label className="label justify-start gap-3 rounded-box border border-base-300 bg-base-100 p-3">
-                    <input
-                      type="checkbox"
-                      className="toggle toggle-info toggle-sm"
-                      checked={selectedWall.doorState === "open"}
-                      onChange={(event) => {
-                        const doorState = event.currentTarget.checked
-                          ? "open"
-                          : "closed";
-                        setWalls((current) =>
-                          current.map((wall) =>
-                            wall.id === selectedWall.id
-                              ? {
-                                  ...wall,
-                                  doorState,
-                                }
-                              : wall,
-                          ),
-                        );
-                      }}
-                    />
-                    <span>Door starts open</span>
-                  </label>
+                  <Toggle
+                    label="Door starts open"
+                    tone="info"
+                    controlSize="sm"
+                    wrapperClassName="rounded-box border border-base-300 bg-base-100 p-3"
+                    checked={selectedWall.doorState === "open"}
+                    onChange={(event) => {
+                      const doorState = event.currentTarget.checked
+                        ? "open"
+                        : "closed";
+                      setWalls((current) =>
+                        current.map((wall) =>
+                          wall.id === selectedWall.id
+                            ? {
+                                ...wall,
+                                doorState,
+                              }
+                            : wall,
+                        ),
+                      );
+                    }}
+                  />
                 )}
-                <button
+                <Button
                   type="button"
-                  className="btn btn-error btn-outline w-full"
+                  tone="danger"
+                  fullWidth
                   onClick={() => {
                     setWalls((current) =>
                       current.filter((wall) => wall.id !== selectedWall.id),
@@ -1762,14 +1795,16 @@ function SiteWallEditor({
                   }}
                 >
                   Delete selected boundary
-                </button>
+                </Button>
               </div>
             )}
 
             {walls.length > 0 && (
-              <button
+              <Button
                 type="button"
-                className="btn btn-error btn-ghost mt-3 w-full"
+                tone="danger"
+                fullWidth
+                className="mt-3"
                 onClick={() => {
                   setWalls([]);
                   setDraft([]);
@@ -1778,7 +1813,7 @@ function SiteWallEditor({
                 }}
               >
                 Discard all walls and doors
-              </button>
+              </Button>
             )}
 
             <div className="divider">Transitions</div>
@@ -1789,10 +1824,10 @@ function SiteWallEditor({
                     location.id === transition.destination.locationId,
                 );
                 return (
-                  <button
+                  <ActionCard
                     key={transition.id}
                     type="button"
-                    className={`card border text-left ${selectedTransitionId === transition.id ? "border-secondary bg-secondary/10" : "border-base-300 bg-base-100"}`}
+                    className={`border text-left ${selectedTransitionId === transition.id ? "border-secondary bg-secondary/10" : "border-base-300 bg-base-100"}`}
                     onClick={() => {
                       setSelectedTransitionId(transition.id);
                       setSelectedWallId(undefined);
@@ -1807,7 +1842,7 @@ function SiteWallEditor({
                         To {destination?.name ?? "another map"}
                       </span>
                     </span>
-                  </button>
+                  </ActionCard>
                 );
               })}
               {!transitions.length && (
@@ -1819,53 +1854,51 @@ function SiteWallEditor({
             </div>
 
             {selectedTransition && (
-              <fieldset className="fieldset mt-4 rounded-box border border-base-300 bg-base-100 p-3">
-                <legend className="fieldset-legend">
-                  Transition destination
-                </legend>
-                <label className="fieldset-label">Map</label>
-                <select
-                  className="select select-bordered w-full"
-                  value={selectedTransition.destination.locationId}
-                  onChange={(event) => {
-                    const locationId = event.currentTarget.value;
-                    setTransitions((current) =>
-                      current.map((transition) =>
-                        transition.id === selectedTransition.id
-                          ? {
-                              ...transition,
-                              destination: {
-                                ...transition.destination,
-                                locationId,
-                              },
-                            }
-                          : transition,
-                      ),
-                    );
-                  }}
-                >
-                  {locations
-                    .filter(
-                      (location) =>
-                        stringAt(location.data, ["kind"]) === "site",
-                    )
-                    .map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name ?? "Untitled site"}
-                      </option>
-                    ))}
-                </select>
+              <Fieldset className="mt-4 rounded-box border border-base-300 bg-base-100 p-3">
+                <Legend>Transition destination</Legend>
+                <Field label="Map">
+                  <Select
+                    value={selectedTransition.destination.locationId}
+                    onChange={(event) => {
+                      const locationId = event.currentTarget.value;
+                      setTransitions((current) =>
+                        current.map((transition) =>
+                          transition.id === selectedTransition.id
+                            ? {
+                                ...transition,
+                                destination: {
+                                  ...transition.destination,
+                                  locationId,
+                                },
+                              }
+                            : transition,
+                        ),
+                      );
+                    }}
+                  >
+                    {locations
+                      .filter(
+                        (location) =>
+                          stringAt(location.data, ["kind"]) === "site",
+                      )
+                      .map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name ?? "Untitled site"}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {(["x", "y"] as const).map((axis) => (
-                    <label key={axis} className="fieldset">
-                      <span className="fieldset-label">
-                        Destination {axis.toUpperCase()} (%)
-                      </span>
-                      <input
+                    <Field
+                      key={axis}
+                      label={`Destination ${axis.toUpperCase()} (%)`}
+                    >
+                      <Input
                         type="number"
                         min="0"
                         max="100"
-                        className="input input-bordered w-full"
+
                         value={Math.round(
                           selectedTransition.destination.position[axis] * 100,
                         )}
@@ -1892,17 +1925,16 @@ function SiteWallEditor({
                           );
                         }}
                       />
-                    </label>
+                    </Field>
                   ))}
                 </div>
-                <label className="fieldset mt-2">
-                  <span className="fieldset-label">Trigger radius (%)</span>
-                  <input
+                <Field label="Trigger radius (%)" className="mt-2">
+                  <Input
                     type="number"
                     min="0.5"
                     max="25"
                     step="0.5"
-                    className="input input-bordered w-full"
+
                     value={selectedTransition.radius * 100}
                     onChange={(event) => {
                       const radius = Math.max(
@@ -1918,10 +1950,11 @@ function SiteWallEditor({
                       );
                     }}
                   />
-                </label>
-                <button
+                </Field>
+                <Button
                   type="button"
-                  className="btn btn-error btn-outline mt-3"
+                  tone="danger"
+                  className="mt-3"
                   onClick={() => {
                     setTransitions((current) =>
                       current.filter(
@@ -1932,22 +1965,19 @@ function SiteWallEditor({
                   }}
                 >
                   Delete transition
-                </button>
-              </fieldset>
+                </Button>
+              </Fieldset>
             )}
 
             <div className="divider">Line of sight</div>
-            <label className="label justify-start gap-3">
-              <input
-                type="checkbox"
-                className="toggle toggle-accent"
-                checked={visionPreview}
-                onChange={(event) =>
-                  setVisionPreview(event.currentTarget.checked)
-                }
-              />
-              <span>Reveal observer visibility</span>
-            </label>
+            <Toggle
+              label="Reveal observer visibility"
+              tone="accent"
+              checked={visionPreview}
+              onChange={(event) =>
+                setVisionPreview(event.currentTarget.checked)
+              }
+            />
             <p className="mt-2 text-sm text-base-content/60">
               Place and drag the observer. Closed doors and sight-blocking walls
               hide the map. The observer stays exactly where you place it and is
@@ -1961,12 +1991,12 @@ function SiteWallEditor({
             Decorator coordinates remain aligned when the map is resized.
           </p>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+            <Button type="button" tone="ghost" onClick={onCancel}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-primary"
+              tone="primary"
               onClick={() =>
                 onSave({
                   walls: draft.length > 0 ? finishDraft() : walls,
@@ -1976,11 +2006,11 @@ function SiteWallEditor({
               }
             >
               Save decorators
-            </button>
+            </Button>
           </div>
         </footer>
       </div>
-    </dialog>
+    </Dialog>
   );
 }
 
@@ -2012,11 +2042,11 @@ function SiteWallsPanel({
               : `${orientation} · Add walls, doors, transitions, gravity, and visibility preview.`}
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={onEdit}>
+        <Button type="button" tone="primary" onClick={onEdit}>
           {walls.length || transitions.length
             ? "Edit decorators"
             : "Add decorators"}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -2075,10 +2105,8 @@ function ProfileEditor({
               placeholder={`Add a ${group.title.toLowerCase()} summary`}
               onCommit={(value) => patch(group.summaryPath, value)}
             />
-            <fieldset className="fieldset">
-              <legend className="fieldset-legend text-base-content/60">
-                Tags
-              </legend>
+            <Fieldset>
+              <Legend className="text-base-content/60">Tags</Legend>
               <EditableList
                 label={`${group.title} tags`}
                 values={stringsAt(data, [
@@ -2095,12 +2123,10 @@ function ProfileEditor({
                   )
                 }
               />
-            </fieldset>
+            </Fieldset>
             {group.fields.map(([label, path]) => (
-              <fieldset key={label} className="fieldset">
-                <legend className="fieldset-legend text-base-content/60">
-                  {label}
-                </legend>
+              <Fieldset key={label}>
+                <Legend className="text-base-content/60">{label}</Legend>
                 <EditableList
                   label={label}
                   values={stringsAt(data, [...path])}
@@ -2110,16 +2136,14 @@ function ProfileEditor({
                   }
                   onCommit={(value) => patch([...path], value)}
                 />
-              </fieldset>
+              </Fieldset>
             ))}
             {group.title === "Culture" && (
-              <fieldset className="fieldset">
-                <legend className="fieldset-legend text-base-content/60">
-                  Population
-                </legend>
-                <input
+              <Fieldset>
+                <Legend className="text-base-content/60">Population</Legend>
+                <Input
                   type="number"
-                  className="input input-bordered w-full"
+
                   key={`${record.id}:population:${numberAt(data, ["profile", "culture", "population"]) ?? ""}`}
                   defaultValue={numberAt(data, [
                     "profile",
@@ -2136,19 +2160,19 @@ function ProfileEditor({
                     )
                   }
                 />
-              </fieldset>
+              </Fieldset>
             )}
             {group.title === "Politics" && (
-              <fieldset className="fieldset">
-                <legend className="fieldset-legend text-base-content/60">
+              <Fieldset>
+                <Legend className="text-base-content/60">
                   Stability (0–100)
-                </legend>
-                <input
+                </Legend>
+                <Input
                   type="number"
                   min="0"
                   max="100"
                   key={`${record.id}:stability:${numberAt(data, ["profile", "politics", "stability"]) ?? ""}`}
-                  className="input input-bordered w-full"
+
                   defaultValue={numberAt(data, [
                     "profile",
                     "politics",
@@ -2164,7 +2188,7 @@ function ProfileEditor({
                     )
                   }
                 />
-              </fieldset>
+              </Fieldset>
             )}
           </div>
         </section>
@@ -2193,10 +2217,9 @@ function PhysicalEnvironmentEditor({
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <fieldset className="fieldset">
-            <legend className="fieldset-legend">Environment kind</legend>
-            <select
-              className="select select-bordered w-full"
+          <Fieldset>
+            <Legend>Environment kind</Legend>
+            <Select
               value={stringAt(record.data, ["physicalEnvironment", "kind"])}
               onChange={(event) =>
                 patch(["physicalEnvironment", "kind"], event.target.value)
@@ -2205,12 +2228,11 @@ function PhysicalEnvironmentEditor({
               {PHYSICAL_ENVIRONMENT_KINDS.map((value) => (
                 <option key={value}>{value}</option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset className="fieldset">
-            <legend className="fieldset-legend">Understanding</legend>
-            <select
-              className="select select-bordered w-full"
+            </Select>
+          </Fieldset>
+          <Fieldset>
+            <Legend>Understanding</Legend>
+            <Select
               value={stringAt(record.data, [
                 "physicalEnvironment",
                 "understanding",
@@ -2225,12 +2247,11 @@ function PhysicalEnvironmentEditor({
               {UNDERSTANDING_STATES.map((value) => (
                 <option key={value}>{value}</option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset className="fieldset">
-            <legend className="fieldset-legend">Operating basis</legend>
-            <select
-              className="select select-bordered w-full"
+            </Select>
+          </Fieldset>
+          <Fieldset>
+            <Legend>Operating basis</Legend>
+            <Select
               value={stringAt(record.data, [
                 "physicalEnvironment",
                 "operatingBasis",
@@ -2247,11 +2268,11 @@ function PhysicalEnvironmentEditor({
                   {value || "Not applicable"}
                 </option>
               ))}
-            </select>
-          </fieldset>
+            </Select>
+          </Fieldset>
         </div>
-        <fieldset className="fieldset">
-          <legend className="fieldset-legend">Observed properties</legend>
+        <Fieldset>
+          <Legend>Observed properties</Legend>
           <p className="mb-2 text-xs text-base-content/60">
             At least one measurable or repeatably observed property is required.
           </p>
@@ -2269,7 +2290,7 @@ function PhysicalEnvironmentEditor({
               }
             }}
           />
-        </fieldset>
+        </Fieldset>
         <EditableText
           value={
             typeof environment.mechanismDescription === "string"
@@ -2289,8 +2310,8 @@ function PhysicalEnvironmentEditor({
             ["Boundary conditions", "boundaryConditions"],
             ["Access constraints", "accessConstraints"],
           ].map(([label, field]) => (
-            <fieldset key={field} className="fieldset">
-              <legend className="fieldset-legend">{label}</legend>
+            <Fieldset key={field}>
+              <Legend>{label}</Legend>
               <EditableList
                 label={label}
                 values={stringsAt(record.data, ["physicalEnvironment", field])}
@@ -2300,7 +2321,7 @@ function PhysicalEnvironmentEditor({
                   patch(["physicalEnvironment", field], value)
                 }
               />
-            </fieldset>
+            </Fieldset>
           ))}
         </div>
       </div>
@@ -2320,12 +2341,11 @@ function ExtensionEditor({
   if (!entries.length) return null;
 
   return (
-    <div className="collapse collapse-arrow border border-base-300 bg-base-200">
-      <input type="checkbox" />
-      <div className="collapse-title font-semibold">
-        World notes and generated briefs
-      </div>
-      <div className="collapse-content grid gap-4">
+    <Disclosure
+      summary="World notes and generated briefs"
+      className="bg-base-200"
+    >
+      <div className="grid gap-4">
         <p className="text-sm text-base-content/60">
           These namespaced fields contain authored world data, not relational
           dependencies. Changes are saved when a field loses focus.
@@ -2339,7 +2359,7 @@ function ExtensionEditor({
           />
         ))}
       </div>
-    </div>
+    </Disclosure>
   );
 }
 
@@ -2354,10 +2374,11 @@ function JsonExtensionField({
 }) {
   const [error, setError] = useState("");
   return (
-    <fieldset className="fieldset">
-      <legend className="fieldset-legend">{label}</legend>
-      <textarea
-        className={`textarea textarea-bordered min-h-36 w-full font-mono text-xs ${error ? "textarea-error" : ""}`}
+    <Fieldset>
+      <Legend>{label}</Legend>
+      <Textarea
+        className={`min-h-36 w-full font-mono text-xs ${error ? "border-error" : ""}`}
+        aria-invalid={Boolean(error) || undefined}
         defaultValue={JSON.stringify(value, null, 2)}
         onBlur={(event) => {
           try {
@@ -2368,8 +2389,8 @@ function JsonExtensionField({
           }
         }}
       />
-      {error && <p className="label text-error">{error}</p>}
-    </fieldset>
+      {error && <FieldError>{error}</FieldError>}
+    </Fieldset>
   );
 }
 
@@ -2429,7 +2450,7 @@ function ParentMapPinDialog({
   }, [image.assetId, image.uri, onCancel]);
 
   return (
-    <dialog open className="modal modal-open z-50 p-0">
+    <Dialog open className="modal-open z-50 p-0">
       <div className="fixed inset-0 flex flex-col bg-base-100">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 bg-base-200 px-5 py-4 sm:px-8">
           <div>
@@ -2444,14 +2465,14 @@ function ParentMapPinDialog({
               when the pin is in the right place.
             </p>
           </div>
-          <button
+          <Button
             type="button"
-            className="btn btn-circle btn-ghost"
+            tone="ghost"
             aria-label="Cancel map placement"
             onClick={onCancel}
           >
             ✕
-          </button>
+          </Button>
         </header>
 
         <div className="min-h-0 flex-1 bg-black/80 p-3 sm:p-6">
@@ -2494,23 +2515,23 @@ function ParentMapPinDialog({
               : "Choose a point on the map to continue."}
           </p>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+            <Button type="button" tone="ghost" onClick={onCancel}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-primary"
+              tone="primary"
               disabled={!position}
               onClick={() => {
                 if (position) onConfirm(position);
               }}
             >
               Confirm pin
-            </button>
+            </Button>
           </div>
         </footer>
       </div>
-    </dialog>
+    </Dialog>
   );
 }
 
@@ -2699,28 +2720,22 @@ function LocationCreator({
             your context and the project’s create-location prompt.
           </p>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+        <Button type="button" tone="ghost" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </header>
 
       <div role="tablist" className="tabs tabs-box w-fit">
-        <button
-          type="button"
-          role="tab"
-          className={`tab ${mode === "ai" ? "tab-active" : ""}`}
-          onClick={() => setMode("ai")}
-        >
+        <Tab type="button" active={mode === "ai"} onClick={() => setMode("ai")}>
           Create with AI
-        </button>
-        <button
+        </Tab>
+        <Tab
           type="button"
-          role="tab"
-          className={`tab ${mode === "manual" ? "tab-active" : ""}`}
+          active={mode === "manual"}
           onClick={() => setMode("manual")}
         >
           Create manually
-        </button>
+        </Tab>
       </div>
 
       <section className="card border border-base-300 bg-base-200 shadow-sm">
@@ -2738,13 +2753,13 @@ function LocationCreator({
               </p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
-            className={`btn ${mapPosition ? "btn-outline" : "btn-primary"}`}
+            tone={mapPosition ? "outline" : "primary"}
             onClick={() => setPinDialogOpen(true)}
           >
             {mapPosition ? "Move map pin" : "Place on parent map"}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -2762,10 +2777,10 @@ function LocationCreator({
                 and its map.
               </p>
             </div>
-            <textarea
+            <Textarea
               autoFocus
               required
-              className="textarea textarea-bordered min-h-56 w-full text-base leading-7"
+              className="min-h-56 w-full text-base leading-7"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="A storm-battered port at the edge of the parent region, built around the ribs of a leviathan. Its lighthouse guild secretly controls passage through the reefs…"
@@ -2774,15 +2789,16 @@ function LocationCreator({
               <span className="text-xs text-base-content/50">
                 Uses create-location.md + parent context
               </span>
-              <button
-                className="btn btn-primary"
+              <Button
+                type="submit"
+                tone="primary"
                 disabled={working || !prompt.trim()}
               >
                 {working && (
                   <span className="loading loading-spinner loading-sm" />
                 )}
                 Generate location and map
-              </button>
+              </Button>
             </div>
           </div>
         </form>
@@ -2793,63 +2809,58 @@ function LocationCreator({
         >
           <div className="card-body gap-5">
             <h2 className="card-title">Start with the essentials</h2>
-            <fieldset className="fieldset">
-              <legend className="fieldset-legend">Name</legend>
-              <input
+            <Fieldset>
+              <Legend>Name</Legend>
+              <Input
                 autoFocus
                 required
-                className="input input-bordered w-full"
+
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="The Ember Coast"
               />
-            </fieldset>
+            </Fieldset>
             {kind === "plane" && (
               <div className="grid gap-4 rounded-box border border-primary/25 bg-primary/[0.05] p-4 sm:grid-cols-2">
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">
-                    Physical environment
-                  </legend>
-                  <select
-                    className="select select-bordered w-full"
+                <Fieldset>
+                  <Legend>Physical environment</Legend>
+                  <Select
                     value={environmentKind}
                     onChange={(event) => setEnvironmentKind(event.target.value)}
                   >
                     {PHYSICAL_ENVIRONMENT_KINDS.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </fieldset>
-                <fieldset className="fieldset">
-                  <legend className="fieldset-legend">Understanding</legend>
-                  <select
-                    className="select select-bordered w-full"
+                  </Select>
+                </Fieldset>
+                <Fieldset>
+                  <Legend>Understanding</Legend>
+                  <Select
                     value={understanding}
                     onChange={(event) => setUnderstanding(event.target.value)}
                   >
                     {UNDERSTANDING_STATES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
-                  </select>
-                </fieldset>
-                <fieldset className="fieldset sm:col-span-2">
-                  <legend className="fieldset-legend">Observed property</legend>
-                  <textarea
+                  </Select>
+                </Fieldset>
+                <Fieldset className="sm:col-span-2">
+                  <Legend>Observed property</Legend>
+                  <Textarea
                     required
-                    className="textarea textarea-bordered min-h-24 w-full"
+                    className="min-h-24 w-full"
                     value={observedProperty}
                     onChange={(event) =>
                       setObservedProperty(event.target.value)
                     }
                     placeholder="Describe one measurable property that distinguishes this environment"
                   />
-                </fieldset>
+                </Fieldset>
               </div>
             )}
-            <fieldset className="fieldset">
-              <legend className="fieldset-legend">Location type</legend>
-              <select
-                className="select select-bordered w-full"
+            <Fieldset>
+              <Legend>Location type</Legend>
+              <Select
                 value={kind}
                 onChange={(event) => setKind(event.target.value)}
               >
@@ -2859,11 +2870,12 @@ function LocationCreator({
                       locationKind.slice(1)}
                   </option>
                 ))}
-              </select>
-            </fieldset>
+              </Select>
+            </Fieldset>
             <div className="card-actions justify-end">
-              <button
-                className="btn btn-primary"
+              <Button
+                type="submit"
+                tone="primary"
                 disabled={
                   working ||
                   !name.trim() ||
@@ -2874,7 +2886,7 @@ function LocationCreator({
                   <span className="loading loading-spinner loading-sm" />
                 )}
                 Add location
-              </button>
+              </Button>
             </div>
           </div>
         </form>
@@ -2897,6 +2909,7 @@ function LocationCreator({
 }
 
 export function WorldEditor({ id }: { id: string }) {
+  const navigate = useInternalNavigate();
   const [records, setRecords] = useState<DomainRecord[]>([]);
   const [selectedId, setSelectedId] = useState(id);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -3076,7 +3089,7 @@ export function WorldEditor({ id }: { id: string }) {
     try {
       await Promise.all(queues.current.values());
       await deleteWorld(id);
-      window.location.assign("/worlds");
+      await navigate("/worlds");
     } catch (caught) {
       setDeleting(false);
       setConfirmingDelete(false);
@@ -3111,9 +3124,9 @@ export function WorldEditor({ id }: { id: string }) {
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="navbar sticky top-16 z-20 border-b border-base-300 bg-base-100/90 px-4 backdrop-blur lg:px-8">
         <div className="navbar-start gap-3">
-          <a href="/worlds" className="btn btn-ghost btn-sm">
+          <RouterButtonLink href="/worlds" tone="ghost" size="sm">
             ← Worlds
-          </a>
+          </RouterButtonLink>
           <div className="hidden sm:block">
             <p className="text-xs font-semibold tracking-[0.22em] text-primary uppercase">
               World editor
@@ -3124,34 +3137,37 @@ export function WorldEditor({ id }: { id: string }) {
           </div>
         </div>
         <div className="navbar-end gap-2">
-          <div
-            className={`badge gap-2 ${
+          <StatusIndicator
+            tone={
               saveState === "error"
-                ? "badge-error"
+                ? "error"
                 : saveState === "saving"
-                  ? "badge-warning"
-                  : "badge-ghost"
-            }`}
-          >
-            {saveState === "saving" && (
-              <span className="loading loading-spinner loading-xs" />
-            )}
-            {saveState === "error"
-              ? "Not saved"
-              : saveState === "saving"
-                ? "Saving"
-                : saveState === "saved"
-                  ? "Saved"
-                  : "Autosave on"}
-          </div>
-          <button
+                  ? "warning"
+                  : saveState === "saved"
+                    ? "success"
+                    : "neutral"
+            }
+            pulse={saveState === "saving"}
+            label={
+              saveState === "error"
+                ? "Not saved"
+                : saveState === "saving"
+                  ? "Saving"
+                  : saveState === "saved"
+                    ? "Saved"
+                    : "Autosave on"
+            }
+          />
+          <Button
             type="button"
-            className="btn btn-ghost btn-sm text-error hover:bg-error/10"
+            tone="ghost"
+            size="sm"
+            className="text-error hover:bg-error/10"
             disabled={!root || deleting}
             onClick={() => setConfirmingDelete(true)}
           >
             Delete world
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -3160,11 +3176,7 @@ export function WorldEditor({ id }: { id: string }) {
           {activePath.length > 0 && (
             <LocationBreadcrumbs path={activePath} onSelect={selectLocation} />
           )}
-          {message && (
-            <div role="alert" className="alert alert-error">
-              <span>{message}</span>
-            </div>
-          )}
+          {message && <Alert tone="error">{message}</Alert>}
           {addParent ? (
             <LocationCreator
               key={addParent.id}
@@ -3198,10 +3210,9 @@ export function WorldEditor({ id }: { id: string }) {
                   </div>
                 </div>
                 <div className="grid gap-3">
-                  <fieldset className="fieldset">
-                    <legend className="fieldset-legend">Location type</legend>
-                    <select
-                      className="select select-bordered w-full"
+                  <Fieldset>
+                    <Legend>Location type</Legend>
+                    <Select
                       value={stringAt(selected.data, ["kind"])}
                       disabled={selected.id === id}
                       onChange={(event) => patch(["kind"], event.target.value)}
@@ -3214,19 +3225,20 @@ export function WorldEditor({ id }: { id: string }) {
                           {kind.charAt(0).toUpperCase() + kind.slice(1)}
                         </option>
                       ))}
-                    </select>
-                  </fieldset>
+                    </Select>
+                  </Fieldset>
                   {selected.id !== id && parentIdOf(selected) && (
-                    <button
+                    <Button
                       type="button"
-                      className={`btn btn-sm ${mapPositionOf(selected) ? "btn-outline" : "btn-primary"}`}
+                      tone={mapPositionOf(selected) ? "outline" : "primary"}
+                      size="sm"
                       onClick={() => setPlacingLocationId(selected.id)}
                     >
                       <span aria-hidden>●</span>
                       {mapPositionOf(selected)
                         ? "Move map pin"
                         : "Place map pin"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </header>
@@ -3269,7 +3281,7 @@ export function WorldEditor({ id }: { id: string }) {
       </div>
 
       {confirmingDelete && root && (
-        <dialog open className="modal modal-open">
+        <Dialog open className="modal-open">
           <div className="modal-box border border-error/30">
             <h2 className="text-xl font-bold">Delete {root.name}?</h2>
             <p className="mt-3 text-base-content/70">
@@ -3278,17 +3290,17 @@ export function WorldEditor({ id }: { id: string }) {
               This action cannot be undone.
             </p>
             <div className="modal-action">
-              <button
+              <Button
                 type="button"
-                className="btn btn-ghost"
+                tone="ghost"
                 disabled={deleting}
                 onClick={() => setConfirmingDelete(false)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-error"
+                tone="danger"
                 disabled={deleting}
                 onClick={() => void removeWorld()}
               >
@@ -3296,17 +3308,17 @@ export function WorldEditor({ id }: { id: string }) {
                   <span className="loading loading-spinner loading-sm" />
                 )}
                 Delete world permanently
-              </button>
+              </Button>
             </div>
           </div>
-          <button
+          <ActionSurface
             type="button"
             className="modal-backdrop"
             aria-label="Cancel world deletion"
             disabled={deleting}
             onClick={() => setConfirmingDelete(false)}
           />
-        </dialog>
+        </Dialog>
       )}
       {placingLocation && placementParent && (
         <ParentMapPinDialog

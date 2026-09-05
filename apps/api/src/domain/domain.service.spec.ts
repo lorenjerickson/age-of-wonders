@@ -170,6 +170,17 @@ describe("DomainService.removeWorld", () => {
     ];
     const deleted: string[] = [];
     const prisma = {
+      campaignMembership: {
+        findMany: jest.fn(() => Promise.resolve([])),
+        deleteMany: jest.fn(() => Promise.resolve({ count: 0 })),
+      },
+      campaignInvitation: {
+        deleteMany: jest.fn(() => Promise.resolve({ count: 0 })),
+      },
+      user: { deleteMany: jest.fn(() => Promise.resolve({ count: 0 })) },
+      $transaction: jest.fn((operations: Promise<unknown>[]) =>
+        Promise.all(operations),
+      ),
       domainRecord: {
         findUnique: jest.fn(() => Promise.resolve(world)),
         findMany: jest.fn(({ where }: { where: { resource: string } }) =>

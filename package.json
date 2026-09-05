@@ -15,7 +15,8 @@
     "format:check": "prettier --check .",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "check:ui": "node scripts/check-ui-primitives.mjs"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Age of Wonders UI design preview</title>
+  <style>
+    :root{color-scheme:dark;--b1:oklch(14% .006 285);--b2:oklch(18% .008 285);--b3:oklch(23% .01 285);--bc:oklch(94% .01 90);--p:oklch(83% .15 85);--pc:oklch(18% .025 75);--s:oklch(64% .12 55);--a:oklch(72% .12 165);--i:oklch(72% .12 240);--ok:oklch(72% .14 155);--w:oklch(82% .15 82);--e:oklch(67% .2 25);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--b1);color:var(--bc);font-size:17px;line-height:1.5}.shell{max-width:1120px;margin:auto;padding:48px 24px 80px}h1{margin:0;font-size:42px;letter-spacing:-.03em}h2{margin:0 0 20px;font-size:24px}.eyebrow{color:var(--p);font-size:13px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}.lede{max-width:700px;color:color-mix(in oklab,var(--bc) 62%,transparent)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-top:32px}.card{border:1px solid var(--b3);border-radius:24px;background:var(--b2);padding:24px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.btn{border:1px solid transparent;border-radius:12px;padding:10px 16px;background:oklch(25% .01 285);color:var(--bc);font:inherit;font-weight:650}.btn.primary{background:var(--p);color:var(--pc)}.btn.secondary{background:var(--s);color:white}.btn.ghost{background:transparent;border-color:var(--b3)}.btn.danger{background:var(--e);color:white}.field{display:grid;gap:7px;margin-top:14px}.field label{font-size:15px;font-weight:650}.field small{color:color-mix(in oklab,var(--bc) 55%,transparent)}input,select,textarea{width:100%;border:1px solid var(--b3);border-radius:12px;background:var(--b1);color:var(--bc);padding:11px 13px;font:inherit;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--p);box-shadow:0 0 0 2px color-mix(in oklab,var(--p) 15%,transparent)}textarea{min-height:104px;resize:vertical}.inside{display:flex;align-items:center;border:1px solid var(--b3);border-radius:12px;background:var(--b1);overflow:hidden}.inside span{padding-left:13px;color:color-mix(in oklab,var(--bc) 55%,transparent);font-size:14px}.inside input{border:0}.choice{display:flex;align-items:center;gap:9px}.choice input{width:20px;height:20px;accent-color:var(--p)}.badge{display:inline-flex;border-radius:99px;padding:4px 10px;background:var(--b3);font-size:13px}.badge.gold{border:1px solid var(--p);background:transparent;color:var(--p)}.status{display:inline-flex;align-items:center;gap:8px}.dot{width:10px;height:10px;border-radius:50%;background:var(--ok)}.toolbar{display:flex;gap:5px;border-bottom:1px solid var(--b3);padding:8px}.tool{border:0;border-radius:8px;background:transparent;color:var(--bc);padding:7px 10px}.editor{overflow:hidden;border:1px solid var(--b3);border-radius:18px;background:var(--b1)}.paper{min-height:130px;padding:16px;color:color-mix(in oklab,var(--bc) 72%,transparent)}details{border:1px solid var(--b3);border-radius:14px;background:var(--b1);padding:13px 16px}summary{cursor:pointer;font-weight:650}@media(max-width:600px){h1{font-size:34px}.shell{padding:32px 16px}.card{padding:18px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">Age of Wonders · UI library</p>
+    <h1>A coherent GM workspace</h1>
+    <p class="lede">Warm gold actions, quiet charcoal surfaces, readable field hierarchy, and semantic state colors carried by reusable primitives.</p>
+    <div class="grid">
+      <section class="card"><h2>Actions</h2><div class="row"><button class="btn primary">Save changes</button><button class="btn secondary">Generate</button><button class="btn">Cancel</button><button class="btn ghost">More</button><button class="btn danger">Delete</button></div></section>
+      <section class="card"><h2>Fields</h2><div class="field"><label for="name">Location name</label><input id="name" value="The Gilded Archive"><small>Use the name known to the players.</small></div><div class="field"><label for="kind">Environment</label><select id="kind"><option>Interior</option><option>Wilderness</option></select></div></section>
+      <section class="card"><h2>Compact controls</h2><div class="inside"><span>Scale</span><input aria-label="Scale" value="100%"></div><div class="row" style="margin-top:18px"><label class="choice"><input type="checkbox" checked> Reveal to players</label><label class="choice"><input type="checkbox"> Lock layer</label></div></section>
+      <section class="card"><h2>Metadata and status</h2><div class="row"><span class="badge gold">GM only</span><span class="badge">Creature</span><span class="badge">Rare</span><span class="status"><span class="dot"></span>Saved</span></div></section>
+      <section class="card" style="grid-column:1/-1"><h2>Rich text</h2><div class="editor"><div class="toolbar"><button class="tool"><b>B</b></button><button class="tool"><i>I</i></button><button class="tool">H2</button><button class="tool">• List</button><button class="tool">❝</button></div><div class="paper"><b>Secrets beneath the archive</b><p>Record what the GM knows, then reveal discoveries deliberately during play.</p></div></div></section>
+      <section class="card" style="grid-column:1/-1"><h2>Disclosure</h2><details><summary>Advanced placement</summary><p class="lede">Map coordinates, trigger radius, and visibility settings belong in a calm secondary layer.</p></details></section>
+    </div>
+  </main>
+</body>
+</html>

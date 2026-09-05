@@ -688,11 +688,12 @@ location ID, and `stationary`, `traveling`, or `lost` status.
 
 ## Characters, creatures, items, and encounters
 
-- `CharacterState` owns identity/entity references, controllers, advancement, heritage, background,
-  alignment, classes, attributes, skills, proficiencies, defenses, hit points, movement, senses,
-  languages, inventory/equipment, disciplines, features, feats, professions, effects, conditions,
-  resource pools, biography, and extensions.
-- `CreatureState` is the runtime monster/NPC counterpart. It includes an optional monster
+- `CharacterState` extends `CreatureState`; it is not a parallel aggregate with a smaller or
+  incompatible creature contract. Every creature property and invariant therefore applies to a
+  character. Character state additionally records its owning campaign membership, campaign status
+  (`active`, `retired`, or `dead`), advancement, heritage, background, alignment, classes,
+  features, feats, professions, death saves, biography, and other character-specific progression.
+- `CreatureState` is the common runtime creature aggregate. For monsters and NPCs it includes an optional monster
   definition, three required image assets, an opposed-roll defense rating contributed by equipped
   armor, physical classification and local aliases, combat statistics, inventory/equipment,
   disciplines, communication capabilities, action definition IDs, effects, conditions, resources,
@@ -711,6 +712,24 @@ location ID, and `stationary`, `traveling`, or `lost` status.
 Character heritage records an origin region and zero to three immutable-at-creation heritage
 selections. Character profession state records current expertise, how it was acquired, advancement
 awards/spends, and action use counts.
+
+Campaign participation is distinct from character identity. A player `CampaignMembership` owns
+`characterIds` for its complete character history and has at most one `activeCharacterId`. A dead or
+retired character remains in that history; the membership persists and can create a replacement.
+Every `CharacterState.ownerMembershipId` points back to that owning membership. GM and spectator
+participants do not own character collections through the player-membership contract; the initial
+GM is the campaign owner rather than an invited campaign membership.
+
+`CharacterCreationDraft` is a resumable, revisioned input aggregate for creating one character. It
+may contain partial selections, imagery, attribute rolls and assignments, starting equipment, and
+biography. A complete `CharacterState` still requires the complete inherited `CreatureImages` and
+all other creature invariants. The draft's horizontal side-view image becomes
+`CreatureImages.paperDollToken`; there is no separate `horizontalToken` property.
+
+The shared `CampaignInvitationPreview` and `CampaignInvitationDeliverySummary` contracts are
+deliberately non-sensitive. Do not add email addresses, phone numbers, plaintext invitation tokens,
+or token hashes to those types or to generic domain resources. Authentication and invitation-secret
+storage belong behind dedicated protected service boundaries.
 
 Skills are definitions, never free-form strings in state or tests:
 
@@ -804,7 +823,8 @@ record for review.
 
 ### Creature images
 
-Every `CreatureState` requires an `images` object with exactly three gameplay views. The keyed
+Every `CreatureState`, including every `CharacterState`, requires an `images` object with exactly
+three gameplay views. The keyed
 roles are semantic and must not be substituted for one another:
 
 ```ts
@@ -841,6 +861,9 @@ Each property must identify its own stored media asset. `portrait` shows the ent
 illustration scale; it is not a headshot. `overheadToken` must use a true top-down camera angle.
 `paperDollToken` must show the entire creature in profile at a smaller token scale. Generated or
 uploaded images are stored as media assets; do not fabricate or persist signed `uri` values.
+
+Product language may call `paperDollToken` the character's horizontal token. These are the same
+semantic image role, not two separately required assets.
 
 `worldId` is required and references the root `LocationState` that owns the creature. World-scoped
 creature creation must use the authoritative route world ID rather than inventing or copying a
@@ -1248,6 +1271,10 @@ interface GameState {
   extensions?: Record<NamespacedKey, JsonValue>;
 }
 ```
+
+Although `CharacterState` extends `CreatureState`, a character is stored in `entities.characters`.
+Do not duplicate the same aggregate in `entities.creatures`; that collection is for non-character
+creatures.
 
 Game mutations are represented by discriminated `GameCommand` values for actions, choices,
 movement, equipment/container operations, encounters, rest, travel, party location, professions,

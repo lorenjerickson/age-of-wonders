@@ -1,0 +1,46 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "color": {
+    "base": {
+      "100": { "$value": "oklch(14% 0.006 285)", "$type": "color" },
+      "200": { "$value": "oklch(18% 0.008 285)", "$type": "color" },
+      "300": { "$value": "oklch(23% 0.01 285)", "$type": "color" },
+      "content": { "$value": "oklch(94% 0.01 90)", "$type": "color" }
+    },
+    "primary": { "$value": "oklch(83% 0.15 85)", "$type": "color" },
+    "secondary": { "$value": "oklch(64% 0.12 55)", "$type": "color" },
+    "accent": { "$value": "oklch(72% 0.12 165)", "$type": "color" },
+    "info": { "$value": "oklch(72% 0.12 240)", "$type": "color" },
+    "success": { "$value": "oklch(72% 0.14 155)", "$type": "color" },
+    "warning": { "$value": "oklch(82% 0.15 82)", "$type": "color" },
+    "error": { "$value": "oklch(67% 0.2 25)", "$type": "color" }
+  },
+  "font": {
+    "family": { "$value": "Inter, ui-sans-serif, system-ui, sans-serif", "$type": "fontFamily" },
+    "size": {
+      "xs": { "$value": "0.875rem", "$type": "dimension" },
+      "sm": { "$value": "1.020833rem", "$type": "dimension" },
+      "base": { "$value": "1.166667rem", "$type": "dimension" },
+      "lg": { "$value": "1.3125rem", "$type": "dimension" },
+      "xl": { "$value": "1.458333rem", "$type": "dimension" }
+    }
+  },
+  "space": {
+    "1": { "$value": "0.25rem", "$type": "dimension" },
+    "2": { "$value": "0.5rem", "$type": "dimension" },
+    "3": { "$value": "0.75rem", "$type": "dimension" },
+    "4": { "$value": "1rem", "$type": "dimension" },
+    "6": { "$value": "1.5rem", "$type": "dimension" },
+    "8": { "$value": "2rem", "$type": "dimension" }
+  },
+  "radius": {
+    "selector": { "$value": "0.65rem", "$type": "dimension" },
+    "field": { "$value": "0.75rem", "$type": "dimension" },
+    "box": { "$value": "1.5rem", "$type": "dimension" }
+  },
+  "border": { "default": { "$value": "1px", "$type": "dimension" } },
+  "motion": {
+    "fast": { "$value": "120ms", "$type": "duration" },
+    "standard": { "$value": "180ms", "$type": "duration" }
+  }
+}

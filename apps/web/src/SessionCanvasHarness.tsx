@@ -7,7 +7,25 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Details,
+  FileInput,
+  FileInputTrigger,
+  IconButton,
+  Label,
+  Range,
+  Select,
+  StatusIndicator,
+  Summary,
+  Tab,
+  Tabs,
+  Toggle,
+} from "@aow/ui";
 import { visibilityPolygon } from "./mapGeometry";
+import { RouterButtonLink } from "./navigation";
 import {
   canStartTokenDrag,
   canvasObjectKindForLayer,
@@ -415,8 +433,8 @@ function PanelSelect<Value extends string>({
     options[0]?.label;
 
   return (
-    <details ref={detailsRef} className="group min-w-0">
-      <summary
+    <Details ref={detailsRef} className="group min-w-0">
+      <Summary
         aria-label={ariaLabel}
         className="flex h-8 w-full min-w-0 cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-100/80 px-3 text-xs text-base-content/75 outline-none hover:border-base-300 focus-visible:ring-2 focus-visible:ring-violet-200 [&::-webkit-details-marker]:hidden"
       >
@@ -427,23 +445,26 @@ function PanelSelect<Value extends string>({
         >
           ▼
         </span>
-      </summary>
+      </Summary>
       <div className="mt-1 grid min-w-0 overflow-hidden rounded-lg border border-base-300 bg-base-100 p-1 shadow-lg">
         {options.map((option) => (
-          <button
+          <Button
             key={option.value}
             type="button"
-            className={`min-w-0 rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/10 ${option.value === value ? "bg-violet-300/10 text-violet-100" : "text-base-content/65"}`}
+            tone="ghost"
+            size="xs"
+            fullWidth
+            className={`min-w-0 justify-start text-left ${option.value === value ? "bg-primary/15 text-primary" : "text-base-content/65"}`}
             onClick={() => {
               onChange(option.value);
               detailsRef.current?.removeAttribute("open");
             }}
           >
             <span className="block truncate">{option.label}</span>
-          </button>
+          </Button>
         ))}
       </div>
-    </details>
+    </Details>
   );
 }
 
@@ -473,11 +494,12 @@ function ToolButton({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <IconButton
       type="button"
+      tone={active ? "primary" : undefined}
       className={`group relative grid place-items-center border transition ${compact ? "h-9 w-9 rounded-lg text-base" : "h-11 w-11 rounded-xl text-lg"} ${
         active
-          ? "border-primary bg-primary text-primary-content shadow-[0_0_24px_rgba(244,195,76,.22)]"
+          ? "shadow-[0_0_24px_rgba(244,195,76,.22)]"
           : "border-base-300/70 bg-base-100/65 text-base-content/70 backdrop-blur hover:border-primary/40 hover:bg-base-100/85 hover:text-base-content"
       }`}
       aria-label={`${definition.label} (${definition.shortcut})`}
@@ -490,7 +512,7 @@ function ToolButton({
           {definition.shortcut}
         </span>
       )}
-    </button>
+    </IconButton>
   );
 }
 
@@ -3069,14 +3091,25 @@ export function SessionCanvasWorkspace({
                   {selectedSoundPlayback?.fileName || "No audio file selected"}
                 </p>
               </div>
-              <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${selectedSoundPlayback?.playing ? "bg-emerald-400 shadow-[0_0_10px_#34d399]" : selectedSoundPlayback?.armed ? "bg-primary" : selectedSoundPlayback ? "bg-violet-300" : "bg-white/20"}`}
+              <StatusIndicator
+                tone={
+                  selectedSoundPlayback?.playing
+                    ? "success"
+                    : selectedSoundPlayback?.armed || selectedSoundPlayback
+                      ? "info"
+                      : "neutral"
+                }
+                pulse={selectedSoundPlayback?.playing}
+                label={<span className="sr-only">Audio playback status</span>}
               />
             </div>
-            <label className="btn btn-sm w-full min-w-0 max-w-full overflow-hidden border-violet-300/20 bg-violet-300/10 text-violet-100 hover:bg-violet-300/20">
+            <FileInputTrigger
+              size="sm"
+              fullWidth
+              className="min-w-0 max-w-full overflow-hidden border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
+            >
               <span className="truncate">Choose audio file</span>
-              <input
-                type="file"
+              <FileInput
                 accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac"
                 className="sr-only"
                 onChange={(event) => {
@@ -3084,26 +3117,31 @@ export function SessionCanvasWorkspace({
                   event.currentTarget.value = "";
                 }}
               />
-            </label>
+            </FileInputTrigger>
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.25rem] gap-2">
-              <button
+              <Button
                 type="button"
-                className="btn btn-sm w-full min-w-0 max-w-full border-base-300 bg-base-100/80 text-base-content disabled:text-base-content/30"
+                size="sm"
+                fullWidth
+                className="min-w-0 max-w-full border-base-300 bg-base-100/80 text-base-content disabled:text-base-content/30"
                 disabled={!selectedSoundPlayback}
                 onClick={() => void togglePositionalPlayback()}
               >
                 {selectedSoundPlayback?.armed
                   ? "Disable playback"
                   : "Enable playback"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-ghost btn-sm w-full min-w-0 max-w-full px-2 text-base-content/55"
+                tone="ghost"
+                size="sm"
+                fullWidth
+                className="min-w-0 max-w-full px-2 text-base-content/55"
                 disabled={!selectedSoundPlayback}
                 onClick={() => selectAudioFile(undefined)}
               >
                 Clear
-              </button>
+              </Button>
             </div>
             {selectedSound && listenerToken && (
               <div
@@ -3117,17 +3155,18 @@ export function SessionCanvasWorkspace({
             )}
             {selectedSound && (
               <>
-                <label className="grid min-w-0 max-w-full gap-1.5 overflow-hidden">
+                <Label className="grid min-w-0 max-w-full gap-1.5 overflow-hidden">
                   <span className="flex justify-between text-[10px] text-base-content/55">
                     <span>Effective range</span>
                     <span>{selectedSound.radius}px</span>
                   </span>
-                  <input
-                    type="range"
+                  <Range
+                    tone="info"
+                    controlSize="xs"
                     min="60"
                     max="600"
                     step="10"
-                    className="range range-xs range-info w-full min-w-0 max-w-full"
+                    className="w-full min-w-0 max-w-full"
                     value={selectedSound.radius}
                     onChange={(event) => {
                       const radius = Number(event.currentTarget.value);
@@ -3137,7 +3176,7 @@ export function SessionCanvasWorkspace({
                       }));
                     }}
                   />
-                </label>
+                </Label>
                 <div className="grid min-w-0 gap-1 text-[10px] text-base-content/55">
                   <span>Volume behavior</span>
                   <PanelSelect<CanvasSound["volumeMode"]>
@@ -3155,17 +3194,18 @@ export function SessionCanvasWorkspace({
                     }}
                   />
                 </div>
-                <label className="grid min-w-0 max-w-full gap-1.5 overflow-hidden">
+                <Label className="grid min-w-0 max-w-full gap-1.5 overflow-hidden">
                   <span className="flex justify-between text-[10px] text-base-content/55">
                     <span>Base volume</span>
                     <span>{Math.round(selectedSound.volume * 100)}%</span>
                   </span>
-                  <input
-                    type="range"
+                  <Range
+                    tone="secondary"
+                    controlSize="xs"
                     min="0"
                     max="1"
                     step="0.01"
-                    className="range range-xs range-secondary w-full min-w-0 max-w-full"
+                    className="w-full min-w-0 max-w-full"
                     value={selectedSound.volume}
                     onChange={(event) => {
                       const volume = Number(event.currentTarget.value);
@@ -3175,22 +3215,21 @@ export function SessionCanvasWorkspace({
                       }));
                     }}
                   />
-                </label>
-                <label className="flex min-w-0 items-center justify-between gap-3 text-xs text-base-content/65">
-                  <span>Loop continuously</span>
-                  <input
-                    type="checkbox"
-                    className="toggle toggle-xs toggle-secondary"
-                    checked={selectedSound.loop}
-                    onChange={(event) => {
-                      const loop = event.currentTarget.checked;
-                      updateSound(selectedSound.key, (sound) => ({
-                        ...sound,
-                        loop,
-                      }));
-                    }}
-                  />
-                </label>
+                </Label>
+                <Toggle
+                  label="Loop continuously"
+                  tone="secondary"
+                  controlSize="xs"
+                  wrapperClassName="min-w-0 flex-row-reverse justify-between text-xs text-base-content/65"
+                  checked={selectedSound.loop}
+                  onChange={(event) => {
+                    const loop = event.currentTarget.checked;
+                    updateSound(selectedSound.key, (sound) => ({
+                      ...sound,
+                      loop,
+                    }));
+                  }}
+                />
               </>
             )}
             <p className="text-[10px] leading-4 text-base-content/35">
@@ -3199,32 +3238,32 @@ export function SessionCanvasWorkspace({
               updates volume live.
             </p>
             {selectedSoundPlayback?.error && (
-              <p role="alert" className="text-[10px] text-red-300">
+              <Alert tone="error" className="py-2 text-[10px]">
                 {selectedSoundPlayback.error}
-              </p>
+              </Alert>
             )}
           </section>
         )}
         {layerKey === "grid" && (
-          <label className="mt-3 grid min-w-0 max-w-full gap-1.5 overflow-hidden">
+          <Label className="mt-3 grid min-w-0 max-w-full gap-1.5 overflow-hidden">
             <span className="flex justify-between text-[10px] text-base-content/50">
               <span>Five-foot scale</span>
               <span>{gridSize}px</span>
             </span>
-            <input
-              type="range"
+            <Range
+              controlSize="xs"
               min="24"
               max="160"
               step="1"
-              className="range range-xs range-primary w-full min-w-0 max-w-full"
+              className="w-full min-w-0 max-w-full"
               value={gridSize}
               onChange={(event) =>
                 setGridSize(Number(event.currentTarget.value))
               }
             />
-          </label>
+          </Label>
         )}
-        <label className="mt-3 grid min-w-0 max-w-full gap-1.5 overflow-hidden">
+        <Label className="mt-3 grid min-w-0 max-w-full gap-1.5 overflow-hidden">
           <span className="flex justify-between text-[10px] text-base-content/50">
             <span>
               {layerKey === "sounds"
@@ -3233,12 +3272,12 @@ export function SessionCanvasWorkspace({
             </span>
             <span>{Math.round(layerOpacity[layerKey] * 100)}%</span>
           </span>
-          <input
-            type="range"
+          <Range
+            controlSize="xs"
             min="0"
             max="1"
             step="0.05"
-            className="range range-xs range-primary w-full min-w-0 max-w-full"
+            className="w-full min-w-0 max-w-full"
             value={layerOpacity[layerKey]}
             onChange={(event) => {
               const opacity = Number(event.currentTarget.value);
@@ -3248,7 +3287,7 @@ export function SessionCanvasWorkspace({
               }));
             }}
           />
-        </label>
+        </Label>
       </div>
     );
   };
@@ -3313,31 +3352,34 @@ export function SessionCanvasWorkspace({
         <header className="flex min-h-18 shrink-0 flex-wrap items-center justify-between gap-4 border-b border-base-300 bg-base-200/90 px-4 py-3 shadow-sm">
           <div className="flex min-w-0 items-center gap-3">
             {onBack ? (
-              <button
+              <IconButton
                 type="button"
-                className="btn btn-ghost btn-square btn-sm"
+                tone="ghost"
+                size="sm"
                 aria-label="Back to campaign locations"
                 onClick={onBack}
               >
                 ←
-              </button>
+              </IconButton>
             ) : (
-              <a
+              <RouterButtonLink
                 href="/sessions"
-                className="btn btn-ghost btn-square btn-sm"
+                tone="ghost"
+                size="sm"
+                className="aspect-square p-0"
                 aria-label="Leave canvas laboratory"
               >
                 ←
-              </a>
+              </RouterButtonLink>
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <p className="truncate font-semibold tracking-wide">
                   {locationName}
                 </p>
-                <span className="badge badge-primary badge-outline badge-sm">
+                <Badge tone="primary" outline size="sm">
                   {fixtureMode ? "Canvas lab" : locationKind || "Location"}
-                </span>
+                </Badge>
               </div>
               <p className="truncate text-sm text-base-content/55">
                 {fixtureMode
@@ -3348,32 +3390,42 @@ export function SessionCanvasWorkspace({
           </div>
           <div className="session-canvas-header-actions ml-auto flex flex-wrap items-center justify-end gap-2">
             <>
-              <div className="hidden items-center gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-xs text-base-content/60 md:flex">
-                <span
-                  className={`h-2 w-2 rounded-full ${anyAudioPlaying ? "bg-emerald-400 shadow-[0_0_10px_#34d399]" : soundEnabled ? "bg-violet-300" : "bg-white/25"}`}
-                />
-                {!soundEnabled || !layerVisibility.sounds
-                  ? "Audio muted"
-                  : anyAudioPlaying
-                    ? "Positional audio playing"
-                    : Object.keys(soundPlayback).length
-                      ? "Positional audio ready"
-                      : `${sounds.length} ambient sources`}
-              </div>
-              <button
+              <StatusIndicator
+                tone={
+                  anyAudioPlaying
+                    ? "success"
+                    : soundEnabled
+                      ? "info"
+                      : "neutral"
+                }
+                pulse={anyAudioPlaying}
+                className="hidden rounded-box border border-base-300 bg-base-100 px-3 py-2 text-xs text-base-content/60 md:inline-flex"
+                label={
+                  !soundEnabled || !layerVisibility.sounds
+                    ? "Audio muted"
+                    : anyAudioPlaying
+                      ? "Positional audio playing"
+                      : Object.keys(soundPlayback).length
+                        ? "Positional audio ready"
+                        : `${sounds.length} ambient sources`
+                }
+              />
+              <Button
                 type="button"
-                className="btn btn-ghost btn-sm"
+                tone="ghost"
+                size="sm"
                 onClick={() => setSoundEnabled((value) => !value)}
               >
                 {soundEnabled ? "Sound on" : "Sound off"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-primary btn-sm"
+                tone="primary"
+                size="sm"
                 onClick={() => setEffectsPlaying((value) => !value)}
               >
                 {effectsPlaying ? "Pause effects" : "Play effects"}
-              </button>
+              </Button>
             </>
             <div
               className="hidden min-w-36 rounded-box border border-dashed border-base-300 px-3 py-1.5 xl:block"
@@ -3416,7 +3468,7 @@ export function SessionCanvasWorkspace({
           {!fixtureMode && (
             <>
               <span className="my-1 h-px w-7 bg-base-300/70" />
-              <button
+              <IconButton
                 type="button"
                 className={`grid h-9 w-9 place-items-center rounded-lg border text-base ${inspectorTab === "content" ? "border-primary bg-primary text-primary-content" : "border-base-300/70 bg-base-100/65 text-base-content/70"}`}
                 aria-label="Add creatures, items, or discoveries"
@@ -3424,8 +3476,8 @@ export function SessionCanvasWorkspace({
                 onClick={() => setInspectorTab("content")}
               >
                 +
-              </button>
-              <button
+              </IconButton>
+              <IconButton
                 type="button"
                 className={`grid h-9 w-9 place-items-center rounded-lg border text-base ${inspectorTab === "layers" ? "border-primary bg-primary text-primary-content" : "border-base-300/70 bg-base-100/65 text-base-content/70"}`}
                 aria-label="Configure layers, audio, and effects"
@@ -3433,11 +3485,11 @@ export function SessionCanvasWorkspace({
                 onClick={() => setInspectorTab("layers")}
               >
                 ◫
-              </button>
+              </IconButton>
             </>
           )}
           <div className="mt-auto grid gap-2">
-            <button
+            <IconButton
               type="button"
               className={`grid place-items-center border ${fixtureMode ? "h-10 w-10 rounded-xl" : "h-9 w-9 rounded-lg"} ${debugOverlays ? "border-secondary/40 bg-secondary/10 text-secondary" : "border-base-300 text-base-content/55"}`}
               title="Toggle authoring overlays"
@@ -3445,8 +3497,8 @@ export function SessionCanvasWorkspace({
               onClick={() => setDebugOverlays((value) => !value)}
             >
               ⌘
-            </button>
-            <button
+            </IconButton>
+            <IconButton
               type="button"
               className={`grid place-items-center border border-base-300 text-base-content/55 hover:text-base-content ${fixtureMode ? "h-10 w-10 rounded-xl" : "h-9 w-9 rounded-lg"}`}
               title="Reset view"
@@ -3454,7 +3506,7 @@ export function SessionCanvasWorkspace({
               onClick={() => setViewport({ pan: { x: 0, y: 0 }, zoom: 1 })}
             >
               ⌂
-            </button>
+            </IconButton>
           </div>
         </nav>
 
@@ -3464,9 +3516,10 @@ export function SessionCanvasWorkspace({
           <div
             className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-box border border-base-300 bg-base-100/90 p-1 text-base-content shadow-xl backdrop-blur ${fixtureMode ? "top-3" : "top-16"}`}
           >
-            <button
+            <IconButton
               type="button"
-              className="btn btn-ghost btn-xs"
+              tone="ghost"
+              size="xs"
               aria-label="Zoom out"
               onClick={() =>
                 setViewport((current) => ({
@@ -3476,13 +3529,14 @@ export function SessionCanvasWorkspace({
               }
             >
               −
-            </button>
+            </IconButton>
             <span className="min-w-16 text-center text-xs font-semibold text-base-content/65">
               {Math.round(viewport.zoom * 100)}%
             </span>
-            <button
+            <IconButton
               type="button"
-              className="btn btn-ghost btn-xs"
+              tone="ghost"
+              size="xs"
               aria-label="Zoom in"
               onClick={() =>
                 setViewport((current) => ({
@@ -3492,7 +3546,7 @@ export function SessionCanvasWorkspace({
               }
             >
               +
-            </button>
+            </IconButton>
             <span className="mx-1 h-5 w-px bg-base-300" />
             <span className="px-2 text-xs text-base-content/55">
               {availableTools.find(({ key }) => key === activeTool)?.label}
@@ -3621,13 +3675,14 @@ export function SessionCanvasWorkspace({
                     : `Drag to move${selection.kind === "vertex" ? " connected walls" : ""}`}
                 </span>
                 {selection.kind !== "layer" && (
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-ghost btn-xs text-error"
+                    tone="danger"
+                    size="xs"
                     onClick={deleteSelection}
                   >
                     Delete
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -3638,29 +3693,26 @@ export function SessionCanvasWorkspace({
             </div>
           </div>
           {fallNotice && (
-            <div
-              role="status"
+            <Alert
+              tone="error"
               className="pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 rounded-lg border border-error/30 bg-base-100/92 px-4 py-2 text-sm font-semibold text-error shadow-xl backdrop-blur"
             >
               {fallNotice}
-            </div>
+            </Alert>
           )}
         </section>
 
         <aside className="session-canvas-inspector flex min-h-0 min-w-0 flex-col overflow-y-auto border-l border-base-300/70 bg-base-200/65 shadow-[-12px_0_30px_rgba(0,0,0,.12)] backdrop-blur-xl">
-          <div
-            role="tablist"
+          <Tabs
             aria-label="Canvas inspector"
             className="sticky top-0 z-10 flex shrink-0 border-b border-base-300 bg-base-200/90 p-2 backdrop-blur-xl"
           >
             {inspectorTabs.map((tab, index) => (
-              <button
+              <Tab
                 key={tab}
                 id={`canvas-tab-${tab}`}
-                type="button"
-                role="tab"
+                active={inspectorTab === tab}
                 className={`min-w-0 flex-1 rounded-lg px-2 py-2 text-sm font-semibold capitalize ${inspectorTab === tab ? "bg-primary/15 text-primary" : "text-base-content/50 hover:text-base-content/80"}`}
-                aria-selected={inspectorTab === tab}
                 aria-controls="canvas-inspector-panel"
                 tabIndex={inspectorTab === tab ? 0 : -1}
                 onClick={() => setInspectorTab(tab)}
@@ -3681,9 +3733,9 @@ export function SessionCanvasWorkspace({
                 }}
               >
                 {tab}
-              </button>
+              </Tab>
             ))}
-          </div>
+          </Tabs>
 
           <div
             id="canvas-inspector-panel"
@@ -3717,15 +3769,15 @@ export function SessionCanvasWorkspace({
                               className="overflow-hidden rounded-lg border border-base-300/60 bg-base-100/35"
                             >
                               <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] items-center px-1 py-1.5">
-                                <button
+                                <Button
                                   type="button"
                                   className={`grid h-8 w-8 place-items-center rounded-md text-sm ${layerVisibility[layer.key] ? "text-primary" : "text-base-content/25"}`}
                                   aria-label={`${layerVisibility[layer.key] ? "Hide" : "Show"} ${layer.label}`}
                                   onClick={() => toggleLayer(layer.key)}
                                 >
                                   {layerVisibility[layer.key] ? "◉" : "○"}
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   type="button"
                                   className="min-w-0 px-1 text-left"
                                   onClick={() =>
@@ -3741,8 +3793,8 @@ export function SessionCanvasWorkspace({
                                   <span className="block text-xs text-base-content/40">
                                     {layer.graphical ? "render" : "simulation"}
                                   </span>
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   type="button"
                                   className="grid h-8 w-8 place-items-center rounded-md text-base-content/40 hover:text-base-content/75"
                                   aria-label={`Open ${layer.label} settings`}
@@ -3754,12 +3806,12 @@ export function SessionCanvasWorkspace({
                                   }
                                 >
                                   <span aria-hidden="true">⚙</span>
-                                </button>
+                                </Button>
                               </div>
                               {objects.length > 0 ? (
                                 <div className="grid gap-0.5 border-t border-base-300/50 p-1.5">
                                   {objects.map((object) => (
-                                    <button
+                                    <Button
                                       key={`${object.selection.kind}:${object.selection.key}`}
                                       type="button"
                                       className="grid min-w-0 grid-cols-[1.1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-primary/[.08]"
@@ -3781,7 +3833,7 @@ export function SessionCanvasWorkspace({
                                           {object.type}
                                         </span>
                                       </span>
-                                    </button>
+                                    </Button>
                                   ))}
                                 </div>
                               ) : objectKind ? (
@@ -3821,10 +3873,11 @@ export function SessionCanvasWorkspace({
                   <p className="text-[11px] font-bold tracking-[.16em] text-base-content/50 uppercase">
                     Environment
                   </p>
-                  <label className="mt-3 grid gap-2 text-xs text-base-content/70">
+                  <Label className="mt-3 grid gap-2 text-xs text-base-content/70">
                     Weather
-                    <select
-                      className="select select-sm w-full border-base-300 bg-base-100"
+                    <Select
+                      controlSize="sm"
+                      className="border-base-300 bg-base-100"
                       value={weather}
                       onChange={(event) =>
                         setWeather(event.currentTarget.value as WeatherKind)
@@ -3834,81 +3887,78 @@ export function SessionCanvasWorkspace({
                       <option value="rain">Rain</option>
                       <option value="snow">Snow</option>
                       <option value="embers">Embers</option>
-                    </select>
-                  </label>
-                  <label className="mt-4 grid gap-2 text-xs text-base-content/70">
+                    </Select>
+                  </Label>
+                  <Label className="mt-4 grid gap-2 text-xs text-base-content/70">
                     <span className="flex justify-between">
                       <span>Darkness</span>
                       <span>{Math.round(darkness * 100)}%</span>
                     </span>
-                    <input
-                      type="range"
+                    <Range
+                      controlSize="xs"
                       min="0"
                       max="0.85"
                       step="0.01"
-                      className="range range-xs range-primary"
                       value={darkness}
                       onChange={(event) =>
                         setDarkness(Number(event.currentTarget.value))
                       }
                     />
-                  </label>
+                  </Label>
                 </section>
                 <section className="grid gap-3 border-t border-base-300 pt-4">
-                  <label className="flex items-center justify-between text-xs text-base-content/70">
-                    <span>Token vision & fog</span>
-                    <input
-                      type="checkbox"
-                      className="toggle toggle-xs toggle-primary"
-                      checked={fogEnabled}
-                      onChange={(event) =>
-                        setFogEnabled(event.currentTarget.checked)
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between text-xs text-base-content/70">
-                    <span>Authoring overlays</span>
-                    <input
-                      type="checkbox"
-                      className="toggle toggle-xs toggle-info"
-                      checked={debugOverlays}
-                      onChange={(event) =>
-                        setDebugOverlays(event.currentTarget.checked)
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-2 text-xs text-base-content/70">
+                  <Toggle
+                    label="Token vision & fog"
+                    controlSize="xs"
+                    wrapperClassName="flex-row-reverse justify-between text-xs text-base-content/70"
+                    checked={fogEnabled}
+                    onChange={(event) =>
+                      setFogEnabled(event.currentTarget.checked)
+                    }
+                  />
+                  <Toggle
+                    label="Authoring overlays"
+                    tone="info"
+                    controlSize="xs"
+                    wrapperClassName="flex-row-reverse justify-between text-xs text-base-content/70"
+                    checked={debugOverlays}
+                    onChange={(event) =>
+                      setDebugOverlays(event.currentTarget.checked)
+                    }
+                  />
+                  <Label className="grid gap-2 text-xs text-base-content/70">
                     <span className="flex justify-between">
                       <span>Grid size</span>
                       <span>{gridSize}px</span>
                     </span>
-                    <input
-                      type="range"
+                    <Range
+                      controlSize="xs"
                       min="32"
                       max="96"
                       step="8"
-                      className="range range-xs"
                       value={gridSize}
                       onChange={(event) =>
                         setGridSize(Number(event.currentTarget.value))
                       }
                     />
-                  </label>
+                  </Label>
                 </section>
                 <section className="border-t border-base-300 pt-4">
                   <p className="text-[11px] font-bold tracking-[.16em] text-base-content/50 uppercase">
                     Encounter clock
                   </p>
                   <div className="mt-3 flex items-center justify-between rounded-xl border border-base-300 bg-base-100 p-3">
-                    <button
+                    <IconButton
                       type="button"
-                      className="btn btn-ghost btn-xs"
+                      tone="ghost"
+                      size="xs"
+                      aria-label="Previous encounter round"
                       onClick={() =>
                         setRound((value) => Math.max(1, value - 1))
                       }
                     >
                       −
-                    </button>
+                    </IconButton>
                     <div className="text-center">
                       <p className="text-lg font-black text-primary">
                         Round {round}
@@ -3917,13 +3967,15 @@ export function SessionCanvasWorkspace({
                         Kael’s turn
                       </p>
                     </div>
-                    <button
+                    <IconButton
                       type="button"
-                      className="btn btn-ghost btn-xs"
+                      tone="ghost"
+                      size="xs"
+                      aria-label="Next encounter round"
                       onClick={() => setRound((value) => value + 1)}
                     >
                       +
-                    </button>
+                    </IconButton>
                   </div>
                 </section>
               </div>
@@ -3947,17 +3999,17 @@ export function SessionCanvasWorkspace({
                   </section>
                   <section className="grid gap-3 border-t border-base-300 pt-4">
                     {fixtureMode ? (
-                      <label className="grid gap-2 text-xs text-base-content/70">
+                      <Label className="grid gap-2 text-xs text-base-content/70">
                         <span className="flex justify-between">
                           <span>Vision range</span>
                           <span>{selectedToken.vision} px</span>
                         </span>
-                        <input
-                          type="range"
+                        <Range
+                          tone="info"
+                          controlSize="xs"
                           min="100"
                           max="650"
                           step="10"
-                          className="range range-xs range-info"
                           value={selectedToken.vision}
                           onChange={(event) => {
                             const vision = Number(event.currentTarget.value);
@@ -3970,7 +4022,7 @@ export function SessionCanvasWorkspace({
                             );
                           }}
                         />
-                      </label>
+                      </Label>
                     ) : (
                       <div className="flex items-center justify-between text-xs text-base-content/60">
                         <span>Vision range</span>
@@ -3995,13 +4047,14 @@ export function SessionCanvasWorkspace({
                         </p>
                       </div>
                     </div>
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-sm border-red-400/20 bg-red-400/5 text-red-200 hover:bg-red-400/10"
+                      tone="danger"
+                      size="sm"
                       onClick={deleteSelection}
                     >
                       Delete token
-                    </button>
+                    </Button>
                   </section>
                   {renderLayerProperties("tokens")}
                 </div>
@@ -4028,13 +4081,14 @@ export function SessionCanvasWorkspace({
                     </p>
                   )}
                   {selection.kind !== "layer" && (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-sm border-red-400/20 bg-red-400/5 text-red-200 hover:bg-red-400/10"
+                      tone="danger"
+                      size="sm"
                       onClick={deleteSelection}
                     >
                       Delete {selection.kind === "vertex" ? "vertex" : "object"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               ) : (

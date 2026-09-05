@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nest build",
     "db:generate": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "domain:migrate:science": "ts-node --files src/cli/migrate-science-domain.ts",

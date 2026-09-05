@@ -9,6 +9,7 @@ export * from "./game";
 export * from "./heritage";
 export * from "./items";
 export * from "./locations";
+export * from "./participation";
 export * from "./disciplines";
 export * from "./skills";
 export * from "./primitives";

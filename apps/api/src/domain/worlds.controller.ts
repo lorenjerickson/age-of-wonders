@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiNoContentResponse,
@@ -12,9 +13,11 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { DomainService } from "./domain.service";
+import { GmGuard } from "../auth/auth.guard";
 
 @ApiTags("worlds")
 @Controller("worlds")
+@UseGuards(GmGuard)
 export class WorldsController {
   constructor(private readonly domain: DomainService) {}
 

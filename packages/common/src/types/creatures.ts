@@ -189,8 +189,9 @@ export type MonsterDefinition<
 export interface CreatureState<
   Extensions extends ExtensionData = ExtensionData,
   Equipment extends EquipmentState = EquipmentState,
+  Id extends CreatureId = CreatureId,
 > {
-  readonly identity: StateIdentity<CreatureId>;
+  readonly identity: StateIdentity<Id>;
   readonly entityId: EntityId;
   /** Root world that owns this creature and supplies its setting context. */
   readonly worldId: LocationId;

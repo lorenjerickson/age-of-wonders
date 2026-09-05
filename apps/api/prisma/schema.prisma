@@ -66,3 +66,165 @@ model MediaAsset {
   @@index([tags], type: Gin)
   @@index([createdAt])
 }
+
+enum UserRole {
+  GM
+  PARTICIPANT
+}
+
+enum CampaignRole {
+  PLAYER
+  SPECTATOR
+}
+
+enum MembershipStatus {
+  ACTIVE
+  BANNED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum DeliveryChannel {
+  EMAIL
+  SMS
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  CAPTURED
+  FAILED
+}
+
+enum CharacterDraftStatus {
+  IN_PROGRESS
+  READY_FOR_REVIEW
+  COMPLETE
+}
+
+/// Authenticated people. Contact details remain encrypted on invitations and
+/// memberships rather than being exposed through the generic domain API.
+model User {
+  id                  String               @id @default(uuid())
+  displayName         String
+  role                UserRole
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  authSessions        AuthSession[]
+  memberships         CampaignMembership[]
+  createdInvitations  CampaignInvitation[] @relation("InvitationCreator")
+  acceptedInvitations CampaignInvitation[] @relation("InvitationAcceptor")
+}
+
+model AuthSession {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model CampaignMembership {
+  id                String                   @id @default(uuid())
+  campaignId        String
+  userId            String
+  role              CampaignRole
+  status            MembershipStatus         @default(ACTIVE)
+  displayName       String
+  emailEncrypted    String?
+  emailHash         String?
+  phoneEncrypted    String?
+  phoneHash         String?
+  characterIds      Json                     @default("[]")
+  activeCharacterId String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  characterDrafts   CharacterCreationDraft[]
+
+  @@unique([campaignId, userId])
+  @@index([campaignId, role, status])
+  @@index([campaignId, emailHash])
+  @@index([campaignId, phoneHash])
+  @@index([activeCharacterId])
+}
+
+model CampaignInvitation {
+  id               String               @id @default(uuid())
+  campaignId       String
+  role             CampaignRole
+  displayName      String
+  emailEncrypted   String?
+  emailHash        String?
+  phoneEncrypted   String?
+  phoneHash        String?
+  tokenHash        String               @unique
+  status           InvitationStatus     @default(PENDING)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  reissuedFromId   String?
+  createdByUserId  String
+  acceptedByUserId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  createdBy        User                 @relation("InvitationCreator", fields: [createdByUserId], references: [id])
+  acceptedBy       User?                @relation("InvitationAcceptor", fields: [acceptedByUserId], references: [id])
+  deliveries       InvitationDelivery[]
+
+  @@index([campaignId, status])
+  @@index([campaignId, emailHash])
+  @@index([campaignId, phoneHash])
+  @@index([expiresAt])
+}
+
+model InvitationDelivery {
+  id                String             @id @default(uuid())
+  invitationId      String
+  channel           DeliveryChannel
+  status            DeliveryStatus     @default(PENDING)
+  attempts          Int                @default(0)
+  providerMessageId String?
+  lastErrorCode     String?
+  lastAttemptAt     DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  invitation        CampaignInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  @@unique([invitationId, channel])
+  @@index([status, createdAt])
+}
+
+/// Resumable player-owned workflow. A membership may own several characters.
+model CharacterCreationDraft {
+  id                     String               @id @default(uuid())
+  membershipId           String
+  characterId            String?
+  revision               Int                  @default(1)
+  status                 CharacterDraftStatus @default(IN_PROGRESS)
+  name                   String?
+  backgroundDefinitionId String?
+  professionDefinitionId String?
+  heritageDefinitionIds  Json                 @default("[]")
+  attributeRolls         Json                 @default("[]")
+  attributeAssignments   Json                 @default("{}")
+  startingEquipmentIds   Json                 @default("[]")
+  biography              String?
+  imageAssetIds          Json                 @default("{}")
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  membership             CampaignMembership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, status])
+  @@index([characterId])
+}

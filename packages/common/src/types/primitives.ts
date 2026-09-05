@@ -9,15 +9,23 @@ export type DomainId<Kind extends string> = string & {
 
 export type DefinitionId = DomainId<"definition">;
 export type EntityId = DomainId<"entity">;
-export type CharacterId = DomainId<"character">;
 export type CreatureId = DomainId<"creature">;
+declare const characterIdBrand: unique symbol;
+/** A character is a specialized creature and its identifier is valid wherever a CreatureId is accepted. */
+export type CharacterId = CreatureId & {
+  readonly [characterIdBrand]: "character";
+};
 export type ItemInstanceId = DomainId<"item-instance">;
 export type EncounterId = DomainId<"encounter">;
 export type EffectInstanceId = DomainId<"effect-instance">;
 export type DecisionId = DomainId<"decision">;
 export type EventId = DomainId<"event">;
 export type PlayerId = DomainId<"player">;
+export type UserId = DomainId<"user">;
 export type CampaignId = DomainId<"campaign">;
+export type CampaignMembershipId = DomainId<"campaign-membership">;
+export type CampaignInvitationId = DomainId<"campaign-invitation">;
+export type CharacterCreationDraftId = DomainId<"character-creation-draft">;
 export type SessionId = DomainId<"session">;
 export type SceneId = DomainId<"scene">;
 export type LocationId = DomainId<"location">;

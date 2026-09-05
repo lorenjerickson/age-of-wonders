@@ -9,6 +9,9 @@ import { GraphModule } from "./graph/graph.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ServiceFailureInterceptor } from "./logging/service-failure.interceptor";
 import { TransferModule } from "./transfer/transfer.module";
+import { AuthModule } from "./auth/auth.module";
+import { CharactersModule } from "./characters/characters.module";
+import { InvitationsModule } from "./invitations/invitations.module";
 
 @Module({
   imports: [
@@ -17,12 +20,15 @@ import { TransferModule } from "./transfer/transfer.module";
       envFilePath: [".env", "../../.env"],
     }),
     PrismaModule,
+    AuthModule,
     HealthModule,
     MediaModule,
     GraphModule,
     DomainModule,
     AiModule,
     TransferModule,
+    InvitationsModule,
+    CharactersModule,
   ],
   providers: [
     {

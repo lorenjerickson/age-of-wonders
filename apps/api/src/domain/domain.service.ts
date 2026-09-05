@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "../graph/graph.service";
 import type {
@@ -266,6 +266,36 @@ export class DomainService {
         )
         .map((campaign) => campaign.id),
     );
+    const campaignIdList = [...campaignIds];
+
+    if (campaignIdList.length > 0) {
+      const affectedMemberships = await this.prisma.campaignMembership.findMany(
+        {
+          where: { campaignId: { in: campaignIdList } },
+          select: { userId: true },
+        },
+      );
+      await this.prisma.$transaction([
+        this.prisma.campaignInvitation.deleteMany({
+          where: { campaignId: { in: campaignIdList } },
+        }),
+        this.prisma.campaignMembership.deleteMany({
+          where: { campaignId: { in: campaignIdList } },
+        }),
+      ]);
+      const participantIds = [
+        ...new Set(affectedMemberships.map((membership) => membership.userId)),
+      ];
+      if (participantIds.length > 0) {
+        await this.prisma.user.deleteMany({
+          where: {
+            id: { in: participantIds },
+            role: UserRole.PARTICIPANT,
+            memberships: { none: {} },
+          },
+        });
+      }
+    }
 
     const sessions = await this.prisma.domainRecord.findMany({
       where: { resource: "sessions" },

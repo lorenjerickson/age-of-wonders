@@ -9,6 +9,7 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiCreatedResponse,
@@ -22,15 +23,14 @@ import {
   ListDomainResourcesDto,
   ReplaceDomainResourceDto,
 } from "./dto/domain-resource.dto";
-import {
-  assertDomainResource,
-  DOMAIN_RESOURCES,
-} from "./domain-resource";
+import { assertDomainResource, DOMAIN_RESOURCES } from "./domain-resource";
 import { DomainService } from "./domain.service";
+import { GmGuard } from "../auth/auth.guard";
 
 @ApiTags("domain")
 @ApiParam({ name: "resource", enum: DOMAIN_RESOURCES })
 @Controller("domain/:resource")
+@UseGuards(GmGuard)
 export class DomainController {
   constructor(private readonly domain: DomainService) {}
 
@@ -55,10 +55,7 @@ export class DomainController {
 
   @Get(":id")
   @ApiOperation({ summary: "Get a domain aggregate by ID" })
-  get(
-    @Param("resource") resourceValue: string,
-    @Param("id") id: string,
-  ) {
+  get(@Param("resource") resourceValue: string, @Param("id") id: string) {
     return this.domain.get(assertDomainResource(resourceValue), id);
   }
 
@@ -69,11 +66,7 @@ export class DomainController {
     @Param("id") id: string,
     @Body() dto: ReplaceDomainResourceDto,
   ) {
-    return this.domain.replace(
-      assertDomainResource(resourceValue),
-      id,
-      dto,
-    );
+    return this.domain.replace(assertDomainResource(resourceValue), id, dto);
   }
 
   @Delete(":id")
