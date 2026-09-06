@@ -13,6 +13,7 @@ import {
 import {
   createPlayerCharacter,
   getCharacterOptions,
+  getMyAuthenticationProviders,
   getPlayerCharacter,
   listPlayerCharacters,
   logout,
@@ -571,6 +572,11 @@ export function CharacterCreationPage({
   const [characters, setCharacters] = useState<CharacterDraft[]>();
   const [campaignInstanceName, setCampaignInstanceName] = useState("");
   const [message, setMessage] = useState("");
+  const [auth0, setAuth0] =
+    useState<
+      Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
+    >();
+  const returnTo = `/play/instances/${encodeURIComponent(campaignInstanceId)}/characters${characterId ? `/${encodeURIComponent(characterId)}` : ""}`;
 
   useEffect(() => {
     if (characterId) return;
@@ -588,6 +594,13 @@ export function CharacterCreationPage({
     );
   }, [campaignInstanceId, characterId]);
 
+  useEffect(() => {
+    void getMyAuthenticationProviders().then(
+      (result) => setAuth0(result.auth0),
+      () => undefined,
+    );
+  }, []);
+
   return (
     <main className="min-h-dvh bg-base-100 text-base-content">
       <header className="border-b border-base-300 bg-base-200/70 px-5 py-4 backdrop-blur-xl sm:px-8">
@@ -598,16 +611,28 @@ export function CharacterCreationPage({
             </p>
             <p className="font-semibold">Character creation</p>
           </div>
-          <Button
-            type="button"
-            tone="ghost"
-            size="sm"
-            onClick={() =>
-              void logout().finally(() => navigate("/join", { replace: true }))
-            }
-          >
-            Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            {auth0?.configured && !auth0.linked && (
+              <a
+                className="btn btn-outline btn-sm"
+                href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(returnTo)}`}
+              >
+                Connect Auth0
+              </a>
+            )}
+            <Button
+              type="button"
+              tone="ghost"
+              size="sm"
+              onClick={() =>
+                void logout().finally(() =>
+                  navigate("/join", { replace: true }),
+                )
+              }
+            >
+              Sign out
+            </Button>
+          </div>
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">

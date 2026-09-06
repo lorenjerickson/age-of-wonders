@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-character-import-experience-complete
+status: active-implementation-plan-auth0-adapter-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,7 +21,7 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, Campaign/World authoring, identity/participation, initial
+The Session, Campaign Instance, Campaign/World authoring, identity/participation, Auth0 adapter, initial
 system-boundary, legacy-removal, Instance-native Character-sheet, Character completion/review, and
 first-party one-way Character import waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
@@ -33,8 +33,9 @@ implementation-named participation, generic domain, raw graph, ambiguous Campaig
 destructive root-Location World routes are no longer registered.
 
 Route families not named in the completed-wave sections remain target architecture, not
-claims of completed implementation. The Auth0 adapter, writable secret and operational Settings,
-and fully contextual World/Campaign AI and media commands remain separate follow-up work.
+claims of completed implementation. Writable secret and operational Settings, Auth0 provider
+administration beyond deployment configuration, and fully contextual World/Campaign AI and media
+commands remain separate follow-up work.
 
 ## Binding route principles
 
@@ -375,6 +376,30 @@ internal `aow:bootstrap` provider association is an adapter-neutral durable link
 with a later Auth0 association. The temporary `/api/auth/gm-session` alias introduced during this
 wave was subsequently removed; `/api/auth/session` is the only bootstrap-session command.
 
+The Auth0 adapter adds provider discovery plus explicit sign-in and linking entry points:
+
+```text
+GET /api/auth/providers
+GET /api/auth/providers/me
+GET /api/auth/auth0/start
+GET /api/auth/auth0/link
+GET /api/auth/auth0/callback
+```
+
+The deployment enables the adapter only when `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`,
+`AUTH0_CLIENT_SECRET`, and the exact browser-visible `AUTH0_CALLBACK_URL` are all present. The
+callback URL terminates at the public web `/api` proxy in the standard hosted topology.
+
+It uses Authorization Code with S256 PKCE, state, nonce, an encrypted short-lived HTTP-only
+transaction cookie, exact issuer/audience/signature validation, and local-only return paths. It
+stores no Auth0 access or refresh token. Anonymous sign-in succeeds only for an exact active
+provider-subject association. Linking must start and finish as the same authenticated User, refuses
+subjects linked elsewhere, and never infers identity from email, phone, invitation contact,
+display name, or another provider association. The local application session remains the
+authorization boundary after Auth0 authentication. Its cookie is `SameSite=Lax` so it survives the
+top-level provider callback; the existing trusted-origin middleware continues to reject unsafe
+cross-origin cookie-authenticated requests.
+
 Authentication-provider associations now belong to a User and only optionally link to that User's
 Player profile. This permits administrators and invited Spectators to have durable authenticated
 identities without becoming Players. Instance invitation acceptance no longer searches for or
@@ -534,7 +559,7 @@ must be reconciled with its own captured schema and approved before activation.
    provider associations, Players, Instance memberships/invitations, Character
    ownership/lifecycle/import boundaries, Instance-native resumable Character sheets,
    captured-schema submission, GM review, activation materialization, and first-party one-way
-   import selection. Auth0 remains a fast follow.
+   import selection, plus explicit Auth0 account linking and exact-subject sign-in.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
    adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
    authority boundaries. Writable hosted configuration and fully contextual content operations

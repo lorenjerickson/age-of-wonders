@@ -18,6 +18,7 @@ import {
   checkHealth,
   getCampaignInstanceContinuation,
   getGmResumableSession,
+  getMyAuthenticationProviders,
   type CampaignInstanceContinuation,
   type CampaignInstanceList,
   type WorldDefinitionList,
@@ -103,6 +104,10 @@ export function AppShell({
   const [guideOpen, setGuideOpen] = useState(false);
   const [resumableSession, setResumableSession] =
     useState<Awaited<ReturnType<typeof getGmResumableSession>>["session"]>();
+  const [auth0, setAuth0] =
+    useState<
+      Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
+    >();
   const drawerTrigger = useRef<HTMLLabelElement>(null);
   const drawerPanel = useRef<HTMLElement>(null);
   const guideTrigger = useRef<HTMLButtonElement>(null);
@@ -121,6 +126,19 @@ export function AppShell({
       cancelled = true;
     };
   }, [gmAccess, pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getMyAuthenticationProviders().then(
+      (result) => {
+        if (!cancelled) setAuth0(result.auth0);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -323,9 +341,22 @@ export function AppShell({
               ))}
             </ul>
           </nav>
-          <p className="px-3 py-3 text-xs leading-5 text-base-content/35">
-            Author Worlds, prepare Campaigns, and continue play.
-          </p>
+          <div className="border-t border-base-300/70 px-3 py-3">
+            {auth0?.configured &&
+              (auth0.linked ? (
+                <p className="mb-2 text-xs text-success">Auth0 connected</p>
+              ) : (
+                <a
+                  className="btn btn-outline btn-sm mb-2 w-full"
+                  href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(pathname)}`}
+                >
+                  Connect Auth0
+                </a>
+              ))}
+            <p className="text-xs leading-5 text-base-content/35">
+              Author Worlds, prepare Campaigns, and continue play.
+            </p>
+          </div>
         </aside>
       </div>
     </div>

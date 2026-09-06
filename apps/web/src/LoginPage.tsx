@@ -1,10 +1,19 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Button, FieldError, TextInput } from "@aow/ui";
-import { establishAdministrator, getBootstrapStatus, loginAsGm } from "./api";
+import { useLocation } from "@tanstack/react-router";
+import { Button, Checkbox, FieldError, TextInput } from "@aow/ui";
+import {
+  establishAdministrator,
+  getAuthenticationProviders,
+  getBootstrapStatus,
+  loginAsGm,
+} from "./api";
 import { useInternalNavigate } from "./navigation";
 
 export function LoginPage() {
   const navigate = useInternalNavigate();
+  const location = useLocation();
+  const authReturnTo =
+    new URLSearchParams(location.searchStr).get("returnTo") ?? "/";
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -13,10 +22,14 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [grantGameMaster, setGrantGameMaster] = useState(true);
+  const [auth0Configured, setAuth0Configured] = useState(false);
 
   useEffect(() => {
-    void getBootstrapStatus()
-      .then((result) => setSetupRequired(result.setupRequired))
+    void Promise.all([getBootstrapStatus(), getAuthenticationProviders()])
+      .then(([bootstrap, providers]) => {
+        setSetupRequired(bootstrap.setupRequired);
+        setAuth0Configured(providers.auth0.configured);
+      })
       .catch(() => {
         setSetupRequired(false);
         setMessage("The server setup status could not be loaded.");
@@ -96,19 +109,14 @@ export function LoginPage() {
                 value={phone}
                 onChange={(event) => setPhone(event.currentTarget.value)}
               />
-              <label className="flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-primary mt-0.5"
-                  checked={grantGameMaster}
-                  onChange={(event) =>
-                    setGrantGameMaster(event.currentTarget.checked)
-                  }
-                />
-                <span>
-                  Also grant this person Game Master access to author and play.
-                </span>
-              </label>
+              <Checkbox
+                tone="primary"
+                checked={grantGameMaster}
+                label="Also grant this person Game Master access to author and play."
+                onChange={(event) =>
+                  setGrantGameMaster(event.currentTarget.checked)
+                }
+              />
             </>
           )}
           <TextInput
@@ -133,6 +141,20 @@ export function LoginPage() {
           >
             {setupRequired ? "Complete first launch" : "Sign in"}
           </Button>
+          {!setupRequired && auth0Configured && (
+            <>
+              <div className="divider text-xs text-base-content/45">or</div>
+              <a
+                className="btn btn-outline"
+                href={`/api/auth/auth0/start?returnTo=${encodeURIComponent(authReturnTo)}`}
+              >
+                Continue with Auth0
+              </a>
+              <p className="text-xs leading-5 text-base-content/50">
+                Your Auth0 account must already be linked to this profile.
+              </p>
+            </>
+          )}
         </form>
       </section>
     </main>

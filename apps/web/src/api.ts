@@ -504,6 +504,19 @@ export function getBootstrapStatus() {
   return request<{ setupRequired: boolean }>("/auth/bootstrap");
 }
 
+export interface Auth0ProviderStatus {
+  configured: boolean;
+  linked?: boolean;
+}
+
+export function getAuthenticationProviders() {
+  return request<{ auth0: Auth0ProviderStatus }>("/auth/providers");
+}
+
+export function getMyAuthenticationProviders() {
+  return request<{ auth0: Auth0ProviderStatus }>("/auth/providers/me");
+}
+
 export function establishAdministrator(input: {
   token: string;
   displayName: string;

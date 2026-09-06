@@ -764,8 +764,8 @@ human-readable names or neutral fallbacks; opaque IDs may appear in URLs but nev
 Player status records the person's standing with the server, such as active, inactive, or banned;
 it is separate from Campaign membership and Session attendance. A profile is created through an
 invitation-driven onboarding flow and linked to the durable identity supplied by the configured
-authentication provider; it is not later “claimed” through heuristic matching. The provider-neutral
-contract must support a future Auth0 adapter.
+authentication provider; it is not later “claimed” through heuristic matching. The Auth0 adapter
+preserves that boundary through explicit linking and exact provider-subject lookup.
 
 A durable authenticated person may exist only as a Spectator, outside any Campaign Instance, but
 may observe a Campaign Instance only after an explicit Campaign Instance invitation. Player and
@@ -2030,7 +2030,8 @@ unspecified and must not be filled in by incidental implementation choices.
     inactive, or banned. Invitation-driven onboarding creates a profile associated with a durable
     authentication-provider identity; profiles are not claimed. A durable spectator-only identity
     may exist outside an Instance, but observing a Campaign requires an invitation. The auth
-    boundary must support a future Auth0 adapter.
+    boundary supports the Auth0 adapter through explicit linking and exact provider-subject lookup;
+    Auth0 claims do not identify or claim a profile through contact matching.
 18. **Resolved — Navigation chrome:** Home and Settings are stable primary destinations. Continue is
     dashboard/Instance-page content, not primary navigation. Home provides a Continue action for
     every active Campaign Instance.

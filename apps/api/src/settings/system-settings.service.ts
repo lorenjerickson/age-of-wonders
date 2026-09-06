@@ -270,7 +270,7 @@ export class SystemSettingsService {
         true,
         "secret-backed",
       ),
-      this.configured("auth0", "Auth0", "AUTH0_DOMAIN", false, "secret-backed"),
+      this.auth0(),
     ];
   }
 
@@ -296,6 +296,39 @@ export class SystemSettingsService {
         "AI budgets, quotas, and history retention are not yet configurable.",
       ),
     ];
+  }
+
+  private auth0(): SystemSettingStatus {
+    const keys = [
+      "AUTH0_DOMAIN",
+      "AUTH0_CLIENT_ID",
+      "AUTH0_CLIENT_SECRET",
+      "AUTH0_CALLBACK_URL",
+    ];
+    const configured = keys.filter((key) =>
+      Boolean(this.config.get<string>(key)?.trim()),
+    ).length;
+    if (configured === keys.length) {
+      return ready(
+        "auth0",
+        "Auth0",
+        "Authorization Code with PKCE sign-in and explicit account linking are enabled.",
+        "secret-backed",
+        "Configured",
+      );
+    }
+    if (configured > 0) {
+      return unavailable(
+        "auth0",
+        "Auth0",
+        "Auth0 configuration is incomplete; domain, client ID, client secret, and callback URL are all required.",
+      );
+    }
+    return disabled(
+      "auth0",
+      "Auth0",
+      "Auth0 sign-in is not configured. Bootstrap and invitation sessions remain available.",
+    );
   }
 
   private communications(): SystemSettingStatus[] {

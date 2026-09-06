@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, StatusIndicator } from "@aow/ui";
 import {
   ApiRequestError,
+  getMyAuthenticationProviders,
   getParticipantCampaignSession,
   getParticipantCampaignSessionEvents,
   heartbeatCampaignSession,
@@ -40,6 +41,10 @@ export function CampaignSessionParticipantPage({
   const [present, setPresent] = useState(false);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
+  const [auth0, setAuth0] =
+    useState<
+      Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
+    >();
   const connectionKey = useRef("");
 
   const load = useCallback(async () => {
@@ -63,6 +68,13 @@ export function CampaignSessionParticipantPage({
   }, [campaignInstanceId, sessionId]);
 
   useEffect(() => void load(), [load]);
+
+  useEffect(() => {
+    void getMyAuthenticationProviders().then(
+      (result) => setAuth0(result.auth0),
+      () => undefined,
+    );
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => void load(), 15_000);
@@ -163,16 +175,26 @@ export function CampaignSessionParticipantPage({
               </p>
             )}
           </div>
-          {session &&
-            ["lobby", "active", "paused"].includes(session.status) && (
-              <Button
-                tone={present ? "outline" : "primary"}
-                loading={busy}
-                onClick={() => void (present ? leave() : join())}
+          <div className="flex flex-wrap gap-2">
+            {auth0?.configured && !auth0.linked && (
+              <a
+                className="btn btn-outline"
+                href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(`/play/instances/${campaignInstanceId}/sessions/${sessionId}`)}`}
               >
-                {present ? "Leave Session" : sessionAction(session.status)}
-              </Button>
+                Connect Auth0
+              </a>
             )}
+            {session &&
+              ["lobby", "active", "paused"].includes(session.status) && (
+                <Button
+                  tone={present ? "outline" : "primary"}
+                  loading={busy}
+                  onClick={() => void (present ? leave() : join())}
+                >
+                  {present ? "Leave Session" : sessionAction(session.status)}
+                </Button>
+              )}
+          </div>
         </header>
 
         {message && <Alert tone="error">{message}</Alert>}

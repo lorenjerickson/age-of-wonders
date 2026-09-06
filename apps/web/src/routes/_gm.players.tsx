@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button, FieldError, Select, TextInput } from "@aow/ui";
+import { Button, FieldError, Select, SelectField, TextInput } from "@aow/ui";
 import type {
   PlayerDetailProjection,
   PlayerDirectoryProjection,
@@ -105,22 +105,20 @@ function PlayersLanding() {
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
         />
-        <label className="form-control">
-          <span className="label-text mb-2 text-sm font-medium">Standing</span>
-          <Select
-            value={standing}
-            onChange={(event) =>
-              setStanding(event.currentTarget.value as typeof standing)
-            }
-          >
-            <option value="all">All standings</option>
-            {STANDINGS.map((value) => (
-              <option key={value} value={value}>
-                {title(value)}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <SelectField
+          label="Standing"
+          value={standing}
+          onChange={(event) =>
+            setStanding(event.currentTarget.value as typeof standing)
+          }
+        >
+          <option value="all">All standings</option>
+          {STANDINGS.map((value) => (
+            <option key={value} value={value}>
+              {title(value)}
+            </option>
+          ))}
+        </SelectField>
         <Button type="submit" tone="primary">
           Apply
         </Button>
