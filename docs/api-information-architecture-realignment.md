@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-character-sheet-tranche-complete
+status: active-implementation-plan-character-completion-wave-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -22,7 +22,8 @@ an isolated naming cleanup.
 ## Delivery status
 
 The Session, Campaign Instance, Campaign/World authoring, identity/participation, initial
-system-boundary, legacy-removal, and Instance-native Character-sheet waves are implemented.
+system-boundary, legacy-removal, Instance-native Character-sheet, and Character completion/review
+waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
 invitation entry points live beneath `/api/invitations`; and authenticated locator and participant
 projections live beneath `/api/me`. First-party web callers use the canonical authoring roots
@@ -32,9 +33,9 @@ implementation-named participation, generic domain, raw graph, ambiguous Campaig
 destructive root-Location World routes are no longer registered.
 
 Route families not named in the completed-wave sections remain target architecture, not
-claims of completed implementation. Character completion/review, the Auth0 adapter, writable secret
-and operational Settings, and fully contextual World/Campaign AI and media commands remain separate
-follow-up work.
+claims of completed implementation. The Auth0 adapter, writable secret and operational Settings,
+first-party Character import selection, and fully contextual World/Campaign AI and media commands
+remain separate follow-up work.
 
 ## Binding route principles
 
@@ -130,6 +131,7 @@ follow-up work.
 /api/me/campaign-instances/:campaignInstanceId/characters/options
 /api/me/campaign-instances/:campaignInstanceId/characters/:characterId
 /api/me/campaign-instances/:campaignInstanceId/characters/:characterId/attribute-rolls
+/api/me/campaign-instances/:campaignInstanceId/characters/:characterId/actions/submit-for-review
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/presence
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/events
@@ -258,6 +260,8 @@ GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/creature
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/roster
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/memberships
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/review
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/actions/review
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents/available
 POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents
 PATCH /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents/:agentParticipationId
@@ -390,15 +394,22 @@ different source Instance owned by the same GM and the same durable Player User;
 a new destination identity, copies the source Character sheet into a destination-owned draft, and
 records complete provenance with no synchronization or transfer-back.
 Terminal `retired` and `dead` Characters cannot transition back. Activating a Character requires a
-Character sheet owned by the same destination Player membership, and selecting for play requires
-an active Character owned by the selected Player membership.
+GM-approved Character draft owned by the same destination Player membership. Activation repeats
+validation against the Instance's current captured World/Campaign schema and atomically materializes
+a snapshot-stamped `campaign-instance-character-sheet`; selecting for play then requires an active
+Character owned by the selected Player membership.
 
-The Character ownership shell, lifecycle/provenance, and resumable authoring editor are now
-Instance-bound. Complete captured-schema validation and materialization at activation, plus
-first-party import selection UI, remain follow-up work. The current activation gate enforces sheet
-existence and ownership but does not yet represent complete schema conformance. The canonical
-import command and database constraints already prevent cross-Player, cross-owner, same-Instance,
-or identity-preserving transfers.
+The Character ownership shell, lifecycle/provenance, resumable authoring editor, submission lock,
+GM review, and activation materialization are Instance-bound. Attribute requirements come from the
+immutable Model Schema releases selected by the captured World revision, including their locked
+dependency releases, so a World-defined Attribute such as Likeable participates without a
+hard-coded UI change. Submission and approval
+validate Background, Profession, Heritage, every captured Attribute roll/assignment, and optional
+starting equipment against the current captured snapshot. A later Instance migration therefore
+requires stale approval to be reopened and reviewed rather than silently materializing against a
+different schema. First-party import selection UI remains follow-up work. The canonical import
+command creates a distinct destination draft and the database constraints prevent cross-Player,
+cross-owner, same-Instance, or identity-preserving transfers.
 
 ## Model, AI, media, graph, and Settings implementation wave
 
@@ -475,6 +486,14 @@ captured by the Instance's current snapshot. Legacy Campaign-scoped draft rows a
 archived migration input and have no live controller or writer. Migration/preflight code may still
 inspect those rows; that internal compatibility does not restore HTTP authority.
 
+The completion wave adds a Player submit-for-review transition and GM review resource beneath the
+same explicit Instance ancestry. Submitted and approved drafts are immutable to the Player. The GM
+may approve a conformant submission or request changes; activation revalidates the approved draft
+against the current Instance snapshot and materializes the internal Character resource in the same
+transaction as the lifecycle transition. The materialized creation sheet is deliberately not
+presented as a fabricated full `CharacterState`; runtime rule compilation remains responsible for
+combining it with captured Profession, Heritage, Item, and Rule definitions.
+
 ## Compatibility and rollout
 
 1. Add canonical controllers as aliases over the same services; do not duplicate domain logic.
@@ -502,8 +521,9 @@ inspect those rows; that internal compatibility does not restore HTTP authority.
    placements, and World libraries.
 4. **Identity and participation — complete vertical slice:** first-admin bootstrap, user-level
    provider associations, Players, Instance memberships/invitations, Character
-   ownership/lifecycle/import boundaries, and Instance-native resumable Character sheets. Auth0 and
-   completion/review/import UX remain fast follows.
+   ownership/lifecycle/import boundaries, Instance-native resumable Character sheets,
+   captured-schema submission, GM review, and activation materialization. Auth0 and first-party
+   import selection UX remain fast follows.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
    adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
    authority boundaries. Writable hosted configuration and fully contextual content operations

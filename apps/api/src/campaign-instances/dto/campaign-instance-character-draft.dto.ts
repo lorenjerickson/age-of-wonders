@@ -6,6 +6,7 @@ import {
   IsInt,
   IsObject,
   IsOptional,
+  IsIn,
   IsString,
   MaxLength,
   Min,
@@ -77,4 +78,16 @@ export class ExpectedPlayerCharacterDraftRevisionDto {
   @IsInt()
   @Min(1)
   expectedRevision!: number;
+}
+
+export class ReviewCampaignInstanceCharacterDto extends ExpectedPlayerCharacterDraftRevisionDto {
+  @ApiProperty({ enum: ["approve", "request-changes"] })
+  @IsIn(["approve", "request-changes"])
+  decision!: "approve" | "request-changes";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  note?: string;
 }

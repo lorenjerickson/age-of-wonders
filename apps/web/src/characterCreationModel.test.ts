@@ -15,6 +15,10 @@ describe("character creation model", () => {
           status: "draft",
           revision: 4,
           selections: { backgroundId: "old" },
+          attributeRolls: [],
+          attributeAssignments: {},
+          startingEquipmentIds: [],
+          validationIssues: [],
         },
         {
           backgroundId: "background-1",
@@ -42,7 +46,15 @@ describe("character creation model", () => {
       }),
     ).toBe(true);
     expect(
-      characterDisplayName({ id: "opaque", status: "draft", revision: 1 }),
+      characterDisplayName({
+        id: "opaque",
+        status: "draft",
+        revision: 1,
+        attributeRolls: [],
+        attributeAssignments: {},
+        startingEquipmentIds: [],
+        validationIssues: [],
+      }),
     ).toBe("New character");
   });
 });

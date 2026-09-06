@@ -27,5 +27,10 @@ rows in place and creates the constrained Instance-bound draft table; it never g
 mapping for old data. Production startup intentionally fails instead of falling back to `db push`
 when migration history is inconsistent.
 
+`20260912000000_character_completion_review` adds submission/review provenance and creates an
+`in-progress` Instance draft for any existing Character association that predates the authoritative
+completion gate. Legacy materialized fields may prefill that draft, but the migration never marks
+it reviewed or approved; the current captured schema must validate it through the normal workflow.
+
 The development Compose profile remains a local-only convenience. Its ports bind to loopback, and
 its source-known credentials must never be reused for a remotely reachable deployment.

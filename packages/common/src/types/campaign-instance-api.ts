@@ -276,6 +276,7 @@ export interface CampaignInstanceRosterProjection {
     readonly name: string;
     readonly playerName: string;
     readonly status: "draft" | "active" | "inactive" | "retired" | "dead";
+    readonly sheetStatus: "in-progress" | "ready-for-review" | "complete";
     readonly readiness: "ready" | "blocked" | "future";
   }[];
 }
@@ -480,7 +481,17 @@ export interface PlayerCampaignInstanceCharacterDraftProjection {
   readonly startingEquipmentIds: readonly DefinitionId[];
   readonly biography?: string;
   readonly imageAssetIds: Readonly<Record<string, string>>;
+  readonly submittedAt?: string;
+  readonly reviewedAt?: string;
+  readonly reviewNote?: string;
+  readonly validationIssues: readonly CharacterCreationValidationIssueProjection[];
   readonly updatedAt: string;
+}
+
+export interface CharacterCreationValidationIssueProjection {
+  readonly code: string;
+  readonly field: string;
+  readonly message: string;
 }
 
 export interface PlayerCampaignInstanceCharacterDraftListProjection {
@@ -510,13 +521,58 @@ export interface PlayerCharacterCreationOptionsProjection {
   readonly backgrounds: readonly CharacterCreationOptionProjection[];
   readonly professions: readonly CharacterCreationOptionProjection[];
   readonly heritages: readonly CharacterCreationOptionProjection[];
+  readonly attributes: readonly CharacterAttributeOptionProjection[];
+  readonly startingEquipment: readonly CharacterCreationOptionProjection[];
   readonly maximumHeritages: number;
+  readonly attributeRollCount: number;
 }
 
 export interface CharacterCreationOptionProjection {
   readonly id: DefinitionId;
   readonly name: string;
   readonly description?: string;
+}
+
+export interface CharacterAttributeOptionProjection {
+  /** Captured Model Element identity used as the assignment key. */
+  readonly id: string;
+  readonly name: string;
+  readonly minimum: number;
+  readonly maximum: number;
+}
+
+export interface SubmitPlayerCharacterForReviewRequest {
+  readonly expectedRevision: number;
+}
+
+export interface ReviewCampaignInstanceCharacterRequest {
+  readonly expectedRevision: number;
+  readonly decision: "approve" | "request-changes";
+  readonly note?: string;
+}
+
+export interface CampaignInstanceCharacterReviewProjection {
+  readonly campaignInstanceName: string;
+  readonly characterId: CharacterId;
+  readonly characterName: string;
+  readonly playerName: string;
+  readonly characterStatus:
+    "draft" | "active" | "inactive" | "retired" | "dead";
+  readonly draftRevision: number;
+  readonly reviewStatus: "in-progress" | "ready-for-review" | "complete";
+  readonly backgroundName?: string;
+  readonly professionName?: string;
+  readonly heritageNames: readonly string[];
+  readonly attributes: readonly {
+    readonly name: string;
+    readonly score?: number;
+  }[];
+  readonly startingEquipmentNames: readonly string[];
+  readonly biography?: string;
+  readonly submittedAt?: string;
+  readonly reviewedAt?: string;
+  readonly reviewNote?: string;
+  readonly validationIssues: readonly CharacterCreationValidationIssueProjection[];
 }
 
 export interface ChangeCampaignInstanceCharacterStatusRequest {

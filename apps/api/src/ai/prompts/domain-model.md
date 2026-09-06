@@ -666,27 +666,27 @@ Character drafts are timestamped as archived migration input and are not part of
 workflow. These relational tables are not generic domain resources. Canonical first-launch, Player
 directory, membership lifecycle, and Character association/import APIs now operate on this spine:
 
-| Contract or protected boundary                  | Relational table                            | Integrity boundary                                                                                                                                                                                                        |
-| ----------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SystemAdministrator`                           | `SystemAdministrator`                       | First-launch installation operator with protected required email/phone; authority is separate from the optional GM role even when both belong to one User                                                                 |
-| `PlayerProfile`                                 | `PlayerProfile`                             | One durable Player profile per authenticated User; standing is independent of Instance membership; Spectator-only Users have no profile; each non-null contact hash is unique installation-wide                           |
-| Protected authentication-provider association   | `AuthenticationProviderAssociation`         | Belongs to the durable User and optionally its Player profile, supporting administrators and Spectators without invented Player profiles; subjects are encrypted/hashed and credentials remain external references        |
-| `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`           | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                                      |
-| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`                | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                                   |
-| Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                                    |
-| Non-human Agent identity                        | `AgentIdentity`                             | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                                    |
-| `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`        | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and must be selected from the closed core Session capability registry                                                            |
-| `CampaignSession` / `CampaignInstanceSession`   | `CampaignInstanceSession`                   | Explicit Instance FK; named-command lifecycle, metadata CAS, schedule, captured snapshot/runtime boundary references, normalized event bounds, summary status, and idempotent creation key                                |
-| `CampaignSessionParticipation`                  | `SessionParticipation`                      | Exactly one human membership or Agent participation; role/name plus separate immutable observe/act capability snapshots, invitation response, live presence, durable attendance, required classification, and acted state |
-| Protected Session invitation workflow           | `CampaignSessionInvitation`                 | Existing human Instance membership only; hash-only credential, expiration, reissue lineage, response chronology, and same-Instance composite FKs                                                                          |
-| Session invitation delivery attempt             | `CampaignSessionInvitationDeliveryAttempt`  | Contact-free delivery outcome; protected contacts remain on the durable profile boundary                                                                                                                                  |
-| `SessionPresenceLease`                          | `SessionPresenceLease`                      | Renewable hashed connection lease; presence is neither invitation response nor durable attendance                                                                                                                         |
-| `CampaignSessionEvent`                          | `CampaignSessionEvent`                      | Append-only, ordered, bounded, attributed, visibility-scoped Session journal record with optional runtime revision transition and integrity-chain fields                                                                  |
-| `CampaignSessionRuntimeBoundary`                | `CampaignSessionRuntimeBoundary`            | Append-only reference to the owning Instance snapshot and runtime revision at start, pause, resume-after-migration, or conclusion                                                                                         |
-| `CampaignSessionSummary`                        | `CampaignSessionSummary`                    | Revisioned draft/approved/amended narrative against an exact sealed event sequence; approved revisions are immutable and private GM notes remain separately projected                                                     |
-| Session integration event                       | `CampaignSessionOutboxEvent`                | Durable outbox request such as `session-backup-requested`; emitting the request is atomic with summary approval while backup execution remains external                                                                   |
-| `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation`      | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                               |
-| `CharacterCreationDraft`                        | `CampaignInstanceCharacterDraft`            | Resumable input is keyed to an already allocated Character and constrained to that Character's exact Instance and Player membership; choices come from the Instance's captured World snapshot                             |
+| Contract or protected boundary                  | Relational table                            | Integrity boundary                                                                                                                                                                                                                  |
+| ----------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SystemAdministrator`                           | `SystemAdministrator`                       | First-launch installation operator with protected required email/phone; authority is separate from the optional GM role even when both belong to one User                                                                           |
+| `PlayerProfile`                                 | `PlayerProfile`                             | One durable Player profile per authenticated User; standing is independent of Instance membership; Spectator-only Users have no profile; each non-null contact hash is unique installation-wide                                     |
+| Protected authentication-provider association   | `AuthenticationProviderAssociation`         | Belongs to the durable User and optionally its Player profile, supporting administrators and Spectators without invented Player profiles; subjects are encrypted/hashed and credentials remain external references                  |
+| `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`           | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                                                |
+| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`                | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                                             |
+| Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                                              |
+| Non-human Agent identity                        | `AgentIdentity`                             | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                                              |
+| `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`        | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and must be selected from the closed core Session capability registry                                                                      |
+| `CampaignSession` / `CampaignInstanceSession`   | `CampaignInstanceSession`                   | Explicit Instance FK; named-command lifecycle, metadata CAS, schedule, captured snapshot/runtime boundary references, normalized event bounds, summary status, and idempotent creation key                                          |
+| `CampaignSessionParticipation`                  | `SessionParticipation`                      | Exactly one human membership or Agent participation; role/name plus separate immutable observe/act capability snapshots, invitation response, live presence, durable attendance, required classification, and acted state           |
+| Protected Session invitation workflow           | `CampaignSessionInvitation`                 | Existing human Instance membership only; hash-only credential, expiration, reissue lineage, response chronology, and same-Instance composite FKs                                                                                    |
+| Session invitation delivery attempt             | `CampaignSessionInvitationDeliveryAttempt`  | Contact-free delivery outcome; protected contacts remain on the durable profile boundary                                                                                                                                            |
+| `SessionPresenceLease`                          | `SessionPresenceLease`                      | Renewable hashed connection lease; presence is neither invitation response nor durable attendance                                                                                                                                   |
+| `CampaignSessionEvent`                          | `CampaignSessionEvent`                      | Append-only, ordered, bounded, attributed, visibility-scoped Session journal record with optional runtime revision transition and integrity-chain fields                                                                            |
+| `CampaignSessionRuntimeBoundary`                | `CampaignSessionRuntimeBoundary`            | Append-only reference to the owning Instance snapshot and runtime revision at start, pause, resume-after-migration, or conclusion                                                                                                   |
+| `CampaignSessionSummary`                        | `CampaignSessionSummary`                    | Revisioned draft/approved/amended narrative against an exact sealed event sequence; approved revisions are immutable and private GM notes remain separately projected                                                               |
+| Session integration event                       | `CampaignSessionOutboxEvent`                | Durable outbox request such as `session-backup-requested`; emitting the request is atomic with summary approval while backup execution remains external                                                                             |
+| `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation`      | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                                         |
+| `CharacterCreationDraft`                        | `CampaignInstanceCharacterDraft`            | Resumable input is keyed to an already allocated Character and constrained to that Character's exact Instance and Player membership; captured-schema submission, GM review, and activation materialization are explicit transitions |
 
 Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
 namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
@@ -768,26 +768,26 @@ cardinality: the relational Definition APIs support multiple World and Campaign 
 lineages. Versioned World lifecycle is archive-first; the former destructive root-Location World
 endpoint and ambiguous `campaignId` HTTP contracts have been removed.
 
-| Resource               | Aggregate                                   | Stored ID              | Stored kind/name                                |
-| ---------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| `definitions`          | `GameDefinition`                            | `identity.id`          | `kind`, `identity.name`                         |
-| `rule-variants`        | `RuleVariant`                               | `id`                   | `rule-variant`, `name`                          |
-| `content-packs`        | `ContentPackManifest`                       | `id`                   | `content-pack`, `name`                          |
-| `extension-schemas`    | `ExtensionSchema`                           | `id`                   | `extension-schema`, `key`                       |
-| `systems`              | `GameSystemDefinition`                      | `id`                   | `game-system`, `name`                           |
-| `games`                | `GameState`                                 | `campaign.identity.id` | `game-state`, campaign name                     |
-| `campaigns`            | `CampaignDefinition` (legacy compatibility) | `identity.id`          | name                                            |
-| `sessions`             | `SessionState`                              | `identity.id`          | name                                            |
-| `characters`           | `CharacterState`                            | `identity.id`          | name                                            |
-| `creatures`            | `CreatureState`                             | `identity.id`          | name                                            |
-| `items`                | `ItemInstance`                              | `id`                   | `item-instance`, name override or definition ID |
-| `objects`              | `ObjectState`                               | `identity.id`          | name                                            |
-| `scenes`               | `SceneState`                                | `identity.id`          | name                                            |
-| `locations`            | `LocationState`                             | `identity.id`          | `kind`, name                                    |
-| `location-connections` | `LocationConnectionState`                   | `identity.id`          | `kind`                                          |
-| `encounters`           | `EncounterState`                            | `identity.id`          | name                                            |
-| `pending-decisions`    | `PendingDecision`                           | `id`                   | `pending-decision`                              |
-| `game-events`          | `GameEvent`                                 | `id`                   | `type`                                          |
+| Resource               | Aggregate                                            | Stored ID              | Stored kind/name                                |
+| ---------------------- | ---------------------------------------------------- | ---------------------- | ----------------------------------------------- |
+| `definitions`          | `GameDefinition`                                     | `identity.id`          | `kind`, `identity.name`                         |
+| `rule-variants`        | `RuleVariant`                                        | `id`                   | `rule-variant`, `name`                          |
+| `content-packs`        | `ContentPackManifest`                                | `id`                   | `content-pack`, `name`                          |
+| `extension-schemas`    | `ExtensionSchema`                                    | `id`                   | `extension-schema`, `key`                       |
+| `systems`              | `GameSystemDefinition`                               | `id`                   | `game-system`, `name`                           |
+| `games`                | `GameState`                                          | `campaign.identity.id` | `game-state`, campaign name                     |
+| `campaigns`            | `CampaignDefinition` (legacy compatibility)          | `identity.id`          | name                                            |
+| `sessions`             | `SessionState`                                       | `identity.id`          | name                                            |
+| `characters`           | `CharacterState` or `CampaignInstanceCharacterSheet` | `identity.id`          | name                                            |
+| `creatures`            | `CreatureState`                                      | `identity.id`          | name                                            |
+| `items`                | `ItemInstance`                                       | `id`                   | `item-instance`, name override or definition ID |
+| `objects`              | `ObjectState`                                        | `identity.id`          | name                                            |
+| `scenes`               | `SceneState`                                         | `identity.id`          | name                                            |
+| `locations`            | `LocationState`                                      | `identity.id`          | `kind`, name                                    |
+| `location-connections` | `LocationConnectionState`                            | `identity.id`          | `kind`                                          |
+| `encounters`           | `EncounterState`                                     | `identity.id`          | name                                            |
+| `pending-decisions`    | `PendingDecision`                                    | `id`                   | `pending-decision`                              |
+| `game-events`          | `GameEvent`                                          | `id`                   | `type`                                          |
 
 Fields ending in `Id` or `Ids` become graph relationships automatically. Keep references in those
 fields rather than inventing parallel reference structures.
@@ -1530,8 +1530,9 @@ Campaign Instance, with no synchronization or back-transfer. The membership's op
 active Character must occur in its Character history and resolve to an association for that same
 membership and Instance. Every Character in the membership's full history must likewise resolve to
 an association owned by that membership in that Instance. A lifecycle transition to `active`
-requires a Character sheet whose `ownerMembershipId` is that same Instance membership; complete
-captured-schema validation remains a stricter application-level gate still to be implemented.
+requires a GM-approved draft whose `ownerMembershipId` is that same Instance membership. Activation
+revalidates against the current captured World/Campaign schema and atomically materializes a
+snapshot-stamped `campaign-instance-character-sheet` with the lifecycle transition.
 `validateParticipationConsistency` checks these Character invariants plus
 same-Instance Session, human-membership, and Agent-participation relationships without putting
 opaque identifiers into its human-readable issues.
@@ -1544,8 +1545,14 @@ rebound. Player operations use the collection
 association and draft in one transaction, reads and writes verify the authenticated active Player
 membership, and optimistic revision checks prevent lost updates. Available Background, Profession,
 and Heritage choices are read from the World snapshot captured by the Campaign Instance's current
-snapshot, never from the live evolving World Definition. The unscoped `/character-drafts` HTTP API
-has been removed.
+snapshot, never from the live evolving World Definition. Attribute requirements are resolved from
+the immutable Model Schema releases selected by the captured World revision and their locked
+dependency releases, including GM-authored Attribute elements rather than a closed built-in list.
+A Player may edit only `in-progress`, then
+submit for review; submitted and complete drafts are locked. The GM may approve a conformant draft
+or request changes. Activation repeats validation against the current Instance snapshot before
+materializing `CampaignInstanceCharacterSheet`, which is creation output rather than a fabricated
+complete `CharacterState`. The unscoped `/character-drafts` HTTP API has been removed.
 
 Invitation acceptance never claims a profile by heuristically matching recipient contact data. An
 invitation is bound to a known User only when the GM explicitly selects that Player profile;

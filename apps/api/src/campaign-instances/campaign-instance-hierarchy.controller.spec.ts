@@ -8,6 +8,7 @@ import type { CampaignInstanceManagementService } from "./campaign-instance-mana
 import type { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import type { CampaignInstancesService } from "./campaign-instances.service";
 import type { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
+import type { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
 
 const request = {
   user: { id: "gm-1", displayName: "Game Master" },
@@ -35,6 +36,14 @@ function controller(assertParentOverride?: jest.Mock) {
   const characters = {
     changeCharacterStatus,
   } as unknown as CampaignInstanceCharactersService;
+  const reviewDetail = jest
+    .fn()
+    .mockResolvedValue({ reviewStatus: "ready-for-review" });
+  const review = jest.fn().mockResolvedValue({ reviewStatus: "complete" });
+  const characterDrafts = {
+    reviewDetail,
+    review,
+  } as unknown as CampaignInstanceCharacterDraftsService;
   return {
     instances,
     calls: {
@@ -44,6 +53,8 @@ function controller(assertParentOverride?: jest.Mock) {
       assertParent,
       validate,
       changeCharacterStatus,
+      reviewDetail,
+      review,
     },
     subject: new CampaignInstanceHierarchyController(
       instances,
@@ -51,6 +62,7 @@ function controller(assertParentOverride?: jest.Mock) {
       {} as CampaignInstanceInvitationsService,
       {} as CampaignInstanceMigrationsService,
       characters,
+      characterDrafts,
     ),
   };
 }
@@ -118,6 +130,37 @@ describe("CampaignInstanceHierarchyController", () => {
       "character-1",
       "gm-1",
       { expectedStatus: "active", targetStatus: "retired" },
+    );
+  });
+
+  it("scopes Character review reads and decisions before touching the draft", async () => {
+    const { calls, subject } = controller();
+
+    await subject.characterReview(
+      "definition-1",
+      "instance-1",
+      "character-1",
+      request,
+    );
+    await subject.reviewCharacter(
+      "definition-1",
+      "instance-1",
+      "character-1",
+      request,
+      { expectedRevision: 3, decision: "approve" },
+    );
+
+    expect(calls.assertParent).toHaveBeenCalledTimes(2);
+    expect(calls.reviewDetail).toHaveBeenCalledWith(
+      "instance-1",
+      "character-1",
+      "gm-1",
+    );
+    expect(calls.review).toHaveBeenCalledWith(
+      "instance-1",
+      "character-1",
+      "gm-1",
+      { expectedRevision: 3, decision: "approve" },
     );
   });
 });

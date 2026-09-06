@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
 import type {
   CreateCampaignInstanceCharacterDto,
   ImportCampaignInstanceCharacterDto,
@@ -51,7 +52,10 @@ const CHARACTER_STATUS = {
 
 @Injectable()
 export class CampaignInstanceCharactersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly characterDrafts: CampaignInstanceCharacterDraftsService,
+  ) {}
 
   async membershipDetail(
     instanceId: string,
@@ -304,22 +308,8 @@ export class CampaignInstanceCharactersService {
       );
     }
     const characterId = randomUUID();
-    const importedData = importedCharacterData(
-      sourceRecord.data,
-      characterId,
-      destination.id,
-      name,
-    );
+    const importedDraft = importedCharacterDraftData(sourceRecord.data, name);
     const imported = await this.prisma.$transaction(async (tx) => {
-      await tx.domainRecord.create({
-        data: {
-          resource: "characters",
-          id: characterId,
-          kind: sourceRecord.kind,
-          name,
-          data: importedData,
-        },
-      });
       const created = await tx.campaignInstanceCharacterAssociation.create({
         data: {
           characterId,
@@ -332,6 +322,14 @@ export class CampaignInstanceCharactersService {
           sourceCampaignInstanceName: source.campaignInstance.name,
           sourceCharacterName: source.characterName,
           importedAt: new Date(),
+        },
+      });
+      await tx.campaignInstanceCharacterDraft.create({
+        data: {
+          campaignInstanceId: instanceId,
+          playerMembershipId: destination.id,
+          characterId,
+          ...importedDraft,
         },
       });
       await tx.campaignInstanceAuditEvent.create({
@@ -383,24 +381,47 @@ export class CampaignInstanceCharactersService {
         "The Character's Player and membership must both be active.",
       );
     }
-    if (target === "ACTIVE") {
-      const sheet = await this.prisma.domainRecord.findUnique({
-        where: {
-          resource_id: { resource: "characters", id: characterId },
-        },
-        select: { data: true },
-      });
-      if (
-        !sheet ||
-        !isJsonObject(sheet.data) ||
-        sheet.data.ownerMembershipId !== character.playerMembershipId
-      ) {
-        throw new ConflictException(
-          "The Character needs a sheet owned by this Player membership before activation.",
-        );
-      }
-    }
+    const materialization =
+      target === "ACTIVE"
+        ? await this.characterDrafts.activationMaterialization(
+            instanceId,
+            characterId,
+            ownerUserId,
+          )
+        : undefined;
     await this.prisma.$transaction(async (tx) => {
+      if (materialization) {
+        const currentInstance = await tx.campaignInstance.findFirst({
+          where: {
+            id: instanceId,
+            currentSnapshotId: materialization.snapshotId,
+          },
+          select: { id: true },
+        });
+        if (!currentInstance) {
+          throw new ConflictException(
+            "The Campaign Instance snapshot changed; review the Character sheet again.",
+          );
+        }
+        await tx.domainRecord.upsert({
+          where: {
+            resource_id: { resource: "characters", id: characterId },
+          },
+          create: {
+            resource: "characters",
+            id: characterId,
+            kind: "campaign-instance-character-sheet",
+            name: character.characterName,
+            data: materialization.data,
+          },
+          update: {
+            kind: "campaign-instance-character-sheet",
+            name: character.characterName,
+            data: materialization.data,
+            revision: { increment: 1 },
+          },
+        });
+      }
       const updated = await tx.campaignInstanceCharacterAssociation.updateMany({
         where: {
           characterId,
@@ -581,27 +602,70 @@ export class CampaignInstanceCharactersService {
   }
 }
 
-function importedCharacterData(
+function importedCharacterDraftData(
   value: Prisma.JsonValue,
-  characterId: string,
-  membershipId: string,
   name: string,
-): Prisma.InputJsonObject {
-  if (!isJsonObject(value) || !isJsonObject(value.identity)) {
+): {
+  name: string;
+  backgroundDefinitionId?: string;
+  professionDefinitionId?: string;
+  heritageDefinitionIds: Prisma.InputJsonArray;
+  attributeAssignments: Prisma.InputJsonObject;
+  startingEquipmentIds: Prisma.InputJsonArray;
+  biography?: string;
+  imageAssetIds: Prisma.InputJsonObject;
+} {
+  if (!isJsonObject(value)) {
     throw new ConflictException(
       "The source Character sheet cannot be imported safely.",
     );
   }
   return {
-    ...value,
-    identity: {
-      ...value.identity,
-      id: characterId,
-      revision: 1,
-    },
     name,
-    ownerMembershipId: membershipId,
+    ...(typeof value.backgroundDefinitionId === "string"
+      ? { backgroundDefinitionId: value.backgroundDefinitionId }
+      : {}),
+    ...(typeof value.professionDefinitionId === "string"
+      ? { professionDefinitionId: value.professionDefinitionId }
+      : {}),
+    heritageDefinitionIds: jsonStringArray(value.heritageDefinitionIds),
+    attributeAssignments: jsonNumberRecord(value.attributeAssignments),
+    startingEquipmentIds: jsonStringArray(value.startingEquipmentDefinitionIds),
+    ...(typeof value.biography === "string"
+      ? { biography: value.biography }
+      : {}),
+    imageAssetIds: jsonStringRecord(value.imageAssetIds),
   };
+}
+
+function jsonStringArray(
+  value: Prisma.JsonValue | undefined,
+): Prisma.InputJsonArray {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function jsonNumberRecord(
+  value: Prisma.JsonValue | undefined,
+): Prisma.InputJsonObject {
+  if (!isJsonObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number",
+    ),
+  );
+}
+
+function jsonStringRecord(
+  value: Prisma.JsonValue | undefined,
+): Prisma.InputJsonObject {
+  if (!isJsonObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
 }
 
 function isJsonObject(

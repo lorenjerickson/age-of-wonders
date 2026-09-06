@@ -3,6 +3,9 @@ import { CampaignInstanceCharactersService } from "./campaign-instance-character
 
 function harness() {
   const tx = {
+    campaignInstance: {
+      findFirst: jest.fn().mockResolvedValue({ id: "instance-1" }),
+    },
     campaignInstanceHumanMembership: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       update: jest.fn().mockResolvedValue({}),
@@ -21,7 +24,10 @@ function harness() {
       create: jest.fn().mockResolvedValue({}),
     },
     campaignInstanceAuditEvent: { create: jest.fn().mockResolvedValue({}) },
-    domainRecord: { create: jest.fn().mockResolvedValue({}) },
+    domainRecord: {
+      create: jest.fn().mockResolvedValue({}),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
   };
   const prisma = {
     campaignInstanceHumanMembership: { findFirst: jest.fn() },
@@ -32,10 +38,23 @@ function harness() {
       operation(tx),
     ),
   };
+  const characterDrafts = {
+    activationMaterialization: jest.fn().mockResolvedValue({
+      snapshotId: "instance-snapshot-1",
+      data: {
+        identity: { id: "character-1", version: { revision: 1 } },
+        ownerMembershipId: "membership-1",
+      },
+    }),
+  };
   return {
     prisma,
     tx,
-    service: new CampaignInstanceCharactersService(prisma as never),
+    characterDrafts,
+    service: new CampaignInstanceCharactersService(
+      prisma as never,
+      characterDrafts as never,
+    ),
   };
 }
 
@@ -148,7 +167,7 @@ describe("CampaignInstanceCharactersService", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it("copies Character sheet data into a distinct destination identity", async () => {
+  it("copies imported sheet choices into a distinct destination draft", async () => {
     const { service, prisma, tx } = harness();
     prisma.campaignInstanceHumanMembership.findFirst.mockResolvedValue({
       id: "membership-destination",
@@ -169,7 +188,10 @@ describe("CampaignInstanceCharactersService", () => {
         identity: { id: "source-character", revision: 7 },
         name: "Aster Vale",
         ownerMembershipId: "source-membership",
-        campaignStatus: "active",
+        backgroundDefinitionId: "background-scout",
+        professionDefinitionId: "profession-ranger",
+        heritageDefinitionIds: ["heritage-riverfolk"],
+        attributeAssignments: { might: 75 },
       },
     });
 
@@ -181,26 +203,48 @@ describe("CampaignInstanceCharactersService", () => {
       name: "Aster Recast",
     });
 
-    expect(tx.domainRecord.create).toHaveBeenCalledWith({
-      // Jest asymmetric matchers are intentionally dynamic at this assertion boundary.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    expect(tx.campaignInstanceCharacterDraft.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        resource: "characters",
+        campaignInstanceId: "instance-1",
+        playerMembershipId: "membership-destination",
         name: "Aster Recast",
-        // Jest asymmetric matchers are intentionally dynamic at this assertion boundary.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        data: expect.objectContaining({
-          name: "Aster Recast",
-          ownerMembershipId: "membership-destination",
-          // Jest asymmetric matchers are intentionally dynamic at this assertion boundary.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          identity: expect.objectContaining({ revision: 1 }),
-        }),
-      }),
+        backgroundDefinitionId: "background-scout",
+        professionDefinitionId: "profession-ranger",
+        heritageDefinitionIds: ["heritage-riverfolk"],
+      }) as unknown,
     });
   });
 
-  it("blocks Character activation until its sheet belongs to the destination membership", async () => {
+  it("blocks Character activation until its Instance-bound draft is approved", async () => {
+    const { service, prisma, tx, characterDrafts } = harness();
+    prisma.campaignInstanceCharacterAssociation.findFirst.mockResolvedValue({
+      characterId: "character-1",
+      characterName: "Aster Vale",
+      status: "DRAFT",
+      playerMembershipId: "membership-1",
+      campaignInstance: { name: "Tuesday Glasswake" },
+      playerMembership: {
+        status: "ACTIVE",
+        displayName: "River",
+        playerProfile: { standing: "ACTIVE" },
+      },
+    });
+    characterDrafts.activationMaterialization.mockRejectedValue(
+      new ConflictException("The Character sheet requires GM approval."),
+    );
+
+    await expect(
+      service.changeCharacterStatus("instance-1", "character-1", "gm-1", {
+        expectedStatus: "draft",
+        targetStatus: "active",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      tx.campaignInstanceCharacterAssociation.updateMany,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("materializes the approved snapshot-stamped sheet during activation", async () => {
     const { service, prisma, tx } = harness();
     prisma.campaignInstanceCharacterAssociation.findFirst.mockResolvedValue({
       characterId: "character-1",
@@ -214,9 +258,37 @@ describe("CampaignInstanceCharactersService", () => {
         playerProfile: { standing: "ACTIVE" },
       },
     });
-    prisma.domainRecord.findUnique.mockResolvedValue({
-      data: { ownerMembershipId: "another-membership" },
+
+    await service.changeCharacterStatus("instance-1", "character-1", "gm-1", {
+      expectedStatus: "draft",
+      targetStatus: "active",
     });
+
+    expect(tx.domainRecord.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          kind: "campaign-instance-character-sheet",
+          name: "Aster Vale",
+        }) as unknown,
+      }),
+    );
+  });
+
+  it("rejects activation if the Instance snapshot changes before materialization", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.campaignInstanceCharacterAssociation.findFirst.mockResolvedValue({
+      characterId: "character-1",
+      characterName: "Aster Vale",
+      status: "DRAFT",
+      playerMembershipId: "membership-1",
+      campaignInstance: { name: "Tuesday Glasswake" },
+      playerMembership: {
+        status: "ACTIVE",
+        displayName: "River",
+        playerProfile: { standing: "ACTIVE" },
+      },
+    });
+    tx.campaignInstance.findFirst.mockResolvedValue(null);
 
     await expect(
       service.changeCharacterStatus("instance-1", "character-1", "gm-1", {
@@ -224,6 +296,7 @@ describe("CampaignInstanceCharactersService", () => {
         targetStatus: "active",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.domainRecord.upsert).not.toHaveBeenCalled();
     expect(
       tx.campaignInstanceCharacterAssociation.updateMany,
     ).not.toHaveBeenCalled();

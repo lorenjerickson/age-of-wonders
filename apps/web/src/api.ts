@@ -53,6 +53,7 @@ import type {
   PlayerCampaignInstanceCharacterDraftListProjection,
   PlayerCampaignInstanceCharacterDraftProjection,
   PlayerCharacterCreationOptionsProjection,
+  CampaignInstanceCharacterReviewProjection,
   SystemSettingArea,
   SystemSettingAreaProjection,
   SystemSettingsIndexProjection,
@@ -1892,6 +1893,11 @@ export function updatePlayerCharacterSelections(
   character: CharacterDraft,
   selections: CharacterSelections,
   name?: string,
+  details: {
+    attributeAssignments?: Record<string, number>;
+    startingEquipmentIds?: string[];
+    biography?: string;
+  } = {},
 ) {
   return request<PlayerCampaignInstanceCharacterDraftProjection>(
     playerCharactersPath(
@@ -1906,10 +1912,83 @@ export function updatePlayerCharacterSelections(
         backgroundDefinitionId: selections.backgroundId,
         professionDefinitionId: selections.professionId,
         heritageDefinitionIds: selections.heritageIds,
+        ...details,
         expectedRevision: character.revision,
       }),
     },
   ).then((updated) => ({ character: characterDraftFromApi(updated) }));
+}
+
+export function rollPlayerCharacterAttributes(
+  campaignInstanceId: string,
+  character: CharacterDraft,
+) {
+  return request<PlayerCampaignInstanceCharacterDraftProjection>(
+    playerCharactersPath(
+      campaignInstanceId,
+      `/${encodeURIComponent(character.id)}/attribute-rolls`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: character.revision }),
+    },
+  ).then((updated) => ({ character: characterDraftFromApi(updated) }));
+}
+
+export function submitPlayerCharacterForReview(
+  campaignInstanceId: string,
+  character: CharacterDraft,
+) {
+  return request<PlayerCampaignInstanceCharacterDraftProjection>(
+    playerCharactersPath(
+      campaignInstanceId,
+      `/${encodeURIComponent(character.id)}/actions/submit-for-review`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: character.revision }),
+    },
+  ).then((updated) => ({ character: characterDraftFromApi(updated) }));
+}
+
+export function getCampaignInstanceCharacterReview(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  characterId: string,
+) {
+  return request<CampaignInstanceCharacterReviewProjection>(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/characters/${encodeURIComponent(characterId)}/review`,
+    ),
+  );
+}
+
+export function reviewCampaignInstanceCharacter(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  characterId: string,
+  input: {
+    expectedRevision: number;
+    decision: "approve" | "request-changes";
+    note?: string;
+  },
+) {
+  return request<CampaignInstanceCharacterReviewProjection>(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/characters/${encodeURIComponent(characterId)}/actions/review`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 interface RawCharacterDraft {
@@ -1920,6 +1999,12 @@ interface RawCharacterDraft {
   backgroundDefinitionId?: string | null;
   professionDefinitionId?: string | null;
   heritageDefinitionIds?: unknown;
+  attributeRolls?: unknown;
+  attributeAssignments?: unknown;
+  startingEquipmentIds?: unknown;
+  biography?: string | null;
+  reviewNote?: string | null;
+  validationIssues?: unknown;
   updatedAt?: string;
 }
 
@@ -1939,7 +2024,44 @@ function characterDraftFromApi(draft: RawCharacterDraft): CharacterDraft {
           )
         : [],
     },
+    attributeRolls: Array.isArray(draft.attributeRolls)
+      ? draft.attributeRolls.filter(
+          (value): value is number => typeof value === "number",
+        )
+      : [],
+    attributeAssignments: numericRecord(draft.attributeAssignments),
+    startingEquipmentIds: Array.isArray(draft.startingEquipmentIds)
+      ? draft.startingEquipmentIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    biography: draft.biography ?? undefined,
+    reviewNote: draft.reviewNote ?? undefined,
+    validationIssues: Array.isArray(draft.validationIssues)
+      ? draft.validationIssues.filter(isCharacterValidationIssue)
+      : [],
   };
+}
+
+function numericRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number",
+    ),
+  );
+}
+
+function isCharacterValidationIssue(
+  value: unknown,
+): value is { code: string; field: string; message: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const issue = value as Record<string, unknown>;
+  return (
+    typeof issue.code === "string" &&
+    typeof issue.field === "string" &&
+    typeof issue.message === "string"
+  );
 }
 
 export function checkHealth() {

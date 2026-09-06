@@ -40,6 +40,7 @@ import {
   getCampaignInstancePlots,
   getCampaignInstancePreparation,
   getCampaignInstanceRoster,
+  getCampaignInstanceCharacterReview,
   getCampaignInstanceSessions,
   getCampaignSession,
   getCampaignSessionEvents,
@@ -53,6 +54,7 @@ import {
   joinCampaignSession,
   listPlayers,
   saveCampaignInstancePreparation,
+  reviewCampaignInstanceCharacter,
   selectCampaignInstanceCharacter,
   updateCampaignInstanceAgent,
   updateCampaignInstanceInvitation,
@@ -101,6 +103,7 @@ import type {
   PlayerDirectoryItem,
   PlayerProfileId,
   CharacterId,
+  CampaignInstanceCharacterReviewProjection,
 } from "@aow/common";
 
 const pageClass = "mx-auto max-w-6xl px-6 py-12 lg:px-10";
@@ -1067,6 +1070,9 @@ export function CampaignInstanceRosterPage() {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterMembershipId, setCharacterMembershipId] = useState("");
+  const [characterReview, setCharacterReview] =
+    useState<CampaignInstanceCharacterReviewProjection>();
+  const [characterReviewNote, setCharacterReviewNote] = useState("");
   const invitationDirty = Boolean(
     invitedName.trim() || email.trim() || phone.trim() || role !== "player",
   );
@@ -1245,6 +1251,64 @@ export function CampaignInstanceRosterPage() {
         caught instanceof Error
           ? caught.message
           : "The Character could not be changed.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openCharacterReview(characterId: string) {
+    setBusy(`review:${characterId}`);
+    setError("");
+    try {
+      const review = await getCampaignInstanceCharacterReview(
+        instance.campaignDefinitionId,
+        instance.id,
+        characterId,
+      );
+      setCharacterReview(review);
+      setCharacterReviewNote(review.reviewNote ?? "");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not load the Character review.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function decideCharacterReview(
+    decision: "approve" | "request-changes",
+  ) {
+    if (!characterReview) return;
+    setBusy(`review:${characterReview.characterId}`);
+    setError("");
+    try {
+      const review = await reviewCampaignInstanceCharacter(
+        instance.campaignDefinitionId,
+        instance.id,
+        characterReview.characterId,
+        {
+          expectedRevision: characterReview.draftRevision,
+          decision,
+          note: characterReviewNote.trim() || undefined,
+        },
+      );
+      setCharacterReview(review);
+      setCharacterReviewNote(review.reviewNote ?? "");
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not record the Character review.",
       );
     } finally {
       setBusy("");
@@ -1556,6 +1620,123 @@ export function CampaignInstanceRosterPage() {
                 Create draft
               </Button>
             </form>
+            {characterReview && (
+              <section className="mt-4 rounded-box border border-primary/30 bg-primary/[0.06] p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
+                      Character review
+                    </p>
+                    <h3 className="mt-1 text-xl font-semibold">
+                      {characterReview.characterName}
+                    </h3>
+                    <p className="mt-1 text-sm text-base-content/60">
+                      Player: {characterReview.playerName} ·{" "}
+                      {statusLabel(characterReview.reviewStatus)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    tone="ghost"
+                    onClick={() => setCharacterReview(undefined)}
+                  >
+                    Close review
+                  </Button>
+                </div>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div>
+                    <dt className="text-base-content/55">Background</dt>
+                    <dd className="font-medium">
+                      {characterReview.backgroundName ?? "Not selected"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-base-content/55">Profession</dt>
+                    <dd className="font-medium">
+                      {characterReview.professionName ?? "Not selected"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-base-content/55">Heritage</dt>
+                    <dd className="font-medium">
+                      {characterReview.heritageNames.join(", ") ||
+                        "Not selected"}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {characterReview.attributes.map((attribute) => (
+                    <div
+                      key={attribute.name}
+                      className="rounded-box bg-base-100 px-3 py-2 text-sm"
+                    >
+                      <span className="text-base-content/55">
+                        {attribute.name}
+                      </span>{" "}
+                      <strong>{attribute.score ?? "Unassigned"}</strong>
+                    </div>
+                  ))}
+                </div>
+                {characterReview.startingEquipmentNames.length > 0 && (
+                  <p className="mt-4 text-sm">
+                    <span className="text-base-content/55">
+                      Starting equipment:
+                    </span>
+                    {characterReview.startingEquipmentNames.join(", ")}
+                  </p>
+                )}
+                {characterReview.biography && (
+                  <p className="mt-4 whitespace-pre-wrap text-sm">
+                    {characterReview.biography}
+                  </p>
+                )}
+                {characterReview.validationIssues.length > 0 && (
+                  <Alert tone="warning" className="mt-4">
+                    {characterReview.validationIssues
+                      .map((issue) => issue.message)
+                      .join(" ")}
+                  </Alert>
+                )}
+                <Label className="mt-4 block">
+                  Review note
+                  <Textarea
+                    className="mt-2 w-full"
+                    maxLength={2_000}
+                    value={characterReviewNote}
+                    onChange={(event) =>
+                      setCharacterReviewNote(event.currentTarget.value)
+                    }
+                  />
+                </Label>
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  {(characterReview.reviewStatus === "ready-for-review" ||
+                    characterReview.reviewStatus === "complete") && (
+                    <Button
+                      type="button"
+                      tone="outline"
+                      loading={busy === `review:${characterReview.characterId}`}
+                      onClick={() =>
+                        void decideCharacterReview("request-changes")
+                      }
+                    >
+                      Request changes
+                    </Button>
+                  )}
+                  {characterReview.reviewStatus === "ready-for-review" && (
+                    <Button
+                      type="button"
+                      tone="primary"
+                      loading={busy === `review:${characterReview.characterId}`}
+                      disabled={characterReview.validationIssues.length > 0}
+                      onClick={() => void decideCharacterReview("approve")}
+                    >
+                      Approve Character
+                    </Button>
+                  )}
+                </div>
+              </section>
+            )}
             <ul className="mt-4 grid gap-3 md:grid-cols-2">
               {data.characters.map((character) => (
                 <li
@@ -1570,9 +1751,20 @@ export function CampaignInstanceRosterPage() {
                   </p>
                   <p className="mt-1 text-xs">
                     {statusLabel(character.status)} ·{" "}
-                    {statusLabel(character.readiness)}
+                    {statusLabel(character.sheetStatus)}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      tone="ghost"
+                      disabled={busy === `review:${character.characterId}`}
+                      onClick={() =>
+                        void openCharacterReview(character.characterId)
+                      }
+                    >
+                      Review sheet
+                    </Button>
                     {characterTargets(character.status)
                       .filter(
                         (target) =>

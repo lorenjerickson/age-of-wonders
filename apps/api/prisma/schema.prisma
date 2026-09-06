@@ -348,6 +348,7 @@ model User {
   authoredSessionEvents                      CampaignSessionEvent[]                  @relation("CampaignSessionEventActor")
   createdSessionBoundaries                   CampaignSessionRuntimeBoundary[]        @relation("CampaignSessionBoundaryActor")
   createdSessionSummaries                    CampaignSessionSummary[]                @relation("CampaignSessionSummaryAuthor")
+  reviewedCampaignInstanceCharacterDrafts    CampaignInstanceCharacterDraft[]        @relation("CampaignInstanceCharacterDraftReviewer")
 }
 
 /// Installation-level operator established during first launch. This role is
@@ -1377,15 +1378,21 @@ model CampaignInstanceCharacterDraft {
   startingEquipmentIds   Json                                 @default("[]")
   biography              String?
   imageAssetIds          Json                                 @default("{}")
+  submittedAt            DateTime?
+  reviewedAt             DateTime?
+  reviewedByUserId       String?
+  reviewNote             String?
   createdAt              DateTime                             @default(now())
   updatedAt              DateTime                             @updatedAt
   campaignInstance       CampaignInstance                     @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_campaignInstanceId_fkey")
   playerMembership       CampaignInstanceHumanMembership      @relation(fields: [campaignInstanceId, playerMembershipId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_membership_fkey")
   character              CampaignInstanceCharacterAssociation @relation(fields: [campaignInstanceId, playerMembershipId, characterId], references: [campaignInstanceId, playerMembershipId, characterId], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_character_fkey")
+  reviewedBy             User?                                @relation("CampaignInstanceCharacterDraftReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict, map: "InstanceCharacterDraft_reviewer_fkey")
 
   @@unique([campaignInstanceId, playerMembershipId, characterId], map: "InstanceCharacterDraft_membership_character_key")
   @@index([campaignInstanceId, playerMembershipId, status], map: "InstanceCharacterDraft_membership_status_idx")
   @@index([playerMembershipId, status], map: "InstanceCharacterDraft_player_status_idx")
+  @@index([reviewedByUserId, reviewedAt], map: "InstanceCharacterDraft_reviewer_idx")
 }
 
 /// Immutable compatible Campaign/World capture used by a Campaign Instance.

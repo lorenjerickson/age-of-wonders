@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -84,6 +86,22 @@ export class CampaignInstanceCharacterDraftsController {
     @Body() dto: ExpectedPlayerCharacterDraftRevisionDto,
   ) {
     return this.drafts.rollAttributes(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto.expectedRevision,
+    );
+  }
+
+  @Post(":characterId/actions/submit-for-review")
+  @HttpCode(HttpStatus.OK)
+  submitForReview(
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedPlayerCharacterDraftRevisionDto,
+  ) {
+    return this.drafts.submitForReview(
       campaignInstanceId,
       characterId,
       request.user!.id,

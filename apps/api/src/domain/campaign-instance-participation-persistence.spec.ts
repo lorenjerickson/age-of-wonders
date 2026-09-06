@@ -9,6 +9,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const characterCompletionMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260912000000_character_completion_review/migration.sql",
+  ),
+  "utf8",
+);
+
 describe("Campaign Instance participation migration", () => {
   it("enforces same-Instance relationships with composite foreign keys", () => {
     expect(migration).toContain(
@@ -32,7 +40,7 @@ describe("Campaign Instance participation migration", () => {
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "CampaignInstanceSession_single_active_installation_key"',
     );
-    expect(migration).toContain('WHERE "status" = \'ACTIVE\'');
+    expect(migration).toContain("WHERE \"status\" = 'ACTIVE'");
   });
 
   it("enforces lifecycle-consistent provider associations, invitations, and Sessions", () => {
@@ -65,9 +73,7 @@ describe("Campaign Instance participation migration", () => {
     expect(migration).toContain(
       '"is_namespaced_key_array"("observeCapabilities")',
     );
-    expect(migration).toContain(
-      '"is_namespaced_key_array"("actCapabilities")',
-    );
+    expect(migration).toContain('"is_namespaced_key_array"("actCapabilities")');
   });
 
   it("stores identity and invitation secrets only in protected forms", () => {
@@ -81,5 +87,32 @@ describe("Campaign Instance participation migration", () => {
     expect(migration).toContain('"tokenHash" TEXT NOT NULL');
     expect(migration).not.toContain('"providerSubject" TEXT');
     expect(migration).not.toContain('"token" TEXT');
+  });
+});
+
+describe("Campaign Instance Character completion migration", () => {
+  it("persists review provenance without weakening the Instance relationship", () => {
+    expect(characterCompletionMigration).toContain(
+      'ADD COLUMN "reviewedByUserId" TEXT',
+    );
+    expect(characterCompletionMigration).toContain(
+      'FOREIGN KEY ("reviewedByUserId") REFERENCES "User"("id")',
+    );
+    expect(characterCompletionMigration).toContain(
+      'CREATE INDEX "InstanceCharacterDraft_reviewer_idx"',
+    );
+  });
+
+  it("backfills resumable drafts for existing Character associations", () => {
+    expect(characterCompletionMigration).toContain(
+      'INSERT INTO "CampaignInstanceCharacterDraft"',
+    );
+    expect(characterCompletionMigration).toContain(
+      'FROM "CampaignInstanceCharacterAssociation" association',
+    );
+    expect(characterCompletionMigration).toContain("'IN_PROGRESS'");
+    expect(characterCompletionMigration).toContain(
+      'WHERE draft."characterId" IS NULL',
+    );
   });
 });

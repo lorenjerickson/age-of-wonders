@@ -24,6 +24,8 @@ import { CampaignInstanceManagementService } from "./campaign-instance-managemen
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import { CampaignInstancesService } from "./campaign-instances.service";
 import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
+import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
+import { ReviewCampaignInstanceCharacterDto } from "./dto/campaign-instance-character-draft.dto";
 import {
   ApplyCampaignInstanceMigrationDto,
   ApplyCampaignInstanceRestoreDto,
@@ -61,6 +63,8 @@ export class CampaignInstanceHierarchyController {
     private readonly migrations: CampaignInstanceMigrationsService,
     @Inject(CampaignInstanceCharactersService)
     private readonly charactersService: CampaignInstanceCharactersService,
+    @Inject(CampaignInstanceCharacterDraftsService)
+    private readonly characterDraftsService: CampaignInstanceCharacterDraftsService,
   ) {}
 
   private async scope(
@@ -360,6 +364,39 @@ export class CampaignInstanceHierarchyController {
   ) {
     await this.scope(campaignDefinitionId, campaignInstanceId, request);
     return this.charactersService.changeCharacterStatus(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/characters/:characterId/review")
+  async characterReview(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.reviewDetail(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+    );
+  }
+
+  @Post(":campaignInstanceId/characters/:characterId/actions/review")
+  @HttpCode(HttpStatus.OK)
+  async reviewCharacter(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ReviewCampaignInstanceCharacterDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.review(
       campaignInstanceId,
       characterId,
       request.user!.id,

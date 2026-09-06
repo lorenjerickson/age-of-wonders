@@ -8,6 +8,7 @@ import {
   SelectField,
   StatusIndicator,
   TextInput,
+  TextareaField,
 } from "@aow/ui";
 import {
   createPlayerCharacter,
@@ -15,6 +16,8 @@ import {
   getPlayerCharacter,
   listPlayerCharacters,
   logout,
+  rollPlayerCharacterAttributes,
+  submitPlayerCharacterForReview,
   updatePlayerCharacterSelections,
 } from "./api";
 import {
@@ -82,8 +85,10 @@ function CharacterRoster({
                     </h3>
                     <p className="text-sm text-base-content/55">
                       {character.status === "complete"
-                        ? "Profile complete"
-                        : "Creation in progress"}
+                        ? "Approved by the Game Master"
+                        : character.status === "ready-for-review"
+                          ? "Awaiting Game Master review"
+                          : "Creation in progress"}
                     </p>
                   </div>
                 </InternalLink>
@@ -128,17 +133,20 @@ function ChoiceSelect({
   label,
   value,
   options,
+  disabled,
   onChange,
 }: {
   label: string;
   value: string;
   options: CharacterOptions["backgrounds"];
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const selected = options.find((option) => option.id === value);
   return (
     <SelectField
       required
+      disabled={disabled}
       label={label}
       help={selected?.description}
       value={value}
@@ -167,6 +175,13 @@ function CharacterDraftEditor({
     heritageIds: [],
   });
   const [name, setName] = useState("");
+  const [attributeAssignments, setAttributeAssignments] = useState<
+    Record<string, number>
+  >({});
+  const [startingEquipmentIds, setStartingEquipmentIds] = useState<string[]>(
+    [],
+  );
+  const [biography, setBiography] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -179,6 +194,9 @@ function CharacterDraftEditor({
         setDraft(character);
         setName(character.name ?? "");
         setSelections({ heritageIds: [], ...character.selections });
+        setAttributeAssignments(character.attributeAssignments);
+        setStartingEquipmentIds(character.startingEquipmentIds);
+        setBiography(character.biography ?? "");
         setOptions(result);
       },
       (caught: unknown) =>
@@ -201,10 +219,14 @@ function CharacterDraftEditor({
         draft,
         selections,
         name.trim(),
+        { attributeAssignments, startingEquipmentIds, biography },
       );
       setDraft(character);
       setName(character.name ?? "");
       setSelections({ heritageIds: [], ...character.selections });
+      setAttributeAssignments(character.attributeAssignments);
+      setStartingEquipmentIds(character.startingEquipmentIds);
+      setBiography(character.biography ?? "");
       setMessage("Choices saved. You can safely return later.");
     } catch (caught) {
       if (
@@ -233,6 +255,60 @@ function CharacterDraftEditor({
     }
   }
 
+  async function rollAttributes() {
+    if (!draft) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const { character } = await rollPlayerCharacterAttributes(
+        campaignInstanceId,
+        draft,
+      );
+      setDraft(character);
+      setAttributeAssignments({});
+      setMessage(
+        "Attribute rolls generated. Assign one to every Attribute and leave two unused.",
+      );
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Could not generate Attribute rolls.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitForReview() {
+    if (!draft || !selectionsComplete(selections)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const { character: saved } = await updatePlayerCharacterSelections(
+        campaignInstanceId,
+        draft,
+        selections,
+        name.trim(),
+        { attributeAssignments, startingEquipmentIds, biography },
+      );
+      const { character } = await submitPlayerCharacterForReview(
+        campaignInstanceId,
+        saved,
+      );
+      setDraft(character);
+      setMessage("Submitted to your Game Master for review.");
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Could not submit the Character for review.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!draft || !options)
     return (
       <StatusIndicator
@@ -243,6 +319,11 @@ function CharacterDraftEditor({
     );
   const maximumHeritages = options.maximumHeritages ?? 1;
   const heritageIds = selections.heritageIds ?? [];
+  const editable = draft.status === "in-progress";
+  const rollCounts = draft.attributeRolls.reduce<Map<number, number>>(
+    (counts, score) => counts.set(score, (counts.get(score) ?? 0) + 1),
+    new Map(),
+  );
 
   return (
     <form className="grid gap-6" onSubmit={save}>
@@ -257,10 +338,25 @@ function CharacterDraftEditor({
           {characterDisplayName(draft)}
         </h1>
         <p className="mt-2 text-base-content/55">
-          Choose the foundations of this character. Your saved work remains
-          available between visits.
+          Complete the captured choices and Attributes for this Campaign
+          Instance. Your saved work remains available between visits.
         </p>
       </div>
+      {draft.status === "ready-for-review" && (
+        <Alert>
+          Awaiting Game Master review. Your submitted sheet is locked.
+        </Alert>
+      )}
+      {draft.status === "complete" && (
+        <Alert tone="success">
+          Your Game Master approved this Character. It is ready for activation.
+        </Alert>
+      )}
+      {draft.reviewNote && (
+        <Alert tone={editable ? "warning" : "info"}>
+          Game Master note: {draft.reviewNote}
+        </Alert>
+      )}
       <section className="card border border-base-300 bg-base-200 shadow-xl">
         <div className="card-body grid gap-6">
           <div>
@@ -271,6 +367,7 @@ function CharacterDraftEditor({
           </div>
           <TextInput
             required
+            disabled={!editable}
             label="Character name"
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
@@ -288,6 +385,7 @@ function CharacterDraftEditor({
             label="Background"
             value={selections.backgroundId ?? ""}
             options={options.backgrounds}
+            disabled={!editable}
             onChange={(backgroundId) =>
               setSelections({ ...selections, backgroundId })
             }
@@ -296,6 +394,7 @@ function CharacterDraftEditor({
             label="Profession"
             value={selections.professionId ?? ""}
             options={options.professions}
+            disabled={!editable}
             onChange={(professionId) =>
               setSelections({ ...selections, professionId })
             }
@@ -318,7 +417,7 @@ function CharacterDraftEditor({
                       help={option.description}
                       className="mt-1"
                       checked={checked}
-                      disabled={disabled}
+                      disabled={disabled || !editable}
                       onChange={() =>
                         setSelections({
                           ...selections,
@@ -333,17 +432,128 @@ function CharacterDraftEditor({
               })}
             </div>
           </div>
-          {message && <Alert>{message}</Alert>}
-          <div className="card-actions justify-end">
-            <Button
-              type="submit"
-              tone="primary"
-              loading={busy}
-              disabled={!name.trim() || !selectionsComplete(selections)}
-            >
-              Save and continue later
-            </Button>
+          <div className="border-t border-base-300 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="card-title">Attributes</h2>
+                <HelpText>
+                  The captured Character model determines this editable list.
+                  Generate {options.attributeRollCount} rolls, assign one to
+                  every Attribute, and leave two unused.
+                </HelpText>
+              </div>
+              {editable && (
+                <Button
+                  type="button"
+                  tone="outline"
+                  disabled={busy}
+                  onClick={() => void rollAttributes()}
+                >
+                  {draft.attributeRolls.length ? "Reroll" : "Generate rolls"}
+                </Button>
+              )}
+            </div>
+            {draft.attributeRolls.length > 0 && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {options.attributes.map((attribute) => {
+                  const current = attributeAssignments[attribute.id];
+                  const usedByOthers = Object.entries(attributeAssignments)
+                    .filter(([id]) => id !== attribute.id)
+                    .reduce<Map<number, number>>(
+                      (counts, [, score]) =>
+                        counts.set(score, (counts.get(score) ?? 0) + 1),
+                      new Map(),
+                    );
+                  const values = [...new Set(draft.attributeRolls)];
+                  return (
+                    <SelectField
+                      key={attribute.id}
+                      required
+                      disabled={!editable}
+                      label={attribute.name}
+                      value={current ?? ""}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value);
+                        setAttributeAssignments((assignments) => ({
+                          ...assignments,
+                          [attribute.id]: value,
+                        }));
+                      }}
+                    >
+                      <option value="">Assign a roll</option>
+                      {values.map((score) => (
+                        <option
+                          key={score}
+                          value={score}
+                          disabled={
+                            score !== current &&
+                            (usedByOthers.get(score) ?? 0) >=
+                              (rollCounts.get(score) ?? 0)
+                          }
+                        >
+                          {score}
+                        </option>
+                      ))}
+                    </SelectField>
+                  );
+                })}
+              </div>
+            )}
           </div>
+          {options.startingEquipment.length > 0 && (
+            <div className="border-t border-base-300 pt-6">
+              <FieldLabel>Starting equipment</FieldLabel>
+              <HelpText>Choose any equipment granted at creation.</HelpText>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {options.startingEquipment.map((option) => (
+                  <Checkbox
+                    key={option.id}
+                    label={option.name}
+                    help={option.description}
+                    checked={startingEquipmentIds.includes(option.id)}
+                    disabled={!editable}
+                    onChange={() =>
+                      setStartingEquipmentIds((ids) =>
+                        ids.includes(option.id)
+                          ? ids.filter((id) => id !== option.id)
+                          : [...ids, option.id],
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          <TextareaField
+            disabled={!editable}
+            label="Biography"
+            help="Optional public Character background and notes."
+            maxLength={4_000}
+            value={biography}
+            onChange={(event) => setBiography(event.currentTarget.value)}
+          />
+          {message && <Alert>{message}</Alert>}
+          {editable && (
+            <div className="card-actions justify-end">
+              <Button
+                type="submit"
+                tone="primary"
+                loading={busy}
+                disabled={!name.trim() || !selectionsComplete(selections)}
+              >
+                Save and continue later
+              </Button>
+              <Button
+                type="button"
+                tone="primary"
+                loading={busy}
+                disabled={!name.trim() || !selectionsComplete(selections)}
+                onClick={() => void submitForReview()}
+              >
+                Submit for review
+              </Button>
+            </div>
+          )}
         </div>
       </section>
     </form>

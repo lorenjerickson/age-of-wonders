@@ -15,6 +15,36 @@ import type {
   UpdatePlayerCampaignInstanceCharacterDraftDto,
 } from "./dto/campaign-instance-character-draft.dto";
 
+type CharacterCreationOption = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+type CharacterAttributeOption = {
+  id: string;
+  name: string;
+  minimum: number;
+  maximum: number;
+};
+
+type CharacterCreationContext = {
+  campaignInstanceSnapshotId: string;
+  backgrounds: CharacterCreationOption[];
+  professions: CharacterCreationOption[];
+  heritages: CharacterCreationOption[];
+  attributes: CharacterAttributeOption[];
+  startingEquipment: CharacterCreationOption[];
+  maximumHeritages: number;
+  attributeRollCount: number;
+};
+
+type CharacterValidationIssue = {
+  code: string;
+  field: string;
+  message: string;
+};
+
 @Injectable()
 export class CampaignInstanceCharacterDraftsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -97,9 +127,9 @@ export class CampaignInstanceCharacterDraftsService {
       characterId,
       userId,
     );
-    if (draft.status === CharacterDraftStatus.COMPLETE) {
+    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
       throw new BadRequestException(
-        "A completed Character sheet is immutable.",
+        "A Character sheet under review or already approved is immutable.",
       );
     }
     await this.validateDefinitionSelections(campaignInstanceId, userId, dto);
@@ -157,12 +187,13 @@ export class CampaignInstanceCharacterDraftsService {
       characterId,
       userId,
     );
-    if (draft.status === CharacterDraftStatus.COMPLETE) {
+    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
       throw new BadRequestException(
-        "A completed Character sheet is immutable.",
+        "A Character sheet under review or already approved is immutable.",
       );
     }
-    const rolls = Array.from({ length: STANDARD_ATTRIBUTES.length + 2 }, () =>
+    const creation = await this.creationContext(campaignInstanceId);
+    const rolls = Array.from({ length: creation.attributeRollCount }, () =>
       randomInt(1, 101),
     );
     const updated = await this.prisma.campaignInstanceCharacterDraft.updateMany(
@@ -186,12 +217,379 @@ export class CampaignInstanceCharacterDraftsService {
     return this.get(campaignInstanceId, characterId, userId);
   }
 
+  async submitForReview(
+    campaignInstanceId: string,
+    characterId: string,
+    userId: string,
+    expectedRevision: number,
+  ) {
+    const draft = await this.ownedDraft(
+      campaignInstanceId,
+      characterId,
+      userId,
+    );
+    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
+      throw new ConflictException(
+        "This Character sheet is not available for submission.",
+      );
+    }
+    const issues = validateCompleteDraft(
+      draft,
+      await this.creationContext(campaignInstanceId),
+    );
+    if (issues.length) {
+      throw new BadRequestException(issues.map((issue) => issue.message));
+    }
+    const submittedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.campaignInstanceCharacterDraft.updateMany({
+        where: {
+          characterId,
+          campaignInstanceId,
+          playerMembershipId: draft.playerMembershipId,
+          status: CharacterDraftStatus.IN_PROGRESS,
+          revision: expectedRevision,
+        },
+        data: {
+          status: CharacterDraftStatus.READY_FOR_REVIEW,
+          submittedAt,
+          reviewedAt: null,
+          reviewedByUserId: null,
+          reviewNote: null,
+          revision: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException(
+          "Character sheet changed; reload and retry.",
+        );
+      }
+      await tx.campaignInstanceAuditEvent.create({
+        data: {
+          campaignInstanceId,
+          actorUserId: userId,
+          action: "instance.character.submitted-for-review",
+          subjectName: draft.name ?? "Unnamed Character",
+          subjectType: "Character",
+          detail: { playerName: draft.playerMembership.displayName },
+        },
+      });
+    });
+    return this.get(campaignInstanceId, characterId, userId);
+  }
+
   async options(campaignInstanceId: string, userId: string) {
-    const membership = await this.playerMembership(campaignInstanceId, userId);
-    const manifest =
-      membership.campaignInstance.currentSnapshot?.worldDefinitionSnapshot
-        .manifest;
-    if (!isCanonicalSnapshotManifest(manifest)) {
+    await this.playerMembership(campaignInstanceId, userId);
+    const creation = await this.creationContext(campaignInstanceId);
+    return {
+      backgrounds: creation.backgrounds,
+      professions: creation.professions,
+      heritages: creation.heritages,
+      attributes: creation.attributes,
+      startingEquipment: creation.startingEquipment,
+      maximumHeritages: creation.maximumHeritages,
+      attributeRollCount: creation.attributeRollCount,
+    };
+  }
+
+  async reviewDetail(
+    campaignInstanceId: string,
+    characterId: string,
+    ownerUserId: string,
+  ) {
+    const draft = await this.gmDraft(
+      campaignInstanceId,
+      characterId,
+      ownerUserId,
+    );
+    const creation = await this.creationContext(campaignInstanceId);
+    const issues = validateCompleteDraft(draft, creation);
+    return {
+      campaignInstanceName: draft.campaignInstance.name,
+      characterId: draft.characterId,
+      characterName: draft.name ?? "Unnamed Character",
+      playerName: draft.playerMembership.displayName,
+      characterStatus: draft.character.status.toLowerCase(),
+      draftRevision: draft.revision,
+      reviewStatus: draft.status.toLowerCase().replaceAll("_", "-"),
+      backgroundName: optionName(
+        creation.backgrounds,
+        draft.backgroundDefinitionId,
+      ),
+      professionName: optionName(
+        creation.professions,
+        draft.professionDefinitionId,
+      ),
+      heritageNames: stringArray(draft.heritageDefinitionIds).flatMap((id) => {
+        const name = optionName(creation.heritages, id);
+        return name ? [name] : [];
+      }),
+      attributes: creation.attributes.map((attribute) => ({
+        name: attribute.name,
+        score: numberRecord(draft.attributeAssignments)[attribute.id],
+      })),
+      startingEquipmentNames: stringArray(draft.startingEquipmentIds).flatMap(
+        (id) => {
+          const name = optionName(creation.startingEquipment, id);
+          return name ? [name] : [];
+        },
+      ),
+      ...(draft.biography ? { biography: draft.biography } : {}),
+      ...(draft.submittedAt
+        ? { submittedAt: draft.submittedAt.toISOString() }
+        : {}),
+      ...(draft.reviewedAt
+        ? { reviewedAt: draft.reviewedAt.toISOString() }
+        : {}),
+      ...(draft.reviewNote ? { reviewNote: draft.reviewNote } : {}),
+      validationIssues: issues,
+    };
+  }
+
+  async review(
+    campaignInstanceId: string,
+    characterId: string,
+    ownerUserId: string,
+    input: {
+      expectedRevision: number;
+      decision: "approve" | "request-changes";
+      note?: string;
+    },
+  ) {
+    const draft = await this.gmDraft(
+      campaignInstanceId,
+      characterId,
+      ownerUserId,
+    );
+    if (draft.character.status === "ACTIVE") {
+      throw new ConflictException(
+        "An active Character sheet cannot return to review.",
+      );
+    }
+    const allowed =
+      draft.status === CharacterDraftStatus.READY_FOR_REVIEW ||
+      (input.decision === "request-changes" &&
+        draft.status === CharacterDraftStatus.COMPLETE);
+    if (!allowed) {
+      throw new ConflictException(
+        "The Character sheet is not in a reviewable state.",
+      );
+    }
+    if (input.decision === "approve") {
+      const issues = validateCompleteDraft(
+        draft,
+        await this.creationContext(campaignInstanceId),
+      );
+      if (issues.length) {
+        throw new BadRequestException(issues.map((issue) => issue.message));
+      }
+    }
+    const reviewedAt = new Date();
+    const note = input.note?.trim() || null;
+    const targetStatus =
+      input.decision === "approve"
+        ? CharacterDraftStatus.COMPLETE
+        : CharacterDraftStatus.IN_PROGRESS;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.campaignInstanceCharacterDraft.updateMany({
+        where: {
+          characterId,
+          campaignInstanceId,
+          revision: input.expectedRevision,
+          status: draft.status,
+        },
+        data: {
+          status: targetStatus,
+          reviewedAt,
+          reviewedByUserId: ownerUserId,
+          reviewNote: note,
+          revision: { increment: 1 },
+        },
+      });
+      if (result.count !== 1) {
+        throw new ConflictException(
+          "Character sheet changed; reload and retry.",
+        );
+      }
+      await tx.campaignInstanceAuditEvent.create({
+        data: {
+          campaignInstanceId,
+          actorUserId: ownerUserId,
+          action:
+            input.decision === "approve"
+              ? "instance.character.review-approved"
+              : "instance.character.changes-requested",
+          subjectName: draft.name ?? "Unnamed Character",
+          subjectType: "Character",
+          detail: { playerName: draft.playerMembership.displayName, note },
+        },
+      });
+      return result;
+    });
+    void updated;
+    return this.reviewDetail(campaignInstanceId, characterId, ownerUserId);
+  }
+
+  async activationMaterialization(
+    campaignInstanceId: string,
+    characterId: string,
+    ownerUserId: string,
+  ) {
+    const draft = await this.gmDraft(
+      campaignInstanceId,
+      characterId,
+      ownerUserId,
+    );
+    if (draft.status !== CharacterDraftStatus.COMPLETE) {
+      throw new ConflictException(
+        "The Character sheet requires GM approval before activation.",
+      );
+    }
+    const creation = await this.creationContext(campaignInstanceId);
+    const issues = validateCompleteDraft(draft, creation);
+    if (issues.length) {
+      throw new ConflictException(
+        "The approved Character sheet no longer conforms to this Campaign Instance snapshot. Request changes and review it again.",
+      );
+    }
+    const approvedAt = draft.reviewedAt ?? new Date();
+    return {
+      snapshotId: creation.campaignInstanceSnapshotId,
+      sourceDraftRevision: draft.revision,
+      data: {
+        identity: {
+          id: draft.characterId,
+          version: {
+            revision: 1,
+            updatedAt: approvedAt.toISOString(),
+          },
+        },
+        campaignInstanceId,
+        campaignInstanceSnapshotId: creation.campaignInstanceSnapshotId,
+        ownerMembershipId: draft.playerMembershipId,
+        sourceDraftRevision: draft.revision,
+        name: draft.name!,
+        backgroundDefinitionId: draft.backgroundDefinitionId!,
+        professionDefinitionId: draft.professionDefinitionId!,
+        heritageDefinitionIds: stringArray(draft.heritageDefinitionIds),
+        attributeAssignments: numberRecord(draft.attributeAssignments),
+        startingEquipmentDefinitionIds: stringArray(draft.startingEquipmentIds),
+        ...(draft.biography ? { biography: draft.biography } : {}),
+        imageAssetIds: stringRecord(draft.imageAssetIds),
+        approvedAt: approvedAt.toISOString(),
+      } satisfies Prisma.InputJsonObject,
+    };
+  }
+
+  private async validateDefinitionSelections(
+    campaignInstanceId: string,
+    userId: string,
+    dto: UpdatePlayerCampaignInstanceCharacterDraftDto,
+  ) {
+    if (
+      dto.backgroundDefinitionId === undefined &&
+      dto.professionDefinitionId === undefined &&
+      dto.heritageDefinitionIds === undefined &&
+      dto.attributeAssignments === undefined &&
+      dto.startingEquipmentIds === undefined
+    ) {
+      return;
+    }
+    await this.playerMembership(campaignInstanceId, userId);
+    const allowed = await this.creationContext(campaignInstanceId);
+    const selections = [
+      ["background", dto.backgroundDefinitionId, allowed.backgrounds],
+      ["profession", dto.professionDefinitionId, allowed.professions],
+    ] as const;
+    for (const [kind, id, options] of selections) {
+      if (id && !options.some((option) => option.id === id)) {
+        throw new BadRequestException(
+          `Selected ${kind} is not available in this Campaign Instance snapshot.`,
+        );
+      }
+    }
+    for (const id of dto.heritageDefinitionIds ?? []) {
+      if (!allowed.heritages.some((option) => option.id === id)) {
+        throw new BadRequestException(
+          "Selected heritage is not available in this Campaign Instance snapshot.",
+        );
+      }
+    }
+    if (
+      dto.heritageDefinitionIds &&
+      dto.heritageDefinitionIds.length > allowed.maximumHeritages
+    ) {
+      throw new BadRequestException(
+        `Choose no more than ${allowed.maximumHeritages} heritage option.`,
+      );
+    }
+    const attributeById = new Map(
+      allowed.attributes.map((attribute) => [attribute.id, attribute]),
+    );
+    for (const [id, score] of Object.entries(dto.attributeAssignments ?? {})) {
+      const attribute = attributeById.get(id);
+      if (
+        !attribute ||
+        !Number.isInteger(score) ||
+        score < attribute.minimum ||
+        score > attribute.maximum
+      ) {
+        throw new BadRequestException(
+          "An Attribute assignment is not valid for this Campaign Instance snapshot.",
+        );
+      }
+    }
+    for (const id of dto.startingEquipmentIds ?? []) {
+      if (!allowed.startingEquipment.some((option) => option.id === id)) {
+        throw new BadRequestException(
+          "Selected starting equipment is not available in this Campaign Instance snapshot.",
+        );
+      }
+    }
+  }
+
+  private async creationContext(
+    campaignInstanceId: string,
+  ): Promise<CharacterCreationContext> {
+    const instance = await this.prisma.campaignInstance.findUnique({
+      where: { id: campaignInstanceId },
+      select: {
+        currentSnapshot: {
+          select: {
+            id: true,
+            campaignDefinitionSnapshot: {
+              select: {
+                campaignDefinitionRevision: { select: { content: true } },
+              },
+            },
+            worldDefinitionSnapshot: {
+              select: {
+                manifest: true,
+                worldDefinitionRevision: {
+                  select: {
+                    modelSchemaSelections: {
+                      orderBy: { selectionOrder: "asc" },
+                      select: {
+                        modelSchemaRelease: {
+                          select: {
+                            id: true,
+                            dependencies: true,
+                            elementSelections: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const snapshot = instance?.currentSnapshot;
+    const manifest = snapshot?.worldDefinitionSnapshot.manifest;
+    if (!snapshot || !isCanonicalSnapshotManifest(manifest)) {
       throw new ConflictException(
         "Character choices are unavailable from this Campaign Instance snapshot.",
       );
@@ -206,39 +604,103 @@ export class CampaignInstanceCharacterDraftsService {
             : [],
         )
         .sort((left, right) => left.name.localeCompare(right.name));
-    return {
-      backgrounds: byKind("background"),
-      professions: byKind("profession"),
-      heritages: byKind("heritage"),
-      maximumHeritages: 1,
-    };
-  }
-
-  private async validateDefinitionSelections(
-    campaignInstanceId: string,
-    userId: string,
-    dto: UpdatePlayerCampaignInstanceCharacterDraftDto,
-  ) {
-    if (
-      dto.backgroundDefinitionId === undefined &&
-      dto.professionDefinitionId === undefined &&
-      dto.heritageDefinitionIds === undefined
-    ) {
-      return;
-    }
-    const allowed = await this.options(campaignInstanceId, userId);
-    const selections = [
-      ["background", dto.backgroundDefinitionId, allowed.backgrounds],
-      ["profession", dto.professionDefinitionId, allowed.professions],
-      ["heritage", dto.heritageDefinitionIds?.[0], allowed.heritages],
-    ] as const;
-    for (const [kind, id, options] of selections) {
-      if (id && !options.some((option) => option.id === id)) {
-        throw new BadRequestException(
-          `Selected ${kind} is not available in this Campaign Instance snapshot.`,
+    const releaseSelections =
+      snapshot.worldDefinitionSnapshot.worldDefinitionRevision
+        .modelSchemaSelections;
+    const campaignReleaseIds = stringArrayFromObject(
+      snapshot.campaignDefinitionSnapshot.campaignDefinitionRevision.content,
+      "modelSchemaReleaseIds",
+    );
+    const campaignReleases = campaignReleaseIds.length
+      ? await this.prisma.modelSchemaRelease.findMany({
+          where: { id: { in: campaignReleaseIds } },
+          select: { id: true, dependencies: true, elementSelections: true },
+        })
+      : [];
+    const releases = new Map(
+      [
+        ...releaseSelections.map((selection) => selection.modelSchemaRelease),
+        ...campaignReleases,
+      ].map((release) => [release.id, release]),
+    );
+    let pendingDependencyIds = [...releases.values()]
+      .flatMap((release) => modelReleaseDependencyIds(release.dependencies))
+      .filter((id) => !releases.has(id));
+    while (pendingDependencyIds.length) {
+      const dependencies = await this.prisma.modelSchemaRelease.findMany({
+        where: { id: { in: [...new Set(pendingDependencyIds)] } },
+        select: { id: true, dependencies: true, elementSelections: true },
+      });
+      pendingDependencyIds = [];
+      for (const dependency of dependencies) {
+        if (releases.has(dependency.id)) continue;
+        releases.set(dependency.id, dependency);
+        pendingDependencyIds.push(
+          ...modelReleaseDependencyIds(dependency.dependencies).filter(
+            (id) => !releases.has(id),
+          ),
         );
       }
     }
+    const elementRevisionIds = [...releases.values()].flatMap((release) =>
+      modelElementRevisionIds(release.elementSelections),
+    );
+    const modelElements = elementRevisionIds.length
+      ? await this.prisma.modelElementRevision.findMany({
+          where: { id: { in: [...new Set(elementRevisionIds)] } },
+          select: {
+            id: true,
+            payload: true,
+            presentation: true,
+            element: { select: { id: true, key: true, semanticRole: true } },
+          },
+        })
+      : [];
+    const attributes = modelElements
+      .filter((revision) => revision.element.semanticRole === "aow:attribute")
+      .map((revision) => attributeOption(revision))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const effectiveAttributes = attributes.length
+      ? attributes
+      : STANDARD_ATTRIBUTES.map((attribute) => ({
+          id: attribute,
+          name: title(attribute),
+          minimum: 0,
+          maximum: 100,
+        }));
+    return {
+      campaignInstanceSnapshotId: snapshot.id,
+      backgrounds: byKind("background"),
+      professions: byKind("profession"),
+      heritages: byKind("heritage"),
+      attributes: effectiveAttributes,
+      startingEquipment: byKind("item"),
+      maximumHeritages: 1,
+      attributeRollCount: effectiveAttributes.length + 2,
+    };
+  }
+
+  private async gmDraft(
+    campaignInstanceId: string,
+    characterId: string,
+    ownerUserId: string,
+  ) {
+    const draft = await this.prisma.campaignInstanceCharacterDraft.findFirst({
+      where: {
+        characterId,
+        campaignInstanceId,
+        campaignInstance: { ownerUserId },
+      },
+      include: {
+        campaignInstance: { select: { name: true } },
+        playerMembership: { select: { displayName: true } },
+        character: { select: { status: true } },
+      },
+    });
+    if (!draft) {
+      throw new NotFoundException("The selected Character was not found.");
+    }
+    return draft;
   }
 
   private async ownedDraft(
@@ -257,7 +719,10 @@ export class CampaignInstanceCharacterDraftsService {
           playerProfile: { standing: "ACTIVE" },
         },
       },
-      include: { campaignInstance: { select: { name: true } } },
+      include: {
+        campaignInstance: { select: { name: true } },
+        playerMembership: { select: { displayName: true } },
+      },
     });
     if (!draft) {
       throw new NotFoundException("The selected Character was not found.");
@@ -313,6 +778,10 @@ type CharacterDraftRow = {
   startingEquipmentIds: Prisma.JsonValue;
   biography: string | null;
   imageAssetIds: Prisma.JsonValue;
+  submittedAt: Date | null;
+  reviewedAt: Date | null;
+  reviewedByUserId: string | null;
+  reviewNote: string | null;
   updatedAt: Date;
 };
 
@@ -339,6 +808,12 @@ function draftProjection(
     startingEquipmentIds: stringArray(draft.startingEquipmentIds),
     ...(draft.biography ? { biography: draft.biography } : {}),
     imageAssetIds: stringRecord(draft.imageAssetIds),
+    ...(draft.submittedAt
+      ? { submittedAt: draft.submittedAt.toISOString() }
+      : {}),
+    ...(draft.reviewedAt ? { reviewedAt: draft.reviewedAt.toISOString() } : {}),
+    ...(draft.reviewNote ? { reviewNote: draft.reviewNote } : {}),
+    validationIssues: [],
     updatedAt: draft.updatedAt.toISOString(),
   };
 }
@@ -388,4 +863,191 @@ function numberRecord(value: Prisma.JsonValue): Record<string, number> {
       (entry): entry is [string, number] => typeof entry[1] === "number",
     ),
   );
+}
+
+function modelElementRevisionIds(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((selection) => {
+    if (!isObject(selection)) return [];
+    return typeof selection.elementRevisionId === "string"
+      ? [selection.elementRevisionId]
+      : [];
+  });
+}
+
+function modelReleaseDependencyIds(value: Prisma.JsonValue): string[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) =>
+        isObject(entry) && typeof entry.releaseId === "string"
+          ? [entry.releaseId]
+          : [],
+      )
+    : [];
+}
+
+function stringArrayFromObject(value: Prisma.JsonValue, key: string): string[] {
+  return isObject(value) && Array.isArray(value[key])
+    ? value[key].filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function attributeOption(revision: {
+  payload: Prisma.JsonValue;
+  presentation: Prisma.JsonValue;
+  element: { id: string; key: string; semanticRole: string };
+}): CharacterAttributeOption {
+  const payload = isObject(revision.payload) ? revision.payload : {};
+  const metadata = isObject(payload.valueMetadata) ? payload.valueMetadata : {};
+  const presentation = isObject(revision.presentation)
+    ? revision.presentation
+    : {};
+  return {
+    id: revision.element.id,
+    name:
+      typeof presentation.label === "string" && presentation.label.trim()
+        ? presentation.label.trim()
+        : title(revision.element.key.split(":").at(-1) ?? "Attribute"),
+    minimum:
+      typeof metadata["aow:minimum"] === "number" ? metadata["aow:minimum"] : 0,
+    maximum:
+      typeof metadata["aow:maximum"] === "number"
+        ? metadata["aow:maximum"]
+        : 100,
+  };
+}
+
+function optionName(
+  options: readonly CharacterCreationOption[],
+  id: string | null,
+): string | undefined {
+  return id ? options.find((option) => option.id === id)?.name : undefined;
+}
+
+function title(value: string): string {
+  return value
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function validateCompleteDraft(
+  draft: CharacterDraftRow,
+  creation: CharacterCreationContext,
+): CharacterValidationIssue[] {
+  const issues: CharacterValidationIssue[] = [];
+  const add = (code: string, field: string, message: string) =>
+    issues.push({ code, field, message });
+  if (!draft.name?.trim()) {
+    add("name-required", "name", "Enter a Character name.");
+  }
+  if (
+    !draft.backgroundDefinitionId ||
+    !creation.backgrounds.some(
+      (option) => option.id === draft.backgroundDefinitionId,
+    )
+  ) {
+    add(
+      "background-required",
+      "backgroundDefinitionId",
+      "Choose an available Background.",
+    );
+  }
+  if (
+    !draft.professionDefinitionId ||
+    !creation.professions.some(
+      (option) => option.id === draft.professionDefinitionId,
+    )
+  ) {
+    add(
+      "profession-required",
+      "professionDefinitionId",
+      "Choose an available Profession.",
+    );
+  }
+  const heritages = stringArray(draft.heritageDefinitionIds);
+  if (
+    heritages.length !== 1 ||
+    heritages.some(
+      (id) => !creation.heritages.some((option) => option.id === id),
+    )
+  ) {
+    add(
+      "heritage-required",
+      "heritageDefinitionIds",
+      "Choose one available Heritage.",
+    );
+  }
+  const rolls = numberArray(draft.attributeRolls);
+  if (
+    rolls.length !== creation.attributeRollCount ||
+    rolls.some((score) => !Number.isInteger(score) || score < 1 || score > 100)
+  ) {
+    add(
+      "attribute-rolls-required",
+      "attributeRolls",
+      `Generate all ${creation.attributeRollCount} Attribute rolls.`,
+    );
+  }
+  const assignments = numberRecord(draft.attributeAssignments);
+  const allowedAttributeIds = new Set(
+    creation.attributes.map((attribute) => attribute.id),
+  );
+  if (
+    Object.keys(assignments).length !== creation.attributes.length ||
+    Object.keys(assignments).some((id) => !allowedAttributeIds.has(id))
+  ) {
+    add(
+      "attribute-assignments-incomplete",
+      "attributeAssignments",
+      "Assign one roll to every captured Attribute.",
+    );
+  }
+  for (const attribute of creation.attributes) {
+    const score = assignments[attribute.id];
+    if (
+      score === undefined ||
+      !Number.isInteger(score) ||
+      score < attribute.minimum ||
+      score > attribute.maximum
+    ) {
+      add(
+        "attribute-score-invalid",
+        "attributeAssignments",
+        `${attribute.name} requires a score between ${attribute.minimum} and ${attribute.maximum}.`,
+      );
+    }
+  }
+  if (rolls.length === creation.attributeRollCount) {
+    const available = new Map<number, number>();
+    rolls.forEach((roll) =>
+      available.set(roll, (available.get(roll) ?? 0) + 1),
+    );
+    const invalidAssignment = Object.values(assignments).some((score) => {
+      const remaining = available.get(score) ?? 0;
+      if (remaining < 1) return true;
+      available.set(score, remaining - 1);
+      return false;
+    });
+    if (invalidAssignment) {
+      add(
+        "attribute-roll-mismatch",
+        "attributeAssignments",
+        "Every assigned Attribute score must use one generated roll.",
+      );
+    }
+  }
+  const equipment = stringArray(draft.startingEquipmentIds);
+  if (
+    equipment.some(
+      (id) => !creation.startingEquipment.some((option) => option.id === id),
+    )
+  ) {
+    add(
+      "starting-equipment-invalid",
+      "startingEquipmentIds",
+      "Starting equipment must come from this Campaign Instance snapshot.",
+    );
+  }
+  return issues;
 }

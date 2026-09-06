@@ -9,10 +9,12 @@ import type {
   CampaignInstanceId,
   CampaignInstanceInvitationId,
   CampaignInstanceMembershipId,
+  CampaignInstanceSnapshotId,
   CampaignMembershipId,
   CharacterCreationDraftId,
   CharacterId,
   DefinitionId,
+  MediaAssetId,
   NamespacedKey,
   PartialAttributeCollection,
   PlayerProfileId,
@@ -483,7 +485,7 @@ export interface CharacterCreationValidationIssue {
   readonly message: string;
 }
 
-/** Resumable player-authored input for one already Instance-bound CharacterState. */
+/** Resumable player-authored input for one already Instance-bound Character sheet. */
 export interface CharacterCreationDraft {
   readonly identity: StateIdentity<CharacterCreationDraftId>;
   readonly campaignInstanceId: CampaignInstanceId;
@@ -504,5 +506,30 @@ export interface CharacterCreationDraft {
   readonly startingEquipmentDefinitionIds?: readonly DefinitionId[];
   readonly biography?: string;
   readonly playerDeclaredCompleteAt?: string;
+  readonly reviewedAt?: string;
+  readonly reviewNote?: string;
   readonly validationIssues: readonly CharacterCreationValidationIssue[];
+}
+
+/**
+ * Snapshot-stamped, GM-approved Character sheet materialized for one Campaign Instance.
+ * This is creation output, not a fabricated complete CharacterState; runtime systems may
+ * compile it with captured Profession, Heritage, Item, and Rule definitions as needed.
+ */
+export interface CampaignInstanceCharacterSheet {
+  readonly identity: StateIdentity<CharacterId>;
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly campaignInstanceSnapshotId: CampaignInstanceSnapshotId;
+  readonly ownerMembershipId: CampaignInstanceMembershipId;
+  readonly sourceDraftRevision: number;
+  readonly name: string;
+  readonly backgroundDefinitionId: DefinitionId;
+  readonly professionDefinitionId: DefinitionId;
+  readonly heritageDefinitionIds: readonly DefinitionId[];
+  /** Keys are captured, extensible Attribute model identities—not a closed built-in enum. */
+  readonly attributeAssignments: Readonly<Record<string, AttributeScore>>;
+  readonly startingEquipmentDefinitionIds: readonly DefinitionId[];
+  readonly biography?: string;
+  readonly imageAssetIds: Readonly<Record<string, MediaAssetId>>;
+  readonly approvedAt: string;
 }

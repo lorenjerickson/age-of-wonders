@@ -660,24 +660,10 @@ export class CampaignInstanceManagementService {
           status: true,
           playerMembershipId: true,
           playerMembership: { select: { displayName: true } },
+          draft: { select: { status: true } },
         },
       }),
     ]);
-    const characterSheets = characters.length
-      ? await this.prisma.domainRecord.findMany({
-          where: {
-            resource: "characters",
-            id: { in: characters.map((character) => character.characterId) },
-          },
-          select: { id: true, data: true },
-        })
-      : [];
-    const characterSheetOwners = new Map(
-      characterSheets.map((sheet) => [
-        sheet.id,
-        objectValue(sheet.data).ownerMembershipId,
-      ]),
-    );
     return {
       campaignInstanceId: id,
       campaignInstanceName: instance.name,
@@ -713,9 +699,13 @@ export class CampaignInstanceManagementService {
         name: row.characterName,
         playerName: row.playerMembership.displayName,
         status: row.status.toLowerCase(),
+        sheetStatus:
+          row.draft?.status.toLowerCase().replaceAll("_", "-") ?? "in-progress",
         readiness:
-          row.status !== "DRAFT" ||
-          characterSheetOwners.get(row.characterId) === row.playerMembershipId
+          row.status === "ACTIVE" ||
+          row.status === "RETIRED" ||
+          row.status === "DEAD" ||
+          row.draft?.status === "COMPLETE"
             ? "ready"
             : "blocked",
       })),
