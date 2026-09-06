@@ -483,17 +483,13 @@ export interface CharacterCreationValidationIssue {
   readonly message: string;
 }
 
-/**
- * @deprecated Uses CampaignId and CampaignMembershipId. A replacement draft contract must use
- * CampaignInstanceId and CampaignInstanceMembershipId; retained for legacy callers.
- * Resumable player-authored input used to create one CharacterState.
- */
+/** Resumable player-authored input for one already Instance-bound CharacterState. */
 export interface CharacterCreationDraft {
   readonly identity: StateIdentity<CharacterCreationDraftId>;
-  readonly campaignId: CampaignId;
-  readonly ownerMembershipId: CampaignMembershipId;
-  /** Populated once a creature-backed character aggregate has been allocated. */
-  readonly characterId?: CharacterId;
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly ownerMembershipId: CampaignInstanceMembershipId;
+  /** Allocated with the draft so Character identity can never float between Instances. */
+  readonly characterId: CharacterId;
   readonly status: CharacterCreationDraftStatus;
   readonly name?: string;
   readonly backgroundId?: DefinitionId;

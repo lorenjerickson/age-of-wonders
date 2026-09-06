@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-legacy-removal-tranche-complete
+status: active-implementation-plan-character-sheet-tranche-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -22,18 +22,19 @@ an isolated naming cleanup.
 ## Delivery status
 
 The Session, Campaign Instance, Campaign/World authoring, identity/participation, initial
-system-boundary, and first legacy-removal waves are implemented. Canonical GM routes enforce Campaign Definition, Campaign
-Instance, and World ancestry; public invitation entry points live beneath `/api/invitations`; and
-authenticated locator and participant projections live beneath `/api/me`. First-party web callers
-use the canonical authoring roots `/api/worlds` and `/api/campaigns`. The former
+system-boundary, legacy-removal, and Instance-native Character-sheet waves are implemented.
+Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
+invitation entry points live beneath `/api/invitations`; and authenticated locator and participant
+projections live beneath `/api/me`. First-party web callers use the canonical authoring roots
+`/api/worlds` and `/api/campaigns`. The former
 `/api/world-definitions`, `/api/campaign-definitions`, top-level Campaign Instance and Session,
 implementation-named participation, generic domain, raw graph, ambiguous Campaign invitation, and
 destructive root-Location World routes are no longer registered.
 
 Route families not named in the completed-wave sections remain target architecture, not
-claims of completed implementation. Character sheet authoring, the Auth0 adapter, writable secret
-and operational Settings, and fully contextual World/Campaign AI and media commands remain
-separate follow-up work.
+claims of completed implementation. Character completion/review, the Auth0 adapter, writable secret
+and operational Settings, and fully contextual World/Campaign AI and media commands remain separate
+follow-up work.
 
 ## Binding route principles
 
@@ -125,6 +126,10 @@ separate follow-up work.
 /api/invitations/session/resolve
 /api/invitations/session/respond
 /api/me/resumable-session
+/api/me/campaign-instances/:campaignInstanceId/characters
+/api/me/campaign-instances/:campaignInstanceId/characters/options
+/api/me/campaign-instances/:campaignInstanceId/characters/:characterId
+/api/me/campaign-instances/:campaignInstanceId/characters/:characterId/attribute-rolls
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/presence
 /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/events
@@ -148,8 +153,8 @@ integrity.
 | `/api/campaign-instances`                     | Instance creation, runtime, roster, migrations, restores, Sessions     | Removed after migration beneath stable Campaign Definition ancestry                                  | Use `/api/campaigns/:campaignDefinitionId/instances`                                                                                          |
 | `/api/campaign-instance-invitations`          | Public Instance/Session token workflows and participant Session access | Removed after token and participant operations moved to `/api/invitations` and `/api/me`             | Do not restore or generate                                                                                                                    |
 | `/api/campaigns/:campaignId/invitations`      | Legacy Campaign membership/invitation                                  | Removed; the ambiguous identity cannot be translated safely                                          | Use Instance-owned memberships and invitations                                                                                                |
-| `/api/campaigns/:campaignId/character-drafts` | Legacy Campaign-scoped Character creation                              | Removed; the ambiguous identity cannot be translated safely                                          | Instance-native Character sheets remain a required follow-up                                                                                  |
-| `/api/character-drafts`                       | User draft listing and edits                                           | Resumable user task can be top-level, but its target Instance must be explicit                       | Move listing to `/api/me/character-drafts`; create beneath an Instance or require an immutable Instance association                           |
+| `/api/campaigns/:campaignId/character-drafts` | Legacy Campaign-scoped Character creation                              | Removed; the ambiguous identity cannot be translated safely                                          | Use `/api/me/campaign-instances/:campaignInstanceId/characters` for the authenticated Player                                                  |
+| `/api/character-drafts`                       | Legacy user draft listing and edits                                    | Removed after the Instance-native Character sheet workflow shipped                                   | Do not restore; every operation requires explicit Campaign Instance ancestry                                                                  |
 | `/api/model-registries`                       | GM-owned model registry and releases                                   | Legitimate top-level authored aggregate                                                              | Keep top-level; add explicit World adoption routes and stable release resources                                                               |
 | `/api/domain/:resource`                       | Generic CRUD for heterogeneous legacy resources                        | Removed from HTTP; internal `DomainRecord` persistence remains for migration and snapshot assembly   | Never expose it as the extension mechanism                                                                                                    |
 | `/api/ai/...`                                 | AI-assisted aggregate/content commands and generation history          | Several routes target legacy World/Location identities; generic generation can bypass owning context | Nest generation commands under canonical owners or require immutable snapshot provenance; keep `/api/ai/generations` as bounded audit history |
@@ -388,13 +393,12 @@ Terminal `retired` and `dead` Characters cannot transition back. Activating a Ch
 Character sheet owned by the same destination Player membership, and selecting for play requires
 an active Character owned by the selected Player membership.
 
-This wave establishes Character ownership shells and lifecycle/provenance. It does not claim that
-the legacy Character sheet draft editor has been realigned: contextual Instance-bound sheet
-authoring, complete captured-schema validation at activation, and first-party import selection UI
-remain follow-up work. The current activation gate enforces sheet existence and ownership but does
-not yet represent complete schema conformance. The canonical import command and database
-constraints already prevent cross-Player, cross-owner, same-Instance, or identity-preserving
-transfers.
+The Character ownership shell, lifecycle/provenance, and resumable authoring editor are now
+Instance-bound. Complete captured-schema validation and materialization at activation, plus
+first-party import selection UI, remain follow-up work. The current activation gate enforces sheet
+existence and ownership but does not yet represent complete schema conformance. The canonical
+import command and database constraints already prevent cross-Player, cross-owner, same-Instance,
+or identity-preserving transfers.
 
 ## Model, AI, media, graph, and Settings implementation wave
 
@@ -462,15 +466,14 @@ ambiguous Campaign pages. It also removes the duplicate `/join/campaign` exchang
 World `creatures`/`items` placeholders. `/join` is now a neutral invitation landing page, while
 Instance and Session credentials use `/join/instance` and `/join/session`.
 
-This tranche deliberately retains the authenticated `/api/character-drafts` workflow and its
-legacy persistence for existing Players. It is the only live HTTP compatibility surface identified
-by this inventory that lacks an Instance-native Character-sheet replacement. Its creation behavior
-still selects a legacy active Campaign membership and therefore cannot be called complete support
-for multiple Campaign Instances. The next Character realignment must introduce participant-scoped
-Instance Character sheets, migrate or archive existing drafts, move resumable tasks beneath
-`/api/me`, and only then remove these routes and legacy relational models. Migration/preflight and
-host-transfer code may continue reading internal `DomainRecord` and legacy tables; that internal
-data compatibility does not restore generic HTTP authority.
+The Character-sheet tranche removes the final live `/api/character-drafts` compatibility workflow.
+Player collection, creation, option, read, and save operations now live beneath
+`/api/me/campaign-instances/:campaignInstanceId/characters`. Creation allocates the Character's
+Instance association and resumable draft atomically; subsequent operations authorize through the
+same active Player membership and cannot rebind either parent. Options come from the World snapshot
+captured by the Instance's current snapshot. Legacy Campaign-scoped draft rows are timestamped as
+archived migration input and have no live controller or writer. Migration/preflight code may still
+inspect those rows; that internal compatibility does not restore HTTP authority.
 
 ## Compatibility and rollout
 
@@ -498,16 +501,17 @@ data compatibility does not restore generic HTTP authority.
 3. **Campaign and World authoring — complete:** product vocabulary, revision resources, Plots,
    placements, and World libraries.
 4. **Identity and participation — complete vertical slice:** first-admin bootstrap, user-level
-   provider associations, Players, Instance memberships/invitations, and Character
-   ownership/lifecycle/import boundaries. Auth0 and Character sheet/import UX remain fast follows.
+   provider associations, Players, Instance memberships/invitations, Character
+   ownership/lifecycle/import boundaries, and Instance-native resumable Character sheets. Auth0 and
+   completion/review/import UX remain fast follows.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
    adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
    authority boundaries. Writable hosted configuration and fully contextual content operations
    remain fast follows.
-6. **Legacy removal — first tranche complete:** fully replaced aliases, ambiguous `campaignId`
+6. **Legacy removal — Character tranche complete:** fully replaced aliases, ambiguous `campaignId`
    invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph
-   HTTP access, obsolete web routes, and unscoped AI commands are removed. Instance-native
-   participant Character sheets and retirement of their legacy draft persistence remain.
+   HTTP access, obsolete web routes, unscoped AI commands, and the unscoped Character-draft workflow
+   are removed. Legacy Character draft rows remain only as explicitly archived migration input.
 
 ## Acceptance criteria
 

@@ -157,6 +157,7 @@ export class CampaignInstanceInvitationsService {
             ? ("spectator" as const)
             : ("player" as const),
       },
+      campaignInstanceId: invitation.campaignInstanceId,
       campaignInstanceName: invitation.campaignInstance.name,
     };
   }

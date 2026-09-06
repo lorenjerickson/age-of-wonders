@@ -11,6 +11,7 @@ import type {
   AgentId,
   CharacterId,
   CreatureId,
+  DefinitionId,
   JsonValue,
   ItemInstanceId,
   NamespacedKey,
@@ -462,6 +463,60 @@ export interface ChangeCampaignInstanceMembershipStatusRequest {
 export interface CreateCampaignInstanceCharacterRequest {
   readonly name: string;
   readonly playerMembershipId: CampaignInstanceMembershipId;
+}
+
+export interface PlayerCampaignInstanceCharacterDraftProjection {
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly campaignInstanceName: string;
+  readonly characterId: CharacterId;
+  readonly revision: number;
+  readonly status: "in-progress" | "ready-for-review" | "complete";
+  readonly name?: string;
+  readonly backgroundDefinitionId?: DefinitionId;
+  readonly professionDefinitionId?: DefinitionId;
+  readonly heritageDefinitionIds: readonly DefinitionId[];
+  readonly attributeRolls: readonly number[];
+  readonly attributeAssignments: Readonly<Record<string, number>>;
+  readonly startingEquipmentIds: readonly DefinitionId[];
+  readonly biography?: string;
+  readonly imageAssetIds: Readonly<Record<string, string>>;
+  readonly updatedAt: string;
+}
+
+export interface PlayerCampaignInstanceCharacterDraftListProjection {
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly campaignInstanceName: string;
+  readonly items: readonly PlayerCampaignInstanceCharacterDraftProjection[];
+  readonly total: number;
+}
+
+export interface CreatePlayerCampaignInstanceCharacterRequest {
+  readonly name?: string;
+}
+
+export interface UpdatePlayerCampaignInstanceCharacterDraftRequest {
+  readonly expectedRevision: number;
+  readonly name?: string;
+  readonly backgroundDefinitionId?: DefinitionId;
+  readonly professionDefinitionId?: DefinitionId;
+  readonly heritageDefinitionIds?: readonly DefinitionId[];
+  readonly attributeAssignments?: Readonly<Record<string, number>>;
+  readonly startingEquipmentIds?: readonly DefinitionId[];
+  readonly biography?: string;
+  readonly imageAssetIds?: Readonly<Record<string, string>>;
+}
+
+export interface PlayerCharacterCreationOptionsProjection {
+  readonly backgrounds: readonly CharacterCreationOptionProjection[];
+  readonly professions: readonly CharacterCreationOptionProjection[];
+  readonly heritages: readonly CharacterCreationOptionProjection[];
+  readonly maximumHeritages: number;
+}
+
+export interface CharacterCreationOptionProjection {
+  readonly id: DefinitionId;
+  readonly name: string;
+  readonly description?: string;
 }
 
 export interface ChangeCampaignInstanceCharacterStatusRequest {

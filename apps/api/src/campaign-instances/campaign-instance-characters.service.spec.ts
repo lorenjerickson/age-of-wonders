@@ -17,6 +17,9 @@ function harness() {
       ),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    campaignInstanceCharacterDraft: {
+      create: jest.fn().mockResolvedValue({}),
+    },
     campaignInstanceAuditEvent: { create: jest.fn().mockResolvedValue({}) },
     domainRecord: { create: jest.fn().mockResolvedValue({}) },
   };
@@ -88,6 +91,13 @@ describe("CampaignInstanceCharactersService", () => {
         }),
       }),
     );
+    expect(tx.campaignInstanceCharacterDraft.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        campaignInstanceId: "instance-1",
+        playerMembershipId: "membership-1",
+        name: "Aster Vale",
+      }) as unknown,
+    });
   });
 
   it("rejects one-way import when the destination belongs to another Player", async () => {

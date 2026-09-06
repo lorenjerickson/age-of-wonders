@@ -879,11 +879,10 @@ shapes:
 /players
 /players/:playerId
 
-/me/campaigns
-/me/campaigns/:campaignInstanceId
-/me/campaigns/:campaignInstanceId/characters/:characterId
-/me/sessions/:sessionId/lobby
-/me/sessions/:sessionId/play
+/play
+/play/instances/:campaignInstanceId/characters
+/play/instances/:campaignInstanceId/characters/:characterId
+/play/instances/:campaignInstanceId/sessions/:sessionId
 /join/...
 
 /settings/system

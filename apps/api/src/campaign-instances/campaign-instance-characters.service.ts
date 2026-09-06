@@ -230,6 +230,14 @@ export class CampaignInstanceCharactersService {
           playerMembershipId: membership.id,
         },
       });
+      await tx.campaignInstanceCharacterDraft.create({
+        data: {
+          campaignInstanceId: instanceId,
+          playerMembershipId: membership.id,
+          characterId,
+          name,
+        },
+      });
       await tx.campaignInstanceAuditEvent.create({
         data: {
           campaignInstanceId: instanceId,

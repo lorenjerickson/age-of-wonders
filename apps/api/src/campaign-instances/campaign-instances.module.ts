@@ -20,6 +20,8 @@ import {
   CampaignSessionMeOverviewController,
 } from "./campaign-participation.controller";
 import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
+import { CampaignInstanceCharacterDraftsController } from "./campaign-instance-character-drafts.controller";
+import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
 
 @Module({
   imports: [NotificationsModule],
@@ -30,6 +32,7 @@ import { CampaignInstanceCharactersService } from "./campaign-instance-character
     CampaignInvitationEntryController,
     CampaignSessionMeOverviewController,
     CampaignSessionMeController,
+    CampaignInstanceCharacterDraftsController,
   ],
   providers: [
     CampaignInstancesService,
@@ -38,6 +41,7 @@ import { CampaignInstanceCharactersService } from "./campaign-instance-character
     CampaignInstanceMigrationsService,
     CampaignSessionService,
     CampaignInstanceCharactersService,
+    CampaignInstanceCharacterDraftsService,
     InvitationTokenService,
     ContactProtector,
   ],

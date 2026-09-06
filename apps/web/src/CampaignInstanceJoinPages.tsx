@@ -61,8 +61,15 @@ export function CampaignInstanceJoinPage() {
     event.preventDefault();
     state.setBusy(true);
     try {
-      await acceptCampaignInstanceInvitation(state.token.current);
-      await navigate("/play/characters", { replace: true });
+      const result = await acceptCampaignInstanceInvitation(
+        state.token.current,
+      );
+      await navigate(
+        result.user.role === "player"
+          ? `/play/instances/${encodeURIComponent(result.campaignInstanceId)}/characters`
+          : "/join",
+        { replace: true },
+      );
     } catch (caught) {
       state.setMessage(
         caught instanceof Error

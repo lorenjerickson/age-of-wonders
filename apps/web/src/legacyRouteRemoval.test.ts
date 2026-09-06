@@ -12,6 +12,8 @@ describe("legacy web surface removal", () => {
     "routes/_gm.locations.index.tsx",
     "routes/_gm.systems.index.tsx",
     "routes/join.campaign.tsx",
+    "routes/_player.play.characters.index.tsx",
+    "routes/_player.play.characters.$characterId.tsx",
   ])("does not ship %s", (relativePath) => {
     expect(existsSync(join(sourceRoot, relativePath))).toBe(false);
   });
@@ -23,6 +25,7 @@ describe("legacy web surface removal", () => {
       "/campaign-invitations/",
       "/ai/worlds",
       "/ai/locations",
+      '"/character-drafts',
     ]) {
       expect(api).not.toContain(path);
     }

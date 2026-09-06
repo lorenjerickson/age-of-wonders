@@ -1,6 +1,5 @@
 import type {
   CharacterDraft,
-  CharacterOptions,
   CharacterSelections,
 } from "./characterCreationModel";
 import type {
@@ -51,6 +50,9 @@ import type {
   ChangeCampaignInstanceCharacterStatusRequest,
   SelectCampaignInstanceCharacterRequest,
   ImportCampaignInstanceCharacterRequest,
+  PlayerCampaignInstanceCharacterDraftListProjection,
+  PlayerCampaignInstanceCharacterDraftProjection,
+  PlayerCharacterCreationOptionsProjection,
   SystemSettingArea,
   SystemSettingAreaProjection,
   SystemSettingsIndexProjection,
@@ -1540,6 +1542,7 @@ export function resolveCampaignInstanceInvitation(token: string) {
 export function acceptCampaignInstanceInvitation(token: string) {
   return request<{
     user: { displayName: string; role: "player" | "spectator" };
+    campaignInstanceId: string;
     campaignInstanceName: string;
   }>("/invitations/instance/accept", {
     method: "POST",
@@ -1839,39 +1842,62 @@ export function logout() {
   return request<void>("/auth/logout", { method: "POST" });
 }
 
-export function listPlayerCharacters() {
-  return request<RawCharacterDraft[]>("/character-drafts").then(
-    (characters) => ({ characters: characters.map(characterDraftFromApi) }),
-  );
+function playerCharactersPath(campaignInstanceId: string, suffix = "") {
+  return `/me/campaign-instances/${encodeURIComponent(campaignInstanceId)}/characters${suffix}`;
 }
 
-export function createPlayerCharacter(name: string) {
-  return request<RawCharacterDraft>("/character-drafts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  }).then((character) => ({ character: characterDraftFromApi(character) }));
+export function listPlayerCharacters(campaignInstanceId: string) {
+  return request<PlayerCampaignInstanceCharacterDraftListProjection>(
+    playerCharactersPath(campaignInstanceId),
+  ).then((result) => ({
+    campaignInstanceName: result.campaignInstanceName,
+    characters: result.items.map(characterDraftFromApi),
+  }));
 }
 
-export function getPlayerCharacter(characterId: string) {
-  return request<RawCharacterDraft>(
-    `/character-drafts/${encodeURIComponent(characterId)}`,
+export function createPlayerCharacter(
+  campaignInstanceId: string,
+  name: string,
+) {
+  return request<PlayerCampaignInstanceCharacterDraftProjection>(
+    playerCharactersPath(campaignInstanceId),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    },
   ).then((character) => ({ character: characterDraftFromApi(character) }));
 }
 
-export function getCharacterOptions(characterId: string) {
-  return request<CharacterOptions>(
-    `/character-drafts/${encodeURIComponent(characterId)}/options`,
+export function getPlayerCharacter(
+  campaignInstanceId: string,
+  characterId: string,
+) {
+  return request<PlayerCampaignInstanceCharacterDraftProjection>(
+    playerCharactersPath(
+      campaignInstanceId,
+      `/${encodeURIComponent(characterId)}`,
+    ),
+  ).then((character) => ({ character: characterDraftFromApi(character) }));
+}
+
+export function getCharacterOptions(campaignInstanceId: string) {
+  return request<PlayerCharacterCreationOptionsProjection>(
+    playerCharactersPath(campaignInstanceId, "/options"),
   );
 }
 
 export function updatePlayerCharacterSelections(
+  campaignInstanceId: string,
   character: CharacterDraft,
   selections: CharacterSelections,
   name?: string,
 ) {
-  return request<RawCharacterDraft>(
-    `/character-drafts/${encodeURIComponent(character.id)}`,
+  return request<PlayerCampaignInstanceCharacterDraftProjection>(
+    playerCharactersPath(
+      campaignInstanceId,
+      `/${encodeURIComponent(character.id)}`,
+    ),
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1887,7 +1913,7 @@ export function updatePlayerCharacterSelections(
 }
 
 interface RawCharacterDraft {
-  id: string;
+  characterId: string;
   revision: number;
   name?: string | null;
   status: string;
@@ -1899,7 +1925,7 @@ interface RawCharacterDraft {
 
 function characterDraftFromApi(draft: RawCharacterDraft): CharacterDraft {
   return {
-    id: draft.id,
+    id: draft.characterId,
     name: draft.name ?? undefined,
     status: draft.status.toLowerCase().replaceAll("_", "-"),
     revision: draft.revision,

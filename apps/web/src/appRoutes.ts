@@ -38,7 +38,7 @@ export const ROUTE_POLICIES = [
   },
   {
     family: "player character",
-    pattern: "/play[/characters/:id]",
+    pattern: "/play/instances/:campaignInstanceId/characters[/:characterId]",
     audience: "player",
     rendering: "client-island",
   },

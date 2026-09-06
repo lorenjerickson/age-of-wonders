@@ -21,9 +21,9 @@ export interface CharacterOption {
 }
 
 export interface CharacterOptions {
-  backgrounds: CharacterOption[];
-  professions: CharacterOption[];
-  heritages: CharacterOption[];
+  backgrounds: readonly CharacterOption[];
+  professions: readonly CharacterOption[];
+  heritages: readonly CharacterOption[];
   maximumHeritages?: number;
 }
 

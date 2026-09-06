@@ -660,10 +660,11 @@ revision, and snapshot workflow. They are not unversioned generic domain resourc
 
 ### Relational Campaign Instance participation persistence
 
-The additive participation spine persists the current Instance-scoped contracts without rebinding
-or removing legacy Campaign membership, invitation, Character draft, or `sessions` resource rows.
-These relational tables are not generic domain resources. Canonical first-launch, Player directory,
-membership lifecycle, and Character association/import APIs now operate on this spine:
+The participation spine persists the current Instance-scoped contracts without guessing how legacy
+Campaign membership, invitation, Character draft, or `sessions` rows should be rebound. Legacy
+Character drafts are timestamped as archived migration input and are not part of the live HTTP
+workflow. These relational tables are not generic domain resources. Canonical first-launch, Player
+directory, membership lifecycle, and Character association/import APIs now operate on this spine:
 
 | Contract or protected boundary                  | Relational table                            | Integrity boundary                                                                                                                                                                                                        |
 | ----------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -685,6 +686,7 @@ membership lifecycle, and Character association/import APIs now operate on this 
 | `CampaignSessionSummary`                        | `CampaignSessionSummary`                    | Revisioned draft/approved/amended narrative against an exact sealed event sequence; approved revisions are immutable and private GM notes remain separately projected                                                     |
 | Session integration event                       | `CampaignSessionOutboxEvent`                | Durable outbox request such as `session-backup-requested`; emitting the request is atomic with summary approval while backup execution remains external                                                                   |
 | `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation`      | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                               |
+| `CharacterCreationDraft`                        | `CampaignInstanceCharacterDraft`            | Resumable input is keyed to an already allocated Character and constrained to that Character's exact Instance and Player membership; choices come from the Instance's captured World snapshot                             |
 
 Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
 namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
@@ -1534,6 +1536,17 @@ captured-schema validation remains a stricter application-level gate still to be
 same-Instance Session, human-membership, and Agent-participation relationships without putting
 opaque identifiers into its human-readable issues.
 
+`CharacterCreationDraft` is the resumable authoring state for an already allocated, Instance-bound
+Character. Its `campaignInstanceId`, `ownerMembershipId`, and required `characterId` cannot be
+rebound. Player operations use the collection
+`/me/campaign-instances/:campaignInstanceId/characters` and member
+`/me/campaign-instances/:campaignInstanceId/characters/:characterId`; create allocates the Character
+association and draft in one transaction, reads and writes verify the authenticated active Player
+membership, and optimistic revision checks prevent lost updates. Available Background, Profession,
+and Heritage choices are read from the World snapshot captured by the Campaign Instance's current
+snapshot, never from the live evolving World Definition. The unscoped `/character-drafts` HTTP API
+has been removed.
+
 Invitation acceptance never claims a profile by heuristically matching recipient contact data. An
 invitation is bound to a known User only when the GM explicitly selects that Player profile;
 contacts can detect a collision but never select identity. Otherwise acceptance creates a new User
@@ -1541,11 +1554,10 @@ and an internal provider association. It creates a Player profile only for the `
 `CharacterState.ownerMembershipId` is a `CampaignInstanceMembershipId`; the deprecated
 singleton-Campaign membership identifier is not valid Character ownership.
 
-`CampaignMembership`, `PlayerCampaignMembership`, `NonPlayerCampaignMembership`, and
-`CharacterCreationDraft` remain deprecated compatibility contracts because their `CampaignId`
-association conflates definition and runtime scope. Existing callers may continue to use them, but
-new work uses the Campaign Instance contracts. `CharacterCreationDraft` remains a resumable,
-revisioned legacy input aggregate until an Instance-safe replacement is introduced.
+`CampaignMembership`, `PlayerCampaignMembership`, and `NonPlayerCampaignMembership` remain
+deprecated compatibility contracts because their `CampaignId` association conflates definition and
+runtime scope. Existing migration tools may continue to inspect them, but new work uses Campaign
+Instance contracts. `CharacterCreationDraft` is no longer one of those compatibility contracts.
 
 `CampaignInvitationPreview`, `CampaignInstanceInvitationPreview`,
 `CampaignInstanceInvitation`, and `CampaignInvitationDeliverySummary` are deliberately

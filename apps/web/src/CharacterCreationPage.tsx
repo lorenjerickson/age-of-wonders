@@ -26,7 +26,15 @@ import {
 } from "./characterCreationModel";
 import { InternalLink, useInternalNavigate } from "./navigation";
 
-function CharacterRoster({ characters }: { characters: CharacterDraft[] }) {
+function CharacterRoster({
+  campaignInstanceId,
+  campaignInstanceName,
+  characters,
+}: {
+  campaignInstanceId: string;
+  campaignInstanceName: string;
+  characters: CharacterDraft[];
+}) {
   const navigate = useInternalNavigate();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,8 +45,13 @@ function CharacterRoster({ characters }: { characters: CharacterDraft[] }) {
     setBusy(true);
     setMessage("");
     try {
-      const { character } = await createPlayerCharacter(name.trim());
-      await navigate(`/play/characters/${encodeURIComponent(character.id)}`);
+      const { character } = await createPlayerCharacter(
+        campaignInstanceId,
+        name.trim(),
+      );
+      await navigate(
+        `/play/instances/${encodeURIComponent(campaignInstanceId)}/characters/${encodeURIComponent(character.id)}`,
+      );
     } catch (caught) {
       setMessage(
         caught instanceof Error
@@ -52,13 +65,15 @@ function CharacterRoster({ characters }: { characters: CharacterDraft[] }) {
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
       <section>
-        <h2 className="text-2xl font-semibold">Your characters</h2>
+        <h2 className="text-2xl font-semibold">
+          Your characters in {campaignInstanceName}
+        </h2>
         {characters.length ? (
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {characters.map((character) => (
               <li key={character.id}>
                 <InternalLink
-                  href={`/play/characters/${encodeURIComponent(character.id)}`}
+                  href={`/play/instances/${encodeURIComponent(campaignInstanceId)}/characters/${encodeURIComponent(character.id)}`}
                   className="card border border-base-300 bg-base-200 transition hover:border-primary"
                 >
                   <div className="card-body gap-2 p-5">
@@ -139,7 +154,13 @@ function ChoiceSelect({
   );
 }
 
-function CharacterDraftEditor({ characterId }: { characterId: string }) {
+function CharacterDraftEditor({
+  campaignInstanceId,
+  characterId,
+}: {
+  campaignInstanceId: string;
+  characterId: string;
+}) {
   const [draft, setDraft] = useState<CharacterDraft>();
   const [options, setOptions] = useState<CharacterOptions>();
   const [selections, setSelections] = useState<CharacterSelections>({
@@ -151,8 +172,8 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
 
   useEffect(() => {
     void Promise.all([
-      getPlayerCharacter(characterId),
-      getCharacterOptions(characterId),
+      getPlayerCharacter(campaignInstanceId, characterId),
+      getCharacterOptions(campaignInstanceId),
     ]).then(
       ([{ character }, result]) => {
         setDraft(character);
@@ -167,7 +188,7 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
             : "Could not load character creation.",
         ),
     );
-  }, [characterId]);
+  }, [campaignInstanceId, characterId]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -176,6 +197,7 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
     setMessage("");
     try {
       const { character } = await updatePlayerCharacterSelections(
+        campaignInstanceId,
         draft,
         selections,
         name.trim(),
@@ -189,7 +211,10 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
         caught instanceof Error &&
         caught.message.includes("reload and retry")
       ) {
-        const { character } = await getPlayerCharacter(characterId);
+        const { character } = await getPlayerCharacter(
+          campaignInstanceId,
+          characterId,
+        );
         setDraft(character);
         setName(character.name ?? "");
         setSelections({ heritageIds: [], ...character.selections });
@@ -222,7 +247,10 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
   return (
     <form className="grid gap-6" onSubmit={save}>
       <div>
-        <InternalLink href="/play/characters" className="text-sm text-primary">
+        <InternalLink
+          href={`/play/instances/${encodeURIComponent(campaignInstanceId)}/characters`}
+          className="text-sm text-primary"
+        >
           ← All characters
         </InternalLink>
         <h1 className="mt-3 text-3xl font-semibold">
@@ -323,18 +351,24 @@ function CharacterDraftEditor({ characterId }: { characterId: string }) {
 }
 
 export function CharacterCreationPage({
+  campaignInstanceId,
   characterId,
 }: {
+  campaignInstanceId: string;
   characterId?: string;
 }) {
   const navigate = useInternalNavigate();
   const [characters, setCharacters] = useState<CharacterDraft[]>();
+  const [campaignInstanceName, setCampaignInstanceName] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (characterId) return;
-    void listPlayerCharacters().then(
-      ({ characters: result }) => setCharacters(result),
+    void listPlayerCharacters(campaignInstanceId).then(
+      ({ campaignInstanceName: instanceName, characters: result }) => {
+        setCampaignInstanceName(instanceName);
+        setCharacters(result);
+      },
       (caught: unknown) =>
         setMessage(
           caught instanceof Error
@@ -342,7 +376,7 @@ export function CharacterCreationPage({
             : "Could not load your characters.",
         ),
     );
-  }, [characterId]);
+  }, [campaignInstanceId, characterId]);
 
   return (
     <main className="min-h-dvh bg-base-100 text-base-content">
@@ -368,9 +402,16 @@ export function CharacterCreationPage({
       </header>
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
         {characterId ? (
-          <CharacterDraftEditor characterId={characterId} />
+          <CharacterDraftEditor
+            campaignInstanceId={campaignInstanceId}
+            characterId={characterId}
+          />
         ) : characters ? (
-          <CharacterRoster characters={characters} />
+          <CharacterRoster
+            campaignInstanceId={campaignInstanceId}
+            campaignInstanceName={campaignInstanceName || "this Campaign"}
+            characters={characters}
+          />
         ) : (
           <StatusIndicator
             tone={message ? "error" : "info"}

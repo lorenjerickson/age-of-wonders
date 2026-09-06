@@ -16,15 +16,15 @@ same-origin proxy; it has no database access.
 
 ## Rendering map
 
-| Route family                                                  | Audience          | Initial rendering                  | Data behavior                                                                            |
-| ------------------------------------------------------------- | ----------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| `/login`                                                      | Public            | SSG                                | Identity-independent form; login posts through `/api`.                                   |
-| `/join`, `/join/instance`, `/join/session`                    | Public invitation | SSG shell plus client exchange     | The fragment token is read, removed, exchanged, and retained only in browser state.      |
-| `/`                                                           | GM                | SSR plus hydrated form             | Health and recent World/Campaign read models are present in initial HTML.                |
-| `/worlds`, `/campaigns`, `/players`, `/settings`, `/sessions` | GM/operator       | SSR                                | Lists and status projections are loaded through server functions with cookie forwarding. |
-| World/Campaign and nested Atlas/Bestiary/Compendium editors   | GM                | Server-authenticated client island | Browser-heavy editors are code-split and excluded from server rendering.                 |
-| `/session-canvas-lab`                                         | GM                | Server-authenticated client island | Canvas DOM, event, geometry, and focus code is never evaluated for server HTML.          |
-| `/play`, `/play/characters`, `/play/characters/:id`           | Player            | Server-authenticated client island | Character workflows retain their interactive client data model.                          |
+| Route family                                                     | Audience          | Initial rendering                  | Data behavior                                                                                      |
+| ---------------------------------------------------------------- | ----------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `/login`                                                         | Public            | SSG                                | Identity-independent form; login posts through `/api`.                                             |
+| `/join`, `/join/instance`, `/join/session`                       | Public invitation | SSG shell plus client exchange     | The fragment token is read, removed, exchanged, and retained only in browser state.                |
+| `/`                                                              | GM                | SSR plus hydrated form             | Health and recent World/Campaign read models are present in initial HTML.                          |
+| `/worlds`, `/campaigns`, `/players`, `/settings`, `/sessions`    | GM/operator       | SSR                                | Lists and status projections are loaded through server functions with cookie forwarding.           |
+| World/Campaign and nested Atlas/Bestiary/Compendium editors      | GM                | Server-authenticated client island | Browser-heavy editors are code-split and excluded from server rendering.                           |
+| `/session-canvas-lab`                                            | GM                | Server-authenticated client island | Canvas DOM, event, geometry, and focus code is never evaluated for server HTML.                    |
+| `/play`, `/play/instances/:instanceId/characters{/:characterId}` | Player            | Server-authenticated client island | Character workflows are explicitly Instance-scoped and retain their interactive client data model. |
 
 Opaque identifiers remain confined to URL parameters and request state. Server-rendered labels use
 API-provided names or neutral human-readable fallbacks.

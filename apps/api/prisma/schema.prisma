@@ -532,6 +532,7 @@ model CharacterCreationDraft {
   startingEquipmentIds   Json                 @default("[]")
   biography              String?
   imageAssetIds          Json                 @default("{}")
+  archivedAt             DateTime?
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
   membership             CampaignMembership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
@@ -975,6 +976,7 @@ model CampaignInstance {
   agentParticipations    CampaignInstanceAgentParticipation[]
   sessions               CampaignInstanceSession[]
   characters             CampaignInstanceCharacterAssociation[] @relation("CharacterInstance")
+  characterDrafts        CampaignInstanceCharacterDraft[]
   characterImportSources CampaignInstanceCharacterAssociation[] @relation("CharacterImportSourceInstance")
   runtimeCheckpoints     CampaignInstanceRuntimeCheckpoint[]
   migrationAudits        CampaignInstanceMigrationAudit[]
@@ -1007,6 +1009,7 @@ model CampaignInstanceHumanMembership {
   playerProfile         PlayerProfile?                         @relation(fields: [playerProfileId, userId], references: [id, userId], onDelete: Restrict)
   acceptedInvitations   CampaignInstanceInvitation[]
   characters            CampaignInstanceCharacterAssociation[] @relation("MembershipCharacters")
+  characterDrafts       CampaignInstanceCharacterDraft[]
   activeCharacter       CampaignInstanceCharacterAssociation?  @relation("MembershipActiveCharacter", fields: [campaignInstanceId, id, activeCharacterId], references: [campaignInstanceId, playerMembershipId, characterId], onDelete: Restrict)
   sessionParticipations SessionParticipation[]
 
@@ -1349,11 +1352,40 @@ model CampaignInstanceCharacterAssociation {
   sourceCampaignInstance     CampaignInstance?                      @relation("CharacterImportSourceInstance", fields: [sourceCampaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignInstanceCharacterAssociation_sourceInstance_fkey")
   sourceAssociation          CampaignInstanceCharacterAssociation?  @relation("CharacterImportSource", fields: [sourceCampaignInstanceId, sourceCharacterId], references: [campaignInstanceId, characterId], onDelete: Restrict, map: "CampaignInstanceCharacterAssociation_sourceAssociation_fkey")
   importedAssociations       CampaignInstanceCharacterAssociation[] @relation("CharacterImportSource")
+  draft                      CampaignInstanceCharacterDraft?
 
   @@unique([campaignInstanceId, characterId])
   @@unique([campaignInstanceId, playerMembershipId, characterId])
   @@index([campaignInstanceId, playerMembershipId, status])
   @@index([sourceCampaignInstanceId, sourceCharacterId])
+}
+
+/// Resumable player-authored sheet for a Character already bound to exactly one Instance.
+model CampaignInstanceCharacterDraft {
+  id                     String                               @id @default(uuid())
+  campaignInstanceId     String
+  playerMembershipId     String
+  characterId            String                               @unique
+  revision               Int                                  @default(1)
+  status                 CharacterDraftStatus                 @default(IN_PROGRESS)
+  name                   String?
+  backgroundDefinitionId String?
+  professionDefinitionId String?
+  heritageDefinitionIds  Json                                 @default("[]")
+  attributeRolls         Json                                 @default("[]")
+  attributeAssignments   Json                                 @default("{}")
+  startingEquipmentIds   Json                                 @default("[]")
+  biography              String?
+  imageAssetIds          Json                                 @default("{}")
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+  campaignInstance       CampaignInstance                     @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_campaignInstanceId_fkey")
+  playerMembership       CampaignInstanceHumanMembership      @relation(fields: [campaignInstanceId, playerMembershipId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_membership_fkey")
+  character              CampaignInstanceCharacterAssociation @relation(fields: [campaignInstanceId, playerMembershipId, characterId], references: [campaignInstanceId, playerMembershipId, characterId], onDelete: Restrict, map: "CampaignInstanceCharacterDraft_character_fkey")
+
+  @@unique([campaignInstanceId, playerMembershipId, characterId], map: "InstanceCharacterDraft_membership_character_key")
+  @@index([campaignInstanceId, playerMembershipId, status], map: "InstanceCharacterDraft_membership_status_idx")
+  @@index([playerMembershipId, status], map: "InstanceCharacterDraft_player_status_idx")
 }
 
 /// Immutable compatible Campaign/World capture used by a Campaign Instance.

@@ -43,6 +43,7 @@ export class CampaignInvitationEntryController {
     setSessionCookie(response, result.sessionToken);
     return {
       user: result.user,
+      campaignInstanceId: result.campaignInstanceId,
       campaignInstanceName: result.campaignInstanceName,
     };
   }

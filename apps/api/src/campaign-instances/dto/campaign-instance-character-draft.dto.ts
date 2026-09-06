@@ -1,19 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { CharacterDraftStatus } from "@prisma/client";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsEnum,
-  IsObject,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from "class-validator";
 
-export class UpdateCharacterDraftDto {
+export class CreatePlayerCampaignInstanceCharacterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+}
+
+export class UpdatePlayerCampaignInstanceCharacterDraftDto {
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -64,24 +70,11 @@ export class UpdateCharacterDraftDto {
   @IsOptional()
   @IsObject()
   imageAssetIds?: Record<string, string>;
-
-  @ApiPropertyOptional({ enum: CharacterDraftStatus })
-  @IsOptional()
-  @IsEnum(CharacterDraftStatus)
-  status?: CharacterDraftStatus;
 }
 
-export class ExpectedCharacterDraftRevisionDto {
+export class ExpectedPlayerCharacterDraftRevisionDto {
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
   expectedRevision!: number;
-}
-
-export class CreateCharacterDraftDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  name?: string;
 }
