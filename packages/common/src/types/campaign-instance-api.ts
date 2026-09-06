@@ -15,8 +15,16 @@ import type {
   NamespacedKey,
   PlotDefinitionId,
   SessionId,
+  SessionParticipationId,
   WorldPlacementDefinitionId,
 } from "./primitives";
+import type {
+  CampaignSessionStatus,
+  SessionAttendanceStatus,
+  SessionParticipantRole,
+  SessionResponseStatus,
+  SessionSummaryStatus,
+} from "./session";
 import type {
   CampaignInstancePreparation,
   CampaignInstanceRealizedEntity,
@@ -200,8 +208,14 @@ export interface CampaignInstancePlacementCommandRequest {
   readonly expectedRuntimeRevision: number;
   readonly action: "realize" | "defer" | "replace" | "remove";
   readonly replacement?:
-    | { readonly kind: "existing-creature"; readonly runtimeCreatureId: CreatureId }
-    | { readonly kind: "existing-item"; readonly runtimeItemId: ItemInstanceId };
+    | {
+        readonly kind: "existing-creature";
+        readonly runtimeCreatureId: CreatureId;
+      }
+    | {
+        readonly kind: "existing-item";
+        readonly runtimeItemId: ItemInstanceId;
+      };
   readonly notes?: string;
 }
 
@@ -258,12 +272,118 @@ export interface CampaignInstanceRosterProjection {
 export interface CampaignInstanceSessionProjection {
   readonly id: SessionId;
   readonly name: string;
-  readonly status: "planned" | "active" | "paused" | "concluded" | "cancelled";
+  readonly status: CampaignSessionStatus;
+  readonly metadataRevision: number;
   readonly scheduledFor?: string;
   readonly startedAt?: string;
   readonly concludedAt?: string;
   readonly cancelledAt?: string;
   readonly participantCount: number;
+}
+
+export interface CampaignSessionParticipantProjection {
+  readonly participationId: SessionParticipationId;
+  readonly name: string;
+  readonly role: SessionParticipantRole;
+  readonly required: boolean;
+  readonly response: SessionResponseStatus;
+  readonly responseMessage?: string;
+  readonly attendance: SessionAttendanceStatus;
+  readonly firstJoinedAt?: string;
+  readonly lastLeftAt?: string;
+  readonly totalPresentSeconds: number;
+  readonly present: boolean;
+  readonly ready: boolean;
+  readonly readinessDetail: string;
+  readonly observeCapabilities: readonly NamespacedKey[];
+  readonly actCapabilities: readonly NamespacedKey[];
+}
+
+export interface CampaignSessionDetailProjection extends CampaignInstanceSessionProjection {
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly campaignInstanceName: string;
+  readonly planningNotes?: string;
+  readonly lobbyOpenedAt?: string;
+  readonly pausedAt?: string;
+  readonly resumedAt?: string;
+  readonly cancellationReason?: string;
+  readonly startRuntimeRevision?: number;
+  readonly lastRuntimeRevision?: number;
+  readonly endRuntimeRevision?: number;
+  readonly summaryStatus?: SessionSummaryStatus;
+  readonly currentSummaryRevision?: number;
+  readonly participants: readonly CampaignSessionParticipantProjection[];
+}
+
+export interface CreateCampaignSessionRequest {
+  readonly idempotencyKey: string;
+  readonly name: string;
+  readonly scheduledFor?: string;
+  readonly planningNotes?: string;
+  /** Existing Instance memberships selected for this Session. The GM is added atomically. */
+  readonly playerMembershipIds?: readonly CampaignInstanceMembershipId[];
+  readonly spectatorMembershipIds?: readonly CampaignInstanceMembershipId[];
+  readonly agentParticipationIds?: readonly CampaignInstanceAgentParticipationId[];
+}
+
+export interface UpdateCampaignSessionRequest {
+  readonly expectedMetadataRevision: number;
+  readonly name?: string;
+  readonly scheduledFor?: string | null;
+  readonly planningNotes?: string | null;
+}
+
+export interface UpdateCampaignSessionParticipantsRequest {
+  readonly expectedMetadataRevision: number;
+  readonly playerMembershipIds: readonly CampaignInstanceMembershipId[];
+  readonly spectatorMembershipIds: readonly CampaignInstanceMembershipId[];
+  readonly agentParticipants: readonly {
+    readonly agentParticipationId: CampaignInstanceAgentParticipationId;
+    readonly required: boolean;
+  }[];
+}
+
+export type CampaignSessionCommand =
+  | "open-lobby"
+  | "close-lobby"
+  | "start"
+  | "pause"
+  | "resume"
+  | "conclude"
+  | "cancel";
+
+export interface CampaignSessionLifecycleRequest {
+  readonly expectedMetadataRevision: number;
+  readonly expectedRuntimeRevision?: number;
+  readonly readinessToken?: string;
+  readonly reason?: string;
+}
+
+export interface CampaignSessionReadinessProjection {
+  readonly campaignInstanceName: string;
+  readonly sessionName: string;
+  readonly ready: boolean;
+  readonly runtimeRevision: number;
+  readonly token: string;
+  readonly checks: readonly CampaignInstanceReadinessCheckProjection[];
+}
+
+export interface CampaignSessionSummaryProjection {
+  readonly sessionName: string;
+  readonly revision: number;
+  readonly status: SessionSummaryStatus;
+  readonly eventSequenceThrough: number;
+  readonly narrative: string;
+  readonly privateGmNotes?: string;
+  readonly createdByName: string;
+  readonly createdAt: string;
+  readonly approvedAt?: string;
+}
+
+export interface UpdateCampaignSessionSummaryRequest {
+  readonly expectedSessionRevision: number;
+  readonly narrative: string;
+  readonly privateGmNotes?: string;
 }
 
 export interface CampaignInstanceSessionListProjection {

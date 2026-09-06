@@ -211,10 +211,52 @@ enum CampaignInstanceAgentParticipationStatus {
 
 enum CampaignInstanceSessionStatus {
   PLANNED
+  LOBBY
   ACTIVE
   PAUSED
   CONCLUDED
   CANCELLED
+}
+
+enum SessionParticipantRole {
+  GM
+  PLAYER
+  SPECTATOR
+  AGENT
+}
+
+enum SessionInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
+}
+
+enum SessionPresencePhase {
+  LOBBY
+  PLAY
+}
+
+enum SessionEventVisibility {
+  GM
+  PARTICIPANTS
+  PLAYERS
+  SPECTATORS
+  SESSION_PUBLIC
+}
+
+enum SessionBoundaryReason {
+  START
+  PAUSE
+  RESUME_AFTER_MIGRATION
+  CONCLUDE
+}
+
+enum SessionSummaryStatus {
+  DRAFT
+  APPROVED
+  AMENDED
 }
 
 enum SessionResponseStatus {
@@ -284,6 +326,11 @@ model User {
   createdCampaignInstanceInvitations         CampaignInstanceInvitation[]            @relation("CampaignInstanceInvitationCreator")
   invitedCampaignInstanceInvitations         CampaignInstanceInvitation[]            @relation("CampaignInstanceInvitationUser")
   ownedAgentIdentities                       AgentIdentity[]                         @relation("AgentIdentityOwner")
+  createdCampaignSessions                    CampaignInstanceSession[]               @relation("CampaignSessionCreator")
+  issuedSessionInvitations                   CampaignSessionInvitation[]             @relation("CampaignSessionInvitationIssuer")
+  authoredSessionEvents                      CampaignSessionEvent[]                  @relation("CampaignSessionEventActor")
+  createdSessionBoundaries                   CampaignSessionRuntimeBoundary[]        @relation("CampaignSessionBoundaryActor")
+  createdSessionSummaries                    CampaignSessionSummary[]                @relation("CampaignSessionSummaryAuthor")
 }
 
 /// Durable server-wide Player role, separate from any Campaign Instance.
@@ -293,9 +340,9 @@ model PlayerProfile {
   displayName          String
   standing             PlayerServerStanding                @default(ACTIVE)
   emailEncrypted       String?
-  emailHash            String?
+  emailHash            String?                             @unique
   phoneEncrypted       String?
-  phoneHash            String?
+  phoneHash            String?                             @unique
   createdAt            DateTime                            @default(now())
   updatedAt            DateTime                            @updatedAt
   user                 User                                @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -304,8 +351,6 @@ model PlayerProfile {
 
   @@unique([id, userId])
   @@index([standing, displayName])
-  @@index([emailHash])
-  @@index([phoneHash])
 }
 
 /// Protected identity-provider linkage. Provider subjects and credentials are
@@ -938,7 +983,7 @@ model CampaignInstanceHumanMembership {
 /// never stored in plaintext. Database checks bind acceptance/revocation
 /// timestamps and membership presence to the invitation status.
 model CampaignInstanceInvitation {
-  id                   String                           @id @default(uuid())
+  id                   String                                      @id @default(uuid())
   campaignInstanceId   String
   role                 CampaignInstanceHumanRole
   invitedName          String?
@@ -947,20 +992,20 @@ model CampaignInstanceInvitation {
   emailHash            String?
   phoneEncrypted       String?
   phoneHash            String?
-  tokenHash            String                           @unique
+  tokenHash            String                                      @unique
   deliveryReference    String?
-  status               CampaignInstanceInvitationStatus @default(PENDING)
+  status               CampaignInstanceInvitationStatus            @default(PENDING)
   expiresAt            DateTime
   acceptedMembershipId String?
   createdByUserId      String
   acceptedAt           DateTime?
   revokedAt            DateTime?
-  createdAt            DateTime                         @default(now())
-  updatedAt            DateTime                         @updatedAt
-  campaignInstance     CampaignInstance                 @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
-  invitedUser          User?                            @relation("CampaignInstanceInvitationUser", fields: [invitedUserId], references: [id], onDelete: Restrict)
-  createdBy            User                             @relation("CampaignInstanceInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  acceptedMembership   CampaignInstanceHumanMembership? @relation(fields: [campaignInstanceId, acceptedMembershipId, role], references: [campaignInstanceId, id, role], onDelete: Restrict)
+  createdAt            DateTime                                    @default(now())
+  updatedAt            DateTime                                    @updatedAt
+  campaignInstance     CampaignInstance                            @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  invitedUser          User?                                       @relation("CampaignInstanceInvitationUser", fields: [invitedUserId], references: [id], onDelete: Restrict)
+  createdBy            User                                        @relation("CampaignInstanceInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  acceptedMembership   CampaignInstanceHumanMembership?            @relation(fields: [campaignInstanceId, acceptedMembershipId, role], references: [campaignInstanceId, id, role], onDelete: Restrict)
   deliveryAttempts     CampaignInstanceInvitationDeliveryAttempt[]
 
   @@unique([campaignInstanceId, id])
@@ -1012,23 +1057,50 @@ model CampaignInstanceAgentParticipation {
 /// A scheduled or historical Session owned by one Campaign Instance. Database
 /// checks keep lifecycle timestamps consistent with the Session status.
 model CampaignInstanceSession {
-  id                 String                        @id @default(uuid())
-  campaignInstanceId String
-  name               String
-  status             CampaignInstanceSessionStatus @default(PLANNED)
-  scheduledFor       DateTime?
-  startedAt          DateTime?
-  concludedAt        DateTime?
-  cancelledAt        DateTime?
-  eventLog           Json                          @default("[]")
-  summary            Json?
-  extensions         Json                          @default("{}")
-  createdAt          DateTime                      @default(now())
-  updatedAt          DateTime                      @updatedAt
-  campaignInstance   CampaignInstance              @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
-  participations     SessionParticipation[]
+  id                     String                           @id @default(uuid())
+  campaignInstanceId     String
+  name                   String
+  status                 CampaignInstanceSessionStatus    @default(PLANNED)
+  metadataRevision       Int                              @default(1)
+  planningNotes          String?
+  creationKeyHash        String?
+  createdByUserId        String?
+  scheduledFor           DateTime?
+  lobbyOpenedAt          DateTime?
+  startedAt              DateTime?
+  pausedAt               DateTime?
+  resumedAt              DateTime?
+  concludedAt            DateTime?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  startSnapshotId        String?
+  startRuntimeRevision   Int?
+  lastRuntimeRevision    Int?
+  endSnapshotId          String?
+  endRuntimeRevision     Int?
+  firstEventSequence     Int?
+  lastEventSequence      Int?
+  currentSummaryRevision Int?
+  summaryStatus          SessionSummaryStatus?
+  eventLog               Json                             @default("[]")
+  summary                Json?
+  extensions             Json                             @default("{}")
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
+  campaignInstance       CampaignInstance                 @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  createdBy              User?                            @relation("CampaignSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  startSnapshot          CampaignInstanceSnapshot?        @relation("CampaignSessionStartSnapshot", fields: [campaignInstanceId, startSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  endSnapshot            CampaignInstanceSnapshot?        @relation("CampaignSessionEndSnapshot", fields: [campaignInstanceId, endSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  participations         SessionParticipation[]
+  invitations            CampaignSessionInvitation[]
+  presenceLeases         SessionPresenceLease[]
+  events                 CampaignSessionEvent[]
+  runtimeBoundaries      CampaignSessionRuntimeBoundary[]
+  summaries              CampaignSessionSummary[]
+  outboxEvents           CampaignSessionOutboxEvent[]
 
   @@unique([campaignInstanceId, id])
+  @@unique([campaignInstanceId, creationKeyHash])
   @@index([campaignInstanceId, status, scheduledFor])
   @@index([status, updatedAt])
 }
@@ -1042,24 +1114,177 @@ model SessionParticipation {
   humanMembershipId    String?
   agentParticipationId String?
   participantName      String
+  role                 SessionParticipantRole
+  required             Boolean                             @default(false)
+  selected             Boolean                             @default(true)
   scheduledAt          DateTime?
   response             SessionResponseStatus               @default(NOT_REQUESTED)
+  responseMessage      String?
+  respondedAt          DateTime?
   attendance           SessionAttendanceStatus             @default(PENDING)
   joinedAt             DateTime?
   leftAt               DateTime?
   acted                Boolean                             @default(false)
+  totalPresentSeconds  Int                                 @default(0)
+  observeCapabilities  Json                                @default("[]")
+  actCapabilities      Json                                @default("[]")
   createdAt            DateTime                            @default(now())
   updatedAt            DateTime                            @updatedAt
   session              CampaignInstanceSession             @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
   humanMembership      CampaignInstanceHumanMembership?    @relation(fields: [campaignInstanceId, humanMembershipId], references: [campaignInstanceId, id], onDelete: Restrict)
   agentParticipation   CampaignInstanceAgentParticipation? @relation(fields: [campaignInstanceId, agentParticipationId], references: [campaignInstanceId, id], onDelete: Restrict)
+  invitations          CampaignSessionInvitation[]
+  presenceLeases       SessionPresenceLease[]
+  authoredEvents       CampaignSessionEvent[]              @relation("CampaignSessionEventParticipation")
 
   @@unique([sessionId, humanMembershipId])
   @@unique([sessionId, agentParticipationId])
+  @@unique([campaignInstanceId, sessionId, id])
   @@index([campaignInstanceId, sessionId])
   @@index([campaignInstanceId, humanMembershipId])
   @@index([campaignInstanceId, agentParticipationId])
   @@index([sessionId, attendance])
+}
+
+model CampaignSessionInvitation {
+  id                      String                                     @id @default(uuid())
+  campaignInstanceId      String
+  sessionId               String
+  participationId         String
+  revision                Int                                        @default(1)
+  predecessorInvitationId String?
+  tokenHash               String                                     @unique
+  status                  SessionInvitationStatus                    @default(PENDING)
+  expiresAt               DateTime
+  issuedByUserId          String
+  issuedAt                DateTime                                   @default(now())
+  acceptedAt              DateTime?
+  revokedAt               DateTime?
+  session                 CampaignInstanceSession                    @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  participation           SessionParticipation                       @relation(fields: [campaignInstanceId, sessionId, participationId], references: [campaignInstanceId, sessionId, id], onDelete: Restrict, map: "CampaignSessionInvitation_campaignInstanceId_sessionId_par_fkey")
+  predecessor             CampaignSessionInvitation?                 @relation("CampaignSessionInvitationLineage", fields: [campaignInstanceId, sessionId, participationId, predecessorInvitationId], references: [campaignInstanceId, sessionId, participationId, id], onDelete: Restrict, map: "CampaignSessionInvitation_predecessor_scope_fkey")
+  reissues                CampaignSessionInvitation[]                @relation("CampaignSessionInvitationLineage")
+  issuedBy                User                                       @relation("CampaignSessionInvitationIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  deliveryAttempts        CampaignSessionInvitationDeliveryAttempt[]
+
+  @@unique([campaignInstanceId, sessionId, id])
+  @@unique([campaignInstanceId, sessionId, participationId, id], map: "CampaignSessionInvitation_scope_id_key")
+  @@unique([participationId, revision])
+  @@index([sessionId, status])
+  @@index([expiresAt])
+}
+
+model CampaignSessionInvitationDeliveryAttempt {
+  id                 String                    @id @default(uuid())
+  campaignInstanceId String
+  sessionId          String
+  invitationId       String
+  channel            DeliveryChannel
+  status             DeliveryStatus
+  providerReference  String?
+  failureCategory    String?
+  attemptedAt        DateTime                  @default(now())
+  invitation         CampaignSessionInvitation @relation(fields: [campaignInstanceId, sessionId, invitationId], references: [campaignInstanceId, sessionId, id], onDelete: Restrict)
+
+  @@index([invitationId, attemptedAt])
+}
+
+model SessionPresenceLease {
+  id                 String                  @id @default(uuid())
+  campaignInstanceId String
+  sessionId          String
+  participationId    String
+  connectionKeyHash  String                  @unique
+  phase              SessionPresencePhase
+  joinedAt           DateTime                @default(now())
+  lastHeartbeatAt    DateTime                @default(now())
+  expiresAt          DateTime
+  leftAt             DateTime?
+  ejectedAt          DateTime?
+  session            CampaignInstanceSession @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  participation      SessionParticipation    @relation(fields: [campaignInstanceId, sessionId, participationId], references: [campaignInstanceId, sessionId, id], onDelete: Restrict)
+
+  @@index([sessionId, expiresAt])
+  @@index([participationId, expiresAt])
+}
+
+model CampaignSessionEvent {
+  id                    String                  @id @default(uuid())
+  campaignInstanceId    String
+  sessionId             String
+  sequence              Int
+  occurredAt            DateTime                @default(now())
+  campaignTime          String?
+  type                  String
+  summary               String
+  actorName             String
+  actorUserId           String?
+  actorParticipationId  String?
+  visibility            SessionEventVisibility  @default(PARTICIPANTS)
+  runtimeRevisionBefore Int?
+  runtimeRevisionAfter  Int?
+  causedBySequence      Int?
+  payload               Json?
+  extensions            Json                    @default("{}")
+  previousHash          String?
+  contentHash           String
+  session               CampaignInstanceSession @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  actorUser             User?                   @relation("CampaignSessionEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorParticipation    SessionParticipation?   @relation("CampaignSessionEventParticipation", fields: [campaignInstanceId, sessionId, actorParticipationId], references: [campaignInstanceId, sessionId, id], onDelete: Restrict)
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, occurredAt])
+}
+
+model CampaignSessionRuntimeBoundary {
+  id                 String                   @id @default(uuid())
+  campaignInstanceId String
+  sessionId          String
+  snapshotId         String
+  runtimeRevision    Int
+  reason             SessionBoundaryReason
+  eventSequence      Int
+  contentHash        String
+  actorUserId        String
+  createdAt          DateTime                 @default(now())
+  session            CampaignInstanceSession  @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  snapshot           CampaignInstanceSnapshot @relation(fields: [campaignInstanceId, snapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  actor              User                     @relation("CampaignSessionBoundaryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, eventSequence])
+  @@index([campaignInstanceId, snapshotId])
+}
+
+model CampaignSessionSummary {
+  id                   String                  @id @default(uuid())
+  campaignInstanceId   String
+  sessionId            String
+  revision             Int
+  status               SessionSummaryStatus
+  eventSequenceThrough Int
+  narrative            String
+  privateGmNotes       String?
+  createdByUserId      String
+  createdAt            DateTime                @default(now())
+  approvedAt           DateTime?
+  session              CampaignInstanceSession @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+  createdBy            User                    @relation("CampaignSessionSummaryAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, revision])
+  @@index([sessionId, status])
+}
+
+model CampaignSessionOutboxEvent {
+  id                 String                  @id @default(uuid())
+  campaignInstanceId String
+  sessionId          String
+  type               String
+  payload            Json
+  createdAt          DateTime                @default(now())
+  deliveredAt        DateTime?
+  session            CampaignInstanceSession @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict)
+
+  @@index([type, deliveredAt, createdAt])
 }
 
 /// Exactly-one-Instance Character ownership plus optional one-way import provenance.
@@ -1117,6 +1342,9 @@ model CampaignInstanceSnapshot {
   runtimeCheckpoints           CampaignInstanceRuntimeCheckpoint[]
   sourceMigrationAudits        CampaignInstanceMigrationAudit[]    @relation("CampaignInstanceMigrationSourceSnapshot")
   resultMigrationAudit         CampaignInstanceMigrationAudit?     @relation("CampaignInstanceMigrationResultSnapshot")
+  sessionStartBoundaries       CampaignInstanceSession[]           @relation("CampaignSessionStartSnapshot")
+  sessionEndBoundaries         CampaignInstanceSession[]           @relation("CampaignSessionEndSnapshot")
+  sessionRuntimeBoundaries     CampaignSessionRuntimeBoundary[]
 
   @@unique([campaignInstanceId, snapshotNumber])
   @@unique([campaignInstanceId, id])

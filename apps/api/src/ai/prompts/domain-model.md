@@ -609,24 +609,70 @@ or removing legacy Campaign membership, invitation, Character draft, or `session
 These relational tables are not generic domain resources and do not yet imply public authoring or
 play APIs:
 
-| Contract or protected boundary                  | Relational table                       | Integrity boundary                                                                                                                                                                                                |
-| ----------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PlayerProfile`                                 | `PlayerProfile`                        | One durable profile per authenticated User; server standing is independent of Instance membership and contact fields are encrypted/hashed, never returned by the shared profile contract                          |
-| Protected authentication-provider association   | `AuthenticationProviderAssociation`    | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle |
-| `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`      | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                              |
-| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`           | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                           |
-| Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                        |
-| Non-human Agent identity                        | `AgentIdentity`                        | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                            |
-| `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`   | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and contain only open namespaced string keys                                                                             |
-| `CampaignInstanceSession`                       | `CampaignInstanceSession`              | Explicit Instance FK with lifecycle-consistent start/conclusion/cancellation timestamps, schedule, event-log, summary, and extension metadata                                                                     |
-| `SessionParticipation`                          | `SessionParticipation`                 | Exactly one human membership or Agent participation; composite FKs require it and its Session to share the same Instance                                                                                          |
-| `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation` | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                       |
+| Contract or protected boundary                  | Relational table                            | Integrity boundary                                                                                                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PlayerProfile`                                 | `PlayerProfile`                             | One durable profile per authenticated User; server standing is independent of Instance membership; contact fields are encrypted/hashed and never returned by the shared profile contract; each non-null contact hash is unique installation-wide |
+| Protected authentication-provider association   | `AuthenticationProviderAssociation`         | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle                                |
+| `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`           | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                                                             |
+| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`                | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                                                          |
+| Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                                                           |
+| Non-human Agent identity                        | `AgentIdentity`                             | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                                                           |
+| `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`        | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and must be selected from the closed core Session capability registry                                                                                   |
+| `CampaignSession` / `CampaignInstanceSession`   | `CampaignInstanceSession`                   | Explicit Instance FK; named-command lifecycle, metadata CAS, schedule, captured snapshot/runtime boundary references, normalized event bounds, summary status, and idempotent creation key                                                       |
+| `CampaignSessionParticipation`                  | `SessionParticipation`                      | Exactly one human membership or Agent participation; role/name plus separate immutable observe/act capability snapshots, invitation response, live presence, durable attendance, required classification, and acted state                        |
+| Protected Session invitation workflow           | `CampaignSessionInvitation`                 | Existing human Instance membership only; hash-only credential, expiration, reissue lineage, response chronology, and same-Instance composite FKs                                                                                                 |
+| Session invitation delivery attempt             | `CampaignSessionInvitationDeliveryAttempt`  | Contact-free delivery outcome; protected contacts remain on the durable profile boundary                                                                                                                                                         |
+| `SessionPresenceLease`                          | `SessionPresenceLease`                      | Renewable hashed connection lease; presence is neither invitation response nor durable attendance                                                                                                                                                |
+| `CampaignSessionEvent`                          | `CampaignSessionEvent`                      | Append-only, ordered, bounded, attributed, visibility-scoped Session journal record with optional runtime revision transition and integrity-chain fields                                                                                         |
+| `CampaignSessionRuntimeBoundary`                | `CampaignSessionRuntimeBoundary`            | Append-only reference to the owning Instance snapshot and runtime revision at start, pause, resume-after-migration, or conclusion                                                                                                                |
+| `CampaignSessionSummary`                        | `CampaignSessionSummary`                    | Revisioned draft/approved/amended narrative against an exact sealed event sequence; approved revisions are immutable and private GM notes remain separately projected                                                                            |
+| Session integration event                       | `CampaignSessionOutboxEvent`                | Durable outbox request such as `session-backup-requested`; emitting the request is atomic with summary approval while backup execution remains external                                                                                          |
+| `CampaignInstanceCharacterAssociation`          | `CampaignInstanceCharacterAssociation`      | A Character ID belongs to one Instance and Player membership; active Character and one-way import provenance use same-Instance/source-lineage composite FKs                                                                                      |
 
 Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
 namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
-chronology, and complete one-way Character import provenance. A PostgreSQL partial unique index
-permits many active Campaign Instances but no more than one `ACTIVE` relational Session across the
-installation. Runtime code must not infer an active Session from legacy `campaignId` data.
+chronology, append-only Session history, and complete one-way Character import provenance. A
+PostgreSQL partial unique index permits many active Campaign Instances but no more than one
+`ACTIVE` or `PAUSED` relational Session across the installation. Runtime code must not infer an
+active or resumable Session from legacy `campaignId` data or record recency.
+
+### Canonical Campaign Session lifecycle and journal
+
+A `CampaignSession` belongs to exactly one Campaign Instance and never copies Instance runtime.
+Its consistency anchors reference the Instance snapshot and runtime revision that applied at each
+boundary. The canonical lifecycle is `planned → lobby → active ⇄ paused → concluded`, with
+`planned|lobby → cancelled` and optional `lobby → planned`. Every transition is a named server
+command; whole-document status replacement is forbidden. `Continue` is the user-facing action for
+an active Session and `Resume` is the action for a paused Session.
+
+The creating GM is atomically included as a required human Session participant. Selected Players
+are required by default, Spectators are optional, and Agents are required only when explicitly
+selected as such. At most eight participants including the GM may be selected. Removing someone
+from a planned roster marks their participation as unselected so response and attendance history
+are retained; only selected participations contribute to the current roster and readiness. Start
+and resume recompute readiness against an exact Session metadata revision, Instance runtime revision,
+captured snapshot, required roster, invitation responses, live presence generations, membership
+standing, active Character readiness, and Agent authorization. A displayed readiness hash is an
+optimistic token, never authorization to skip the transactional recheck.
+
+Invitation response, live presence, and final attendance are independent facts. A Session
+invitation can only name an existing human Campaign Instance membership. Presence uses a bounded,
+renewable hashed connection lease; loading a page does not imply presence. Conclusion converts
+observed participation into durable attendance without erasing earlier join/leave history. The
+current persistence accumulates bounded lease durations; exact union accounting for overlapping
+multi-device leases is deferred, so duration must not be treated as billing- or rules-grade time.
+
+`CampaignSessionEvent` rows, not the legacy `eventLog` JSON field, are authoritative for new
+history. Lifecycle, invitation response, roster, durable presence transitions, summary, and future
+typed game commands append ordered, attributed, visibility-filtered, size-bounded records through
+the server boundary; heartbeat lease renewals do not append, and clients cannot post arbitrary
+event rows. Planning and lobby administration can precede play in that ordered history.
+`firstEventSequence` remains absent until start and then identifies the start event that opens the
+play segment; `lastEventSequence` identifies the latest event across the entire Session history.
+Start, pause, resume after an Instance migration, and conclusion append immutable runtime boundary
+records. Conclusion seals the event sequence and creates a summary draft. Approval/amendment adds
+revisioned summary history and atomically emits a `session-backup-requested` outbox event; it does
+not reset Instance runtime.
 
 `CampaignInstance` also stores explicit nullable `ownerUserId` for an additive legacy rollout, a
 positive `metadataRevision` for lifecycle compare-and-swap, and nullable `creationKeyHash`. New
@@ -706,12 +752,15 @@ an empty or older destination database from the bundled schema before applying d
 
 ### SessionState
 
-`SessionState` is the persisted campaign-session aggregate. It has `identity`, a human-readable
+`SessionState` is a deprecated generic-resource compatibility aggregate, not the canonical
+Campaign Instance Session. It has `identity`, a human-readable
 `name`, required `worldId` and `campaignId`, a `status` of `planned`, `in-progress`, `completed`, or
 `cancelled`, optional ISO timestamps (`scheduledFor`, `startedAt`, and `endedAt`), and arrays of
 `sceneIds`, `encounterIds`, and `eventIds`. Optional `notes` and namespaced `extensions` hold session
 material that does not yet have a first-class field. These references make selective host transfer
-include the session's required campaign and play-state dependencies.
+include the session's required campaign and play-state dependencies. New Session writes use the
+relational `CampaignInstanceSession` aggregate and normalized journal described above; generic
+Session mutation must not select or mutate canonical play state.
 
 ## Geography and world-building
 
@@ -1352,7 +1401,7 @@ location ID, and `stationary`, `traveling`, or `lost` status.
   realized placement. A namespaced strategy must be implemented by the effective captured
   model/plugin or Instance readiness blocks. Existing immutable snapshots without this field
   resolve deterministically to `one-per-instance` with maximum 1 and retain
-`source: "legacy-default"` provenance; no policy is inferred from a Creature's name.
+  `source: "legacy-default"` provenance; no policy is inferred from a Creature's name.
 - `CampaignInstanceAuditEvent` is append-only, bounded, and human-resolvable audit provenance for
   Instance creation, lifecycle/runtime administration, invitations, Agent grants, migration, and
   restore. Audit detail never contains plaintext contact data, invitation credentials, or protected
@@ -1385,9 +1434,16 @@ Participation has four separate scopes; never collapse them into one Campaign pa
   do not. Invitation workflow is Instance-scoped and does not substitute for membership.
 - `CampaignInstanceAgentParticipation` authorizes one non-human Agent process in exactly one
   Campaign Instance. Observe and act capability keys are separately explicit and least-privilege.
+  Core Session integrations use closed registries: observe grants are `aow:event-stream`,
+  `aow:presence`, or `aow:session-state`; act grants are `aow:draft-narrative`,
+  `aow:suggest-content`, or `aow:suggest-plot-twist`. A grant in one registry never implies a grant
+  in the other.
   The contract has no human user, membership, role, or impersonation target; implementations must
   never turn an Agent capability into human credentials or attribute Agent actions to a person.
-- `SessionParticipation` separately records response, attendance, join/leave, and whether a human
+- `CampaignSessionParticipation` separately records response, presence, attendance, role/name and
+  immutable `observeCapabilities` / `actCapabilities` snapshots, required classification,
+  first-join and last-leave timestamps, accumulated
+  bounded presence duration, and whether a human
   membership or Agent acted in one Session. It always names the same Campaign Instance as the
   Session and the referenced membership/Agent authorization. The GM is both operator and a human
   Session participant; fictional GM actions are attributed to the Instance Creatures they control.

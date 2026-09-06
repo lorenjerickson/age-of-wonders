@@ -56,6 +56,11 @@ export type AgentId = DomainId<"agent">;
 export type CampaignInstanceAgentParticipationId =
   DomainId<"campaign-instance-agent-participation">;
 export type SessionParticipationId = DomainId<"session-participation">;
+export type SessionInvitationId = DomainId<"session-invitation">;
+export type SessionPresenceLeaseId = DomainId<"session-presence-lease">;
+export type SessionEventId = DomainId<"session-event">;
+export type SessionRuntimeBoundaryId = DomainId<"session-runtime-boundary">;
+export type SessionSummaryId = DomainId<"session-summary">;
 /** @deprecated Use CampaignInstanceMembershipId for definition/instance-safe participation. */
 export type CampaignMembershipId = DomainId<"campaign-membership">;
 /** @deprecated Use CampaignInstanceInvitationId for definition/instance-safe invitations. */

@@ -21,5 +21,6 @@ export * from "./skills";
 export * from "./primitives";
 export * from "./professions";
 export * from "./rules";
+export * from "./session";
 export * from "./world";
 export * from "./versioning";
