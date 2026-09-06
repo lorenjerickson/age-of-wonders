@@ -16,6 +16,12 @@ import { Auth0Service } from "./auth0.service";
     SystemAdministratorGuard,
     ContactProtector,
   ],
-  exports: [AuthService, SessionGuard, GmGuard, SystemAdministratorGuard],
+  exports: [
+    AuthService,
+    SessionGuard,
+    GmGuard,
+    SystemAdministratorGuard,
+    ContactProtector,
+  ],
 })
 export class AuthModule {}

@@ -1203,10 +1203,14 @@ restart behavior. Core services and installed plugins may contribute Configurati
 the Settings taxonomy is therefore extensible without becoming an unstructured key/value screen.
 
 A Configuration Binding records how an Installation resolves a definition from an
-application-managed value, external secret reference, deployment source, or default. It stores
-provenance and validation metadata but never copies a secret returned by an external secret store.
-Configuration revisions and operator audit events record who changed what, why, and when without
-recording protected values.
+application-managed value, protected application secret, explicit disabled state, deployment
+source, or default. The initial implementation uses static core definitions and one binding per
+definition key. Application bindings take precedence; resetting a binding inherits the deployment
+value or product default, while explicit disablement suppresses a deployment secret. Secret
+bindings are encrypted at rest and never returned. Configuration revisions are append-only and
+record the named operator, action, optional reason, and version without recording protected values.
+Optimistic revisions reject stale commands, and provider tests record only bounded validation
+status.
 
 A Plugin Artifact and its immutable releases are authored and versioned outside every Installation,
 World, and Campaign. A Plugin Installation references one external release and records compatibility
@@ -1219,10 +1223,15 @@ API Clients, Service Accounts, Access Tokens, and Webhook Endpoints are explicit
 with scopes, expiry, rotation/revocation, and audit relationships rather than generic API-key text
 fields.
 
-Readiness Observations are derived status, not editable configuration. Backup, retention,
+Installation name, invitation lifetime, default AI model, and the OpenAI credential form the first
+writable slice and are resolved by runtime services on use. Public URLs and origins, Auth0 topology,
+bootstrap and contact-encryption roots, database and object-storage credentials, and similar
+infrastructure values remain deployment-managed. Readiness Observations are derived status, not
+editable configuration. Backup, retention,
 maintenance, rate-limit, privacy, and update policies belong to the Hosted Installation and govern
-infrastructure workflows without becoming World or Campaign rules. Exact persistence and secret
-store technology remain implementation decisions.
+infrastructure workflows without becoming World or Campaign rules. A future external secret-store
+adapter may replace the current protected application-secret persistence without changing these
+domain semantics.
 
 #### World Definition
 
@@ -1633,6 +1642,13 @@ do not violate that constraint.
 - **DM-051:** Readiness observations report the effective configuration without becoming another
   writable source of truth. Conflicting sources resolve by a documented precedence policy and are
   shown to the System Operator.
+- **DM-051a:** Application bindings override deployment values and product defaults. Resetting a
+  binding resumes inherited resolution; explicit disablement suppresses inherited secret
+  configuration. Mutations use optimistic revisions and take effect immediately unless a setting
+  explicitly reports restart impact.
+- **DM-051b:** Configuration history is append-only and value-free. It may identify the human
+  operator, action, reason, validation outcome, and configuration version, but never a protected
+  value or reversible representation of one.
 - **DM-052:** Quick Start Activity Definitions and per-GM progress are guidance records, not owners
   or copies of World, Campaign, Player, Character, or Session data.
 - **DM-053:** System-verified tutorial completion is a predicate over authoritative state in the

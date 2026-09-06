@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-auth0-adapter-complete
+status: active-implementation-plan-writable-hosted-settings-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,9 +21,9 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, Campaign/World authoring, identity/participation, Auth0 adapter, initial
-system-boundary, legacy-removal, Instance-native Character-sheet, Character completion/review, and
-first-party one-way Character import waves are implemented.
+The Session, Campaign Instance, Campaign/World authoring, identity/participation, Auth0 adapter,
+writable hosted-Settings slice, system-boundary, legacy-removal, Instance-native Character-sheet,
+Character completion/review, and first-party one-way Character import waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
 invitation entry points live beneath `/api/invitations`; and authenticated locator and participant
 projections live beneath `/api/me`. First-party web callers use the canonical authoring roots
@@ -32,8 +32,8 @@ projections live beneath `/api/me`. First-party web callers use the canonical au
 implementation-named participation, generic domain, raw graph, ambiguous Campaign invitation, and
 destructive root-Location World routes are no longer registered.
 
-Route families not named in the completed-wave sections remain target architecture, not
-claims of completed implementation. Writable secret and operational Settings, Auth0 provider
+Route families not named in the completed-wave sections remain target architecture, not claims of
+completed implementation. Plugin and broader operational administration, Auth0 provider
 administration beyond deployment configuration, and fully contextual World/Campaign AI and media
 commands remain separate follow-up work.
 
@@ -452,6 +452,10 @@ GET  /api/ai/generations
 POST /api/worlds/:worldId/media
 GET  /api/settings/system
 GET  /api/settings/system/:systemArea
+PUT  /api/settings/system/:systemArea/settings/:settingKey
+POST /api/settings/system/:systemArea/settings/:settingKey/secret
+POST /api/settings/system/:systemArea/settings/:settingKey/actions/{revoke,reset,test}
+GET  /api/settings/system/:systemArea/settings/:settingKey/history
 ```
 
 Model Registry collections are bounded and deterministic. Effective Model adoption is now read
@@ -476,16 +480,26 @@ and readiness without returning saved secrets. Both the API and navigation requi
 System Administrator independently of GM authority; an administrator without GM authority can
 open Settings without receiving World or Campaign access.
 
+The writable follow-up supplies application bindings for installation name, invitation lifetime,
+default AI model, and the OpenAI credential. Values resolve with explicit application,
+deployment, product-default, or disabled provenance and take effect immediately in the runtime
+consumers. Expected revisions reject stale commands. Secret replacement, rotation, revocation,
+reset-to-deployment, and rate-limited validation never return protected material. Immutable,
+value-free history records the named operator, action, reason, and configuration version. Public
+network addresses, Auth0 topology, encryption roots, databases, and object storage remain
+deployment-managed rather than becoming an unsafe generic key/value surface.
+
 Direct HTTP graph creation and deletion are disabled because tuples are derived projections, not
 domain authority. The legacy raw graph query is restricted to the System Administrator and marked
 deprecated; safe graph counts and drift signals appear under Data & storage. All generic domain
 routes are now marked deprecated, and legacy `systems` writes are frozen because hosted settings
 are not game-system documents.
 
-This vertical slice does not claim complete hosted administration. Plugin lifecycle, secret
-rotation, writable integration/provider configuration, graph rebuild commands, Campaign/Instance
-media scopes, and aggregate-native AI transformations remain fast follows. Compatibility rows with
-missing creator/scope provenance remain intentionally readable and are not rewritten by inference.
+This vertical slice does not claim complete hosted administration. Plugin lifecycle, additional
+provider configuration, infrastructure credential rotation, graph rebuild commands,
+Campaign/Instance media scopes, and aggregate-native AI transformations remain fast follows.
+Compatibility rows with missing creator/scope provenance remain intentionally readable and are not
+rewritten by inference.
 
 ## Legacy removal implementation wave
 
@@ -561,9 +575,9 @@ must be reconciled with its own captured schema and approved before activation.
    captured-schema submission, GM review, activation materialization, and first-party one-way
    import selection, plus explicit Auth0 account linking and exact-subject sign-in.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
-   adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
-   authority boundaries. Writable hosted configuration and fully contextual content operations
-   remain fast follows.
+   adoption, creator/context provenance, System Administrator readiness surfaces, derived-graph
+   authority boundaries, and immediate application bindings for the first runtime settings.
+   Broader hosted administration and fully contextual content operations remain fast follows.
 6. **Legacy removal — Character tranche complete:** fully replaced aliases, ambiguous `campaignId`
    invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph
    HTTP access, obsolete web routes, unscoped AI commands, and the unscoped Character-draft workflow

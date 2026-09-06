@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import OpenAI from "openai";
+import { HostedConfigurationService } from "../settings/hosted-configuration.service";
 
 interface RespondInput {
   input: string;
@@ -23,44 +23,39 @@ export interface GenerateImageOptions {
 
 @Injectable()
 export class OpenAiService {
-  private readonly client: OpenAI | null;
-  readonly model: string;
-
-  constructor(private readonly config: ConfigService) {
-    const apiKey = this.config.get<string>("OPENAI_API_KEY");
-    this.model = this.config.get<string>("OPENAI_MODEL", "gpt-5.6-terra");
-    this.client = apiKey ? new OpenAI({ apiKey }) : null;
-  }
+  constructor(private readonly configuration: HostedConfigurationService) {}
 
   async respond({ input, instructions, maxOutputTokens }: RespondInput) {
-    if (!this.client) {
+    const { client, model } = await this.connection();
+    if (!client) {
       throw new ServiceUnavailableException(
         "OPENAI_API_KEY is not configured on the API service.",
       );
     }
 
-    const response = await this.client.responses.create({
-      model: this.model,
+    const response = await client.responses.create({
+      model,
       input,
       instructions,
       max_output_tokens: maxOutputTokens ?? 8_000,
     });
 
-    return { output: response.output_text, responseId: response.id };
+    return { output: response.output_text, responseId: response.id, model };
   }
 
   async generateImage(
     prompt: string,
     options: GenerateImageOptions = {},
   ): Promise<GeneratedImage> {
-    if (!this.client) {
+    const { client, model } = await this.connection();
+    if (!client) {
       throw new ServiceUnavailableException(
         "OPENAI_API_KEY is not configured on the API service.",
       );
     }
 
-    const response = await this.client.responses.create({
-      model: this.model,
+    const response = await client.responses.create({
+      model,
       input: prompt,
       tool_choice: { type: "image_generation" },
       tools: [
@@ -92,5 +87,13 @@ export class OpenAiService {
       height,
       responseId: response.id,
     };
+  }
+
+  private async connection() {
+    const [apiKey, model] = await Promise.all([
+      this.configuration.openAiApiKey(),
+      this.configuration.openAiModel(),
+    ]);
+    return { client: apiKey ? new OpenAI({ apiKey }) : null, model };
   }
 }

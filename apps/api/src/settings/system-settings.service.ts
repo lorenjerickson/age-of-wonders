@@ -8,6 +8,12 @@ import {
   type SystemSettingsIndexProjection,
 } from "@aow/common";
 import { PrismaService } from "../prisma/prisma.service";
+import type {
+  ReplaceSystemSecretDto,
+  SystemSettingActionDto,
+  UpdateSystemSettingDto,
+} from "./dto/system-setting.dto";
+import { HostedConfigurationService } from "./hosted-configuration.service";
 
 const AREA_METADATA: Record<
   SystemSettingArea,
@@ -77,6 +83,7 @@ export class SystemSettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly hosted: HostedConfigurationService,
   ) {}
 
   async index(): Promise<SystemSettingsIndexProjection> {
@@ -84,10 +91,7 @@ export class SystemSettingsService {
       SYSTEM_SETTING_AREAS.map((area) => this.area(area)),
     );
     return {
-      installationName: this.config.get<string>(
-        "AOW_INSTALLATION_NAME",
-        "Age of Wonders",
-      ),
+      installationName: await this.hosted.installationName(),
       areas: areas.map(({ settings, ...summary }) => {
         void settings;
         return summary;
@@ -195,6 +199,7 @@ export class SystemSettingsService {
       databaseReady = false;
     }
     return [
+      await this.installationName(),
       databaseReady
         ? ready("database", "Database", "PostgreSQL is reachable.", "observed")
         : unavailable("database", "Database", "PostgreSQL is unavailable."),
@@ -274,22 +279,42 @@ export class SystemSettingsService {
     ];
   }
 
-  private ai(): SystemSettingStatus[] {
+  private async ai(): Promise<SystemSettingStatus[]> {
+    const [openai, model] = await Promise.all([
+      this.hosted.control("openai"),
+      this.hosted.control("default-model"),
+    ]);
     return [
-      this.configured(
-        "openai",
-        "OpenAI provider",
-        "OPENAI_API_KEY",
-        false,
-        "secret-backed",
-      ),
-      ready(
-        "default-model",
-        "Default AI model",
-        "The configured model name is safe to display.",
-        "deployment-managed",
-        this.config.get<string>("OPENAI_MODEL", "gpt-5.6-terra"),
-      ),
+      {
+        key: "openai",
+        label: "OpenAI provider",
+        classification: "secret-backed",
+        status:
+          openai.validationStatus === "invalid"
+            ? "unavailable"
+            : openai.configured
+              ? "ready"
+              : "disabled",
+        detail:
+          openai.validationStatus === "invalid"
+            ? "The latest connection test failed. Replace or retest the credential."
+            : openai.configured
+              ? "A protected credential is available. Its value is never returned."
+              : "OpenAI generation is disabled until a credential is supplied.",
+        valueLabel: openai.configured ? "Configured" : undefined,
+        source: openai.source,
+        control: openai.control,
+      },
+      {
+        key: "default-model",
+        label: "Default AI model",
+        classification: "application-managed",
+        status: "ready",
+        detail: "Applied immediately to subsequent AI generation requests.",
+        valueLabel: String(model.control.value),
+        source: model.source,
+        control: model.control,
+      },
       attention(
         "ai-governance",
         "Budgets and retention",
@@ -331,9 +356,10 @@ export class SystemSettingsService {
     );
   }
 
-  private communications(): SystemSettingStatus[] {
+  private async communications(): Promise<SystemSettingStatus[]> {
     const emailProvider = this.config.get<string>("EMAIL_PROVIDER", "capture");
     const smsProvider = this.config.get<string>("SMS_PROVIDER", "capture");
+    const invitationLifetime = await this.hosted.control("invitation-lifetime");
     return [
       ready(
         "email-provider",
@@ -353,13 +379,16 @@ export class SystemSettingsService {
         "deployment-managed",
         humanProvider(smsProvider),
       ),
-      ready(
-        "invitation-lifetime",
-        "Invitation lifetime",
-        "Applied to new invitations.",
-        "deployment-managed",
-        `${this.config.get<number>("INVITATION_TTL_HOURS", 168)} hours`,
-      ),
+      {
+        key: "invitation-lifetime",
+        label: "Invitation lifetime",
+        classification: "application-managed",
+        status: "ready",
+        detail: "Applied immediately to newly issued and reissued invitations.",
+        valueLabel: `${invitationLifetime.control.value} hours`,
+        source: invitationLifetime.source,
+        control: invitationLifetime.control,
+      },
     ];
   }
 
@@ -424,6 +453,119 @@ export class SystemSettingsService {
           "Optional capability is not configured.",
           classification,
         );
+  }
+
+  async updateValue(
+    area: string,
+    key: string,
+    dto: UpdateSystemSettingDto,
+    actorUserId: string,
+  ) {
+    await this.hosted.setValue(
+      area,
+      key,
+      dto.value,
+      dto.expectedRevision,
+      actorUserId,
+      dto.reason,
+    );
+    return { setting: await this.setting(area, key) };
+  }
+
+  async replaceSecret(
+    area: string,
+    key: string,
+    dto: ReplaceSystemSecretDto,
+    actorUserId: string,
+  ) {
+    await this.hosted.replaceSecret(
+      area,
+      key,
+      dto.secret,
+      dto.expectedRevision,
+      actorUserId,
+      dto.reason,
+    );
+    return { setting: await this.setting(area, key) };
+  }
+
+  async revokeSecret(
+    area: string,
+    key: string,
+    dto: SystemSettingActionDto,
+    actorUserId: string,
+  ) {
+    await this.hosted.revokeSecret(
+      area,
+      key,
+      dto.expectedRevision,
+      actorUserId,
+      dto.reason,
+    );
+    return { setting: await this.setting(area, key) };
+  }
+
+  async reset(
+    area: string,
+    key: string,
+    dto: SystemSettingActionDto,
+    actorUserId: string,
+  ) {
+    await this.hosted.reset(
+      area,
+      key,
+      dto.expectedRevision,
+      actorUserId,
+      dto.reason,
+    );
+    return { setting: await this.setting(area, key) };
+  }
+
+  async test(
+    area: string,
+    key: string,
+    dto: SystemSettingActionDto,
+    actorUserId: string,
+  ) {
+    await this.hosted.test(
+      area,
+      key,
+      dto.expectedRevision,
+      actorUserId,
+      dto.reason,
+    );
+    return { setting: await this.setting(area, key) };
+  }
+
+  history(area: string, key: string) {
+    return this.hosted.history(area, key);
+  }
+
+  private async setting(area: string, key: string) {
+    this.hosted.definition(area, key);
+    const projection = await this.area(area);
+    const setting = projection.settings.find(
+      (candidate) => candidate.key === key,
+    );
+    if (!setting) {
+      throw new NotFoundException("The selected system setting was not found.");
+    }
+    return setting;
+  }
+
+  private async installationName(): Promise<SystemSettingStatus> {
+    const state = await this.hosted.control("installation-name");
+    return {
+      key: "installation-name",
+      label: "Installation name",
+      classification: "application-managed",
+      status: "ready",
+      detail:
+        "Displayed in hosted-system administration and applied immediately.",
+      valueLabel: String(state.control.value),
+      source: state.source,
+      control: state.control,
+    };
   }
 }
 

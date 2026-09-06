@@ -23,12 +23,14 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthService } from "../auth/auth.service";
 import type { CreateCampaignInstanceInvitationDto } from "./dto/campaign-instance-management.dto";
+import { HostedConfigurationService } from "../settings/hosted-configuration.service";
 
 @Injectable()
 export class CampaignInstanceInvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly hostedConfiguration: HostedConfigurationService,
     private readonly tokens: InvitationTokenService,
     private readonly contacts: ContactProtector,
     private readonly auth: AuthService,
@@ -262,7 +264,7 @@ export class CampaignInstanceInvitationsService {
       );
     }
     const issued = this.tokens.issue();
-    const ttlHours = this.config.get<number>("INVITATION_TTL_HOURS", 168);
+    const ttlHours = await this.hostedConfiguration.invitationLifetimeHours();
     let invitation;
     try {
       invitation = await this.prisma.$transaction(async (tx) => {
@@ -433,7 +435,7 @@ export class CampaignInstanceInvitationsService {
       ? this.contacts.decrypt(prior.phoneEncrypted)
       : undefined;
     const issued = this.tokens.issue();
-    const ttlHours = this.config.get<number>("INVITATION_TTL_HOURS", 168);
+    const ttlHours = await this.hostedConfiguration.invitationLifetimeHours();
     const issuanceLimit = this.config.get<number>(
       "CAMPAIGN_INSTANCE_INVITATION_HOURLY_LIMIT",
       20,

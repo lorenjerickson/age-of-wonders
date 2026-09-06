@@ -324,6 +324,24 @@ contain stored secrets, credentials, encryption keys, database passwords, or pro
 Settings navigation or API access; an administrator without GM authority may use Settings without
 gaining World or Campaign access.
 
+The first application-managed bindings are installation name, invitation lifetime, default OpenAI
+model, and the OpenAI credential. `ConfigurationBinding` stores one effective override per static
+definition key using `VALUE`, encrypted `SECRET`, explicit `DISABLED`, or `INHERIT` semantics.
+Application values take effect immediately; `INHERIT` resumes the deployment value or product
+default, while `DISABLED` intentionally suppresses even a configured deployment secret. Invitation
+lifetime affects newly issued or reissued invitations, and OpenAI model and credential bindings are
+resolved for each subsequent generation request.
+
+Value updates, secret replacement/rotation, revocation, reset, connection test, and bounded history
+live below `/settings/system/:systemArea/settings/:settingKey`. Every operation remains
+System-Administrator-only and uses an expected revision to reject stale writes. Secret input is
+encrypted before persistence and never appears in status projections, history, logs, AI context, or
+ordinary exports. `ConfigurationRevision` is append-only and records the human operator, action,
+optional reason, and configuration version without recording old or new protected values. A
+connection test records only success or failure and is rate limited. Public addresses, Auth0
+topology, contact-encryption root material, database/object-storage credentials, and other
+infrastructure-sensitive values remain deployment-managed in this slice.
+
 New `Generation` rows record the authenticated requester plus a bounded context kind and context
 identity when the command has one. Generation history remains requester-scoped and returns only
 bounded output previews; provider response identities, prompts, complete outputs, and opaque

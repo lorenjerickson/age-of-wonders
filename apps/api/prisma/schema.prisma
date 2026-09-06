@@ -300,6 +300,29 @@ enum CharacterAssociationOrigin {
   ONE_WAY_IMPORT
 }
 
+enum ConfigurationBindingKind {
+  VALUE
+  SECRET
+  DISABLED
+  INHERIT
+}
+
+enum ConfigurationValidationStatus {
+  UNTESTED
+  VALID
+  INVALID
+}
+
+enum ConfigurationRevisionAction {
+  VALUE_SET
+  SECRET_REPLACED
+  SECRET_ROTATED
+  SECRET_REVOKED
+  OVERRIDE_RESET
+  VALIDATION_SUCCEEDED
+  VALIDATION_FAILED
+}
+
 /// Authenticated people. Protected contact data remains outside generic resources.
 model User {
   id                                         String                                  @id @default(uuid())
@@ -349,6 +372,8 @@ model User {
   createdSessionBoundaries                   CampaignSessionRuntimeBoundary[]        @relation("CampaignSessionBoundaryActor")
   createdSessionSummaries                    CampaignSessionSummary[]                @relation("CampaignSessionSummaryAuthor")
   reviewedCampaignInstanceCharacterDrafts    CampaignInstanceCharacterDraft[]        @relation("CampaignInstanceCharacterDraftReviewer")
+  updatedConfigurationBindings               ConfigurationBinding[]                  @relation("ConfigurationBindingUpdater")
+  configurationRevisions                     ConfigurationRevision[]                 @relation("ConfigurationRevisionActor")
 }
 
 /// Installation-level operator established during first launch. This role is
@@ -443,6 +468,43 @@ model AuthSession {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+/// Installation-scoped override or explicit disablement for one registered
+/// configuration definition. Secret plaintext is retained only as encrypted data.
+model ConfigurationBinding {
+  id               String                        @id @default(uuid())
+  definitionKey    String                        @unique
+  kind             ConfigurationBindingKind
+  value            Json?
+  secretEncrypted  String?
+  version          Int                           @default(1)
+  validationStatus ConfigurationValidationStatus @default(UNTESTED)
+  validatedAt      DateTime?
+  updatedByUserId  String
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+  updatedBy        User                          @relation("ConfigurationBindingUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  revisions        ConfigurationRevision[]
+
+  @@index([kind, updatedAt])
+  @@index([updatedByUserId, updatedAt])
+}
+
+/// Append-only, value-free operator history for configuration changes and tests.
+model ConfigurationRevision {
+  id                     String                      @id @default(uuid())
+  configurationBindingId String
+  configurationVersion   Int
+  action                 ConfigurationRevisionAction
+  reason                 String?
+  actorUserId            String
+  createdAt              DateTime                    @default(now())
+  binding                ConfigurationBinding        @relation(fields: [configurationBindingId], references: [id], onDelete: Restrict)
+  actor                  User                        @relation("ConfigurationRevisionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([configurationBindingId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model CampaignMembership {

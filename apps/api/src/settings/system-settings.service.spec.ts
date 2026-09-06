@@ -22,7 +22,31 @@ function harness() {
   });
   return {
     prisma,
-    service: new SystemSettingsService(prisma as never, config),
+    service: new SystemSettingsService(prisma as never, config, {
+      installationName: jest.fn().mockResolvedValue("Glasswake Table"),
+      control: jest.fn((key: string) =>
+        Promise.resolve({
+          configured: key !== "openai",
+          source: "default",
+          validationStatus: "untested",
+          control: {
+            kind: key === "invitation-lifetime" ? "number" : "text",
+            expectedRevision: 0,
+            value:
+              key === "installation-name"
+                ? "Glasswake Table"
+                : key === "invitation-lifetime"
+                  ? 168
+                  : key === "default-model"
+                    ? "gpt-5.6-terra"
+                    : undefined,
+            canReset: false,
+            canDisable: key === "openai",
+            canTest: false,
+          },
+        }),
+      ),
+    } as never),
   };
 }
 

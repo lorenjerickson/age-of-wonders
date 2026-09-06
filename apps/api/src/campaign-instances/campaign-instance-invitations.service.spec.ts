@@ -49,6 +49,7 @@ function harness(
   const service = new CampaignInstanceInvitationsService(
     prisma as never,
     { get: jest.fn((_key: string, fallback: unknown) => fallback) } as never,
+    { invitationLifetimeHours: jest.fn().mockResolvedValue(168) } as never,
     {
       issue: jest.fn(() => ({
         token: "secret-token",
@@ -136,6 +137,7 @@ function acceptanceHarness(invitedUser?: {
   const service = new CampaignInstanceInvitationsService(
     prisma as never,
     {} as never,
+    { invitationLifetimeHours: jest.fn().mockResolvedValue(168) } as never,
     { hash: jest.fn(() => "token-hash") } as never,
     {
       protectOpaque: jest.fn(() => ({

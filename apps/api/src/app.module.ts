@@ -25,6 +25,7 @@ import { SystemSettingsModule } from "./settings/system-settings.module";
     }),
     PrismaModule,
     AuthModule,
+    SystemSettingsModule,
     HealthModule,
     MediaModule,
     GraphModule,
@@ -36,7 +37,6 @@ import { SystemSettingsModule } from "./settings/system-settings.module";
     CampaignInstancesModule,
     ModelRegistryModule,
     PlayersModule,
-    SystemSettingsModule,
   ],
   providers: [
     {

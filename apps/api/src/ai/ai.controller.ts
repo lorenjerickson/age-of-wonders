@@ -73,7 +73,7 @@ export class AiController {
             kind: "create-campaign",
             prompt: result.combinedPrompt,
             output: result.output,
-            model: this.openAi.model,
+            model: result.model,
             responseId: result.responseId,
             createdByUserId: userId,
             contextType: "world-definition-snapshot",
@@ -83,7 +83,7 @@ export class AiController {
         return {
           draftProposal: result.draftProposal,
           generationId: generation.id,
-          model: this.openAi.model,
+          model: result.model,
           outputPreview: preview(result.output),
           outputTruncated:
             result.output.length > GENERATION_OUTPUT_PREVIEW_LENGTH,

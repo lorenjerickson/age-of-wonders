@@ -59,6 +59,11 @@ import type {
   SystemSettingArea,
   SystemSettingAreaProjection,
   SystemSettingsIndexProjection,
+  SystemSettingActionRequest,
+  SystemSettingMutationResult,
+  UpdateSystemSettingRequest,
+  ReplaceSystemSecretRequest,
+  ConfigurationHistoryProjection,
 } from "@aow/common";
 
 const apiUrl = "/api";
@@ -2109,6 +2114,61 @@ export function getSystemSettings() {
 export function getSystemSettingArea(area: SystemSettingArea) {
   return request<SystemSettingAreaProjection>(
     `/settings/system/${encodeURIComponent(area)}`,
+  );
+}
+
+export function updateSystemSetting(
+  area: SystemSettingArea,
+  settingKey: string,
+  input: UpdateSystemSettingRequest,
+) {
+  return request<SystemSettingMutationResult>(
+    `/settings/system/${area}/settings/${encodeURIComponent(settingKey)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function replaceSystemSecret(
+  area: SystemSettingArea,
+  settingKey: string,
+  input: ReplaceSystemSecretRequest,
+) {
+  return request<SystemSettingMutationResult>(
+    `/settings/system/${area}/settings/${encodeURIComponent(settingKey)}/secret`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function performSystemSettingAction(
+  area: SystemSettingArea,
+  settingKey: string,
+  action: "reset" | "revoke" | "test",
+  input: SystemSettingActionRequest,
+) {
+  return request<SystemSettingMutationResult>(
+    `/settings/system/${area}/settings/${encodeURIComponent(settingKey)}/actions/${action}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getSystemSettingHistory(
+  area: SystemSettingArea,
+  settingKey: string,
+) {
+  return request<ConfigurationHistoryProjection>(
+    `/settings/system/${area}/settings/${encodeURIComponent(settingKey)}/history`,
   );
 }
 
