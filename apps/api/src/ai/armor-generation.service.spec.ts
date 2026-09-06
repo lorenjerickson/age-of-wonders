@@ -153,14 +153,16 @@ describe("ArmorGenerationService", () => {
     };
     expect(inventory.itemIds).toHaveLength(6);
     expect(Object.keys(equipment.slots)).toEqual([
-      "head",
-      "chest",
-      "arms",
-      "hands",
-      "legs",
-      "feet",
+      "aow:equipment-slot-head",
+      "aow:equipment-slot-chest",
+      "aow:equipment-slot-arms",
+      "aow:equipment-slot-hands",
+      "aow:equipment-slot-legs",
+      "aow:equipment-slot-feet",
     ]);
     expect(defense.contributions).toHaveLength(6);
-    expect(defense.contributions[0]?.equipmentSlots).toEqual(["head"]);
+    expect(defense.contributions[0]?.equipmentSlots).toEqual([
+      "aow:equipment-slot-head",
+    ]);
   });
 });

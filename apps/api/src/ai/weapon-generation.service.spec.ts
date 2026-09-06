@@ -94,7 +94,9 @@ describe("WeaponGenerationService", () => {
         category: "weapon",
         quality: "exquisite",
         equippable: {
-          compatibleSlotSets: [["main-hand", "off-hand"]],
+          compatibleSlotSets: [
+            ["aow:equipment-slot-main-hand", "aow:equipment-slot-off-hand"],
+          ],
         },
       },
       extensions: { "aow:worldId": "world-1" },

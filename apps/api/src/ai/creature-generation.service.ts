@@ -4,7 +4,7 @@ import {
   Injectable,
   Logger,
 } from "@nestjs/common";
-import { isAttributeScore, STANDARD_ATTRIBUTES } from "@aow/common";
+import { CORE_ATTRIBUTE_KEYS, isAttributeScore } from "@aow/common";
 import { randomUUID } from "node:crypto";
 import { DomainService } from "../domain/domain.service";
 import { isObject } from "../domain/domain-resource";
@@ -30,6 +30,17 @@ const LEGACY_CREATURE_NATURES = new Set([
   "plant",
   "undead",
 ]);
+
+const LEGACY_ATTRIBUTE_NAMES = [
+  "might",
+  "intellect",
+  "will",
+  "hardiness",
+  "charisma",
+  "agility",
+  "fortune",
+  "sanity",
+] as const;
 
 @Injectable()
 export class CreatureGenerationService {
@@ -168,8 +179,13 @@ export class CreatureGenerationService {
       ? generated.attributes
       : {};
     const standard = isObject(attributes.standard) ? attributes.standard : {};
-    const suppliedScores = STANDARD_ATTRIBUTES.map((key) => {
-      const attribute = isObject(standard[key]) ? standard[key] : {};
+    const suppliedScores = CORE_ATTRIBUTE_KEYS.map((key, index) => {
+      const legacyKey = LEGACY_ATTRIBUTE_NAMES[index];
+      const attribute = isObject(attributes[key])
+        ? attributes[key]
+        : isObject(standard[legacyKey])
+          ? standard[legacyKey]
+          : {};
       return attribute.score;
     });
     const usesTwentyPointScale = suppliedScores.every(
@@ -180,8 +196,13 @@ export class CreatureGenerationService {
         score <= 20,
     );
     const normalizedAttributes = Object.fromEntries(
-      STANDARD_ATTRIBUTES.map((key) => {
-        const supplied = isObject(standard[key]) ? standard[key] : {};
+      CORE_ATTRIBUTE_KEYS.map((key, index) => {
+        const legacyKey = LEGACY_ATTRIBUTE_NAMES[index];
+        const supplied = isObject(attributes[key])
+          ? attributes[key]
+          : isObject(standard[legacyKey])
+            ? standard[legacyKey]
+            : {};
         const rawScore = supplied.score;
         const score =
           typeof rawScore === "number" && Number.isInteger(rawScore)
@@ -191,7 +212,7 @@ export class CreatureGenerationService {
             : 50;
         if (!isAttributeScore(score)) {
           throw new BadGatewayException(
-            `The AI response included an invalid ${key} score; attribute scores must be integers from 0 through 100.`,
+            `The AI response included an invalid ${legacyKey} score; attribute scores must be integers from 0 through 100.`,
           );
         }
         return [
@@ -225,7 +246,7 @@ export class CreatureGenerationService {
         : [],
       size: typeof generated.size === "string" ? generated.size : "medium",
       classification,
-      attributes: { ...attributes, standard: normalizedAttributes },
+      attributes: normalizedAttributes,
       skills: Array.isArray(generated.skills) ? generated.skills : [],
       proficiencies: Array.isArray(generated.proficiencies)
         ? generated.proficiencies

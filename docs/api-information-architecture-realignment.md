@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-session-concurrency-corrected
+status: active-implementation-plan-open-model-contract-cutover-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,8 +21,9 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session—including active-only installation concurrency—Campaign Instance, Campaign/World
-authoring, identity/participation, Auth0 adapter,
+The Session—including active-only installation concurrency—open Attribute/Equipment Slot and
+Profession-only Character contract cutover, Campaign Instance, Campaign/World authoring,
+identity/participation, Auth0 adapter,
 writable hosted-Settings slice, system-boundary, legacy-removal, Instance-native Character-sheet,
 Character completion/review, and first-party one-way Character import waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public

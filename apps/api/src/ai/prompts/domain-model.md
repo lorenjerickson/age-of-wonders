@@ -82,13 +82,13 @@ Other shared values include:
   `{ "kind": "measured", "amount": number, "unit": "turn" | "round" | "minute" | "hour" | "day" | "week" | "month" | "year" }`,
   or `{ "kind": "special", "description": string }`.
 - `ResourcePool`: `{ "current": number, "maximum": number, "temporary"?: number }`.
-- `AttributeCollection<T>` is a legacy compatibility projection:
-  `{ "standard": { ...legacy standard attributes }, "custom"?: { [namespacedKey]: T } }`. Its
-  standard keys remain `might`, `intellect`, `will`, `hardiness`, `charisma`, `agility`, `fortune`,
-  and `sanity` until persisted values migrate. New model authoring uses the exact Model Schema
-  Releases described below. The editable core model defines `wisdom`, not `will`; migration must
-  apply the explicit legacy Will-to-Wisdom mapping and must never silently reinterpret the key.
-  `AttributeScore` remains an integer from 0 through 100, with a neutral default of 50.
+- `AttributeCollection<T>` is a flat record keyed by the applicable captured Model Schema's stable,
+  namespaced Attribute option keys. The editable core seeds `aow:attribute-might`,
+  `aow:attribute-intellect`, `aow:attribute-wisdom`, `aow:attribute-hardiness`,
+  `aow:attribute-charisma`, `aow:attribute-agility`, `aow:attribute-fortune`, and
+  `aow:attribute-sanity`, but these are not an exhaustive set. The legacy raw key `will` migrates
+  explicitly to `aow:attribute-wisdom`; it must never be silently reinterpreted on an unmigrated
+  record. `AttributeScore` remains an integer from 0 through 100, with a neutral default of 50.
 
 ### Definition lineages, revisions, and captured snapshots
 
@@ -1476,8 +1476,9 @@ location ID, and `stationary`, `traveling`, or `lost` status.
 - `CharacterState` extends `CreatureState`; it is not a parallel aggregate with a smaller or
   incompatible creature contract. Every creature property and invariant therefore applies to a
   character. Character state additionally records its owning campaign membership, campaign status
-  (`active`, `retired`, or `dead`), advancement, heritage, background, alignment, classes,
-  features, feats, professions, death saves, biography, and other character-specific progression.
+  (`active`, `retired`, or `dead`), advancement, heritage, background, alignment, features, feats,
+  one or more professions with independent progression, death saves, biography, and other
+  character-specific progression. Class and Subclass are not canonical domain concepts.
 - `CreatureState` is the common runtime creature aggregate. For monsters and NPCs it includes an optional monster
   definition, three required image assets, an opposed-roll defense rating contributed by equipped
   armor, physical classification and local aliases, combat statistics, inventory/equipment,
@@ -1756,6 +1757,10 @@ interface ArmorDefenseContribution {
   dice: DiceExpression;
 }
 ```
+
+`EquipmentSlot` is the stable namespaced key of a vocabulary option in the applicable captured
+Model Schema, such as `aow:equipment-slot-main-hand`. Core keys are editable seed content, not a
+closed union. Custom slots such as Wings participate through the same contract.
 
 Each contribution references the equipped `ItemInstance` supplying it, records one or more occupied
 equipment slots, and contains at least one dice term. The referenced armor definition uses

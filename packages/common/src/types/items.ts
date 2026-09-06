@@ -19,6 +19,7 @@ import type {
   ItemInstanceId,
   LocationId,
   MediaAssetId,
+  NamespacedKey,
   NonEmptyReadonlyArray,
   OpenString,
   ResourcePool,
@@ -59,24 +60,28 @@ export type ItemCategory = OpenString<
   | "treasure"
 >;
 
-export const EQUIPMENT_SLOTS = [
-  "head",
-  "neck",
-  "chest",
-  "shoulders",
-  "arms",
-  "hands",
-  "legs",
-  "feet",
-  "waist",
-  "back",
-  "off-hand",
-  "main-hand",
-  "right-finger",
-  "left-finger",
+/** Seed identities from the editable core Equipment Slot vocabulary. This list is not exhaustive. */
+export const CORE_EQUIPMENT_SLOT_KEYS = [
+  "aow:equipment-slot-pack",
+  "aow:equipment-slot-belt",
+  "aow:equipment-slot-head",
+  "aow:equipment-slot-neck",
+  "aow:equipment-slot-off-hand",
+  "aow:equipment-slot-main-hand",
+  "aow:equipment-slot-chest",
+  "aow:equipment-slot-shoulders",
+  "aow:equipment-slot-arms",
+  "aow:equipment-slot-hands",
+  "aow:equipment-slot-legs",
+  "aow:equipment-slot-feet",
+  "aow:equipment-slot-waist",
+  "aow:equipment-slot-back",
+  "aow:equipment-slot-right-finger",
+  "aow:equipment-slot-left-finger",
 ] as const;
 
-export type EquipmentSlot = (typeof EQUIPMENT_SLOTS)[number];
+/** Stable key of an Equipment Slot option in an adopted Model Schema release. */
+export type EquipmentSlot = NamespacedKey;
 export const ITEM_QUALITIES = [
   "ramshackle",
   "standard",

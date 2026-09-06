@@ -152,16 +152,14 @@ describe("CreatureGenerationService", () => {
     });
     expect(create.mock.calls[0]?.[1]).toMatchObject({
       attributes: {
-        standard: {
-          might: { score: 50, modifier: 0 },
-          intellect: { score: 90, modifier: 4 },
-          will: { score: 75, modifier: 2 },
-          hardiness: { score: 60, modifier: 1 },
-          charisma: { score: 65, modifier: 1 },
-          agility: { score: 70, modifier: 2 },
-          fortune: { score: 60, modifier: 1 },
-          sanity: { score: 80, modifier: 3 },
-        },
+        "aow:attribute-might": { score: 50, modifier: 0 },
+        "aow:attribute-intellect": { score: 90, modifier: 4 },
+        "aow:attribute-wisdom": { score: 75, modifier: 2 },
+        "aow:attribute-hardiness": { score: 60, modifier: 1 },
+        "aow:attribute-charisma": { score: 65, modifier: 1 },
+        "aow:attribute-agility": { score: 70, modifier: 2 },
+        "aow:attribute-fortune": { score: 60, modifier: 1 },
+        "aow:attribute-sanity": { score: 80, modifier: 3 },
       },
     });
     expect(create.mock.calls[0]?.[1]).not.toHaveProperty("armorClass");
@@ -206,13 +204,14 @@ describe("CreatureGenerationService", () => {
       },
       "world-1",
     );
-    const attributes = normalized.attributes as {
-      standard: Record<string, { score: number }>;
-    };
+    const attributes = normalized.attributes as Record<
+      string,
+      { score: number }
+    >;
 
-    expect(attributes.standard.intellect?.score).toBe(92);
-    expect(attributes.standard.might?.score).toBe(50);
-    expect(attributes.standard.sanity?.score).toBe(50);
+    expect(attributes["aow:attribute-intellect"]?.score).toBe(92);
+    expect(attributes["aow:attribute-might"]?.score).toBe(50);
+    expect(attributes["aow:attribute-sanity"]?.score).toBe(50);
   });
 
   it("rejects legacy fantasy taxonomy in newly generated creatures", () => {

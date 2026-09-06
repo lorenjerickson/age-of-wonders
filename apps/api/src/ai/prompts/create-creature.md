@@ -72,8 +72,11 @@ Include every required `CreatureState` field. In particular:
   `composite`, `collective`, `field-phenomenon`, `unknown`, or a justified namespaced value. Add an
   observed `morphology` when useful. Put colloquial, cultural, or historical labels in `aliases`;
   never use labels such as fiend, fey, celestial, undead, or monstrosity as physical taxonomy.
-- `attributes.standard` must contain all eight attributes: `might`, `intellect`, `will`,
-  `hardiness`, `charisma`, `agility`, `fortune`, and `sanity`.
+- `attributes` is a flat object keyed by Attribute option keys from the applicable Model Schema.
+  For this compatibility generator, include the eight core keys `aow:attribute-might`,
+  `aow:attribute-intellect`, `aow:attribute-wisdom`, `aow:attribute-hardiness`,
+  `aow:attribute-charisma`, `aow:attribute-agility`, `aow:attribute-fortune`, and
+  `aow:attribute-sanity`.
 - Every attribute value must contain integer `score`, numeric `modifier`, numeric `savingThrow`, and
   boolean `proficientInSave`. Attribute scores use a percentile-like 0-through-100 scale, with about
   `50` representing an ordinary adult. Generate scores directly on that scale—for example, use
@@ -82,6 +85,7 @@ Include every required `CreatureState` field. In particular:
   throws remain their own small numeric fields and must not be copied into `score`.
 - `skills` and `proficiencies` must be arrays. A skill entry is
   `{ "skillDefinitionId": string, "attribute": string, "rank": "none" | "half" | "proficient" | "expertise" | "custom", "bonus": number, "passive": number }`.
+  The `attribute` value is the same stable namespaced Attribute option key used by `attributes`.
   A proficiency entry is
   `{ "subject": string, "rank": "none" | "half" | "proficient" | "expertise" | "custom", "multiplier"?: number, "sourceIds"?: string[] }`.
   Include a skill only when the surrounding context supplies its persisted `SkillDefinition` ID;

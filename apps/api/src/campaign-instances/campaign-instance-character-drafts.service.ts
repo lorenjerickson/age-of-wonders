@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { STANDARD_ATTRIBUTES } from "@aow/common";
+import { CORE_ATTRIBUTE_KEYS } from "@aow/common";
 import { CharacterDraftStatus, Prisma } from "@prisma/client";
 import { randomInt, randomUUID } from "node:crypto";
 import { isCanonicalSnapshotManifest } from "../domain/snapshot-manifest";
@@ -662,9 +662,9 @@ export class CampaignInstanceCharacterDraftsService {
       .sort((left, right) => left.name.localeCompare(right.name));
     const effectiveAttributes = attributes.length
       ? attributes
-      : STANDARD_ATTRIBUTES.map((attribute) => ({
+      : CORE_ATTRIBUTE_KEYS.map((attribute) => ({
           id: attribute,
-          name: title(attribute),
+          name: title(attribute.replace(/^aow:attribute-/, "")),
           minimum: 0,
           maximum: 100,
         }));

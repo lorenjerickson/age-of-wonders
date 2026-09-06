@@ -168,8 +168,12 @@ export class WeaponGenerationService {
       );
     }
     const compatibleSlotSets = [
-      ...(supportsOneHand ? [["main-hand"], ["off-hand"]] : []),
-      ...(supportsTwoHands ? [["main-hand", "off-hand"]] : []),
+      ...(supportsOneHand
+        ? [["aow:equipment-slot-main-hand"], ["aow:equipment-slot-off-hand"]]
+        : []),
+      ...(supportsTwoHands
+        ? [["aow:equipment-slot-main-hand", "aow:equipment-slot-off-hand"]]
+        : []),
     ];
     const quality = ITEM_QUALITIES.includes(components.quality as ItemQuality)
       ? components.quality

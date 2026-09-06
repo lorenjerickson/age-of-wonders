@@ -1,9 +1,7 @@
 import type {
   BackgroundDefinition,
   CharacterDefinition,
-  ClassDefinition,
   FeatDefinition,
-  SubclassDefinition,
 } from "./character";
 import type { HeritageDefinition } from "./heritage";
 import type { MonsterDefinition } from "./creatures";
@@ -73,7 +71,6 @@ export type GameDefinition =
   | ActionDefinition
   | BackgroundDefinition
   | CharacterDefinition
-  | ClassDefinition
   | ConditionDefinition
   | CustomDefinition
   | FeatDefinition
@@ -85,7 +82,6 @@ export type GameDefinition =
   | ProfessionDefinition
   | DisciplineDefinition
   | SkillDefinition
-  | SubclassDefinition
   | TableDefinition
   | TraitDefinition;
 

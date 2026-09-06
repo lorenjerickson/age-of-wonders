@@ -1,4 +1,4 @@
-import type { DiceExpression, NumericExpression } from "./dice";
+import type { DiceExpression } from "./dice";
 import type { Predicate } from "./expressions";
 import type { EquipmentState } from "./items";
 import type { OperatingBasis, UnderstandingState } from "./disciplines";
@@ -82,16 +82,6 @@ export interface SenseState {
   readonly mechanismDescription?: string;
 }
 
-export interface ClassLevelState {
-  readonly classId: DefinitionId;
-  readonly subclassId?: DefinitionId;
-  readonly level: number;
-  readonly hitDie: number;
-  readonly featureIds: readonly DefinitionId[];
-  readonly resources?: Readonly<Record<string, ResourcePool>>;
-  readonly choices?: Readonly<Record<string, readonly DefinitionId[]>>;
-}
-
 export type Alignment = OpenString<
   | "lawful-good"
   | "neutral-good"
@@ -132,37 +122,6 @@ export interface CharacterTemplateComponents {
 export type CharacterDefinition<
   Extensions extends ExtensionData = ExtensionData,
 > = Definition<"character-template", CharacterTemplateComponents, Extensions>;
-
-export interface ClassComponents {
-  readonly hitDie: number;
-  readonly primaryAttributes: readonly Attribute[];
-  readonly savingThrowProficiencies: readonly Attribute[];
-  readonly levelProgression: readonly ClassLevelDefinition[];
-  readonly multiclassPrerequisites?: readonly Predicate[];
-  readonly disciplineProgression?:
-    "full" | "half" | "third" | "linked" | "none" | string;
-}
-
-export type ClassDefinition<Extensions extends ExtensionData = ExtensionData> =
-  Definition<"class", ClassComponents, Extensions>;
-
-export interface ClassLevelDefinition {
-  readonly level: number;
-  readonly proficiencyBonus?: number;
-  readonly featureIds: readonly DefinitionId[];
-  readonly resourceMaximums?: Readonly<Record<string, NumericExpression>>;
-  readonly capacityByBand?: Readonly<Record<number, number>>;
-  readonly choices?: readonly ChoiceDefinition[];
-}
-
-export interface SubclassComponents {
-  readonly parentClassId: DefinitionId;
-  readonly levelFeatures: Readonly<Record<number, readonly DefinitionId[]>>;
-}
-
-export type SubclassDefinition<
-  Extensions extends ExtensionData = ExtensionData,
-> = Definition<"subclass", SubclassComponents, Extensions>;
 
 export interface BackgroundComponents {
   readonly attributeOptions?: readonly Attribute[];
@@ -212,7 +171,6 @@ export interface CharacterState<
   readonly creationFeatId?: DefinitionId;
   readonly alignment?: Alignment;
   readonly deity?: string;
-  readonly classes: readonly ClassLevelState[];
   readonly deathSaves?: DeathSaveState;
   readonly exhaustionLevel?: number;
   readonly featureIds: readonly DefinitionId[];

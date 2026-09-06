@@ -18,7 +18,7 @@ export type NumericExpression =
     }
   | {
       readonly kind: "level";
-      readonly classId?: DefinitionId;
+      readonly professionId?: DefinitionId;
       readonly actor?: string;
     }
   | {

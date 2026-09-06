@@ -93,19 +93,21 @@ export type NonEmptyReadonlyArray<Value> = readonly [Value, ...Value[]];
 /** Preserves suggestions for standard values while accepting namespaced homebrew values. */
 export type OpenString<Standard extends string> = Standard | (string & {});
 
-export const STANDARD_ATTRIBUTES = [
-  "might",
-  "intellect",
-  "will",
-  "hardiness",
-  "charisma",
-  "agility",
-  "fortune",
-  "sanity",
+/** Seed identities from the editable core Attribute vocabulary. This list is not exhaustive. */
+export const CORE_ATTRIBUTE_KEYS = [
+  "aow:attribute-might",
+  "aow:attribute-intellect",
+  "aow:attribute-wisdom",
+  "aow:attribute-hardiness",
+  "aow:attribute-charisma",
+  "aow:attribute-agility",
+  "aow:attribute-fortune",
+  "aow:attribute-sanity",
 ] as const;
 
-export type StandardAttribute = (typeof STANDARD_ATTRIBUTES)[number];
-export type Attribute = StandardAttribute | NamespacedKey;
+export type CoreAttribute = (typeof CORE_ATTRIBUTE_KEYS)[number];
+/** Stable key of an Attribute vocabulary option in an adopted Model Schema release. */
+export type Attribute = NamespacedKey;
 
 declare const attributeScoreBrand: unique symbol;
 
@@ -137,34 +139,28 @@ export function attributeScore(value: number): AttributeScore {
   return value;
 }
 
-/** Requires every standard attribute while isolating namespaced homebrew attributes. */
-export interface AttributeCollection<Value> {
-  readonly standard: Readonly<Record<StandardAttribute, Value>>;
-  readonly custom?: Readonly<Record<NamespacedKey, Value>>;
-}
+/** Values keyed by Attribute option identity from the applicable captured Model Schema. */
+export type AttributeCollection<Value> = Readonly<Record<Attribute, Value>>;
 
-export interface PartialAttributeCollection<Value> {
-  readonly standard: Readonly<Partial<Record<StandardAttribute, Value>>>;
-  readonly custom?: Readonly<Record<NamespacedKey, Value>>;
-}
+export type PartialAttributeCollection<Value> = Readonly<
+  Partial<Record<Attribute, Value>>
+>;
 
 export const DEFAULT_ATTRIBUTE_SCORES: Readonly<
-  Record<StandardAttribute, AttributeScore>
+  Record<CoreAttribute, AttributeScore>
 > = Object.freeze({
-  might: attributeScore(50),
-  intellect: attributeScore(50),
-  will: attributeScore(50),
-  hardiness: attributeScore(50),
-  charisma: attributeScore(50),
-  agility: attributeScore(50),
-  fortune: attributeScore(50),
-  sanity: attributeScore(50),
+  "aow:attribute-might": attributeScore(50),
+  "aow:attribute-intellect": attributeScore(50),
+  "aow:attribute-wisdom": attributeScore(50),
+  "aow:attribute-hardiness": attributeScore(50),
+  "aow:attribute-charisma": attributeScore(50),
+  "aow:attribute-agility": attributeScore(50),
+  "aow:attribute-fortune": attributeScore(50),
+  "aow:attribute-sanity": attributeScore(50),
 });
 
 export const DEFAULT_ATTRIBUTES: AttributeCollection<AttributeScore> =
-  Object.freeze({
-    standard: DEFAULT_ATTRIBUTE_SCORES,
-  });
+  DEFAULT_ATTRIBUTE_SCORES;
 
 export interface RulesSource {
   readonly namespace: RulesNamespace;

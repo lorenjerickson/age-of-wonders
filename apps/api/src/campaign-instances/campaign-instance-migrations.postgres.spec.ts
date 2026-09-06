@@ -290,6 +290,69 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
     }
   }, 40_000);
 
+  it("migrates Character draft Attribute labels to stable Model keys", async () => {
+    const fixture = await seedFixture(prisma);
+    const playerUserId = `${fixture.ownerUserId}-player`;
+    const playerProfileId = `${fixture.ownerUserId}-profile`;
+    const membershipId = `${fixture.ownerUserId}-membership`;
+    const characterId = `${fixture.ownerUserId}-character`;
+    await prisma.user.create({
+      data: {
+        id: playerUserId,
+        displayName: "Attribute verifier",
+        role: "PARTICIPANT",
+      },
+    });
+    await prisma.playerProfile.create({
+      data: {
+        id: playerProfileId,
+        userId: playerUserId,
+        displayName: "Attribute verifier",
+      },
+    });
+    await prisma.campaignInstanceHumanMembership.create({
+      data: {
+        id: membershipId,
+        campaignInstanceId: fixture.campaignInstanceId,
+        userId: playerUserId,
+        playerProfileId,
+        displayName: "Attribute verifier",
+        role: "PLAYER",
+      },
+    });
+    await prisma.campaignInstanceCharacterAssociation.create({
+      data: {
+        characterId,
+        characterName: "Key Verifier",
+        campaignInstanceId: fixture.campaignInstanceId,
+        playerMembershipId: membershipId,
+      },
+    });
+    await prisma.campaignInstanceCharacterDraft.create({
+      data: {
+        campaignInstanceId: fixture.campaignInstanceId,
+        playerMembershipId: membershipId,
+        characterId,
+        attributeAssignments: { might: 71, will: 64, "example:likeable": 82 },
+      },
+    });
+
+    await prisma.$executeRawUnsafe(characterInstanceAttributeMigrationSql());
+
+    await expect(
+      prisma.campaignInstanceCharacterDraft.findUnique({
+        where: { characterId },
+        select: { attributeAssignments: true },
+      }),
+    ).resolves.toMatchObject({
+      attributeAssignments: {
+        "aow:attribute-might": 71,
+        "aow:attribute-wisdom": 64,
+        "example:likeable": 82,
+      },
+    });
+  }, 40_000);
+
   it("rejects ambiguous Player contact hashes before creating unique indexes", async () => {
     const prefix = `contact-preflight-${randomUUID()}`;
     const preflight = playerProfileContactPreflightSql();
@@ -1177,6 +1240,17 @@ function assertDisposableDatabase(value: string) {
 
 function playerProfileContactPreflightSql() {
   return migrationBlockSql("player_profile_contact_preflight");
+}
+
+function characterInstanceAttributeMigrationSql() {
+  const migration = readFileSync(
+    join(
+      __dirname,
+      "../../prisma/migrations/20260915000000_migrate_character_attribute_keys/migration.sql",
+    ),
+    "utf8",
+  );
+  return migration.split("\n\n-- Retained legacy drafts")[0];
 }
 
 function migrationBlockSql(delimiter: string) {

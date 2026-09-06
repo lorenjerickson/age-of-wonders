@@ -17,6 +17,7 @@ import { assertScientificItemClassification } from "./scientific-item-validation
 
 const ARMOR_SLOTS = ["head", "chest", "arms", "hands", "legs", "feet"] as const;
 type ArmorSlot = (typeof ARMOR_SLOTS)[number];
+const equipmentSlotKey = (slot: ArmorSlot) => `aow:equipment-slot-${slot}`;
 
 interface GeneratedArmor {
   slot: ArmorSlot;
@@ -62,7 +63,9 @@ export class ArmorGenerationService {
       : {};
     const slots = isObject(equipment.slots) ? equipment.slots : {};
     const occupied = ARMOR_SLOTS.filter(
-      (slot) => typeof slots[slot] === "string",
+      (slot) =>
+        typeof slots[equipmentSlotKey(slot)] === "string" ||
+        typeof slots[slot] === "string",
     );
     if (occupied.length) {
       throw new BadRequestException(
@@ -122,6 +125,7 @@ export class ArmorGenerationService {
       const contributions: Record<string, unknown>[] = [];
 
       for (const armor of generated) {
+        const slotKey = equipmentSlotKey(armor.slot);
         const definition = await this.domain.create(
           "definitions",
           armor.definition,
@@ -153,18 +157,18 @@ export class ArmorGenerationService {
           extensions: {
             "aow:worldId": worldId,
             "aow:creatureId": creatureId,
-            "aow:equipmentSlot": armor.slot,
+            "aow:equipmentSlot": slotKey,
           },
         });
         createdItems.push(item);
         itemIds.push(itemId);
-        nextSlots[armor.slot] = itemId;
+        nextSlots[slotKey] = itemId;
         const armorComponent = isObject(definitionComponents.armor)
           ? definitionComponents.armor
           : {};
         contributions.push({
           itemId,
-          equipmentSlots: [armor.slot],
+          equipmentSlots: [slotKey],
           dice: armorComponent.defenseDice,
         });
       }
@@ -391,14 +395,14 @@ export class ArmorGenerationService {
         ...components,
         category: "armor",
         quality,
-        equippable: { compatibleSlotSets: [[slot]] },
+        equippable: { compatibleSlotSets: [[equipmentSlotKey(slot)]] },
         armor: normalizedArmor,
       },
       extensions: {
         ...(isObject(generated.extensions) ? generated.extensions : {}),
         "aow:worldId": worldId,
         "aow:creatureId": creatureId,
-        "aow:equipmentSlot": slot,
+        "aow:equipmentSlot": equipmentSlotKey(slot),
       },
     };
   }
