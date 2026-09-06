@@ -46,7 +46,7 @@ import {
   UpdateCampaignSessionParticipantsDto,
   UpdateCampaignSessionSummaryDto,
 } from "./dto/campaign-session.dto";
-import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 
 @ApiTags("campaign instances")
 @Controller("campaign-instances")

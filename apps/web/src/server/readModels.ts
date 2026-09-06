@@ -92,7 +92,7 @@ export const readLanding = createServerFn({ method: "GET" }).handler(
         () => false,
       ),
       readSection(
-        () => serverApiRequest<WorldDefinitionList>("/world-definitions"),
+        () => serverApiRequest<WorldDefinitionList>("/worlds"),
         "World Definitions could not be loaded.",
       ),
       readSection(
@@ -108,7 +108,7 @@ export const readWorldDefinitionLibrary = createServerFn({
   method: "GET",
 }).handler(() =>
   readSection(
-    () => serverApiRequest<WorldDefinitionList>("/world-definitions"),
+    () => serverApiRequest<WorldDefinitionList>("/worlds"),
     "World Definitions could not be loaded.",
   ),
 );
@@ -120,7 +120,7 @@ export const readWorldDefinition = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     try {
       const definition = await serverApiRequest<WorldDefinitionDetail>(
-        `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}`,
+        `/worlds/${encodeURIComponent(data.worldDefinitionId)}`,
       );
       return { found: true as const, definition };
     } catch (error) {
@@ -138,11 +138,11 @@ export const readWorldAuthoring = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     try {
       const definition = await serverApiRequest<WorldDefinitionDetail>(
-        `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}`,
+        `/worlds/${encodeURIComponent(data.worldDefinitionId)}`,
       );
       const [draft, effective] = await Promise.all([
         serverApiRequest<WorldDefinitionDraft>(
-          `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}/draft`,
+          `/worlds/${encodeURIComponent(data.worldDefinitionId)}/draft`,
         ).catch((error: unknown) => {
           if (error instanceof ServerApiError && error.status === 404)
             return undefined;
@@ -188,7 +188,7 @@ export const readWorldDraftImpact = createServerFn({ method: "GET" })
     readSection(
       () =>
         serverApiRequest<WorldDraftImpact>(
-          `/world-definitions/${encodeURIComponent(data.worldDefinitionId)}/draft/impact`,
+          `/worlds/${encodeURIComponent(data.worldDefinitionId)}/draft/impact`,
         ),
       "Draft impact could not be calculated.",
     ),
@@ -232,7 +232,7 @@ export const readCampaignLibrary = createServerFn({ method: "GET" }).handler(
   async () => {
     const [definitions, instances] = await Promise.all([
       readSection(
-        () => serverApiRequest<CampaignDefinitionList>("/campaign-definitions"),
+        () => serverApiRequest<CampaignDefinitionList>("/campaigns"),
         "Campaign Definitions could not be loaded.",
       ),
       readSection(
@@ -251,7 +251,7 @@ export const readCampaignDefinition = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     try {
       const definition = await serverApiRequest<CampaignDefinitionDetail>(
-        `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}`,
+        `/campaigns/${encodeURIComponent(data.campaignDefinitionId)}`,
       );
       return { found: true as const, definition };
     } catch (error) {
@@ -269,12 +269,12 @@ export const readCampaignDefinitionAuthoring = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     try {
       const definition = await serverApiRequest<CampaignDefinitionDetail>(
-        `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}`,
+        `/campaigns/${encodeURIComponent(data.campaignDefinitionId)}`,
       );
       let draft: CampaignDefinitionDraft | undefined;
       try {
         draft = await serverApiRequest<CampaignDefinitionDraft>(
-          `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}/draft`,
+          `/campaigns/${encodeURIComponent(data.campaignDefinitionId)}/draft`,
         );
       } catch (error) {
         if (!(error instanceof ServerApiError) || error.status !== 404)

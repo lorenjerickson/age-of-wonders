@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { GmGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 import { CampaignDefinitionsService } from "./campaign-definitions.service";
 import {
   ApplyCampaignWorldMigrationDto, CreateCampaignDefinitionDto,
@@ -14,6 +15,7 @@ import {
 @ApiTags("campaign definitions")
 @Controller("campaign-definitions")
 @UseGuards(GmGuard)
+@UseInterceptors(LegacyApiDeprecationInterceptor)
 export class CampaignDefinitionsController {
   constructor(private readonly campaigns: Pick<CampaignDefinitionsService,
     "list" | "get" | "create" | "getDraft" | "startDraft" | "save" |

@@ -7,12 +7,14 @@ import {
   Post,
   Put,
   Req,
+  UseInterceptors,
   UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { GmGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 import {
   CreateWorldDraftDto,
   ExpectedDraftRevisionDto,
@@ -27,6 +29,7 @@ import { WorldDefinitionsService } from "./world-definitions.service";
 @ApiTags("world definitions")
 @Controller("world-definitions")
 @UseGuards(GmGuard)
+@UseInterceptors(LegacyApiDeprecationInterceptor)
 export class WorldDefinitionsController {
   constructor(
     @Inject(WorldDefinitionsService)

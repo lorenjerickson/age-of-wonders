@@ -547,12 +547,12 @@ export function getCurrentUser() {
 }
 
 export function listWorldDefinitions() {
-  return request<WorldDefinitionList>("/world-definitions");
+  return request<WorldDefinitionList>("/worlds");
 }
 
 export function getWorldDefinition(worldDefinitionId: string) {
   return request<WorldDefinitionDetail>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}`,
   );
 }
 
@@ -563,7 +563,7 @@ export function createWorldDefinitionDraft(input: {
   records?: WorldDraftRecord[];
 }) {
   return request<WorldDefinitionSummary & { draft: WorldDefinitionDraft }>(
-    "/world-definitions",
+    "/worlds",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -574,7 +574,7 @@ export function createWorldDefinitionDraft(input: {
 
 export function getWorldDefinitionDraft(worldDefinitionId: string) {
   return request<WorldDefinitionDraft>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/draft`,
   );
 }
 
@@ -583,7 +583,7 @@ export function startWorldDefinitionDraft(
   baseRevisionId: string,
 ) {
   return request<WorldDefinitionDraft>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/draft`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -664,7 +664,7 @@ export function saveWorldDefinitionDraft(
   >,
 ) {
   return request<WorldDefinitionDraft>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/draft`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -680,7 +680,7 @@ export function saveWorldDefinitionDraft(
 
 export function getWorldDraftImpact(worldDefinitionId: string) {
   return request<WorldDraftImpact>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/impact`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/draft/impact`,
   );
 }
 
@@ -691,14 +691,11 @@ export function validateWorldDefinitionDraft(
   return request<{
     valid: boolean;
     issues: Array<{ code: string; subject: string; detail: string }>;
-  }>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/validate`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedStorageRevision }),
-    },
-  );
+  }>(`/worlds/${encodeURIComponent(worldDefinitionId)}/draft/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedStorageRevision }),
+  });
 }
 
 export function publishWorldDefinitionDraft(
@@ -709,14 +706,11 @@ export function publishWorldDefinitionDraft(
     WorldDefinitionRevisionSummary & {
       snapshot?: { id: string; capturedAt: string };
     }
-  >(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/draft/publish`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedStorageRevision }),
-    },
-  );
+  >(`/worlds/${encodeURIComponent(worldDefinitionId)}/draft/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedStorageRevision }),
+  });
 }
 
 function worldLifecycleAction(
@@ -725,7 +719,7 @@ function worldLifecycleAction(
   expectedMetadataRevision: number,
 ) {
   return request<WorldDefinitionSummary>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/${action}`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/${action}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -749,7 +743,7 @@ export function forkWorldDefinition(
   input: { sourceSnapshotId: string; name: string; description?: string },
 ) {
   return request<WorldDefinitionSummary & { draft: WorldDefinitionDraft }>(
-    `/world-definitions/${encodeURIComponent(worldDefinitionId)}/forks`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/forks`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -759,12 +753,12 @@ export function forkWorldDefinition(
 }
 
 export function listCampaignDefinitions() {
-  return request<CampaignDefinitionList>("/campaign-definitions");
+  return request<CampaignDefinitionList>("/campaigns");
 }
 
 export function getCampaignDefinition(campaignDefinitionId: string) {
   return request<CampaignDefinitionDetail>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}`,
   );
 }
 
@@ -779,7 +773,7 @@ export function createCampaignDefinition(input: {
     description?: string;
     metadataRevision: number;
     draft: CampaignDefinitionDraft;
-  }>("/campaign-definitions", {
+  }>("/campaigns", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -788,7 +782,7 @@ export function createCampaignDefinition(input: {
 
 export function getCampaignDefinitionDraft(campaignDefinitionId: string) {
   return request<CampaignDefinitionDraft>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft`,
   );
 }
 
@@ -797,7 +791,7 @@ export function startCampaignDefinitionDraft(
   baseRevisionId: string,
 ) {
   return request<CampaignDefinitionDraft>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -814,7 +808,7 @@ export function saveCampaignDefinitionDraft(
   >,
 ) {
   return request<CampaignDefinitionDraft>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -833,7 +827,7 @@ export function resetCampaignDefinitionDraft(
   expectedStorageRevision: number,
 ) {
   return request<CampaignDefinitionDraft>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/reset`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft/reset`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -844,7 +838,7 @@ export function resetCampaignDefinitionDraft(
 
 export function getCampaignDefinitionDraftImpact(campaignDefinitionId: string) {
   return request<CampaignDraftImpact>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/impact`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft/impact`,
   );
 }
 
@@ -859,14 +853,11 @@ export function forkCampaignDefinition(
     metadataRevision: number;
     draft: CampaignDefinitionDraft;
     forkedFrom?: { revisionName: string };
-  }>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/forks`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
-  );
+  }>(`/campaigns/${encodeURIComponent(campaignDefinitionId)}/forks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }
 
 export function validateCampaignDefinitionDraft(
@@ -876,14 +867,11 @@ export function validateCampaignDefinitionDraft(
   return request<{
     valid: boolean;
     issues: Array<{ code: string; subject: string; detail: string }>;
-  }>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/validate`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedStorageRevision }),
-    },
-  );
+  }>(`/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedStorageRevision }),
+  });
 }
 
 export function publishCampaignDefinitionDraft(
@@ -891,7 +879,7 @@ export function publishCampaignDefinitionDraft(
   expectedStorageRevision: number,
 ) {
   return request<NonNullable<CampaignDefinitionSummary["currentRevision"]>>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/draft/publish`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/draft/publish`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -906,7 +894,7 @@ function campaignLifecycleAction(
   expectedMetadataRevision: number,
 ) {
   return request<CampaignDefinitionSummary>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/${action}`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/${action}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -952,7 +940,7 @@ export function previewCampaignWorldMigration(
   },
 ) {
   return request<CampaignMigrationPreview>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/world-migrations/preview`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/world-migrations/preview`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -968,7 +956,7 @@ export function applyCampaignWorldMigration(
   },
 ) {
   return request<NonNullable<CampaignDefinitionSummary["currentRevision"]>>(
-    `/campaign-definitions/${encodeURIComponent(campaignDefinitionId)}/world-migrations/apply`,
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/world-migrations/apply`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

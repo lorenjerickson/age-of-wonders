@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Param,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiNoContentResponse,
@@ -14,6 +15,7 @@ import {
 } from "@nestjs/swagger";
 import { DomainService } from "./domain.service";
 import { GmGuard } from "../auth/auth.guard";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 
 @ApiTags("worlds")
 @Controller("worlds")
@@ -22,6 +24,7 @@ export class WorldsController {
   constructor(private readonly domain: DomainService) {}
 
   @Delete(":id")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Delete a world and all of its child locations" })
   @ApiParam({ name: "id", description: "Root world LocationState ID" })

@@ -318,18 +318,20 @@ The additive World lineage spine is persisted in the relational `WorldDefinition
 current immutable revision, direct revision ancestry, and content-addressed snapshots while the
 legacy root-Location representation remains available during migration.
 
-The GM-authorized `GET /world-definitions` endpoint lists every active and archived lineage owned
+The GM-authorized `GET /worlds` endpoint lists every active and archived lineage owned
 by the authenticated GM; another GM's lineage is neither listed nor returned by explicit lookup. Each
 item includes its transport ID, human-readable name and description, lifecycle status, archive and
 update metadata, and—when published—human-readable current-revision metadata. It deliberately omits
 revision `content` and snapshot `manifest` payloads. The endpoint is a library query only: response
 order does not establish a current World and clients must explicitly select a lineage.
 
-`GET /world-definitions/:id` reads one explicitly selected lineage and returns its revisions and
+`GET /worlds/:id` reads one explicitly selected lineage and returns its revisions and
 their captured snapshots, including immutable revision content and snapshot manifests. Missing
 lineages and persistence failures use neutral errors that do not echo the requested opaque ID.
+`GET /worlds/:id/revisions` is the bounded revision collection, and
+`GET /worlds/:id/revisions/:revisionId` resolves a revision only through its owned World lineage.
 
-World authoring is draft-first. `POST /world-definitions` creates one independently selectable,
+World authoring is draft-first. `POST /worlds` creates one independently selectable,
 GM-owned World lineage and one mutable working draft in a serializable transaction; it does not
 publish revision 1. When content and records are omitted, the service seeds a root World Location,
 the complete top-level collections, and the installed core Model Schema Release. Optional supplied
@@ -337,26 +339,26 @@ content and records become the complete initial draft rather than a patch over a
 
 Each World has at most one mutable draft:
 
-- `POST /world-definitions/:id/draft` starts or resumes the authenticated owner's draft. If a
+- `POST /worlds/:id/draft` starts or resumes the authenticated owner's draft. If a
   draft already exists, it returns that draft without creating another. Otherwise the request must
   name the World's exact current `baseRevisionId`; the service verifies the current revision's
   canonical snapshot manifest and authoritative revision record, then seeds the draft from that
   immutable capture. A legacy revision without Model Schema selections receives the installed core
   release as its explicit draft selection; publication still requires normal validation and
   conformance. Archived Worlds and stale bases cannot start a draft.
-- `GET /world-definitions/:id/draft` returns the authenticated owner's complete working content,
+- `GET /worlds/:id/draft` returns the authenticated owner's complete working content,
   snapshot records, base revision/snapshot metadata, optimistic storage revision, and validation
   status.
-- `PUT /world-definitions/:id/draft` replaces the complete draft content and record collection. It
+- `PUT /worlds/:id/draft` replaces the complete draft content and record collection. It
   requires `expectedStorageRevision`, increments that revision atomically, and invalidates any
   earlier validation report. A stale save conflicts rather than overwriting another edit.
-- `POST /world-definitions/:id/draft/validate` validates the exact requested storage revision. It
+- `POST /worlds/:id/draft/validate` validates the exact requested storage revision. It
   checks bounded JSON, reserved server records, collection/record completeness, the root Location,
   and the Location containment graph, then stores a report tied to that same revision.
-- `GET /world-definitions/:id/draft/impact` compares the draft records with its captured base and
+- `GET /worlds/:id/draft/impact` compares the draft records with its captured base and
   reports additions, changes, removals, and human-readable downstream Campaign Definition
   migration eligibility. It is analysis only and changes no published state.
-- `POST /world-definitions/:id/draft/publish` publishes the complete draft, never a partial patch.
+- `POST /worlds/:id/draft/publish` publishes the complete draft, never a partial patch.
   It requires the exact optimistic draft revision, recomputes validation, verifies that the draft
   is based on the current World head, and checks that selected Model Schema Releases are readable
   by the GM. In one serializable transaction it creates the next immutable World revision, stores
@@ -370,13 +372,20 @@ snapshot hashes; the server computes canonical revision and record hashes and th
 hash. At most 4,999 caller records are accepted so the authoritative server record keeps the final
 snapshot within the 5,000-record limit.
 
+Atlas Locations, Bestiary Creatures, Item Compendium Items, and Character model definitions have
+canonical owner-scoped reads beneath `/worlds/:id/atlas`, `/worlds/:id/bestiary`,
+`/worlds/:id/item-compendium`, and `/worlds/:id/character-model`. These are projections of the
+selected World's mutable draft, not independently persisted aggregates. Authoritative edits still
+replace the complete draft with its optimistic storage revision so a partial child write cannot
+bypass whole-World validation.
+
 World lineage lifecycle and copying are also explicit:
 
-- `POST /world-definitions/:id/archive` and `POST /world-definitions/:id/restore` require the exact
+- `POST /worlds/:id/archive` and `POST /worlds/:id/restore` require the exact
   `expectedMetadataRevision`. Archiving hides the World from normal active selection and freezes
   draft editing, validation, and publication without deleting revisions, snapshots, or downstream
   Campaign captures.
-- `POST /world-definitions/:id/forks` requires an explicit snapshot from a World owned by the GM.
+- `POST /worlds/:id/forks` requires an explicit snapshot from a World owned by the GM.
   It creates a new World lineage and unpublished draft, remaps captured resource identities and
   references, and stores immutable fork provenance. It does not establish a live link or alter the
   source World.
@@ -389,13 +398,15 @@ opaque identifiers.
 
 Campaign authoring is persisted through `CampaignDefinition`, immutable
 `CampaignDefinitionRevision` and `CampaignDefinitionSnapshot` records, and one mutable
-`CampaignDefinitionDraft` per lineage. `GET /campaign-definitions` is a compact, owner-scoped
-library query. `GET /campaign-definitions/:id` returns the selected lineage, human-readable current
+`CampaignDefinitionDraft` per lineage. `GET /campaigns` is a compact, owner-scoped
+library query. `GET /campaigns/:id` returns the selected lineage, human-readable current
 revision and captured-World summaries, revision history, optional draft metadata, and a bounded
 human-readable projection of captured Locations, Creatures, Items, and World Placements. It does
 not return an editable copy of current revision content or follow the mutable World head.
+`GET /campaigns/:id/revisions` is the bounded revision collection, and revision detail resolves
+only beneath the same Campaign Definition lineage.
 
-`POST /campaign-definitions` requires a human-readable name and an explicit owned
+`POST /campaigns` requires a human-readable name and an explicit owned
 `worldDefinitionSnapshotId`. It creates an active Campaign Definition lineage and an unpublished
 draft capturing that exact immutable World snapshot; it does not create revision 1. The server
 verifies World snapshot integrity and ownership before writing. Clients never submit an
@@ -403,36 +414,41 @@ authoritative snapshot manifest or content hash.
 
 Draft operations are explicit and optimistic:
 
-- `GET /campaign-definitions/:id/draft` reads the owner-scoped working draft.
-- `POST /campaign-definitions/:id/draft` idempotently resumes an existing draft or starts one from
+- `GET /campaigns/:id/draft` reads the owner-scoped working draft.
+- `POST /campaigns/:id/draft` idempotently resumes an existing draft or starts one from
   the explicitly named current Campaign revision.
-- `PUT /campaign-definitions/:id/draft` replaces the complete draft using
+- `PUT /campaigns/:id/draft` replaces the complete draft using
   `expectedStorageRevision`, a revision name, canonical Campaign content, and complete Campaign-owned
   records. Saving invalidates prior validation.
-- `POST /campaign-definitions/:id/draft/validate` validates the exact storage revision, recursive
+- `POST /campaigns/:id/draft/validate` validates the exact storage revision, recursive
   Plot hierarchy, Campaign placements, preparation defaults, captured-World references, and model
   conformance.
-- `POST /campaign-definitions/:id/draft/publish` requires successful validation of that same storage
+- `POST /campaigns/:id/draft/publish` requires successful validation of that same storage
   revision, revalidates inside a serializable transaction, constructs the canonical manifest on the
   server, creates the immutable Campaign revision and snapshot, advances the lineage head with a
   compare-and-set guard, and advances the draft base. Existing Campaign Instances remain unchanged.
-- `GET /campaign-definitions/:id/draft/impact` reports human-readable draft changes and downstream
+- `GET /campaigns/:id/draft/impact` reports human-readable draft changes and downstream
   Instance impact without exposing opaque identifiers as labels.
 
-`POST /campaign-definitions/:id/archive` and `/restore` require the exact metadata revision.
+Canonical `/campaigns/:id/plots` and `/campaigns/:id/placements` reads project the recursively
+nested Plots and authored placements from that Definition's mutable draft. They do not make these
+records independently writable: edits remain part of the complete optimistic Campaign draft so
+Plot lineage, placement references, and captured-World conformance validate together.
+
+`POST /campaigns/:id/archive` and `/restore` require the exact metadata revision.
 Archived definitions and their drafts are read-only, while historical revisions, snapshots, and
-Instances remain intact. `POST /campaign-definitions/:id/forks` creates a distinct lineage and draft
+Instances remain intact. `POST /campaigns/:id/forks` creates a distinct lineage and draft
 from an explicitly selected owned Campaign snapshot, records immutable provenance, and does not
 create a live link to the source.
 
 World adoption is a separate all-or-nothing workflow. `POST
-/campaign-definitions/:id/world-migrations/preview` accepts the exact draft storage revision, one
+/campaigns/:id/world-migrations/preview` accepts the exact draft storage revision, one
 direct-successor World snapshot, bounded mappings, and independent bounded pagination offsets for
 ordinary changes, impacts, and conflicts. It compares the complete immutable World manifests,
 returns truthful human-readable page totals and reconciliation candidates, and computes a hash over
 the complete semantic plan rather than its presentation pages. Large responses shrink the current
 page without skipping unseen rows.
-`POST /campaign-definitions/:id/world-migrations/apply` requires that plan hash, recomputes the full
+`POST /campaigns/:id/world-migrations/apply` requires that plan hash, recomputes the full
 plan inside a serializable transaction, rejects unresolved or stale mappings, creates the next
 Campaign revision/snapshot, and writes immutable migration audit provenance. It never cherry-picks
 World changes, crosses World lineages, rewrites prior Campaign snapshots, or changes existing
@@ -444,6 +460,8 @@ conflicts rather than failing after an apparently ready preview.
 All Campaign Definition routes require GM authorization and constrain nested Campaign, World,
 snapshot, and migration lookups to the authenticated owner. Missing or foreign-owned records,
 stale revisions, and unavailable dependencies use neutral human-readable errors.
+The former `/world-definitions` and `/campaign-definitions` route roots are deprecated
+compatibility aliases. They emit deprecation metadata and must not be generated for new callers.
 
 ### Campaign Instance creation
 

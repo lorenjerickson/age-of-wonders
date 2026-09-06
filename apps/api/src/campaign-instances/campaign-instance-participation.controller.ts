@@ -22,7 +22,7 @@ import {
   PresenceConnectionDto,
   SessionInvitationResponseDto,
 } from "./dto/campaign-participation.dto";
-import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 
 @Controller("campaign-instance-invitations")
 @UseInterceptors(LegacyApiDeprecationInterceptor)

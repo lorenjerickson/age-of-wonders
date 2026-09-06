@@ -16,7 +16,7 @@ import {
   CampaignInstanceMeController,
 } from "./campaign-instance-hierarchy.controller";
 import { CampaignSessionsController } from "./campaign-sessions.controller";
-import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
+import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 import {
   CampaignInvitationEntryController,
   CampaignSessionMeController,
