@@ -1,0 +1,28 @@
+ATLAS
+Use case: illustration-story. Art for a physical torn-paper stop-motion film, Victorian exploration and strange natural science. Antique engraved book illustrations printed on aged ivory and charcoal paper, extremely visible rough torn fibrous edges, hatching, antique gold details, muted emerald accents. Mature, mysterious, adventurous. Flat paper pieces photographed straight on. No modern vector cartoon or glossy 3D.
+Make one animation asset sheet, exactly 4 columns and 4 rows, 2048x2048 square. A genuinely TRANSPARENT background. Each of the 16 equal 512x512 cells contains ONE isolated paper cutout only, wholly within that cell, generous empty margins, no overlap. No grid lines, shadows outside the paper, text, labels or numbers. Pieces are detached puppet body parts, NOT complete characters. Side profile.
+Row 1 left to right:
+1) explorer torso ONLY, vertical Victorian ivory field coat from neck to hips, green satchel across chest, no head, no arms, no legs;
+2) explorer head and neck ONLY, short dark hair, adult woman explorer facing RIGHT, determined engraved profile;
+3) separate coat upper arm ONLY, ivory shoulder at top and elbow at bottom, vertically straight;
+4) separate ivory sleeve forearm and bare hand ONLY, elbow at top and hand at bottom, vertically straight.
+Row 2:
+1) explorer trouser thigh ONLY, hip at top and knee at bottom, charcoal cloth, vertical;
+2) explorer lower leg with tall dark boot ONLY, knee at top, boot at bottom pointing RIGHT, vertical;
+3) isolated Victorian lantern, antique brass frame with a small muted emerald glass light, handle on top;
+4) folded and torn field map, engraved river and a small emerald route line, no readable text.
+Row 3:
+1) torso ONLY of a strange deer-fox creature facing LEFT, long horizontal body with ivory engraved fur and muted emerald branching veins, NO legs, NO head, NO antlers, NO tail;
+2) head and short neck ONLY of the deer-fox creature facing LEFT, long fox muzzle and attentive ear, engraved ivory paper, NO antlers;
+3) detached branching fern-shaped antler crown ONLY, intricate dark emerald and ivory paper botany;
+4) ONE upper leg segment ONLY for the creature, long slender ivory fur paper, hip at top knee at bottom, vertically straight.
+Row 4:
+1) ONE creature lower leg and dark hoof ONLY, knee top and hoof bottom, vertically straight;
+2) ONE long curved fox tail ONLY, ivory engraved fur with emerald veins, horizontal;
+3) ONE dark botanical fern paper silhouette with rough ivory cut edges, taller than wide;
+4) ONE large rough torn charcoal paper rock silhouette with etched geological lines, wider than tall.
+Critical: No whole people or whole animals anywhere. Rigid separate components for animation. Exactly the stated grid order. Alpha transparency truly empty around each piece.
+
+BACKGROUND
+Use case: illustration-story. Art for a physical torn-paper stop-motion film, Victorian exploration and strange natural science. Antique engraved book illustrations printed on aged ivory and charcoal paper, extremely visible rough torn fibrous edges, hatching, antique gold details, muted emerald accents. Mature, mysterious, adventurous. Flat paper pieces photographed straight on. No modern vector cartoon or glossy 3D.
+Create a single wide 16:9 cinematic background plate, 1536x864 or larger. An immense unexplored fern ravine with distant mountains and a narrow Victorian iron exploration bridge far in the background. Layered torn-paper mountains, engraved rock walls at far left and right, a river winding into warm distant light. Charcoal shadows, ivory stone, antique gold sunset, restrained emerald moss. Warm raking light makes every raised torn edge tactile. Lower quarter is a broad continuous nearly horizontal dark paper trail for walking puppets; leave the central foreground and middle ground OPEN and uncluttered, and enough space for an explorer left and large creature right. No humans, no creatures, no lanterns, no text or lettering. The world should feel immense and inviting, dangerous but full of wonder. This is a stage backdrop, not a storyboard.

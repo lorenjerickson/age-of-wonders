@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Something beyond the glass — paper-doll animation</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#141313;color:#e7d5ae;font:16px Georgia,serif}
+canvas{display:block;width:min(100vw,1280px);height:auto;margin:auto}
+.controls{max-width:1280px;margin:0 auto;padding:20px;display:flex;gap:20px;align-items:center}
+button{background:#dcc191;border:0;border-radius:4px;padding:10px 18px;cursor:pointer;color:#211c15;font:inherit}
+p{margin:0;line-height:1.5}small{color:#b6a98e}
+</style>
+<canvas width="1280" height="720" aria-label="A paper explorer senses an indistinct presence behind the frosted glass of a ruined Gothic conservatory."></canvas>
+<div class="controls"><button id="play">Pause</button><button id="replay">Replay</button><p>Something beyond the glass<br><small>28 seconds · articulated paper puppets · eight poses per second · silent</small></p></div>
+<script>
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+const load=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src});
+const rects={
+ torso:[60,25,205,311],head:[368,25,226,302],arm:[702,22,117,306],forearm:[1020,25,124,306],
+ thigh:[99,340,143,292],boot:[416,344,159,285],lantern:[681,339,166,297],map:[926,349,291,276],
+ body:[26,674,329,207],beastHead:[361,638,244,277],antler:[627,648,317,259],beastUpper:[1014,635,111,271],
+ beastLower:[64,906,140,300],tail:[285,1000,351,153],fern:[674,910,159,300],rock:[878,975,357,199]
+};
+const parts={};let bg,raf,start=0,paused=false,lastTime=0;
+function prepare(atlas){
+ for(const [name,[x,y,w,h]] of Object.entries(rects)){
+  const c=document.createElement('canvas');c.width=w;c.height=h;const p=c.getContext('2d');
+  p.drawImage(atlas,x,y,w,h,0,0,w,h);
+  const im=p.getImageData(0,0,w,h),d=im.data;
+  // The supplied atlas contains a neutral checkerboard. Matte it during video
+  // compositing; retain the warm ivory paper and its irregular torn edges.
+  for(let i=0;i<d.length;i+=4){
+   const lo=Math.min(d[i],d[i+1],d[i+2]),hi=Math.max(d[i],d[i+1],d[i+2]);
+   if(lo>205 && hi-lo<19)d[i+3]=0;
+   else if(lo>195 && hi-lo<25)d[i+3]=Math.round(255*Math.max((hi-lo-19)/6,(205-lo)/10));
+  }
+  p.putImageData(im,0,0);parts[name]=c;
+ }
+}
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,t)=>a+(b-a)*clamp(t);
+const rad=d=>d*Math.PI/180;
+const jitter=(f,k=0)=>Math.sin(f*17.31+k*8.19)*0.8;
+function sprite(name,x,y,w,h,angle=0,px=.5,py=.05){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(angle));
+ ctx.drawImage(parts[name],-w*px,-h*py,w,h);ctx.restore();
+}
+function pin(x,y,r=3){ctx.fillStyle='#bda066';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.strokeStyle='#57442c';ctx.lineWidth=1;ctx.stroke();}
+function limb(upper,lower,x,y,a,b,l1,l2,w1,w2){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(a));
+ sprite(upper,0,0,w1,l1+12,0,.5,.07);pin(0,2,2.5);
+ ctx.translate(0,l1);ctx.rotate(rad(b));
+ sprite(lower,0,0,w2,l2+12,0,.5,.06);pin(0,0,2.5);ctx.restore();
+ const ex=x-Math.sin(rad(a))*l1,ey=y+Math.cos(rad(a))*l1;
+ return {x:ex-Math.sin(rad(a+b))*l2,y:ey+Math.cos(rad(a+b))*l2};
+}
+let shadowArt;
+function buildShadow(){
+ const c=document.createElement('canvas');c.width=360;c.height=600;const p=c.getContext('2d');
+ // Overlapping geological and botanical paper scraps suggest mass without anatomy.
+ p.save();p.translate(181,344);p.rotate(-.18);p.drawImage(parts.rock,-117,-272,234,480);p.restore();
+ p.save();p.translate(211,345);p.rotate(.19);p.drawImage(parts.fern,-65,-242,130,374);p.restore();
+ p.save();p.translate(127,310);p.rotate(-.30);p.drawImage(parts.fern,-42,-222,95,337);p.restore();
+ p.globalCompositeOperation='source-in';p.fillStyle='#141716';p.fillRect(0,0,360,600);shadowArt=c;
+}
+function explorerPose(t,f){
+ const enter=clamp((t-.8)/5.1),retreat=clamp((t-17.1)/3.2);
+ const moving=(t>.8&&t<5.9)||(t>17.1&&t<20.3);
+ const phase=(t>17?7-f%8:f%8);
+ const stride=[-20,-7,10,22,14,2,-13,-24][phase];
+ const x=lerp(90,445,enter)-retreat*91;
+ const y=350+(moving?[0,-3,-1,2,0,-2,0,2][phase]:jitter(Math.floor(f/4),2)*.4);
+ const lift=clamp((t-6.6)/2.4);
+ const recoil=clamp((t-15.5)/1);
+ const a=lerp(moving?-stride*.55:-5,-67,lift)+recoil*15;
+ const b=lerp(-12,-26,lift)-recoil*17;
+ const handX=28-Math.sin(rad(a))*62-Math.sin(rad(a+b))*64;
+ const handY=22+Math.cos(rad(a))*62+Math.cos(rad(a+b))*64;
+ return {x,y,moving,phase,stride,lift,recoil,a,b,handX,handY};
+}
+function lampPower(t){
+ if(t>=12.25&&t<12.625)return .20;
+ if(t>=16.5&&t<17.125)return .08;
+ return t>=17.125?.54:1;
+}
+function explorer(t,f){
+ const p=explorerPose(t,f),leg=p.moving?p.stride:3;
+ ctx.save();ctx.translate(p.x,p.y);ctx.scale(.88,.88);ctx.rotate(rad(-p.recoil*2));
+ ctx.shadowColor='#000b';ctx.shadowOffsetX=4;ctx.shadowOffsetY=6;ctx.shadowBlur=3;
+ ctx.filter='brightness(.61)';limb('thigh','boot',-15,138,-leg,p.moving?Math.max(0,p.stride*.7):2,69,80,38,43);
+ limb('arm','forearm',-25,24,p.moving?p.stride*.6:12,-12,61,62,35,30);ctx.filter='brightness(.82)';
+ const hand=limb('arm','forearm',28,22,p.a,p.b,62,64,36,30);
+ sprite('lantern',hand.x,hand.y,45,73,p.moving?-p.stride*.25:jitter(Math.floor(f/2),3)*2,.5,.02);
+ // Arm, lantern and glass illumination remain behind the torso and near leg.
+ ctx.save();ctx.filter='none';ctx.shadowColor='transparent';
+ ctx.globalAlpha=lampPower(t)*.55;ctx.fillStyle='#b4dab3';
+ ctx.beginPath();ctx.ellipse(hand.x,hand.y+44,5,10,0,0,7);ctx.fill();ctx.restore();
+ limb('thigh','boot',15,138,leg,p.moving?Math.max(0,-p.stride*.7):0,69,80,38,43);
+ sprite('map',-34,112,40,45,-14,.5,.2);
+ sprite('torso',0,0,114,161,jitter(Math.floor(f/4),1)*.55,.5,.03);
+ const look=t<10?2:t<15?-7:t<20?8:-3;
+ sprite('head',7,-3,82,105,look+jitter(Math.floor(f/4),2),.5,.86);
+ ctx.restore();
+}
+function windowPath(){
+ ctx.beginPath();ctx.moveTo(657,582);ctx.lineTo(657,322);
+ ctx.bezierCurveTo(651,193,746,80,879,24);
+ ctx.bezierCurveTo(1015,87,1106,201,1106,323);
+ ctx.lineTo(1106,582);ctx.closePath();
+}
+function presence(t,f){
+ const arrive=clamp((t-8.6)/3.2),leave=clamp((t-21.7)/2.3);
+ if(arrive===0)return;
+ const st=Math.floor(t*2)/2;
+ const slide=clamp((st-9)/6),attention=clamp((st-15.5)/3.5);
+ const x=lerp(1020,925,slide)-attention*64+jitter(Math.floor(f/4),7)*3;
+ const y=390-attention*23;
+ ctx.save();windowPath();ctx.clip();
+ ctx.globalCompositeOperation='multiply';
+ ctx.globalAlpha=arrive*(1-leave)*(.55+attention*.17);
+ ctx.filter='blur(5px)';
+ ctx.drawImage(shadowArt,x-140,y-266,280+attention*17,505);
+ ctx.globalAlpha=arrive*(1-leave)*.12;
+ ctx.drawImage(shadowArt,x-180,y-251,330,513);
+ ctx.restore();
+}
+function advancingShadow(t,f){
+ const reach=clamp((t-14.7)/8.4);
+ if(reach===0)return;
+ const x=lerp(1000,421,reach),tip=622+jitter(Math.floor(f/4),12)*2;
+ ctx.save();ctx.globalCompositeOperation='multiply';ctx.globalAlpha=.78*clamp((t-14.7)/1.5);
+ ctx.fillStyle='#171b18';ctx.beginPath();
+ ctx.moveTo(1003,576);ctx.lineTo(1068,583);
+ ctx.lineTo(lerp(1023,x+84,reach),tip-5);ctx.lineTo(x+65,tip+3);
+ ctx.lineTo(x+26,tip+6);ctx.lineTo(x,tip+14);ctx.lineTo(x+53,tip+18);
+ ctx.lineTo(x+104,tip+14);ctx.lineTo(1087,596);ctx.lineTo(1101,581);
+ ctx.closePath();ctx.fill();
+ // Paper grain and irregular edges make the detached shadow feel physical.
+ ctx.clip();ctx.globalAlpha=.14;ctx.drawImage(parts.rock,x,577,660,84);ctx.restore();
+}
+function light(t,f){
+ const p=explorerPose(t,f);
+ const x=p.x+p.handX*.88,y=p.y+(p.handY+44)*.88,power=lampPower(t);
+ ctx.save();ctx.globalCompositeOperation='screen';
+ const g=ctx.createRadialGradient(x,y,3,x,y,135);
+ g.addColorStop(0,'rgba(138,188,139,'+(.21*power)+')');
+ g.addColorStop(.35,'rgba(90,125,88,'+(.09*power)+')');g.addColorStop(1,'#0000');
+ ctx.fillStyle=g;ctx.fillRect(x-140,y-140,280,280);ctx.restore();
+}
+window.renderFrame=function(time){
+ const f=Math.floor(time*8),t=f/8;lastTime=t;
+ ctx.clearRect(0,0,1280,720);ctx.drawImage(bg,0,0,1280,720);
+ ctx.fillStyle='#10201818';ctx.fillRect(0,0,1280,720);
+ presence(t,f);
+ // The shadow advances even while its possible source retreats.
+ advancingShadow(t,f);
+ const p=explorerPose(t,f);
+ ctx.fillStyle='#05090688';ctx.beginPath();ctx.ellipse(p.x,610,53,6,0,0,7);ctx.fill();
+ light(t,f);explorer(t,f);
+ // A near botanical paper strip answers the presence with delayed motion.
+ ctx.save();ctx.filter='brightness(.24)';ctx.shadowColor='#000c';ctx.shadowBlur=3;
+ const twitch=t>13&&t<15?[0,0,-4,-4,2,2,0,0][f%8]:0;
+ sprite('fern',1216,694,138,272,16+twitch+jitter(Math.floor(f/6),20)*.5,.5,1);
+ ctx.restore();
+ // Localized lantern failures darken the room gently; no flash or jump scare.
+ ctx.fillStyle='rgba(4,8,8,'+((1-lampPower(t))*.11)+')';ctx.fillRect(0,0,1280,720);
+ const v=ctx.createRadialGradient(702,365,230,672,365,765);
+ v.addColorStop(0,'#0000');v.addColorStop(1,'#0009');ctx.fillStyle=v;ctx.fillRect(0,0,1280,720);
+};
+function loop(now){if(!paused)renderFrame(((now-start)/1000)%28);raf=requestAnimationFrame(loop)}
+window.stopPreview=()=>{paused=true;cancelAnimationFrame(raf)};
+document.querySelector('#play').onclick=()=>{paused=!paused;start=performance.now()-lastTime*1000;document.querySelector('#play').textContent=paused?'Play':'Pause'};
+document.querySelector('#replay').onclick=()=>{start=performance.now();paused=false;document.querySelector('#play').textContent='Pause'};
+window.ready=Promise.all([load('puppet-atlas.png'),load('conservatory.png')]).then(([atlas,background])=>{
+ prepare(atlas);buildShadow();bg=background;renderFrame(0);start=performance.now();raf=requestAnimationFrame(loop)
+});
+</script>
+</html>

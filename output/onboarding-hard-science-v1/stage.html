@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The signature of matter — paper-doll animation</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#141313;color:#e7d5ae;font:16px Georgia,serif}
+canvas{display:block;width:min(100vw,1280px);height:auto;margin:auto}
+.controls{max-width:1280px;margin:0 auto;padding:20px;display:flex;gap:20px;align-items:center}
+button{background:#dcc191;border:0;border-radius:4px;padding:10px 18px;cursor:pointer;color:#211c15;font:inherit}
+p{margin:0;line-height:1.5}small{color:#b6a98e}
+</style>
+<canvas width="1280" height="720" aria-label="A paper scientist tests a mineral sample using flame spectroscopy and records its spectral signature."></canvas>
+<div class="controls"><button id="play">Pause</button><button id="replay">Replay</button><p>The signature of matter<br><small>24 seconds · articulated paper puppets · eight poses per second · silent</small></p></div>
+<script>
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+const load=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src});
+const rects={
+ torso:[60,25,205,311],head:[368,25,226,302],arm:[702,22,117,306],forearm:[1020,25,124,306],
+ thigh:[99,340,143,292],boot:[416,344,159,285],lantern:[681,339,166,297],map:[926,349,291,276],
+ body:[26,674,329,207],beastHead:[361,638,244,277],antler:[627,648,317,259],beastUpper:[1014,635,111,271],
+ beastLower:[64,906,140,300],tail:[285,1000,351,153],fern:[674,910,159,300],rock:[878,975,357,199]
+};
+const parts={};let bg,raf,start=0,paused=false,lastTime=0;
+function prepare(atlas){
+ for(const [name,[x,y,w,h]] of Object.entries(rects)){
+  const c=document.createElement('canvas');c.width=w;c.height=h;const p=c.getContext('2d');
+  p.drawImage(atlas,x,y,w,h,0,0,w,h);
+  const im=p.getImageData(0,0,w,h),d=im.data;
+  // The supplied atlas contains a neutral checkerboard. Matte it during video
+  // compositing; retain the warm ivory paper and its irregular torn edges.
+  for(let i=0;i<d.length;i+=4){
+   const lo=Math.min(d[i],d[i+1],d[i+2]),hi=Math.max(d[i],d[i+1],d[i+2]);
+   if(lo>205 && hi-lo<19)d[i+3]=0;
+   else if(lo>195 && hi-lo<25)d[i+3]=Math.round(255*Math.max((hi-lo-19)/6,(205-lo)/10));
+  }
+  p.putImageData(im,0,0);parts[name]=c;
+ }
+}
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,t)=>a+(b-a)*clamp(t);
+const rad=d=>d*Math.PI/180;
+const jitter=(f,k=0)=>Math.sin(f*17.31+k*8.19)*0.8;
+function sprite(name,x,y,w,h,angle=0,px=.5,py=.05){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(angle));
+ ctx.drawImage(parts[name],-w*px,-h*py,w,h);ctx.restore();
+}
+function pin(x,y,r=3){ctx.fillStyle='#bda066';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.strokeStyle='#57442c';ctx.lineWidth=1;ctx.stroke();}
+function limb(upper,lower,x,y,a,b,l1,l2,w1,w2){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(a));
+ sprite(upper,0,0,w1,l1+12,0,.5,.07);pin(0,2,2.5);
+ ctx.translate(0,l1);ctx.rotate(rad(b));
+ sprite(lower,0,0,w2,l2+12,0,.5,.06);pin(0,0,2.5);ctx.restore();
+ const ex=x-Math.sin(rad(a))*l1,ey=y+Math.cos(rad(a))*l1;
+ return {x:ex-Math.sin(rad(a+b))*l2,y:ey+Math.cos(rad(a+b))*l2};
+}
+function prepareEquipment(atlas){
+ const boxes={burner:[130,30,238,457],prism:[588,31,307,454],collimator:[1020,150,493,325],screen:[48,550,408,440],notebook:[520,570,480,370],rod:[1020,708,490,63]};
+ for(const [name,[x,y,w,h]] of Object.entries(boxes)){
+  const c=document.createElement('canvas');c.width=w;c.height=h;const p=c.getContext('2d');
+  p.drawImage(atlas,x,y,w,h,0,0,w,h);const im=p.getImageData(0,0,w,h),d=im.data;
+  for(let i=0;i<d.length;i+=4){const lo=Math.min(d[i],d[i+1],d[i+2]),hi=Math.max(d[i],d[i+1],d[i+2]);if(lo>227&&hi-lo<18)d[i+3]=0}
+  p.putImageData(im,0,0);parts[name]=c;
+ }
+}
+function paper(x,y,w,h,fill='#d7c394'){
+ ctx.save();ctx.fillStyle=fill;ctx.shadowColor='#000a';ctx.shadowOffsetX=4;ctx.shadowOffsetY=5;ctx.shadowBlur=2;
+ ctx.beginPath();ctx.moveTo(x+3,y+2);
+ for(let i=1;i<12;i++)ctx.lineTo(x+w*i/12,y+(i%3-1)*1.4);
+ ctx.lineTo(x+w,y+3);ctx.lineTo(x+w-2,y+h*.33);ctx.lineTo(x+w+1,y+h*.71);ctx.lineTo(x+w-3,y+h);
+ for(let i=11;i>0;i--)ctx.lineTo(x+w*i/12,y+h+(i%3-1)*1.2);
+ ctx.lineTo(x,y+h-2);ctx.closePath();ctx.fill();ctx.clip();
+ ctx.globalAlpha=.42;ctx.shadowColor='transparent';ctx.drawImage(parts.screen,0,0,408,285,x,y,w,h);ctx.restore();
+}
+function ink(text,x,y,size=16,color='#352f25'){
+ ctx.fillStyle=color;ctx.font=size+'px Georgia';ctx.fillText(text,x,y);
+}
+function strip(x1,y1,x2,y2,color,width=3,alpha=1){
+ ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;
+ ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo((x1+x2)/2,(y1+y2)/2+.7);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
+}
+function flame(x,y,t,f){
+ const seeded=t>8.5&&t<17.5;
+ const h=[24,29,22,27,32,26,23,30][f%8];
+ const color=seeded?'#e8ba52':'#85acb2';
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(jitter(f,21)*3));
+ ctx.shadowColor=seeded?'#ffc95388':'#92bac466';ctx.shadowBlur=12;
+ ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(-9,2);ctx.lineTo(-7,-h*.45);ctx.lineTo(0,-h);ctx.lineTo(3,-h*.52);ctx.lineTo(9,-h*.3);ctx.lineTo(7,2);ctx.closePath();ctx.fill();
+ ctx.shadowBlur=0;ctx.fillStyle='#efe0a6';ctx.beginPath();ctx.moveTo(-3,1);ctx.lineTo(1,-h*.55);ctx.lineTo(4,1);ctx.fill();ctx.restore();
+}
+function scientist(t,f){
+ const reach=clamp((t-6)/2.5)*(1-clamp((t-17.5)/1.5));
+ const writing=clamp((t-19)/1);
+ const x=374,y=350+jitter(Math.floor(f/3),2)*.65;
+ ctx.save();ctx.translate(x,y);ctx.scale(.94,.94);
+ ctx.shadowColor='#0009';ctx.shadowOffsetX=4;ctx.shadowOffsetY=5;ctx.shadowBlur=2;
+ ctx.filter='brightness(.7)';
+ limb('thigh','boot',-15,138,-4,4,69,80,38,43);
+ limb('arm','forearm',-25,24,12,-8,61,62,35,30);ctx.filter='none';
+ const a=lerp(-12,-131,reach)-writing*40;
+ const b=lerp(-20,4,reach)-writing*26;
+ const hand=limb('arm','forearm',28,22,a,b,62,64,36,30);
+ if(reach>.05){
+  // Rigid sampling tool stays attached to the far hand, behind the torso.
+  sprite('rod',hand.x,hand.y,74,12,-11+jitter(Math.floor(f/3),5)*.6,0,.5);
+ }
+ limb('thigh','boot',15,138,4,0,69,80,38,43);
+ sprite('torso',0,0,114,161,jitter(Math.floor(f/3),1),.5,.03);
+ sprite('head',7,-3,82,105,-4-reach*7+writing*13+jitter(Math.floor(f/3),2),.5,.86);
+ if(writing>.1){
+  sprite('notebook',84,116,105,80,-13,.5,.5);
+  const near=limb('arm','forearm',-24,26,-44,-49,62,61,35,30);
+  ctx.save();ctx.translate(near.x,near.y);ctx.rotate(rad(-30+jitter(f,27)*6));
+  ctx.fillStyle='#332b1f';ctx.fillRect(-2,0,3,38);ctx.restore();
+ }
+ ctx.restore();
+}
+function evidence(t,f){
+ if(t<14)return;
+ const reveal=clamp((t-14)/1.2),x=620,y=lerp(-180,64,reveal),w=470,h=169;
+ paper(x,y,w,h);
+ ink('SPECTRAL COMPARISON',x+20,y+27,17);
+ ink('Sample',x+20,y+65,15);ink('Sodium reference',x+20,y+109,15);
+ const left=x+164,right=x+w-24;
+ for(const yy of [y+60,y+104]){
+  ctx.fillStyle='#272626';ctx.fillRect(left,yy-13,right-left,23);
+  const step=clamp((t-(yy===y+60?15.3:16.3))/.65);
+  if(step>0){
+   ctx.fillStyle='#e8bd4e';ctx.fillRect(left+94,yy-12,3,22*step);ctx.fillRect(left+150,yy-12,2,22*step);
+  }
+ }
+ ctx.strokeStyle='#827350';ctx.lineWidth=1;
+ for(let i=0;i<4;i++){let xx=left+i*(right-left)/3;ctx.beginPath();ctx.moveTo(xx,y+127);ctx.lineTo(xx,y+133);ctx.stroke();ink(String(588+i),xx-11,y+148,12)}
+ ink('Wavelength (nm)',x+20,y+148,12);
+ if(t>18){
+  ctx.strokeStyle='#556747';ctx.lineWidth=2;
+  for(const xx of [left+95,left+151]){ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xx,y+40);ctx.lineTo(xx,y+119);ctx.stroke()}
+  ctx.setLineDash([]);
+ }
+ if(t>20.3){
+  const xx=x+80,yy=y+136,k=clamp((t-20.3)/.7);
+  ctx.strokeStyle='#465639';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(xx,yy);
+  ctx.lineTo(xx+7,yy+7);ctx.lineTo(xx+7+13*k,yy+7-19*k);ctx.stroke();
+ }
+}
+window.renderFrame=function(time){
+ const f=Math.floor(time*8),t=f/8;lastTime=t;
+ ctx.clearRect(0,0,1280,720);ctx.drawImage(bg,0,0,1280,720);
+ ctx.fillStyle='#16181015';ctx.fillRect(0,0,1280,720);
+ ctx.fillStyle='#0e0c0a80';ctx.beginPath();ctx.ellipse(377,634,60,8,0,0,7);ctx.fill();
+ // Optical bench: the spectrum is a schematic paper visualization of dispersion.
+ ctx.shadowColor='#0009';ctx.shadowOffsetX=4;ctx.shadowOffsetY=5;ctx.shadowBlur=2;
+ sprite('screen',1111,438,204,250,0,.5,1);
+ sprite('burner',560,436,70,132,0,.5,1);
+ if(t>6.5)flame(560,306,t,f);
+ // Continuous-light reference source lifts out before the sample test.
+ if(t<7.4){
+  const shift=clamp((t-6)/1.4);
+  ctx.save();ctx.globalAlpha=1-shift;ctx.translate(-shift*50,shift*65);
+  ctx.fillStyle='#776447';ctx.fillRect(556,310,9,113);
+  sprite('lantern',560,323,68,141,0,.5,1);
+  ctx.fillStyle='#f5e7bf';ctx.shadowColor='#fff1bd';ctx.shadowBlur=9;
+  ctx.beginPath();ctx.ellipse(560,280,5,13,0,0,7);ctx.fill();
+  ctx.restore();
+ }
+ const continuous=t>1.3&&t<6.3,sample=t>8.5&&t<17.5;
+ const beam=continuous?clamp((t-1.3)/1):sample?clamp((t-8.5)/.7):0;
+ if(beam>0){
+  ctx.shadowColor='transparent';
+  strip(562,282,630,282,continuous?'#e9dfb8':'#e7bd54',4,beam);
+  strip(756,282,794,282,continuous?'#e9dfb8':'#e7bd54',4,beam);
+  const colors=['#b95643','#c88043','#e3bc55','#709263','#5d9fa2','#7178a2','#867197'];
+  for(let k=0;k<7;k++){
+   if(!continuous&&k!==2)continue;
+   strip(810,286,1054,300+k*8,colors[k],continuous?3:4,beam*.8);
+   // A slit spectrum on the observation screen, violet deviated furthest.
+   ctx.fillStyle=colors[k];ctx.globalAlpha=beam;ctx.fillRect(1053,296+k*8,93,continuous?8:3);ctx.globalAlpha=1;
+  }
+ }
+ ctx.shadowColor='#0009';
+ sprite('collimator',690,434,188,191,0,.5,1);
+ sprite('prism',803,433,136,212,t<1.4?lerp(-5,0,t/1.4):jitter(Math.floor(f/4),8)*.25,.5,1);
+ // Sample tongs and all carried objects share the correct puppet layer order.
+ scientist(t,f);
+ ctx.shadowColor='transparent';evidence(t,f);
+ if(t>21){
+  paper(678,483,352,61);
+  ink('589.0 / 589.6 nm',702,508,19);
+  ink('Sodium present in the sample.',702,530,15);
+ }
+ const vignette=ctx.createRadialGradient(700,350,250,680,350,800);
+ vignette.addColorStop(0,'#0000');vignette.addColorStop(1,'#0008');
+ ctx.fillStyle=vignette;ctx.fillRect(0,0,1280,720);
+};
+function loop(now){if(!paused)renderFrame(((now-start)/1000)%24);raf=requestAnimationFrame(loop)}
+window.stopPreview=()=>{paused=true;cancelAnimationFrame(raf)};
+document.querySelector('#play').onclick=()=>{paused=!paused;start=performance.now()-lastTime*1000;document.querySelector('#play').textContent=paused?'Play':'Pause'};
+document.querySelector('#replay').onclick=()=>{start=performance.now();paused=false;document.querySelector('#play').textContent='Pause'};
+window.ready=Promise.all([load('puppet-atlas.png'),load('laboratory.png'),load('equipment-atlas.png')]).then(([atlas,background,equipment])=>{
+ prepare(atlas);prepareEquipment(equipment);bg=background;renderFrame(0);start=performance.now();raf=requestAnimationFrame(loop)
+});
+</script>
+</html>

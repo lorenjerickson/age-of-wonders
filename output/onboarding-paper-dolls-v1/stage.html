@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Into the unknown — paper-doll animation</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#141313;color:#e7d5ae;font:16px Georgia,serif}
+canvas{display:block;width:min(100vw,1280px);height:auto;margin:auto}
+.controls{max-width:1280px;margin:0 auto;padding:20px;display:flex;gap:20px;align-items:center}
+button{background:#dcc191;border:0;border-radius:4px;padding:10px 18px;cursor:pointer;color:#211c15;font:inherit}
+p{margin:0;line-height:1.5}small{color:#b6a98e}
+</style>
+<canvas width="1280" height="720" aria-label="An articulated paper explorer meets a mutant creature in an unexplored ravine."></canvas>
+<div class="controls"><button id="play">Pause</button><button id="replay">Replay</button><p>Into the unknown<br><small>18 seconds · articulated paper puppets · eight poses per second · silent</small></p></div>
+<script>
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+const load=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src});
+const rects={
+ torso:[60,25,205,311],head:[368,25,226,302],arm:[702,22,117,306],forearm:[1020,25,124,306],
+ thigh:[99,340,143,292],boot:[416,344,159,285],lantern:[681,339,166,297],map:[926,349,291,276],
+ body:[26,674,329,207],beastHead:[361,638,244,277],antler:[627,648,317,259],beastUpper:[1014,635,111,271],
+ beastLower:[64,906,140,300],tail:[285,1000,351,153],fern:[674,910,159,300],rock:[878,975,357,199]
+};
+const parts={};let bg,raf,start=0,paused=false,lastTime=0;
+function prepare(atlas){
+ for(const [name,[x,y,w,h]] of Object.entries(rects)){
+  const c=document.createElement('canvas');c.width=w;c.height=h;const p=c.getContext('2d');
+  p.drawImage(atlas,x,y,w,h,0,0,w,h);
+  const im=p.getImageData(0,0,w,h),d=im.data;
+  // The supplied atlas contains a neutral checkerboard. Matte it during video
+  // compositing; retain the warm ivory paper and its irregular torn edges.
+  for(let i=0;i<d.length;i+=4){
+   const lo=Math.min(d[i],d[i+1],d[i+2]),hi=Math.max(d[i],d[i+1],d[i+2]);
+   if(lo>205 && hi-lo<19)d[i+3]=0;
+   else if(lo>195 && hi-lo<25)d[i+3]=Math.round(255*Math.max((hi-lo-19)/6,(205-lo)/10));
+  }
+  p.putImageData(im,0,0);parts[name]=c;
+ }
+}
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,t)=>a+(b-a)*clamp(t);
+const rad=d=>d*Math.PI/180;
+const jitter=(f,k=0)=>Math.sin(f*17.31+k*8.19)*0.8;
+function sprite(name,x,y,w,h,angle=0,px=.5,py=.05){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(angle));
+ ctx.drawImage(parts[name],-w*px,-h*py,w,h);ctx.restore();
+}
+function pin(x,y,r=3){ctx.fillStyle='#bda066';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.strokeStyle='#57442c';ctx.lineWidth=1;ctx.stroke();}
+function limb(upper,lower,x,y,a,b,l1,l2,w1,w2){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rad(a));
+ sprite(upper,0,0,w1,l1+12,0,.5,.07);pin(0,2,2.5);
+ ctx.translate(0,l1);ctx.rotate(rad(b));
+ sprite(lower,0,0,w2,l2+12,0,.5,.06);pin(0,0,2.5);ctx.restore();
+ const ex=x-Math.sin(rad(a))*l1,ey=y+Math.cos(rad(a))*l1;
+ return {x:ex-Math.sin(rad(a+b))*l2,y:ey+Math.cos(rad(a+b))*l2};
+}
+function explorer(t,f){
+ const walk=clamp((t-.7)/5.1),moving=t>.7&&t<5.8;
+ const phase=f%8, stride=[-24,-10,12,24,17,3,-16,-28][phase];
+ const x=lerp(95,437,walk),y=340+(moving?[0,-3,-1,2,0,-2,0,3][phase]:jitter(Math.floor(f/3)));
+ ctx.save();ctx.translate(x,y);ctx.scale(.88,.88);
+ ctx.shadowColor='#000a';ctx.shadowOffsetX=4;ctx.shadowOffsetY=6;ctx.shadowBlur=3;
+ const leg=moving?stride:3;
+ ctx.filter='brightness(.68)';limb('thigh','boot',-15,138,-leg,moving?Math.max(0,stride*.7):2,69,80,38,43);
+ limb('arm','forearm',-25,24,moving?stride*.6:12,-12,61,62,35,30);
+ ctx.filter='none';
+ const reach=clamp((t-6.5)/2),relax=clamp((t-15.4)/1.2);
+ const a=lerp(moving?-stride*.6:-4,-65,reach)+relax*10;
+ const b=lerp(-12,-28,reach);
+ const hand=limb('arm','forearm',28,22,a,b,62,64,36,30);
+ ctx.save();ctx.shadowBlur=0;
+ const glow=ctx.createRadialGradient(hand.x,hand.y+43,5,hand.x,hand.y+43,94);
+ glow.addColorStop(0,'rgba(103,199,139,'+(0.14+reach*.14)+')');glow.addColorStop(1,'rgba(60,160,100,0)');
+ ctx.fillStyle=glow;ctx.fillRect(hand.x-100,hand.y-58,200,200);ctx.restore();
+ sprite('lantern',hand.x,hand.y,45,73,moving?-stride*.24:jitter(f,3)*2,.5,.02);
+ // Keep the entire lantern assembly behind the torso and near-side leg.
+ limb('thigh','boot',15,138,leg,moving?Math.max(0,-stride*.7):0,69,80,38,43);
+ sprite('map',-34,112,40,45,-14,.5,.2);
+ sprite('torso',0,0,114,161,1+jitter(Math.floor(f/2),1),.5,.03);
+ sprite('head',7,-3,82,105,(t>8?-4:2)+jitter(Math.floor(f/3),2),.5,.86);
+ ctx.restore();
+}
+function beast(t,f){
+ const arrival=clamp((t-4.1)/4.1),moving=t>4.1&&t<8.2;
+ const x=lerp(1430,820,arrival),phase=f%8;
+ const gait=[-19,-9,9,20,11,0,-14,-22][phase];
+ const bow=clamp((t-10.1)/2.7)*(1-clamp((t-14.5)/1.8));
+ ctx.save();ctx.translate(x,328+(moving?[0,2,-2,-4,0,2,-1,0][phase]:jitter(Math.floor(f/3),4)));
+ ctx.shadowColor='#000b';ctx.shadowOffsetX=5;ctx.shadowOffsetY=7;ctx.shadowBlur=3;
+ sprite('tail',213,46,158,74,lerp(-17,5,bow)+jitter(Math.floor(f/2),6)*2,.08,.5);
+ for(let j=0;j<3;j++){
+  ctx.filter='brightness(.60)';
+  limb('beastUpper','beastLower',48+j*77,87,moving?gait*(j%2?-1:1):j*3-3,moving?Math.max(0,-gait*.5):8,101,103,40,34);
+ }
+ ctx.filter='none';sprite('body',107,0,277,139,jitter(Math.floor(f/3),7)*.4,.5,.03);
+ for(let j=0;j<3;j++){
+  limb('beastUpper','beastLower',24+j*81,96,moving?-gait*(j%2?-1:1):j*3-3,moving?Math.max(0,gait*.5):2,99,103,40,34);
+ }
+ ctx.save();ctx.translate(5,-2);ctx.rotate(rad(-bow*23+jitter(Math.floor(f/3),8)));
+ sprite('antler',-22,-28,133,126,-9,.5,.95);
+ sprite('beastHead',0,0,127,148,0,.76,.48);pin(5,24,4);
+ ctx.restore();ctx.restore();
+}
+window.renderFrame=function(time){
+ const f=Math.floor(time*8),t=f/8;lastTime=t;
+ ctx.clearRect(0,0,1280,720);
+ ctx.save();
+ // Fixed camera; every movement belongs to a puppet or physical scenery layer.
+ ctx.drawImage(bg,0,0,1280,720);
+ ctx.fillStyle='#10221a20';ctx.fillRect(0,0,1280,720);
+ // Contact shadows remain on the paper floor.
+ const ex=lerp(95,437,(t-.7)/5.1),bx=lerp(1430,820,(t-4.1)/4.1);
+ ctx.fillStyle='#090d09a0';ctx.beginPath();ctx.ellipse(ex,613,57,9,0,0,7);ctx.ellipse(bx+90,631,180,11,0,0,7);ctx.fill();
+ beast(t,f);explorer(t,f);
+ // Near paper leaves sway one hinge at a time, in held poses.
+ ctx.shadowColor='#000a';ctx.shadowOffsetX=5;ctx.shadowOffsetY=5;ctx.shadowBlur=2;
+ ctx.filter='brightness(.43)';
+ sprite('fern',25,749,185,335,-20+jitter(Math.floor(f/3),9)*1.6,.5,1);
+ sprite('fern',1253,750,163,343,15+jitter(Math.floor(f/4),10)*2,.5,1);
+ sprite('rock',1160,666,290,116,-4,.5,.3);
+ ctx.filter='none';ctx.shadowColor='transparent';
+ const v=ctx.createRadialGradient(650,350,210,650,350,790);v.addColorStop(0,'#0000');v.addColorStop(1,'#0009');ctx.fillStyle=v;ctx.fillRect(0,0,1280,720);
+ ctx.restore();
+};
+function loop(now){if(!paused){const t=((now-start)/1000)%18;renderFrame(t)}raf=requestAnimationFrame(loop)}
+window.stopPreview=()=>{paused=true;cancelAnimationFrame(raf)};
+document.querySelector('#play').onclick=()=>{paused=!paused;start=performance.now()-lastTime*1000;document.querySelector('#play').textContent=paused?'Play':'Pause'};
+document.querySelector('#replay').onclick=()=>{start=performance.now();paused=false;document.querySelector('#play').textContent='Pause'};
+window.ready=Promise.all([load('puppet-atlas.png'),load('ravine.png')]).then(([atlas,background])=>{
+ prepare(atlas);bg=background;renderFrame(0);start=performance.now();raf=requestAnimationFrame(loop)
+});
+</script>
+</html>

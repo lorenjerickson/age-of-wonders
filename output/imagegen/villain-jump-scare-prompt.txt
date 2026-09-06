@@ -1,0 +1,8 @@
+Generated using the built-in image generation tool; exported at 1280 x 720.
+
+Use case: stylized-concept
+Asset type: cinematic horror jump-scare still for final moment of an onboarding intro video. Generate exactly 1280 x 720 pixels, widescreen 16:9, full frame, no borders.
+Scene: almost pure black darkness, no environment visible.
+Subject: straight-on extreme close-up of a female artificial life form's head, staring directly into the viewer. Character context: skin of tarnished golden metal, dirty blonde wig, mismatched historical fashions; however her metal skin and clothing MUST remain completely invisible in the blackness. Only two piercing glowing blue eyes and a few thin, disheveled dirty blonde wig strands hanging across her face are visible. No other physical features are visible.
+Composition: head implied at large scale in center, eyes widely spaced naturally across the central area, slightly above vertical center; a few hair strands intersect the eye area. Head outline disappears entirely into black. Intimate, startling, ominous, cinematic realism. Eyes have intense electric blue luminous irises, icy bright cores, restrained localized blue bloom; eerie focused direct gaze. Hair strands faintly catch blue light with a subtle muted dirty-blonde hint. The rest of the image is near absolute black.
+Critical constraints: darkness is the defining feature. Do not reveal nose, mouth, cheeks, chin, forehead, ears, neck, shoulders, silhouette, skin texture, gold facial surfaces, or costume. No ambient fill, no rim lighting, no fog, no scenery, no additional objects, no text, no watermark. The eye glow must not illuminate the face. Only glowing blue eyes and a handful of hair strands emerge from darkness.
