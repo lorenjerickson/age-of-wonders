@@ -300,15 +300,47 @@ All Model Registry HTTP endpoints require an authenticated GM:
   immutable release history. Neither query grants edit rights to a global or another GM's registry.
 - `POST /model-registries` creates a GM-owned registry from a namespaced key, name, and optional
   description. The authenticated GM becomes the provenance owner.
-- `POST /model-registries/:id/releases/extend` is the bounded convenience workflow currently used
-  by contextual World editors. It creates new elements, carries forward the predecessor release's
+- `POST /model-registries/:id/releases` is the bounded release-publication workflow used by
+  contextual World editors. It creates new elements, carries forward the predecessor release's
   exact selections, locks the installed core release dependency, validates the complete effective
-  closure, and publishes one successor transactionally.
-- `GET /model-registries/effective?worldDefinitionId=...` reads the explicitly selected release
-  roots from that GM's mutable World draft, compiles accessible exact releases and their locked
-  dependencies, rejects overlapping stable keys, filters by global/World applicability, and returns
-  human-readable Attribute, Equipment Slot, and general element projections. It does not infer a
-  latest release and does not read a Campaign Instance-local schema.
+  closure, and publishes one successor transactionally. The former `/releases/extend` command is a
+  deprecated compatibility alias.
+- `GET /worlds/:worldId/model-adoptions` reads the explicitly selected release roots from that GM's
+  mutable World draft, compiles accessible exact releases and their locked dependencies, rejects
+  overlapping stable keys, filters by global/World applicability, and returns human-readable
+  Attribute, Equipment Slot, and general element projections. It does not infer a latest release
+  and does not read a Campaign Instance-local schema. The former top-level `effective` query is a
+  deprecated compatibility alias because World ownership must be route context.
+
+### Hosted-system administration and infrastructure provenance
+
+`SystemSettingArea` is a closed navigation registry for the initial hosted-system administration
+surface; the settings inside every area remain an extensible status collection. Each setting is
+classified as `application-managed`, `secret-backed`, `deployment-managed`, or `observed`, and has
+a human-readable `ready`, `attention`, `disabled`, or `unavailable` status. These projections never
+contain stored secrets, credentials, encryption keys, database passwords, or provider subjects.
+`GET /settings/system` and `GET /settings/system/:systemArea` require the active
+`SystemAdministrator` capability independently of GM authority. A non-administrator GM has no
+Settings navigation or API access; an administrator without GM authority may use Settings without
+gaining World or Campaign access.
+
+New `Generation` rows record the authenticated requester plus a bounded context kind and context
+identity when the command has one. Generation history remains requester-scoped and returns only
+bounded output previews; provider response identities, prompts, complete outputs, and opaque
+context identities are not UI labels. Context-free generation and legacy root-Location AI routes
+are deprecated compatibility operations, not canonical aggregate authoring.
+
+`MediaAsset` records may carry creator and aggregate-scope provenance. New canonical World uploads
+use `/worlds/:worldId/media`, validate World ownership before retaining metadata, and record the
+World Definition scope. Top-level asset reads remain infrastructure-level and creator-scoped; old
+unscoped assets remain readable during compatibility. Host transfer retains the aggregate scope
+but intentionally unbinds creator attribution when Users are not part of the archive.
+
+Graph tuples are derived projections rather than domain authority. Direct tuple creation and
+deletion through HTTP are disabled. The legacy graph query is restricted to the System
+Administrator and marked deprecated; graph counts and readiness are observed through the Data &
+storage Settings area. Internal aggregate persistence and explicit repair workflows may still use
+the graph projection service.
 
 ### Relational World Definition API
 
@@ -721,6 +753,11 @@ Campaign Instance list projections are deterministically ordered and expose boun
 `offset`, and `total` pagination metadata.
 
 ## Persisted API resources
+
+`/domain/:resource` is now an explicitly deprecated compatibility API. It is not an extension
+surface and must not be used for new aggregate authoring. Runtime Campaign/Session resources and
+legacy `systems` writes are blocked; aggregate-specific APIs replace remaining generic writes in
+bounded migration waves. Reads remain temporarily available for compatibility only.
 
 The generic domain API persists the legacy compatibility resources below. The identifier used by
 that API is derived as shown. During additive realignment, an existing installation may still have

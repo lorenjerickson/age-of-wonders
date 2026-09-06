@@ -16,7 +16,11 @@ describe("WorldAuthoringController", () => {
       }),
       get: jest.fn(),
     };
-    const subject = new WorldAuthoringController(worlds, {} as never);
+    const subject = new WorldAuthoringController(
+      worlds,
+      {} as never,
+      {} as never,
+    );
 
     await expect(subject.list(request, "1", "1")).resolves.toEqual({
       items: [{ name: "B" }],
@@ -43,7 +47,11 @@ describe("WorldAuthoringController", () => {
         ],
       }),
     };
-    const subject = new WorldAuthoringController(worlds, authoring as never);
+    const subject = new WorldAuthoringController(
+      worlds,
+      authoring as never,
+      {} as never,
+    );
 
     await expect(
       subject.revision("world-1", "revision-1", request),
@@ -62,10 +70,27 @@ describe("WorldAuthoringController", () => {
         .fn()
         .mockResolvedValue({ revisions: [{ id: "revision-other" }] }),
     };
-    const subject = new WorldAuthoringController(worlds, {} as never);
+    const subject = new WorldAuthoringController(
+      worlds,
+      {} as never,
+      {} as never,
+    );
 
     await expect(
       subject.revision("world-1", "revision-1", request),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("resolves model adoption beneath the owning World", async () => {
+    const modelRegistries = { effective: jest.fn().mockResolvedValue({}) };
+    const subject = new WorldAuthoringController(
+      {} as never,
+      {} as never,
+      modelRegistries as never,
+    );
+
+    await subject.modelAdoptions("world-1", request);
+
+    expect(modelRegistries.effective).toHaveBeenCalledWith("world-1", "gm-1");
   });
 });

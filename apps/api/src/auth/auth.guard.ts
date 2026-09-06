@@ -7,6 +7,7 @@ import {
 import { UserRole } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import { AUTH_COOKIE, type AuthenticatedRequest } from "./auth.types";
+import { PrismaService } from "../prisma/prisma.service";
 
 export function requestToken(
   request: AuthenticatedRequest,
@@ -45,6 +46,29 @@ export class GmGuard extends SessionGuard {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (request.user?.role !== UserRole.GM) {
       throw new ForbiddenException("Game Master access is required.");
+    }
+    return true;
+  }
+}
+
+@Injectable()
+export class SystemAdministratorGuard extends SessionGuard {
+  constructor(
+    auth: AuthService,
+    private readonly prisma: PrismaService,
+  ) {
+    super(auth);
+  }
+
+  override async canActivate(context: ExecutionContext): Promise<boolean> {
+    await super.canActivate(context);
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const administrator = await this.prisma.systemAdministrator.findFirst({
+      where: { userId: request.user!.id, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!administrator) {
+      throw new ForbiddenException("System Administrator access is required.");
     }
     return true;
   }

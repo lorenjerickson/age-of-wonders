@@ -35,13 +35,19 @@ import { assertModelElementRuntimeShape } from "./model-registry-runtime-validat
 export class ModelRegistryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(userId: string) {
-    const rows = await this.prisma.modelRegistry.findMany({
-      where: { OR: [{ ownerUserId: userId }, { ownerUserId: null }] },
-      select: registrySelect,
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-    });
-    return { items: rows.map(registryResponse), total: rows.length };
+  async list(userId: string, limit = 50, offset = 0) {
+    const where = { OR: [{ ownerUserId: userId }, { ownerUserId: null }] };
+    const [rows, total] = await Promise.all([
+      this.prisma.modelRegistry.findMany({
+        where,
+        select: registrySelect,
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.modelRegistry.count({ where }),
+    ]);
+    return { items: rows.map(registryResponse), total, limit, offset };
   }
 
   async get(id: string, userId: string) {
@@ -791,7 +797,8 @@ export function isApplicableToCampaign(
     value !== null &&
     !Array.isArray(value) &&
     (value.kind === "global" ||
-      (value.kind === "world" && value.worldDefinitionId === worldDefinitionId) ||
+      (value.kind === "world" &&
+        value.worldDefinitionId === worldDefinitionId) ||
       (value.kind === "campaign-definition" &&
         value.campaignDefinitionId === campaignDefinitionId))
   );

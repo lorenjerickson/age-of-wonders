@@ -17,6 +17,7 @@ import { CampaignDefinitionsModule } from "./campaign-definitions/campaign-defin
 import { CampaignInstancesModule } from "./campaign-instances/campaign-instances.module";
 import { ModelRegistryModule } from "./model-registry/model-registry.module";
 import { PlayersModule } from "./players/players.module";
+import { SystemSettingsModule } from "./settings/system-settings.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PlayersModule } from "./players/players.module";
     CampaignInstancesModule,
     ModelRegistryModule,
     PlayersModule,
+    SystemSettingsModule,
   ],
   providers: [
     {

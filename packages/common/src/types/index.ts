@@ -15,6 +15,7 @@ export * from "./locations";
 export * from "./model-registry";
 export * from "./participation";
 export * from "./player-api";
+export * from "./system-settings-api";
 export * from "./placements";
 export * from "./plots";
 export * from "./disciplines";

@@ -216,15 +216,24 @@ export class AuthService {
   }
 
   async publicUser(user: AuthenticatedUser) {
-    if (user.role === UserRole.GM) {
-      return { displayName: user.displayName, role: "gm" as const };
-    }
     const administrator = await this.prisma.systemAdministrator.findUnique({
       where: { userId: user.id },
       select: { status: true },
     });
-    if (administrator?.status === "ACTIVE") {
-      return { displayName: user.displayName, role: "administrator" as const };
+    const systemAdministrator = administrator?.status === "ACTIVE";
+    if (user.role === UserRole.GM) {
+      return {
+        displayName: user.displayName,
+        role: "gm" as const,
+        systemAdministrator,
+      };
+    }
+    if (systemAdministrator) {
+      return {
+        displayName: user.displayName,
+        role: "administrator" as const,
+        systemAdministrator: true,
+      };
     }
     const membership =
       await this.prisma.campaignInstanceHumanMembership.findFirst({
@@ -239,6 +248,7 @@ export class AuthService {
     return {
       displayName: user.displayName,
       role: membership?.role === "SPECTATOR" ? "spectator" : "player",
+      systemAdministrator: false,
     } as const;
   }
 

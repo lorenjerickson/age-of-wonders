@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-identity-participation-wave-complete
+status: active-implementation-plan-system-boundaries-wave-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,18 +21,19 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, Campaign/World authoring, and identity/participation waves are
-implemented. Canonical GM routes enforce Campaign Definition, Campaign Instance, and World
-ancestry; public invitation entry points live beneath `/api/invitations`; and authenticated locator
-and participant projections live beneath `/api/me`. First-party web callers use the canonical
-authoring roots `/api/worlds` and `/api/campaigns`. The former `/api/world-definitions`,
-`/api/campaign-definitions`, top-level Campaign Instance, Session, participation, and destructive
-root-Location World routes remain temporary compatibility aliases and emit `Deprecation: true`; no
-sunset date has been announced.
+The Session, Campaign Instance, Campaign/World authoring, identity/participation, and initial
+system-boundary waves are implemented. Canonical GM routes enforce Campaign Definition, Campaign
+Instance, and World ancestry; public invitation entry points live beneath `/api/invitations`; and
+authenticated locator and participant projections live beneath `/api/me`. First-party web callers
+use the canonical authoring roots `/api/worlds` and `/api/campaigns`. The former
+`/api/world-definitions`, `/api/campaign-definitions`, top-level Campaign Instance, Session,
+participation, generic domain, and destructive root-Location World routes remain temporary
+compatibility aliases and emit `Deprecation: true`; no sunset date has been announced.
 
-Route families not named in the four completed-wave sections remain target architecture, not
-claims of completed implementation. Character sheet authoring and the Auth0 adapter remain
-separate follow-up work on top of the provider-neutral identity and ownership boundaries.
+Route families not named in the five completed-wave sections remain target architecture, not
+claims of completed implementation. Character sheet authoring, the Auth0 adapter, writable secret
+and operational Settings, and fully contextual World/Campaign AI and media commands remain
+separate follow-up work.
 
 ## Binding route principles
 
@@ -81,6 +82,7 @@ separate follow-up work on top of the provider-neutral identity and ownership bo
 /api/worlds/:worldId/item-compendium/items/:itemId
 /api/worlds/:worldId/character-model/:definitionKind/:definitionId
 /api/worlds/:worldId/model-adoptions
+/api/worlds/:worldId/media
 
 /api/campaigns
 /api/campaigns/:campaignDefinitionId
@@ -113,6 +115,7 @@ separate follow-up work on top of the provider-neutral identity and ownership bo
 /api/players
 /api/players/:playerId
 /api/model-registries/:registryId
+/api/model-registries/:registryId/releases
 /api/media/:mediaAssetId
 /api/ai/generations
 /api/settings/system/:systemArea
@@ -394,6 +397,53 @@ not yet represent complete schema conformance. The canonical import command and 
 constraints already prevent cross-Player, cross-owner, same-Instance, or identity-preserving
 transfers.
 
+## Model, AI, media, graph, and Settings implementation wave
+
+The fifth wave establishes an initial explicit boundary for independently authored models and
+hosted-system infrastructure:
+
+```text
+GET  /api/worlds/:worldId/model-adoptions
+POST /api/model-registries/:registryId/releases
+GET  /api/ai/generations
+POST /api/worlds/:worldId/media
+GET  /api/settings/system
+GET  /api/settings/system/:systemArea
+```
+
+Model Registry collections are bounded and deterministic. Effective Model adoption is now read
+beneath its owning World rather than selected by a top-level query parameter, and publishing a
+successor uses the registry's release collection. The former effective query and `/releases/extend`
+command remain deprecated compatibility aliases.
+
+New AI generation audit records identify the authenticated GM and carry an explicit bounded
+context kind and context identity when one exists. History remains requester-scoped and exposes
+only bounded previews. The immutable World-snapshot Campaign proposal remains canonical; generic
+generation and legacy root-Location AI mutations are marked deprecated until equivalent
+World-draft transformations are implemented.
+
+Media metadata now carries nullable creator and aggregate-scope provenance for legacy-safe
+rollout. Canonical World uploads validate the World and GM together, remove an already-uploaded
+object when validation fails, and persist World Definition scope. Top-level reads remain available
+and creator-scoped, including nullable legacy assets; the unscoped upload is deprecated.
+
+System Settings now presents the adopted twelve-area taxonomy and classifies every item as
+application-managed, secret-backed, deployment-managed, or observed. Responses report capability
+and readiness without returning saved secrets. Both the API and navigation require the active
+System Administrator independently of GM authority; an administrator without GM authority can
+open Settings without receiving World or Campaign access.
+
+Direct HTTP graph creation and deletion are disabled because tuples are derived projections, not
+domain authority. The legacy raw graph query is restricted to the System Administrator and marked
+deprecated; safe graph counts and drift signals appear under Data & storage. All generic domain
+routes are now marked deprecated, and legacy `systems` writes are frozen because hosted settings
+are not game-system documents.
+
+This vertical slice does not claim complete hosted administration. Plugin lifecycle, secret
+rotation, writable integration/provider configuration, graph rebuild commands, Campaign/Instance
+media scopes, and aggregate-native AI transformations remain fast follows. Compatibility rows with
+missing creator/scope provenance remain intentionally readable and are not rewritten by inference.
+
 ## Compatibility and rollout
 
 1. Add canonical controllers as aliases over the same services; do not duplicate domain logic.
@@ -422,8 +472,10 @@ transfers.
 4. **Identity and participation — complete vertical slice:** first-admin bootstrap, user-level
    provider associations, Players, Instance memberships/invitations, and Character
    ownership/lifecycle/import boundaries. Auth0 and Character sheet/import UX remain fast follows.
-5. **Model, AI, media, graph, and Settings:** explicit adoption/provenance and system-operator
-   boundaries.
+5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
+   adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
+   authority boundaries. Writable hosted configuration and fully contextual content operations
+   remain fast follows.
 6. **Legacy removal:** ambiguous `campaignId`, singleton World operations, generic domain writes,
    obsolete redirects, compatibility types, and migration-only code.
 

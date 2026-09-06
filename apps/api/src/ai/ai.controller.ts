@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Headers,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
@@ -71,8 +81,7 @@ export class AiController {
     return this.campaignProposalGate.execute(
       {
         userId,
-        clientAddress:
-          request.ip ?? request.socket.remoteAddress ?? "unknown",
+        clientAddress: request.ip ?? request.socket.remoteAddress ?? "unknown",
         idempotencyKey,
         requestFingerprint,
       },
@@ -90,6 +99,8 @@ export class AiController {
             model: this.openAi.model,
             responseId: result.responseId,
             createdByUserId: userId,
+            contextType: "world-definition-snapshot",
+            contextId: worldDefinitionSnapshotId,
           },
         });
         return {
@@ -105,6 +116,7 @@ export class AiController {
   }
 
   @Post("worlds/:worldId/weapons")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary:
       "Create a world-scoped weapon definition using create-weapon.md and world context",
@@ -113,6 +125,7 @@ export class AiController {
   async createWeapon(
     @Param("worldId") worldId: string,
     @Body() dto: CreateItemDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.weaponGeneration.create(worldId, dto.prompt);
     const generation = await this.prisma.generation.create({
@@ -122,6 +135,9 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world",
+        contextId: worldId,
       },
     });
     return {
@@ -135,6 +151,7 @@ export class AiController {
   }
 
   @Post("worlds/:worldId/items")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary:
       "Create a world-scoped item definition using create-item.md and world context",
@@ -143,6 +160,7 @@ export class AiController {
   async createItem(
     @Param("worldId") worldId: string,
     @Body() dto: CreateItemDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.itemGeneration.create(worldId, dto.prompt);
     const generation = await this.prisma.generation.create({
@@ -152,6 +170,9 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world",
+        contextId: worldId,
       },
     });
     return {
@@ -165,12 +186,14 @@ export class AiController {
   }
 
   @Post("worlds/:worldId/items/:itemId/image")
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Regenerate and replace an item's inventory image" })
   @ApiParam({ name: "worldId", description: "Root LocationState ID" })
   @ApiParam({ name: "itemId", description: "ItemDefinition ID" })
   async generateItemImage(
     @Param("worldId") worldId: string,
     @Param("itemId") itemId: string,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.itemGeneration.regenerateImage(worldId, itemId);
     const generation = await this.prisma.generation.create({
@@ -180,6 +203,9 @@ export class AiController {
         output: JSON.stringify(result.definition.data),
         model: this.openAi.model,
         responseId: result.imageResponseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world-item",
+        contextId: itemId,
       },
     });
     return {
@@ -191,6 +217,7 @@ export class AiController {
   }
 
   @Post("worlds/:worldId/creatures/:creatureId/armor-set")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary:
       "Generate, inventory, and equip one armor item for each creature armor slot",
@@ -201,6 +228,7 @@ export class AiController {
     @Param("worldId") worldId: string,
     @Param("creatureId") creatureId: string,
     @Body() dto: CreateArmorSetDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.armorGeneration.createSet(
       worldId,
@@ -216,6 +244,9 @@ export class AiController {
         output: JSON.stringify(result.generations),
         model: this.openAi.model,
         responseId: result.generations.at(-1)?.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world-creature",
+        contextId: creatureId,
       },
     });
     return {
@@ -229,6 +260,7 @@ export class AiController {
   }
 
   @Post("worlds/:worldId/creatures")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary:
       "Create a creature using create-creature.md, user input, and its world record",
@@ -237,6 +269,7 @@ export class AiController {
   async createCreature(
     @Param("worldId") worldId: string,
     @Body() dto: CreateCreatureDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.creatureGeneration.create(worldId, dto.prompt);
     const generation = await this.prisma.generation.create({
@@ -246,6 +279,9 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world",
+        contextId: worldId,
       },
     });
     return {
@@ -259,10 +295,14 @@ export class AiController {
   }
 
   @Post("worlds")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary: "Create a world using prompts/create-world.md and user input",
   })
-  async createWorld(@Body() dto: CreateWorldDto) {
+  async createWorld(
+    @Body() dto: CreateWorldDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     const result = await this.worldGeneration.create(dto.prompt);
     const generation = await this.prisma.generation.create({
       data: {
@@ -271,6 +311,8 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-world-creation",
       },
     });
     return {
@@ -284,6 +326,7 @@ export class AiController {
   }
 
   @Post("locations/:parentId")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary:
       "Create a child location using create-location.md, user input, and its parent record",
@@ -292,6 +335,7 @@ export class AiController {
   async createLocation(
     @Param("parentId") parentId: string,
     @Body() dto: CreateLocationDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.locationGeneration.create(
       parentId,
@@ -307,6 +351,9 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-location-parent",
+        contextId: parentId,
       },
     });
     return {
@@ -320,11 +367,13 @@ export class AiController {
   }
 
   @Post("locations/:locationId/map")
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Generate, store, and attach a map to a location" })
   @ApiParam({ name: "locationId", description: "LocationState ID" })
   async generateLocationMap(
     @Param("locationId") locationId: string,
     @Body() dto: GenerateMapDto,
+    @Req() request: Request & AuthenticatedRequest,
   ) {
     const result = await this.locationGeneration.generateMap(
       locationId,
@@ -340,6 +389,9 @@ export class AiController {
         }),
         model: this.openAi.model,
         responseId: result.imageResponseId,
+        createdByUserId: request.user!.id,
+        contextType: "legacy-location",
+        contextId: locationId,
       },
     });
     return {
@@ -351,8 +403,12 @@ export class AiController {
   }
 
   @Post("generate")
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Generate content with the OpenAI Responses API" })
-  async generate(@Body() dto: GenerateContentDto) {
+  async generate(
+    @Body() dto: GenerateContentDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     const result = await this.openAi.respond({
       input: dto.prompt,
       instructions: dto.instructions,
@@ -364,16 +420,22 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "unscoped-compatibility",
       },
     });
     return { ...result, generationId: generation.id, model: this.openAi.model };
   }
 
   @Post("pipelines/content")
+  @Header("Deprecation", "true")
   @ApiOperation({
     summary: "Run a multi-stage outline, draft, and review pipeline",
   })
-  async runContentPipeline(@Body() dto: RunPipelineDto) {
+  async runContentPipeline(
+    @Body() dto: RunPipelineDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     const result = await this.contentPipeline.run(dto.topic, dto.audience);
     const generation = await this.prisma.generation.create({
       data: {
@@ -382,6 +444,8 @@ export class AiController {
         output: result.output,
         model: this.openAi.model,
         responseId: result.stages.at(-1)?.responseId,
+        createdByUserId: request.user!.id,
+        contextType: "unscoped-compatibility",
       },
     });
     return { ...result, generationId: generation.id, model: this.openAi.model };

@@ -4,15 +4,20 @@ import { AiController } from "./ai.controller";
 import { CampaignProposalRequestGate } from "./campaign-proposal-request-gate";
 
 describe("AiController Campaign proposal security", () => {
-  function controller(overrides: {
-    createDraftProposal?: jest.Mock;
-    generationCreate?: jest.Mock;
-    generationFindMany?: jest.Mock;
-  } = {}) {
+  function controller(
+    overrides: {
+      createDraftProposal?: jest.Mock;
+      generationCreate?: jest.Mock;
+      generationFindMany?: jest.Mock;
+      createWeapon?: jest.Mock;
+    } = {},
+  ) {
     const openAi = { model: "test-model" };
     const campaignGeneration = {
-      createDraftProposal:
-        overrides.createDraftProposal ?? jest.fn(),
+      createDraftProposal: overrides.createDraftProposal ?? jest.fn(),
+    };
+    const weaponGeneration = {
+      create: overrides.createWeapon ?? jest.fn(),
     };
     const prisma = {
       generation: {
@@ -30,7 +35,7 @@ describe("AiController Campaign proposal security", () => {
         ignored,
         ignored,
         ignored,
-        ignored,
+        weaponGeneration as never,
         campaignGeneration as never,
         new CampaignProposalRequestGate(),
         prisma as never,
@@ -52,7 +57,9 @@ describe("AiController Campaign proposal security", () => {
       output: "x".repeat(900),
       responseId: "provider-response",
     });
-    const generationCreate = jest.fn().mockResolvedValue({ id: "generation-1" });
+    const generationCreate = jest
+      .fn()
+      .mockResolvedValue({ id: "generation-1" });
     const { instance } = controller({ createDraftProposal, generationCreate });
 
     const response = await instance.createCampaign(
@@ -91,7 +98,13 @@ describe("AiController Campaign proposal security", () => {
     const response = await instance.listGenerations(request);
 
     const findCalls = generationFindMany.mock.calls as unknown as Array<
-      [{ where: { createdByUserId: string }; take: number; select: Record<string, boolean> }]
+      [
+        {
+          where: { createdByUserId: string };
+          take: number;
+          select: Record<string, boolean>;
+        },
+      ]
     >;
     expect(findCalls[0]?.[0].where).toEqual({ createdByUserId: "gm-1" });
     expect(findCalls[0]?.[0].take).toBe(20);
@@ -100,5 +113,41 @@ describe("AiController Campaign proposal security", () => {
     expect(response[0]).toMatchObject({ outputTruncated: true });
     expect(response[0]?.outputPreview).toHaveLength(600);
     expect(response[0]).not.toHaveProperty("output");
+  });
+
+  it("attributes compatibility generation to its GM and explicit context", async () => {
+    const createWeapon = jest.fn().mockResolvedValue({
+      definition: { name: "Storm Pike" },
+      combinedPrompt: "prompt",
+      output: "output",
+      responseId: "response",
+    });
+    const generationCreate = jest
+      .fn()
+      .mockResolvedValue({ id: "generation-1" });
+    const { instance } = controller({ createWeapon, generationCreate });
+
+    await instance.createWeapon(
+      "legacy-world-1",
+      { prompt: "A storm weapon" },
+      request,
+    );
+
+    const createCalls = generationCreate.mock.calls as unknown as Array<
+      [
+        {
+          data: {
+            createdByUserId: string;
+            contextType: string;
+            contextId: string;
+          };
+        },
+      ]
+    >;
+    expect(createCalls[0]?.[0].data).toMatchObject({
+      createdByUserId: "gm-1",
+      contextType: "legacy-world",
+      contextId: "legacy-world-1",
+    });
   });
 });

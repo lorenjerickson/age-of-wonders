@@ -28,6 +28,7 @@ import {
 } from "./dto/world-definition-authoring.dto";
 import { WorldDefinitionAuthoringService } from "./world-definition-authoring.service";
 import { WorldDefinitionsService } from "./world-definitions.service";
+import { ModelRegistryService } from "../model-registry/model-registry.service";
 
 interface DraftRecord {
   readonly resourceType: string;
@@ -43,6 +44,7 @@ export class WorldAuthoringController {
     @Inject(WorldDefinitionsService)
     private readonly worlds: Pick<WorldDefinitionsService, "list" | "get">,
     private readonly authoring: WorldDefinitionAuthoringService,
+    private readonly modelRegistries: ModelRegistryService,
   ) {}
 
   @Get()
@@ -282,6 +284,14 @@ export class WorldAuthoringController {
       limit: page.limit,
       offset: page.offset,
     };
+  }
+
+  @Get(":worldId/model-adoptions")
+  modelAdoptions(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.modelRegistries.effective(worldId, request.user!.id);
   }
 
   @Get(":worldId/character-model/:definitionKind/:definitionId")

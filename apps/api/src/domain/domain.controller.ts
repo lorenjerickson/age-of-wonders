@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -36,6 +37,7 @@ export class DomainController {
   constructor(private readonly domain: DomainService) {}
 
   @Post()
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Create a domain aggregate" })
   @ApiCreatedResponse({ description: "The aggregate was created." })
   create(
@@ -48,6 +50,7 @@ export class DomainController {
   }
 
   @Get()
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "List domain aggregates" })
   list(
     @Param("resource") resourceValue: string,
@@ -57,12 +60,14 @@ export class DomainController {
   }
 
   @Get(":id")
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Get a domain aggregate by ID" })
   get(@Param("resource") resourceValue: string, @Param("id") id: string) {
     return this.domain.get(assertDomainResource(resourceValue), id);
   }
 
   @Put(":id")
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Replace a domain aggregate" })
   replace(
     @Param("resource") resourceValue: string,
@@ -75,6 +80,7 @@ export class DomainController {
   }
 
   @Delete(":id")
+  @Header("Deprecation", "true")
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Delete a domain aggregate" })
   @ApiNoContentResponse({ description: "The aggregate was deleted." })
@@ -96,6 +102,7 @@ const QUARANTINED_LEGACY_WRITES = new Set([
   "encounters",
   "pending-decisions",
   "game-events",
+  "systems",
 ]);
 
 function assertLegacyRuntimeWriteDisabled(resource: string): void {

@@ -1,8 +1,10 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -16,15 +18,16 @@ import {
   PutGraphTriplesDto,
 } from "./dto/graph.dto";
 import { GraphService } from "./graph.service";
-import { GmGuard } from "../auth/auth.guard";
+import { SystemAdministratorGuard } from "../auth/auth.guard";
 
 @ApiTags("graph")
 @Controller("graph/tuples")
-@UseGuards(GmGuard)
+@UseGuards(SystemAdministratorGuard)
 export class GraphController {
   constructor(private readonly graph: GraphService) {}
 
   @Get()
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Query tuples using a LevelGraph pattern" })
   async list(@Query() pattern: GraphPatternDto) {
     const items = await this.graph.get(pattern);
@@ -32,16 +35,23 @@ export class GraphController {
   }
 
   @Post()
+  @Header("Deprecation", "true")
   @ApiOperation({ summary: "Add one or more graph tuples" })
-  async create(@Body() dto: PutGraphTriplesDto) {
-    await this.graph.put(dto.triples);
-    return { created: dto.triples.length };
+  create(@Body() dto: PutGraphTriplesDto): never {
+    void dto;
+    throw new ConflictException(
+      "Direct graph mutation is disabled. Graph relationships are derived from authoritative domain writes.",
+    );
   }
 
   @Delete()
+  @Header("Deprecation", "true")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Delete all tuples matching a pattern" })
-  async remove(@Body() dto: DeleteGraphTriplesDto) {
-    return { deleted: await this.graph.remove(dto.pattern) };
+  remove(@Body() dto: DeleteGraphTriplesDto): never {
+    void dto;
+    throw new ConflictException(
+      "Direct graph mutation is disabled. Use an authorized projection reconciliation workflow.",
+    );
   }
 }

@@ -15,11 +15,14 @@ model Generation {
   model           String
   responseId      String?
   createdByUserId String?
+  contextType     String?
+  contextId       String?
   createdAt       DateTime @default(now())
   createdBy       User?    @relation("GenerationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([createdAt])
   @@index([createdByUserId, createdAt])
+  @@index([createdByUserId, contextType, createdAt])
 }
 
 /// Versioned JSON documents for the aggregate roots in @aow/common.
@@ -50,24 +53,30 @@ model GraphEntry {
 }
 
 model MediaAsset {
-  id           String   @id @default(uuid())
-  bucket       String
-  objectKey    String   @unique
-  filename     String
-  originalName String
-  mimeType     String
-  mediaType    String
-  purpose      String
-  size         Int
-  etag         String?
-  tags         String[] @default([])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  bucket          String
+  objectKey       String   @unique
+  filename        String
+  originalName    String
+  mimeType        String
+  mediaType       String
+  purpose         String
+  size            Int
+  etag            String?
+  tags            String[] @default([])
+  createdByUserId String?
+  scopeType       String?
+  scopeId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       User?    @relation("MediaAssetCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([mediaType, purpose])
   @@index([mimeType])
   @@index([tags], type: Gin)
   @@index([createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([scopeType, scopeId])
 }
 
 enum UserRole {
@@ -300,6 +309,7 @@ model User {
   updatedAt                                  DateTime                                @updatedAt
   authSessions                               AuthSession[]
   createdGenerations                         Generation[]                            @relation("GenerationCreator")
+  uploadedMedia                              MediaAsset[]                            @relation("MediaAssetCreator")
   memberships                                CampaignMembership[]
   createdInvitations                         CampaignInvitation[]                    @relation("InvitationCreator")
   acceptedInvitations                        CampaignInvitation[]                    @relation("InvitationAcceptor")

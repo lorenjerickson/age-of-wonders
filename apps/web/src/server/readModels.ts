@@ -149,7 +149,7 @@ export const readWorldAuthoring = createServerFn({ method: "GET" })
           throw error;
         }),
         serverApiRequest<EffectiveWorldModelResponse>(
-          `/model-registries/effective?worldDefinitionId=${encodeURIComponent(data.worldDefinitionId)}`,
+          `/worlds/${encodeURIComponent(data.worldDefinitionId)}/model-adoptions`,
         ).catch(() => undefined),
       ]);
       return {

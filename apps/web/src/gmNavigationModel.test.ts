@@ -35,6 +35,21 @@ describe("GM primary navigation", () => {
         .map(({ label }) => label),
     ).toEqual(["Campaigns"]);
   });
+
+  it("keeps installation Settings separate from ordinary GM authority", () => {
+    expect(
+      primaryNavigationForPath("/worlds", {
+        gm: true,
+        systemAdministrator: false,
+      }).map(({ label }) => label),
+    ).not.toContain("Settings");
+    expect(
+      primaryNavigationForPath("/settings", {
+        gm: false,
+        systemAdministrator: true,
+      }).map(({ label }) => label),
+    ).toEqual(["Settings"]);
+  });
 });
 
 describe("World secondary navigation", () => {

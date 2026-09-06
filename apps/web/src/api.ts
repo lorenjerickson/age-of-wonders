@@ -52,6 +52,9 @@ import type {
   ChangeCampaignInstanceCharacterStatusRequest,
   SelectCampaignInstanceCharacterRequest,
   ImportCampaignInstanceCharacterRequest,
+  SystemSettingArea,
+  SystemSettingAreaProjection,
+  SystemSettingsIndexProjection,
 } from "@aow/common";
 
 const apiUrl = "/api";
@@ -509,6 +512,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface CurrentUser {
   displayName: string;
   role: "gm" | "administrator" | "player" | "spectator";
+  systemAdministrator: boolean;
 }
 
 export interface CampaignParticipant {
@@ -657,7 +661,7 @@ export function startWorldDefinitionDraft(
 
 export function getEffectiveWorldModels(worldDefinitionId: string) {
   return request<EffectiveWorldModelResponse>(
-    `/model-registries/effective?worldDefinitionId=${encodeURIComponent(worldDefinitionId)}`,
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/model-adoptions`,
   );
 }
 
@@ -712,7 +716,7 @@ export function extendModelRegistryRelease(
       dependencies?: Array<{ releaseId: string }>;
     };
     addedElements: Array<{ id: string; key: string }>;
-  }>(`/model-registries/${encodeURIComponent(registryId)}/releases/extend`, {
+  }>(`/model-registries/${encodeURIComponent(registryId)}/releases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -2044,6 +2048,16 @@ export function checkHealth() {
   return request<{ status: string; database: string }>("/health");
 }
 
+export function getSystemSettings() {
+  return request<SystemSettingsIndexProjection>("/settings/system");
+}
+
+export function getSystemSettingArea(area: SystemSettingArea) {
+  return request<SystemSettingAreaProjection>(
+    `/settings/system/${encodeURIComponent(area)}`,
+  );
+}
+
 export function listDomainRecords(
   resource: DomainResource,
   options: {
@@ -2097,6 +2111,22 @@ export function uploadMedia(file: File, purpose: string, tags: string[] = []) {
     method: "POST",
     body,
   });
+}
+
+export function uploadWorldMedia(
+  worldDefinitionId: string,
+  file: File,
+  purpose: string,
+  tags: string[] = [],
+) {
+  const query = new URLSearchParams({ purpose });
+  if (tags.length) query.set("tags", tags.join(","));
+  const body = new FormData();
+  body.append("file", file);
+  return request<MediaAsset>(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/media?${query.toString()}`,
+    { method: "POST", body },
+  );
 }
 
 export function getMediaDownloadUrl(id: string) {

@@ -12,7 +12,11 @@ export class MediaService {
     private readonly storage: ObjectStorageService,
   ) {}
 
-  async create(upload: StoredUpload, tags: string[]) {
+  async create(
+    upload: StoredUpload,
+    tags: string[],
+    ownership?: { userId: string; scopeType?: string; scopeId?: string },
+  ) {
     try {
       return await this.prisma.mediaAsset.create({
         data: {
@@ -27,6 +31,9 @@ export class MediaService {
           size: upload.size,
           etag: upload.etag,
           tags,
+          createdByUserId: ownership?.userId,
+          scopeType: ownership?.scopeType,
+          scopeId: ownership?.scopeId,
         },
       });
     } catch (error) {
@@ -35,8 +42,30 @@ export class MediaService {
     }
   }
 
-  async list(query: ListMediaQueryDto) {
+  async createForWorld(
+    worldDefinitionId: string,
+    userId: string,
+    upload: StoredUpload,
+    tags: string[],
+  ) {
+    const world = await this.prisma.worldDefinition.findFirst({
+      where: { id: worldDefinitionId, ownerUserId: userId },
+      select: { id: true },
+    });
+    if (!world) {
+      await this.storage.delete(upload.objectKey);
+      throw new NotFoundException("The selected World was not found.");
+    }
+    return this.create(upload, tags, {
+      userId,
+      scopeType: "world-definition",
+      scopeId: worldDefinitionId,
+    });
+  }
+
+  async list(query: ListMediaQueryDto, userId: string) {
     const where: Prisma.MediaAssetWhereInput = {
+      OR: [{ createdByUserId: userId }, { createdByUserId: null }],
       mediaType: query.mediaType,
       purpose: query.purpose,
       mimeType: query.mimeType,
@@ -62,15 +91,22 @@ export class MediaService {
     return { items, total, limit: query.limit, offset: query.offset };
   }
 
-  async get(id: string) {
-    const asset = await this.prisma.mediaAsset.findUnique({ where: { id } });
+  async get(id: string, userId?: string) {
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: {
+        id,
+        ...(userId
+          ? { OR: [{ createdByUserId: userId }, { createdByUserId: null }] }
+          : {}),
+      },
+    });
     if (!asset)
-      throw new NotFoundException(`Media asset '${id}' was not found`);
+      throw new NotFoundException("The selected media asset was not found.");
     return asset;
   }
 
-  async download(id: string) {
-    const asset = await this.get(id);
+  async download(id: string, userId: string) {
+    const asset = await this.get(id, userId);
     const expiresIn = 900;
     return {
       url: await this.storage.signedDownloadUrl(
@@ -82,8 +118,8 @@ export class MediaService {
     };
   }
 
-  async remove(id: string): Promise<void> {
-    const asset = await this.get(id);
+  async remove(id: string, userId?: string): Promise<void> {
+    const asset = await this.get(id, userId);
     await this.storage.delete(asset.objectKey);
     await this.prisma.mediaAsset.delete({ where: { id } });
   }

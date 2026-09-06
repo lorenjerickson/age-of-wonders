@@ -27,9 +27,16 @@ export interface WorldNavigationGroup {
 
 export function primaryNavigationForPath(
   pathname: string,
+  access: { gm: boolean; systemAdministrator: boolean } = {
+    gm: true,
+    systemAdministrator: true,
+  },
 ): readonly PrimaryNavigationItem[] {
   const firstSegment = pathname.split("/").filter(Boolean)[0];
-  return PRIMARY_NAVIGATION.map((item) => ({
+  return PRIMARY_NAVIGATION.filter((item) => {
+    if (item.key === "settings") return access.systemAdministrator;
+    return access.gm;
+  }).map((item) => ({
     ...item,
     active:
       item.key === "home"

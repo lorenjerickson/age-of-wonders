@@ -28,18 +28,18 @@ export function LoginPage() {
     setBusy(true);
     setMessage("");
     try {
-      if (setupRequired) {
-        await establishAdministrator({
-          token: token.trim(),
-          displayName: displayName.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          grantGameMaster,
-        });
-      } else {
-        await loginAsGm(token.trim());
-      }
-      await navigate("/", { replace: true });
+      const result = setupRequired
+        ? await establishAdministrator({
+            token: token.trim(),
+            displayName: displayName.trim(),
+            email: email.trim(),
+            phone: phone.trim(),
+            grantGameMaster,
+          })
+        : await loginAsGm(token.trim());
+      await navigate(result.user.role === "administrator" ? "/settings" : "/", {
+        replace: true,
+      });
     } catch (caught) {
       setMessage(
         caught instanceof Error ? caught.message : "Could not sign in.",

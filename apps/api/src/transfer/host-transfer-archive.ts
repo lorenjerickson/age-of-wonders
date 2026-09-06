@@ -38,6 +38,10 @@ export interface ArchivedMediaAsset {
   readonly size: number;
   readonly etag: string | null;
   readonly tags: readonly string[];
+  /** Exported for audit evidence; intentionally unbound when imported without Users. */
+  readonly createdByUserId?: string | null;
+  readonly scopeType?: string | null;
+  readonly scopeId?: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

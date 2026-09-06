@@ -20,7 +20,7 @@ export const ROUTE_POLICIES = [
   },
   {
     family: "resource browse",
-    pattern: "/worlds|campaigns|players|settings|systems",
+    pattern: "/worlds|campaigns|players|settings",
     audience: "gm",
     rendering: "ssr",
   },

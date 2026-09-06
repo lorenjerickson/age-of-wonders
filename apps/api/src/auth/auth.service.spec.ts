@@ -35,16 +35,17 @@ describe("AuthService bootstrap exchange", () => {
   });
 
   it("authenticates the administrator even when GM authority was not granted", async () => {
+    const findFirstAdministrator = jest.fn().mockResolvedValue({
+      id: "administrator-1",
+      user: {
+        id: "operator-1",
+        displayName: "Operator",
+        role: UserRole.PARTICIPANT,
+      },
+    });
     const prisma = {
       systemAdministrator: {
-        findFirst: jest.fn().mockResolvedValue({
-          id: "administrator-1",
-          user: {
-            id: "operator-1",
-            displayName: "Operator",
-            role: UserRole.PARTICIPANT,
-          },
-        }),
+        findFirst: findFirstAdministrator,
       },
     } as unknown as PrismaService;
     const auth = new AuthService(
@@ -59,7 +60,7 @@ describe("AuthService bootstrap exchange", () => {
       id: "operator-1",
       role: UserRole.PARTICIPANT,
     });
-    expect(prisma.systemAdministrator.findFirst).toHaveBeenCalledWith(
+    expect(findFirstAdministrator).toHaveBeenCalledWith(
       expect.objectContaining({ where: { status: "ACTIVE" } }),
     );
   });

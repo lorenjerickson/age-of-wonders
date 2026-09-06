@@ -88,9 +88,13 @@ function PrimaryNavigationLink({
 export function AppShell({
   children,
   gmScope,
+  gmAccess = true,
+  systemAdministrator = false,
 }: {
   children: ReactNode;
   gmScope: string;
+  gmAccess?: boolean;
+  systemAdministrator?: boolean;
 }) {
   const location = useLocation();
   const pathname = location.pathname;
@@ -99,7 +103,10 @@ export function AppShell({
   const segments = pathname.split("/").filter(Boolean);
   const locationWorkspaceActive =
     segments[0] === "campaigns" && segments[2] === "locations";
-  const primaryNavigation = primaryNavigationForPath(pathname);
+  const primaryNavigation = primaryNavigationForPath(pathname, {
+    gm: gmAccess,
+    systemAdministrator,
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [resumableSession, setResumableSession] =
@@ -110,6 +117,7 @@ export function AppShell({
   const guidePanel = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (!gmAccess) return;
     let cancelled = false;
     void getGmResumableSession().then(
       (result) => {
@@ -120,7 +128,7 @@ export function AppShell({
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [gmAccess, pathname]);
 
   useEffect(() => {
     if (!drawerOpen) return;

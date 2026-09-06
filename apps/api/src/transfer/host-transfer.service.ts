@@ -539,8 +539,10 @@ function domainUpdate(
 }
 
 function mediaCreate(asset: ArchivedMediaAsset): Prisma.MediaAssetCreateInput {
+  const { createdByUserId, ...portable } = asset;
+  void createdByUserId;
   return {
-    ...asset,
+    ...portable,
     tags: [...asset.tags],
     createdAt: new Date(asset.createdAt),
     updatedAt: new Date(asset.updatedAt),
