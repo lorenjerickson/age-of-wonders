@@ -1,4 +1,19 @@
+---
+name: project-state-gap-analysis-2026-08-31
+description: Deprecated pre-realignment repository assessment retained only for historical archaeology
+status: deprecated
+deprecated-on: 2026-09-06
+superseded-by: docs/information-architecture-domain-model-realignment.md
+exclude-from-analysis-and-generation: true
+---
+
 # Age of Wonders project-state and MVP gap analysis
+
+> **DEPRECATED — EXCLUDED FROM FUTURE ANALYSIS AND GENERATION.** This point-in-time assessment was
+> superseded by the adopted information architecture and the subsequent World, Campaign Definition,
+> Campaign Instance, and Session implementations. Its readiness scores and recommended priorities
+> are no longer current. Read it only for explicitly requested historical analysis or migration
+> archaeology.
 
 **Assessment date:** 2026-08-31  
 **Scope:** Current `main` checkout, including uncommitted work; repository documentation; source-of-truth domain types; test/build evidence; and recent product conversations in this workspace.  

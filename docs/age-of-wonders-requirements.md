@@ -1,11 +1,20 @@
 ---
 name: age-of-wonders-requirements
-description: Working product requirements baseline for the Age of Wonders virtual tabletop role-playing system
-status: working-baseline
+description: Deprecated singleton-era product requirements retained only for historical archaeology
+status: deprecated
 last-validated: 2026-09-01
+deprecated-on: 2026-09-06
+superseded-by: docs/information-architecture-domain-model-realignment.md
+exclude-from-analysis-and-generation: true
 ---
 
 # Age of Wonders product requirements
+
+> **DEPRECATED — EXCLUDED FROM FUTURE ANALYSIS AND GENERATION.** This document describes the
+> superseded singleton World/Campaign and blended authoring/play architecture. Do not use it as
+> requirements, design evidence, planning input, retrieval context, or AI-generation context. Read
+> it only when the user explicitly requests historical analysis or migration archaeology. The
+> replacement is `docs/information-architecture-domain-model-realignment.md`.
 
 ## Purpose and authority
 

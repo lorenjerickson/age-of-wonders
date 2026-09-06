@@ -1,4 +1,19 @@
+---
+name: campaign-design
+description: Deprecated pre-lineage Campaign design retained only for historical archaeology
+status: deprecated
+deprecated-on: 2026-09-06
+superseded-by: docs/information-architecture-domain-model-realignment.md
+exclude-from-analysis-and-generation: true
+---
+
 # Campaign definition foundation
+
+> **DEPRECATED — EXCLUDED FROM FUTURE ANALYSIS AND GENERATION.** This document predates the
+> authoritative Campaign Definition/Campaign Instance split, recursive Plot model, captured World
+> snapshots, and migration rules. Do not use it as requirements, design evidence, planning input,
+> retrieval context, or AI-generation context. Read it only for explicitly requested historical
+> analysis or migration archaeology.
 
 This document intentionally defines only the minimum foundation of a campaign. It separates the
 reusable context authored before play from the choices and events that emerge at the table.

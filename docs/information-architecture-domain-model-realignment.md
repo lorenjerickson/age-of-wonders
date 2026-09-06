@@ -1,19 +1,26 @@
 ---
 name: information-architecture-domain-model-realignment
-description: Proposed requirements and design for multiple Worlds, Campaigns, Players, authoring, and live play
-status: proposal-for-iteration
+description: Authoritative architecture for multiple Worlds, Campaigns, Players, authoring, and live play
+status: authoritative-architecture
 date: 2026-09-03
+adopted: 2026-09-06
 ---
 
 # Information architecture and domain model realignment
 
 ## Purpose and status
 
-This document proposes a new information architecture and conceptual domain model for Age of
-Wonders. It is a discussion artifact, not an implementation specification. It intentionally makes
-no code changes and does not yet replace the current product requirements or TypeScript contracts.
+This document is the authoritative product information architecture and conceptual domain model for
+Age of Wonders. It supersedes the singleton World/Campaign and blended authoring/play architecture
+in the documents listed in `docs/README.md`'s exclusion registry. Implementation plans refine this
+architecture but may not contradict it without an explicit architecture decision.
 
-The proposal answers two questions:
+`packages/common/src/types` remains authoritative for the exact implemented TypeScript domain
+contract. `apps/api/src/ai/prompts/domain-model.md` is the synchronized AI-facing representation of
+that implemented contract. Where this architecture describes accepted work not yet implemented,
+the gap must remain explicit rather than being filled by a deprecated requirement.
+
+This architecture answers two questions:
 
 1. How should the application organize setup, authoring, and game-time work?
 2. What relationships must the data model represent so that the navigation reflects the actual
@@ -49,7 +56,7 @@ For this analysis, evidence is applied in this order:
 3. The current web application, database schema, AI-facing domain guide, and existing documents
    provide implementation evidence and migration constraints.
 
-Where the diagram contradicts current implementation or prior requirements, this proposal follows
+Where the diagram contradicts current implementation or prior requirements, this architecture follows
 the diagram and records the displaced decision. Where the diagram is silent, current concepts are
 retained when they still serve the corrected hierarchy. The diagram is conceptual, so leaf labels
 do not imply final storage fields, API resources, or one table per node.
@@ -1747,15 +1754,17 @@ do not violate that constraint.
 | Definition references behave as live pointers with no explicit adoption boundary                                                                | Published revisions are immutable; downstream snapshots change only through optional, complete, direct-lineage migration                 |
 | No compatible World/Campaign revision-pair contract exists for running campaigns                                                                | Every Instance captures a compatible Campaign/World revision pair and migrates it atomically only while no Session is active             |
 
-These changes specifically supersede the single-campaign and flattened-navigation positions in
-`docs/age-of-wonders-requirements.md`, the no-story-hierarchy position in
-`docs/campaign-design.md`, and the singleton/campaign-placement guidance in
-`apps/api/src/ai/prompts/domain-model.md`. Those files should not be changed until this proposal is
-approved and the explicitly deferred decisions in the register below are settled where necessary.
+These changes specifically supersede `docs/age-of-wonders-requirements.md`,
+`docs/campaign-design.md`, and the dated assessment in
+`docs/project-state-gap-analysis-2026-08-31.md`; they are excluded from future requirements,
+architecture, planning, retrieval, and generation context by `docs/README.md`. The former
+singleton/campaign-placement guidance in `apps/api/src/ai/prompts/domain-model.md` has been replaced
+as the TypeScript contracts were realigned. Deferred decisions below remain unresolved and must not
+be filled from excluded documents.
 
 ## Migration and delivery implications
 
-This is a recommended sequence, not authorization to implement it:
+This is the adopted delivery sequence. Individual implementation slices may still use review gates:
 
 1. Approve vocabulary, ownership boundaries, and agent semantics, including the non-negotiable
    multi-World model, Campaign Definition / Campaign Instance separation, discrete authoring/play
@@ -1817,7 +1826,7 @@ The data migration will require provenance-aware mapping rather than mechanical 
 records combine reusable source data, campaign preparation, and live state in ways that the target
 model separates.
 
-## Acceptance criteria for the next design iteration
+## Architecture acceptance criteria
 
 - A fresh hosted deployment enters Setup and can reach minimum readiness without creating any
   World or Campaign content. After readiness, Quick Start is offered separately from Setup.
@@ -1972,7 +1981,7 @@ model separates.
 
 ## Decision register
 
-Resolved entries below are requirements for this proposal. Deferred entries remain deliberately
+Resolved entries below are requirements for this architecture. Deferred entries remain deliberately
 unspecified and must not be filled in by incidental implementation choices.
 
 1. **Resolved — Packaged reuse:** Worlds and Campaigns do not own shared live authored libraries.
@@ -2085,8 +2094,9 @@ unspecified and must not be filled in by incidental implementation choices.
 
 ## Domain-model documentation verification
 
-No domain types, resource mappings, or application code were changed in this analysis. Therefore
-`apps/api/src/ai/prompts/domain-model.md` was not updated. It remains accurate for the current
-implementation but intentionally conflicts with this proposed target model in the areas called out
-above. If this proposal is approved, the TypeScript model and AI-facing guide must be updated
-together during implementation.
+The architecture has been adopted and implemented through the World Definition, Campaign
+Definition, Campaign Instance, and Campaign Session vertical slices. Each implemented domain change
+updated `packages/common/src/types`, persistence where applicable, and
+`apps/api/src/ai/prompts/domain-model.md` together. Remaining accepted but unimplemented areas are
+tracked as gaps in `docs/README.md`; this architecture must not be mistaken for proof that every
+acceptance criterion is already implemented.

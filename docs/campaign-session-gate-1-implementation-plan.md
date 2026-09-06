@@ -136,9 +136,10 @@ full play experience.
 
 ### 4.3 Fast-follow: contextual API hierarchy realignment
 
-After this vertical slice is complete, perform a focused API information-architecture and
-authorization-boundary realignment. This is recorded in the current work scope as a fast-follow,
-but it does not change the Session Gate 1 implementation now in progress.
+This fast-follow is now governed by `docs/api-information-architecture-realignment.md`, which
+expands it into a product-wide API ownership audit and makes the Session hierarchy the first
+implementation wave. The Gate 1 implementation and its historical routes remain unchanged in this
+record.
 
 The follow-up must:
 

@@ -1,8 +1,8 @@
 # Campaign Instance Vertical Slice — Gate 1 Implementation Plan
 
-Status: **Proposed for Gate 1 approval**  
-Size: **Large / cross-cutting**  
-Implementation authorization: **Not granted until Gate 1 is approved**
+Status: **Gate 2 approved; implementation committed locally**
+
+Record type: **Completed implementation plan; not the canonical product architecture**
 
 ## 1. Outcome
 
@@ -521,4 +521,3 @@ Implementation will stop again at **Gate 2** with:
 - verification and disposable-database evidence;
 - resolved review findings and remaining limitations;
 - a proposed conventional commit split.
-
