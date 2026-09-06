@@ -8,6 +8,7 @@ import {
 import type {
   ModelElementLineage,
   ModelElementRevision,
+  ModelMigrationPlan,
   ModelRegistry,
   ModelSchemaRelease,
 } from "@aow/common";
@@ -18,18 +19,23 @@ import {
   compileModelSchemaRelease,
   modelElementRevisionContentHash,
   modelSchemaReleaseContentHash,
+  validateModelMigrationPlan,
   validateModelSchemaCompilation,
   type CompiledModelSchema,
   type ModelSchemaCompilationInput,
   type ModelRegistryValidationResult,
 } from "./model-registry-compiler";
 import type {
+  CreateModelMigrationPlanDto,
   CreateModelRegistryDto,
   ExtendModelSchemaReleaseDto,
   ModelElementRevisionPayloadDto,
 } from "./dto/model-registry.dto";
 import { CORE_MODEL_SCHEMA_RELEASE_ID } from "./editable-core-model-seed";
-import { assertModelElementRuntimeShape } from "./model-registry-runtime-validator";
+import {
+  assertModelElementRuntimeShape,
+  assertModelMigrationMappingsRuntimeShape,
+} from "./model-registry-runtime-validator";
 
 @Injectable()
 export class ModelRegistryService {
@@ -56,7 +62,13 @@ export class ModelRegistryService {
       select: {
         ...registrySelect,
         elements: {
-          select: elementSelect,
+          select: {
+            ...elementSelect,
+            revisions: {
+              select: revisionSelect,
+              orderBy: [{ revisionNumber: "desc" }, { id: "asc" }],
+            },
+          },
           orderBy: [{ key: "asc" }, { id: "asc" }],
         },
         releases: {
@@ -68,7 +80,10 @@ export class ModelRegistryService {
     if (!row) throw missing();
     return {
       ...registryResponse(row),
-      elements: row.elements.map(elementResponse),
+      elements: row.elements.map((element) => ({
+        ...elementResponse(element),
+        revisions: element.revisions.map(revisionResponse),
+      })),
       releases: row.releases.map(releaseResponse),
     };
   }
@@ -102,14 +117,31 @@ export class ModelRegistryService {
     dto: ExtendModelSchemaReleaseDto,
     userId: string,
   ) {
-    if (!Array.isArray(dto.elements) || dto.elements.length > 100)
+    const requestedAdditions = dto.elements ?? [];
+    const requestedRevisions = dto.revisions ?? [];
+    const requestedArchives = dto.archiveElementIds ?? [];
+    if (
+      !Array.isArray(requestedAdditions) ||
+      !Array.isArray(requestedRevisions) ||
+      !Array.isArray(requestedArchives) ||
+      requestedAdditions.length > 100 ||
+      requestedRevisions.length > 100 ||
+      requestedArchives.length > 100
+    )
       throw new BadRequestException(
-        "Model Elements must be supplied as a supported list.",
+        "Model Element changes must be supplied as supported lists.",
       );
-    for (const element of dto.elements) assertModelElementRuntimeShape(element);
-    if (dto.elements.length === 0)
+    for (const element of requestedAdditions)
+      assertModelElementRuntimeShape(element);
+    assertModelMigrationMappingsRuntimeShape(dto.migrationMappings ?? []);
+    if (
+      requestedAdditions.length +
+        requestedRevisions.length +
+        requestedArchives.length ===
+      0
+    )
       throw new BadRequestException(
-        "Add at least one Model Element before publishing a successor release.",
+        "Change at least one Model Element before publishing a successor release.",
       );
     const compiledCore = (
       await this.compileAccessibleRoot(CORE_MODEL_SCHEMA_RELEASE_ID, userId)
@@ -159,8 +191,29 @@ export class ModelRegistryService {
             where: { id: { in: previousRevisionIds } },
             select: revisionSelect,
           });
+          if (
+            previousLineages.length !== previousSelections.length ||
+            previousRevisions.length !== previousSelections.length
+          )
+            throw new BadRequestException(
+              "The predecessor Model Schema release is incomplete.",
+            );
+          const lineageById = new Map(
+            previousLineages.map((lineage) => [lineage.id, lineage]),
+          );
+          const revisionById = new Map(
+            previousRevisions.map((revision) => [revision.id, revision]),
+          );
+          const changedElementIds = [
+            ...requestedRevisions.map(({ elementId }) => elementId),
+            ...requestedArchives,
+          ];
+          if (new Set(changedElementIds).size !== changedElementIds.length)
+            throw new BadRequestException(
+              "A Model Element may be revised or archived only once per release.",
+            );
           const publishedAt = new Date();
-          const additions = dto.elements.map((element) => {
+          const additions = requestedAdditions.map((element) => {
             const elementId = randomUUID();
             const revisionId = randomUUID();
             const lineage = commonLineage(
@@ -184,6 +237,59 @@ export class ModelRegistryService {
               );
             return { element, lineage, revision };
           });
+          const revisions = requestedRevisions.map((change) => {
+            const lineage = lineageById.get(change.elementId);
+            const selected = lineage?.currentRevisionId
+              ? revisionById.get(lineage.currentRevisionId)
+              : undefined;
+            if (
+              !lineage ||
+              lineage.status !== "ACTIVE" ||
+              !selected ||
+              selected.id !== change.predecessorRevisionId
+            )
+              throw new ConflictException(
+                "A Model Element changed; refresh before publishing.",
+              );
+            assertModelElementRuntimeShape({
+              key: lineage.key,
+              kind: lineage.kind,
+              semanticRole: lineage.semanticRole,
+              applicability: lineage.applicability,
+              payload: change.payload,
+              presentation: change.presentation,
+              ...(change.dependencies
+                ? { dependencies: change.dependencies }
+                : {}),
+              ...(change.source ? { source: change.source } : {}),
+            });
+            const revision = commonRevision(
+              randomUUID(),
+              lineage.id,
+              selected.revisionNumber + 1,
+              selected.id,
+              change,
+              userId,
+              publishedAt,
+            );
+            if (revision.payload.kind !== lineage.kind)
+              throw new BadRequestException(
+                "A Model Element kind does not match its payload.",
+              );
+            return { lineage, revision };
+          });
+          const archived = requestedArchives.map((elementId) => {
+            const lineage = lineageById.get(elementId);
+            if (!lineage || lineage.status !== "ACTIVE")
+              throw new ConflictException(
+                "A Model Element changed; refresh before publishing.",
+              );
+            return lineage;
+          });
+          const revisedById = new Map(
+            revisions.map((change) => [change.lineage.id, change]),
+          );
+          const archivedIds = new Set(archived.map(({ id }) => id));
           const releaseId = randomUUID();
           const releaseNumber = (predecessor?.revisionNumber ?? 0) + 1;
           const provisional: ModelSchemaRelease = {
@@ -199,7 +305,19 @@ export class ModelRegistryService {
             },
             name: dto.name.trim(),
             elementSelections: [
-              ...previousSelections,
+              ...previousSelections.flatMap((selection) => {
+                if (archivedIds.has(selection.elementId)) return [];
+                const revised = revisedById.get(selection.elementId);
+                return [
+                  revised
+                    ? {
+                        elementId: revised.lineage
+                          .id as ModelSchemaRelease["elementSelections"][number]["elementId"],
+                        elementRevisionId: revised.revision.identity.id,
+                      }
+                    : selection,
+                ];
+              }),
               ...additions.map(({ lineage, revision }) => ({
                 elementId: lineage.id,
                 elementRevisionId: revision.identity.id,
@@ -216,24 +334,87 @@ export class ModelRegistryService {
               contentHash: modelSchemaReleaseContentHash(provisional),
             },
           };
-          const validation = validateCompilationSafely({
+          const targetCompilationInput: ModelSchemaCompilationInput = {
             registry: registryResponse(registry),
             release,
             lineages: [
-              ...previousLineages.map(toCommonLineage),
+              ...previousLineages
+                .filter(({ id }) => !archivedIds.has(id))
+                .map((lineage) => {
+                  const revised = revisedById.get(lineage.id);
+                  return revised
+                    ? commonLineage(
+                        lineage.id,
+                        registryId,
+                        lineage,
+                        revised.revision.identity.id,
+                      )
+                    : toCommonLineage(lineage);
+                }),
               ...additions.map(({ lineage }) => lineage),
             ],
             revisions: [
-              ...previousRevisions.map(toCommonRevision),
+              ...previousSelections.flatMap((selection) => {
+                if (
+                  archivedIds.has(selection.elementId) ||
+                  revisedById.has(selection.elementId)
+                )
+                  return [];
+                const revision = revisionById.get(selection.elementRevisionId);
+                return revision ? [toCommonRevision(revision)] : [];
+              }),
+              ...revisions.map(({ revision }) => revision),
               ...additions.map(({ revision }) => revision),
             ],
             dependencies: [compiledCore],
-          });
+          };
+          const validation = validateCompilationSafely(targetCompilationInput);
           if (!validation.valid)
             throw new BadRequestException({
               message: "The Model Schema release is incomplete.",
               issues: validation.issues,
             });
+          const targetCompiled = compileModelSchemaRelease(
+            targetCompilationInput,
+          );
+          const migrationPlan = predecessor
+            ? modelMigrationPlan(
+                predecessor.id,
+                release.identity.id,
+                [
+                  ...(dto.migrationMappings ?? []),
+                  ...archived
+                    .filter(
+                      ({ id }) =>
+                        !(dto.migrationMappings ?? []).some(
+                          ({ sourceElementId }) => sourceElementId === id,
+                        ),
+                    )
+                    .map(({ id }) => ({ sourceElementId: id })),
+                ] as ModelMigrationPlan["mappings"],
+                userId,
+                publishedAt,
+              )
+            : undefined;
+          if (migrationPlan && predecessor) {
+            const sourceCompiled = compileModelSchemaRelease({
+              registry: registryResponse(registry),
+              release: releaseResponse(predecessor),
+              lineages: previousLineages.map(toCommonLineage),
+              revisions: previousRevisions.map(toCommonRevision),
+              dependencies: [compiledCore],
+            });
+            const migrationValidation = validateModelMigrationPlan(
+              migrationPlan,
+              sourceCompiled,
+              targetCompiled,
+            );
+            if (!migrationValidation.valid)
+              throw new BadRequestException({
+                message: "The Model migration plan is incomplete.",
+                issues: migrationValidation.issues,
+              });
+          }
           for (const addition of additions) {
             await tx.modelElementLineage.create({
               data: {
@@ -267,6 +448,43 @@ export class ModelRegistryService {
               data: { currentRevisionId: addition.revision.identity.id },
             });
           }
+          for (const change of revisions) {
+            await tx.modelElementRevision.create({
+              data: {
+                id: change.revision.identity.id,
+                elementId: change.lineage.id,
+                revisionNumber: change.revision.identity.revisionNumber,
+                predecessorRevisionId:
+                  change.revision.identity.predecessorRevisionId,
+                payload: jsonObject(change.revision.payload),
+                presentation: jsonObject(change.revision.presentation),
+                dependencies: jsonArray(change.revision.dependencies ?? []),
+                source: change.revision.source
+                  ? jsonObject(change.revision.source)
+                  : Prisma.DbNull,
+                contentHash: change.revision.identity.contentHash,
+                authoredByUserId: userId,
+                publishedAt,
+              },
+            });
+            await tx.modelElementLineage.update({
+              where: { id: change.lineage.id },
+              data: {
+                currentRevisionId: change.revision.identity.id,
+                metadataRevision: { increment: 1 },
+              },
+            });
+          }
+          for (const lineage of archived) {
+            await tx.modelElementLineage.update({
+              where: { id: lineage.id },
+              data: {
+                status: "ARCHIVED",
+                archivedAt: publishedAt,
+                metadataRevision: { increment: 1 },
+              },
+            });
+          }
           const row = await tx.modelSchemaRelease.create({
             data: {
               id: release.identity.id,
@@ -282,13 +500,33 @@ export class ModelRegistryService {
             },
             select: releaseSelect,
           });
+          if (migrationPlan) {
+            await tx.modelMigrationPlan.create({
+              data: {
+                id: migrationPlan.id,
+                registryId,
+                sourceReleaseId: migrationPlan.sourceReleaseId,
+                targetReleaseId: migrationPlan.targetReleaseId,
+                mappings: jsonArray(migrationPlan.mappings),
+                createdByUserId: userId,
+                createdAt: publishedAt,
+              },
+            });
+          }
           return {
             release: releaseResponse(row),
+            migrationPlan,
             addedElements: additions.map(({ lineage, revision }) => ({
               id: lineage.id,
               key: lineage.key,
               revision,
             })),
+            revisedElements: revisions.map(({ lineage, revision }) => ({
+              id: lineage.id,
+              key: lineage.key,
+              revision,
+            })),
+            archivedElements: archived.map(({ id, key }) => ({ id, key })),
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -303,6 +541,100 @@ export class ModelRegistryService {
       if (isConflict(error))
         throw new ConflictException(
           "The Model Registry changed; refresh before publishing.",
+        );
+      throw unavailable();
+    }
+  }
+
+  async listMigrationPlans(
+    registryId: string,
+    userId: string,
+    limit = 50,
+    offset = 0,
+  ) {
+    const registry = await this.prisma.modelRegistry.findFirst({
+      where: {
+        id: registryId,
+        OR: [{ ownerUserId: userId }, { ownerUserId: null }],
+      },
+      select: { id: true },
+    });
+    if (!registry) throw missing();
+    const [rows, total] = await Promise.all([
+      this.prisma.modelMigrationPlan.findMany({
+        where: { registryId },
+        select: migrationPlanSelect,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.modelMigrationPlan.count({ where: { registryId } }),
+    ]);
+    return { items: rows.map(migrationPlanResponse), total, limit, offset };
+  }
+
+  async createMigrationPlan(
+    registryId: string,
+    dto: CreateModelMigrationPlanDto,
+    userId: string,
+  ) {
+    assertModelMigrationMappingsRuntimeShape(dto.mappings);
+    const registry = await this.prisma.modelRegistry.findUnique({
+      where: { id: registryId, ownerUserId: userId },
+      select: { id: true },
+    });
+    if (!registry) throw missing();
+    if (dto.sourceReleaseId === dto.targetReleaseId)
+      throw new BadRequestException(
+        "A Model migration requires different source and target releases.",
+      );
+    const [source, target] = await Promise.all([
+      this.compileAccessibleRoot(dto.sourceReleaseId, userId),
+      this.compileAccessibleRoot(dto.targetReleaseId, userId),
+    ]);
+    if (
+      source.compiled.registryId !== registryId ||
+      target.compiled.registryId !== registryId
+    )
+      throw missing();
+    const plan: ModelMigrationPlan = {
+      id: randomUUID() as ModelMigrationPlan["id"],
+      sourceReleaseId:
+        dto.sourceReleaseId as ModelMigrationPlan["sourceReleaseId"],
+      targetReleaseId:
+        dto.targetReleaseId as ModelMigrationPlan["targetReleaseId"],
+      mappings: dto.mappings as ModelMigrationPlan["mappings"],
+      createdByUserId: userId as ModelMigrationPlan["createdByUserId"],
+      createdAt: new Date().toISOString(),
+    };
+    const validation = validateModelMigrationPlan(
+      plan,
+      source.compiled,
+      target.compiled,
+    );
+    if (!validation.valid)
+      throw new BadRequestException({
+        message: "The Model migration plan is incomplete.",
+        issues: validation.issues,
+      });
+    try {
+      const row = await this.prisma.modelMigrationPlan.create({
+        data: {
+          id: plan.id,
+          registryId,
+          sourceReleaseId: plan.sourceReleaseId,
+          targetReleaseId: plan.targetReleaseId,
+          mappings: jsonArray(plan.mappings),
+          createdByUserId: userId,
+          createdAt: new Date(plan.createdAt),
+        },
+        select: migrationPlanSelect,
+      });
+      return migrationPlanResponse(row);
+    } catch (error) {
+      if (isConflict(error))
+        throw new ConflictException(
+          "A migration plan already connects those exact releases.",
         );
       throw unavailable();
     }
@@ -529,6 +861,17 @@ const releaseSelect = {
   publishedByUserId: true,
   publishedAt: true,
 } as const;
+const migrationPlanSelect = {
+  id: true,
+  registryId: true,
+  sourceReleaseId: true,
+  targetReleaseId: true,
+  mappings: true,
+  createdByUserId: true,
+  createdAt: true,
+  sourceRelease: { select: { name: true, revisionNumber: true } },
+  targetRelease: { select: { name: true, revisionNumber: true } },
+} as const;
 type RegistryRow = Prisma.ModelRegistryGetPayload<{
   select: typeof registrySelect;
 }>;
@@ -540,6 +883,9 @@ type RevisionRow = Prisma.ModelElementRevisionGetPayload<{
 }>;
 type ReleaseRow = Prisma.ModelSchemaReleaseGetPayload<{
   select: typeof releaseSelect;
+}>;
+type MigrationPlanRow = Prisma.ModelMigrationPlanGetPayload<{
+  select: typeof migrationPlanSelect;
 }>;
 interface LineageInput {
   readonly key: string;
@@ -620,6 +966,19 @@ function releaseResponse(row: ReleaseRow): ModelSchemaRelease {
       row.publishedByUserId as ModelSchemaRelease["publishedByUserId"],
   };
 }
+function migrationPlanResponse(row: MigrationPlanRow) {
+  return {
+    id: row.id,
+    registryId: row.registryId,
+    sourceReleaseId: row.sourceReleaseId,
+    targetReleaseId: row.targetReleaseId,
+    mappings: row.mappings,
+    createdByUserId: row.createdByUserId,
+    createdAt: row.createdAt.toISOString(),
+    sourceRelease: row.sourceRelease,
+    targetRelease: row.targetRelease,
+  };
+}
 function commonLineage(
   id: string,
   registryId: string,
@@ -670,6 +1029,22 @@ function commonRevision(
       ...base.identity,
       contentHash: modelElementRevisionContentHash(base),
     },
+  };
+}
+function modelMigrationPlan(
+  sourceReleaseId: string,
+  targetReleaseId: string,
+  mappings: ModelMigrationPlan["mappings"],
+  userId: string,
+  createdAt: Date,
+): ModelMigrationPlan {
+  return {
+    id: randomUUID() as ModelMigrationPlan["id"],
+    sourceReleaseId: sourceReleaseId as ModelMigrationPlan["sourceReleaseId"],
+    targetReleaseId: targetReleaseId as ModelMigrationPlan["targetReleaseId"],
+    mappings,
+    createdByUserId: userId as ModelMigrationPlan["createdByUserId"],
+    createdAt: createdAt.toISOString(),
   };
 }
 function toCommonLineage(row: ElementRow): ModelElementLineage {

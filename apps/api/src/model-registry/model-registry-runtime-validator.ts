@@ -45,6 +45,40 @@ export function assertModelElementRuntimeShape(value: unknown): void {
     });
 }
 
+export function assertModelMigrationMappingsRuntimeShape(value: unknown): void {
+  const issues: string[] = [];
+  if (!Array.isArray(value))
+    fail(issues, "Model migration mappings must be an array.");
+  else {
+    for (const mapping of value) {
+      if (!record(mapping)) {
+        fail(issues, "Model migration mapping must be an object.");
+        continue;
+      }
+      optionalId(mapping.sourceElementId, issues, "Migration source");
+      optionalId(mapping.targetElementId, issues, "Migration target");
+      if (
+        mapping.sourceElementId === undefined &&
+        mapping.targetElementId === undefined
+      )
+        fail(issues, "Model migration mapping must name a source or target.");
+      if (mapping.backfill !== undefined)
+        validateValueSource(mapping.backfill, issues);
+    }
+  }
+  if (!isPublicationJson(value))
+    fail(issues, "Model migration mappings must be bounded JSON.");
+  if (issues.length)
+    throw new BadRequestException({
+      message: "The Model migration mapping shape is invalid.",
+      issues: issues.map((detail) => ({
+        code: "model-migration-shape-invalid",
+        subject: "Model migration",
+        detail,
+      })),
+    });
+}
+
 function validatePayload(value: unknown, issues: string[]): void {
   if (!record(value) || typeof value.kind !== "string") {
     fail(issues, "Payload must have a supported kind.");

@@ -80,6 +80,8 @@ export function projectEffectiveModels(
       semanticRole: element.semanticRole,
       sourceReleaseId: element.sourceReleaseId,
       payload: element.currentRevision?.payload,
+      presentation: element.currentRevision?.presentation,
+      revisionId: element.currentRevision?.identity?.id,
     };
   };
   return {
@@ -297,11 +299,14 @@ export function definitionConformance(
 
 export function creatureEmbodimentPolicyForSave(
   existing: unknown,
-  strategy: "" | "one-per-instance" | "one-per-realization" | "preserve-extension",
+  strategy:
+    "" | "one-per-instance" | "one-per-realization" | "preserve-extension",
   maximum: string,
 ) {
   const prior =
-    typeof existing === "object" && existing !== null && !Array.isArray(existing)
+    typeof existing === "object" &&
+    existing !== null &&
+    !Array.isArray(existing)
       ? (existing as Record<string, JsonValue>)
       : {};
   if (strategy === "preserve-extension") return prior;
@@ -311,7 +316,9 @@ export function creatureEmbodimentPolicyForSave(
   }
   const parsed = Number(maximum);
   const maximumPerCampaignInstance =
-    maximum.trim() && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    maximum.trim() && Number.isInteger(parsed) && parsed > 0
+      ? parsed
+      : undefined;
   if (maximumPerCampaignInstance !== undefined) {
     return { ...prior, strategy, maximumPerCampaignInstance };
   }

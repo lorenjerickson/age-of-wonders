@@ -13,6 +13,7 @@ import type { Request } from "express";
 import { GmGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import {
+  CreateModelMigrationPlanDto,
   CreateModelRegistryDto,
   ExtendModelSchemaReleaseDto,
 } from "./dto/model-registry.dto";
@@ -43,6 +44,29 @@ export class ModelRegistryController {
     @Body() dto: ExtendModelSchemaReleaseDto,
   ) {
     return this.registries.extendRelease(id, dto, req.user!.id);
+  }
+  @Get(":id/migrations")
+  listMigrations(
+    @Param("id") id: string,
+    @Req() req: Request & AuthenticatedRequest,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+  ) {
+    const page = pagination(limit, offset);
+    return this.registries.listMigrationPlans(
+      id,
+      req.user!.id,
+      page.limit,
+      page.offset,
+    );
+  }
+  @Post(":id/migrations")
+  createMigration(
+    @Param("id") id: string,
+    @Req() req: Request & AuthenticatedRequest,
+    @Body() dto: CreateModelMigrationPlanDto,
+  ) {
+    return this.registries.createMigrationPlan(id, dto, req.user!.id);
   }
   @Get(":id") get(
     @Param("id") id: string,

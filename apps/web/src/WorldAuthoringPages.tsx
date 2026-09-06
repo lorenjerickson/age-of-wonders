@@ -28,6 +28,7 @@ import {
   publishWorldDefinitionDraft,
   validateWorldDefinitionDraft,
   type ModelRegistrySummary,
+  type WorldModelOption,
   type WorldDraftImpact,
   type WorldDraftRecord,
 } from "./api";
@@ -1534,6 +1535,7 @@ export function WorldModelEditor({
   const [maximum, setMaximum] = useState(100);
   const [defaultValue, setDefaultValue] = useState(50);
   const [order, setOrder] = useState(0);
+  const [editing, setEditing] = useState<WorldModelOption>();
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<{
@@ -1552,18 +1554,20 @@ export function WorldModelEditor({
   const gmRegistries = registries.filter(
     (registry) => registry.provenance.kind === "gm",
   );
-  const attributeMetadataValid =
-    kind !== "attributes" ||
-    (Number.isInteger(minimum) &&
-      Number.isInteger(maximum) &&
-      Number.isInteger(defaultValue) &&
-      Number.isInteger(order) &&
-      minimum <= defaultValue &&
-      defaultValue <= maximum);
+  const modelMetadataValid =
+    Number.isInteger(order) &&
+    (kind !== "attributes" ||
+      (Number.isInteger(minimum) &&
+        Number.isInteger(maximum) &&
+        Number.isInteger(defaultValue) &&
+        minimum <= defaultValue &&
+        defaultValue <= maximum));
   const modelDirty =
     Boolean(name.trim()) ||
+    Boolean(editing) ||
+    order !== 0 ||
     (kind === "attributes" &&
-      (minimum !== 0 || maximum !== 100 || defaultValue !== 50 || order !== 0));
+      (minimum !== 0 || maximum !== 100 || defaultValue !== 50));
   useBlocker({
     shouldBlockFn: () =>
       modelDirty &&
@@ -1737,34 +1741,66 @@ export function WorldModelEditor({
         return;
       }
       const predecessor = registry.releases[0];
-      const result = await extendModelRegistryRelease(selected.identity.id, {
-        name: `Add ${name.trim()}`,
-        predecessorRevisionId: predecessor?.identity.id,
-        elements: [
-          {
-            key: modelExtensionKey(kind, name),
+      const currentElement = editing
+        ? registry.elements.find((element) => element.id === editing.elementId)
+        : undefined;
+      if (editing && !currentElement?.currentRevision) {
+        setMessage(
+          "That Model option changed or is no longer editable. Reload and try again.",
+        );
+        return;
+      }
+      const valueMetadata =
+        kind === "attributes"
+          ? {
+              "aow:minimum": minimum,
+              "aow:maximum": maximum,
+              "aow:default": defaultValue,
+            }
+          : undefined;
+      const presentation = {
+        ...(currentElement?.currentRevision?.presentation ?? {}),
+        label: name.trim(),
+        order,
+      };
+      const payload = currentElement?.currentRevision
+        ? {
+            ...currentElement.currentRevision.payload,
+            ...(valueMetadata ? { valueMetadata } : {}),
+          }
+        : {
             kind: "vocabulary-option",
-            semanticRole,
-            applicability: { kind: "global" },
-            payload: {
-              kind: "vocabulary-option",
-              vocabularyId: vocabulary.elementId,
-              ...(kind === "attributes"
-                ? {
-                    valueMetadata: {
-                      "aow:minimum": minimum,
-                      "aow:maximum": maximum,
-                      "aow:default": defaultValue,
-                    },
-                  }
-                : {}),
-            },
-            presentation: {
-              label: name.trim(),
-              ...(kind === "attributes" ? { order } : {}),
-            },
-          },
-        ],
+            vocabularyId: vocabulary.elementId,
+            ...(valueMetadata ? { valueMetadata } : {}),
+          };
+      const result = await extendModelRegistryRelease(selected.identity.id, {
+        name: `${editing ? "Revise" : "Add"} ${name.trim()}`,
+        predecessorRevisionId: predecessor?.identity.id,
+        ...(editing && currentElement?.currentRevision
+          ? {
+              revisions: [
+                {
+                  elementId: currentElement.id,
+                  predecessorRevisionId:
+                    currentElement.currentRevision.identity.id,
+                  payload,
+                  presentation,
+                  dependencies: currentElement.currentRevision.dependencies,
+                },
+              ],
+            }
+          : {
+              elements: [
+                {
+                  key: modelExtensionKey(kind, name),
+                  kind: "vocabulary-option" as const,
+                  semanticRole,
+                  applicability: { kind: "global" },
+                  payload,
+                  presentation,
+                },
+              ],
+            }),
       });
       const label = name.trim();
       const adopted = await adopt(
@@ -1784,12 +1820,100 @@ export function WorldModelEditor({
         setMaximum(100);
         setDefaultValue(50);
         setOrder(0);
+        setEditing(undefined);
       }
     } catch (error) {
       setMessage(
         error instanceof ApiRequestError && error.status === 409
           ? "The Model Registry advanced before this release was published. Reload and try again."
           : "The Model release could not be published. No World draft selection was changed.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function editOption(option: WorldModelOption) {
+    const metadata = objectValue(option.payload?.valueMetadata);
+    setEditing(option);
+    setRegistryId(option.registryId ?? "");
+    setName(option.name);
+    setMinimum(
+      typeof metadata["aow:minimum"] === "number" ? metadata["aow:minimum"] : 0,
+    );
+    setMaximum(
+      typeof metadata["aow:maximum"] === "number"
+        ? metadata["aow:maximum"]
+        : 100,
+    );
+    setDefaultValue(
+      typeof metadata["aow:default"] === "number"
+        ? metadata["aow:default"]
+        : 50,
+    );
+    setOrder(
+      typeof option.presentation?.order === "number"
+        ? option.presentation.order
+        : 0,
+    );
+    setMessage("");
+  }
+
+  async function archiveOption(option: WorldModelOption) {
+    if (
+      !draft ||
+      !option.registryId ||
+      !option.elementId ||
+      !window.confirm(
+        `Archive ${option.name}? Existing releases will retain it, but the new release will omit it.`,
+      )
+    )
+      return;
+    setWorking(true);
+    setMessage("");
+    try {
+      const registry = await getModelRegistry(option.registryId);
+      const recovery = recoverableRegistryRelease(
+        draft.content,
+        draft.effectiveModels?.releases ?? [],
+        option.registryId,
+        registry.releases,
+      );
+      if (recovery) {
+        await adopt(
+          {
+            id: recovery.identity.id,
+            registryId: recovery.identity.lineageId,
+            predecessorRevisionId: recovery.identity.predecessorRevisionId,
+            dependencyReleaseIds: (recovery.dependencies ?? []).map(
+              ({ releaseId }) => releaseId,
+            ),
+          },
+          recovery.name || "Published Model release",
+        );
+        return;
+      }
+      const result = await extendModelRegistryRelease(option.registryId, {
+        name: `Archive ${option.name}`,
+        predecessorRevisionId: registry.releases[0]?.identity.id,
+        archiveElementIds: [option.elementId],
+      });
+      await adopt(
+        {
+          id: result.release.identity.id,
+          registryId: result.release.identity.lineageId,
+          predecessorRevisionId: result.release.identity.predecessorRevisionId,
+          dependencyReleaseIds: (result.release.dependencies ?? []).map(
+            ({ releaseId }) => releaseId,
+          ),
+        },
+        option.name,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof ApiRequestError && error.status === 409
+          ? "The Model Registry advanced before this option was archived. Reload and try again."
+          : "The Model option could not be archived. No World draft selection was changed.",
       );
     } finally {
       setWorking(false);
@@ -1820,6 +1944,30 @@ export function WorldModelEditor({
                 {option.description}
               </p>
             )}
+            {gmRegistries.some(
+              (registry) => registry.identity.id === option.registryId,
+            ) && (
+              <div className="mt-3 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  tone="outline"
+                  disabled={working}
+                  onClick={() => editOption(option)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  tone="outline"
+                  disabled={working}
+                  onClick={() => void archiveOption(option)}
+                >
+                  Archive
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -1834,7 +1982,8 @@ export function WorldModelEditor({
           className="mt-8 rounded-box border border-base-300 p-5"
         >
           <h2 className="text-xl font-semibold">
-            Add {kind === "attributes" ? "Attribute" : "Equipment Slot"}
+            {editing ? "Edit" : "Add"}{" "}
+            {kind === "attributes" ? "Attribute" : "Equipment Slot"}
           </h2>
           <p className="mt-2 text-sm text-base-content/60">
             This publishes a successor release, then explicitly adopts that
@@ -1844,6 +1993,7 @@ export function WorldModelEditor({
             <Field label="Editable Model Registry" className="mt-4">
               <Select
                 value={registryId}
+                disabled={Boolean(editing)}
                 onChange={(event) => setRegistryId(event.target.value)}
                 className="mt-2 w-full"
               >
@@ -1917,13 +2067,24 @@ export function WorldModelEditor({
                   />
                 </Field>
               </div>
-              {!attributeMetadataValid && (
+              {!modelMetadataValid && (
                 <p className="mt-3 text-sm text-error" role="alert">
                   Use whole numbers and keep the default between the minimum and
                   maximum.
                 </p>
               )}
             </Fieldset>
+          )}
+          {kind === "equipment-slots" && (
+            <Field label="Display order" required className="mt-4">
+              <Input
+                required
+                type="number"
+                value={order}
+                onChange={(event) => setOrder(Number(event.target.value))}
+                className="mt-2 w-full"
+              />
+            </Field>
           )}
           <div className="mt-5 flex flex-wrap gap-3">
             <Button
@@ -1935,11 +2096,28 @@ export function WorldModelEditor({
                 Boolean(pending) ||
                 draft?.status === "stale" ||
                 !name.trim() ||
-                !attributeMetadataValid
+                !modelMetadataValid
               }
             >
-              Publish and adopt
+              {editing ? "Publish revision and adopt" : "Publish and adopt"}
             </Button>
+            {editing && (
+              <Button
+                type="button"
+                tone="outline"
+                disabled={working}
+                onClick={() => {
+                  setEditing(undefined);
+                  setName("");
+                  setMinimum(0);
+                  setMaximum(100);
+                  setDefaultValue(50);
+                  setOrder(0);
+                }}
+              >
+                Cancel edit
+              </Button>
+            )}
             {pending && (
               <Button
                 type="button"

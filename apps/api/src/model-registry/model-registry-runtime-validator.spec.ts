@@ -1,5 +1,8 @@
 import { BadRequestException } from "@nestjs/common";
-import { assertModelElementRuntimeShape } from "./model-registry-runtime-validator";
+import {
+  assertModelElementRuntimeShape,
+  assertModelMigrationMappingsRuntimeShape,
+} from "./model-registry-runtime-validator";
 
 const outer = {
   key: "custom:element",
@@ -208,5 +211,33 @@ describe("assertModelElementRuntimeShape", () => {
         response: { message: "The Model Element shape is invalid." },
       });
     }
+  });
+});
+
+describe("assertModelMigrationMappingsRuntimeShape", () => {
+  it("accepts retirement, replacement, and typed backfill mappings", () => {
+    expect(() =>
+      assertModelMigrationMappingsRuntimeShape([
+        { sourceElementId: "source-retired" },
+        {
+          sourceElementId: "source-replaced",
+          targetElementId: "target-replacement",
+        },
+        {
+          targetElementId: "target-required",
+          backfill: { kind: "literal", value: 1 },
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["an empty mapping", [{}]],
+    ["an invalid backfill", [{ targetElementId: "target", backfill: {} }]],
+    ["unbounded content", [{ sourceElementId: "source", extra: undefined }]],
+  ])("rejects %s", (_label, mappings) => {
+    expect(() => assertModelMigrationMappingsRuntimeShape(mappings)).toThrow(
+      BadRequestException,
+    );
   });
 });

@@ -38,6 +38,7 @@ export class CreateModelElementDto extends ModelElementRevisionPayloadDto {
 }
 
 export class PublishModelElementRevisionDto extends ModelElementRevisionPayloadDto {
+  @IsString() @MinLength(1) @MaxLength(240) elementId!: string;
   @IsString() @MinLength(1) @MaxLength(240) predecessorRevisionId!: string;
 }
 
@@ -69,11 +70,53 @@ export class PublishModelSchemaReleaseDto {
 export class ExtendModelSchemaReleaseDto {
   @IsString() @MinLength(1) @MaxLength(120) @Matches(/\S/) name!: string;
   @IsOptional() @IsString() @MaxLength(240) predecessorRevisionId?: string;
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => CreateModelElementDto)
-  elements!: CreateModelElementDto[];
+  elements?: CreateModelElementDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => PublishModelElementRevisionDto)
+  revisions?: PublishModelElementRevisionDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  archiveElementIds?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5_000)
+  @ValidateNested({ each: true })
+  @Type(() => ModelMigrationMappingDto)
+  migrationMappings?: ModelMigrationMappingDto[];
+}
+
+export class ModelMigrationMappingDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  sourceElementId?: string;
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  targetElementId?: string;
+  @IsOptional() @IsObject() backfill?: Record<string, unknown>;
+}
+
+export class CreateModelMigrationPlanDto {
+  @IsString() @MinLength(1) @MaxLength(240) sourceReleaseId!: string;
+  @IsString() @MinLength(1) @MaxLength(240) targetReleaseId!: string;
+  @IsArray()
+  @ArrayMaxSize(5_000)
+  @ValidateNested({ each: true })
+  @Type(() => ModelMigrationMappingDto)
+  mappings!: ModelMigrationMappingDto[];
 }
 
 export class ExpectedModelMetadataRevisionDto {

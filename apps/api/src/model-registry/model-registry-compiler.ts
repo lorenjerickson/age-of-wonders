@@ -137,11 +137,14 @@ export function validateModelSchemaCompilation(
       "The release belongs to a different Model Registry.",
     );
   }
-  if (input.release.elementSelections.length === 0) {
+  if (
+    input.release.elementSelections.length === 0 &&
+    (input.release.dependencies?.length ?? 0) === 0
+  ) {
     add(
       "release-empty",
       input.release.name,
-      "A model release must select at least one model element.",
+      "A model release must select an element or an exact dependency release.",
     );
   }
   if (

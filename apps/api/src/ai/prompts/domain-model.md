@@ -259,6 +259,11 @@ Campaign. A GM registry records its owner, and each element lineage declares `gl
 fixed kind, open semantic role, lifecycle status, and optional authoring head.
 `ModelElementRevision` is immutable and contains exactly one typed payload plus advisory
 `ModelPresentation`, dependency declarations, provenance, and author attribution.
+Editing an element—including changing its label, help, group, display order, value metadata, or
+dependencies—publishes a new immutable element revision. Archival never rewrites an old release:
+the lineage is marked archived and omitted from a direct successor. A dependency-only GM release
+is valid when its last local element is archived because its exact dependency closure remains
+explicit.
 
 Field payloads use a safe typed AST rather than executable JavaScript. Atomic values are string,
 integer, number, boolean, bounded JSON, vocabulary-option references, Definition references,
@@ -301,10 +306,16 @@ All Model Registry HTTP endpoints require an authenticated GM:
 - `POST /model-registries` creates a GM-owned registry from a namespaced key, name, and optional
   description. The authenticated GM becomes the provenance owner.
 - `POST /model-registries/:id/releases` is the bounded release-publication workflow used by
-  contextual World editors. It creates new elements, carries forward the predecessor release's
-  exact selections, locks the installed core release dependency, validates the complete effective
-  closure, and publishes one successor transactionally. The former `/releases/extend` command has
-  been removed.
+  contextual World editors. It creates elements, publishes revisions (including presentation
+  reorganization), archives lineages by omission, carries forward unchanged exact selections,
+  locks the installed core release dependency, and validates the complete effective closure. Every
+  non-initial successor also validates and persists its direct-lineage, all-or-nothing
+  `ModelMigrationPlan` in the same transaction. The former `/releases/extend` command has been
+  removed.
+- `GET /model-registries/:id` includes current lineage state, complete immutable element revision
+  history, and release history. `GET /model-registries/:id/migrations` returns readable migration
+  history. `POST /model-registries/:id/migrations` may record a validated plan for an existing exact
+  direct successor pair; only the owning GM may author one.
 - `GET /worlds/:worldId/model-adoptions` reads the explicitly selected release roots from that GM's
   mutable World draft, compiles accessible exact releases and their locked dependencies, rejects
   overlapping stable keys, filters by global/World applicability, and returns human-readable

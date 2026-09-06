@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-open-model-contract-cutover-complete
+status: active-implementation-plan-editable-model-lifecycle-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -450,6 +450,8 @@ hosted-system infrastructure:
 ```text
 GET  /api/worlds/:worldId/model-adoptions
 POST /api/model-registries/:registryId/releases
+GET  /api/model-registries/:registryId/migrations
+POST /api/model-registries/:registryId/migrations
 GET  /api/ai/generations
 POST /api/worlds/:worldId/media
 GET  /api/settings/system
@@ -464,6 +466,14 @@ Model Registry collections are bounded and deterministic. Effective Model adopti
 beneath its owning World rather than selected by a top-level query parameter, and publishing a
 successor uses the registry's release collection. The former effective query and `/releases/extend`
 command were subsequently removed.
+
+The editable lifecycle follow-up makes successor publication atomic across creation, immutable
+revision, presentation reorganization, archival-by-omission, dependency validation, and a required
+direct-lineage migration plan. Contextual Attribute and Equipment Slot editors can revise,
+reorder, or archive GM-owned options and explicitly adopt the exact result into the World draft.
+Registry reads expose immutable element history, while dedicated migration-plan routes support
+inspection and validated recovery/import of an existing direct successor pair. Historical World
+and Campaign snapshots remain pinned to their selected releases.
 
 New AI generation audit records identify the authenticated GM and carry an explicit bounded
 context kind and context identity when one exists. History remains requester-scoped and exposes

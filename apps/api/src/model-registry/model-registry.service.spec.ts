@@ -10,11 +10,13 @@ import {
 } from "@nestjs/common";
 import {
   CORE_MODEL_ELEMENT_IDS,
+  CORE_MODEL_SCHEMA_RELEASE_ID,
   createEditableCoreModelSeed,
 } from "./editable-core-model-seed";
 import {
   compileModelSchemaRelease,
   modelElementRevisionContentHash,
+  modelSchemaReleaseContentHash,
 } from "./model-registry-compiler";
 
 const likeable = {
@@ -89,6 +91,133 @@ function persistedCore() {
   };
 }
 
+function persistedRelease(
+  registryId: string,
+  selections: Array<{ elementId: string; elementRevisionId: string }>,
+  publishedAt: Date,
+) {
+  const common = {
+    identity: {
+      id: "release-1",
+      lineageId: registryId,
+      revisionNumber: 1,
+      publishedAt: publishedAt.toISOString(),
+      contentHash: "",
+    },
+    name: "Custom 1",
+    elementSelections: selections,
+    dependencies: [{ releaseId: CORE_MODEL_SCHEMA_RELEASE_ID }],
+    publishedByUserId: "gm-1",
+  };
+  return {
+    id: common.identity.id,
+    registryId,
+    revisionNumber: 1,
+    predecessorRevisionId: null,
+    name: common.name,
+    elementSelections: selections,
+    dependencies: common.dependencies,
+    contentHash: modelSchemaReleaseContentHash(common as never),
+    publishedByUserId: "gm-1",
+    publishedAt,
+  };
+}
+
+function editableRegistryState() {
+  const core = persistedCore();
+  const now = new Date("2026-09-06T15:00:00.000Z");
+  const revision = {
+    id: "revision-old",
+    elementId: "element-old",
+    revisionNumber: 1,
+    predecessorRevisionId: null,
+    payload: likeable.payload,
+    presentation: { label: "Likeable", order: 1 },
+    dependencies: [],
+    source: null,
+    contentHash: "",
+    authoredByUserId: "gm-1",
+    publishedAt: now,
+  };
+  revision.contentHash = modelElementRevisionContentHash({
+    identity: {
+      id: revision.id as never,
+      lineageId: revision.elementId as never,
+      revisionNumber: revision.revisionNumber,
+      publishedAt: revision.publishedAt.toISOString(),
+      contentHash: "",
+    },
+    payload: revision.payload as never,
+    presentation: revision.presentation,
+    authoredByUserId: "gm-1" as never,
+  });
+  const lineage = {
+    id: "element-old",
+    registryId: "registry-1",
+    key: likeable.key,
+    kind: likeable.kind,
+    semanticRole: likeable.semanticRole,
+    applicability: likeable.applicability,
+    status: "ACTIVE",
+    currentRevisionId: revision.id,
+    metadataRevision: 1,
+    currentRevision: null,
+  };
+  const registry = {
+    id: "registry-1",
+    key: "custom:models",
+    name: "Custom Models",
+    description: null,
+    provenance: { kind: "gm", namespace: "custom", ownerUserId: "gm-1" },
+    ownerUserId: "gm-1",
+    metadataRevision: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  let releaseData: Record<string, unknown> | undefined;
+  const tx = {
+    modelRegistry: { findUnique: jest.fn().mockResolvedValue(registry) },
+    modelSchemaRelease: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(
+          persistedRelease(
+            registry.id,
+            [{ elementId: lineage.id, elementRevisionId: revision.id }],
+            now,
+          ),
+        ),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }: { data: Record<string, unknown> }) => {
+          releaseData = data;
+          return Promise.resolve({ ...data, publishedAt: now });
+        }),
+    },
+    modelElementLineage: {
+      findMany: jest.fn().mockResolvedValue([lineage]),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    modelElementRevision: {
+      findMany: jest.fn().mockResolvedValue([revision]),
+      create: jest.fn(),
+    },
+    modelMigrationPlan: { create: jest.fn() },
+  };
+  return {
+    prisma: {
+      ...core,
+      $transaction: jest.fn(
+        (operation: (transaction: typeof tx) => Promise<unknown>) =>
+          operation(tx),
+      ),
+    },
+    tx,
+    releaseData: () => releaseData,
+  };
+}
+
 describe("ModelRegistryService", () => {
   it("deduplicates identical dependency elements shared by unrelated root releases", () => {
     const seed = createEditableCoreModelSeed();
@@ -155,10 +284,30 @@ describe("ModelRegistryService", () => {
   });
 
   it("resolves Campaign models across global, captured World, and exact Campaign scopes", () => {
-    expect(isApplicableToCampaign({ kind: "global" }, "world-1", "campaign-1")).toBe(true);
-    expect(isApplicableToCampaign({ kind: "world", worldDefinitionId: "world-1" }, "world-1", "campaign-1")).toBe(true);
-    expect(isApplicableToCampaign({ kind: "campaign-definition", campaignDefinitionId: "campaign-1" }, "world-1", "campaign-1")).toBe(true);
-    expect(isApplicableToCampaign({ kind: "campaign-definition", campaignDefinitionId: "other" }, "world-1", "campaign-1")).toBe(false);
+    expect(
+      isApplicableToCampaign({ kind: "global" }, "world-1", "campaign-1"),
+    ).toBe(true);
+    expect(
+      isApplicableToCampaign(
+        { kind: "world", worldDefinitionId: "world-1" },
+        "world-1",
+        "campaign-1",
+      ),
+    ).toBe(true);
+    expect(
+      isApplicableToCampaign(
+        { kind: "campaign-definition", campaignDefinitionId: "campaign-1" },
+        "world-1",
+        "campaign-1",
+      ),
+    ).toBe(true);
+    expect(
+      isApplicableToCampaign(
+        { kind: "campaign-definition", campaignDefinitionId: "other" },
+        "world-1",
+        "campaign-1",
+      ),
+    ).toBe(false);
   });
 
   it("refuses to extend a registry the GM does not own", async () => {
@@ -181,6 +330,26 @@ describe("ModelRegistryService", () => {
         "gm-1",
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses to author a migration plan for a registry the GM does not own", async () => {
+    const prisma = {
+      modelRegistry: { findUnique: jest.fn().mockResolvedValue(null) },
+      modelSchemaRelease: { findFirst: jest.fn() },
+    };
+    const service = new ModelRegistryService(prisma as never);
+    await expect(
+      service.createMigrationPlan(
+        "other-registry",
+        {
+          sourceReleaseId: "release-1",
+          targetReleaseId: "release-2",
+          mappings: [],
+        },
+        "gm-1",
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.modelSchemaRelease.findFirst).not.toHaveBeenCalled();
   });
 
   it("requires the exact current predecessor before extending", async () => {
@@ -254,6 +423,7 @@ describe("ModelRegistryService", () => {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
       },
+      modelMigrationPlan: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
       ...core,
@@ -322,13 +492,11 @@ describe("ModelRegistryService", () => {
         }),
       },
       modelSchemaRelease: {
-        findFirst: jest.fn().mockResolvedValue({
-          id: "release-1",
-          registryId: "registry-1",
-          revisionNumber: 1,
-          elementSelections: [previousSelection],
-          dependencies: [{ releaseId: "aow:model-schema-release:core:1" }],
-        }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue(
+            persistedRelease("registry-1", [previousSelection], now),
+          ),
         create: jest
           .fn()
           .mockImplementation(({ data }: { data: Record<string, unknown> }) => {
@@ -372,6 +540,7 @@ describe("ModelRegistryService", () => {
         ]),
         create: jest.fn().mockResolvedValue({}),
       },
+      modelMigrationPlan: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
       ...core,
@@ -397,6 +566,95 @@ describe("ModelRegistryService", () => {
     expect(stored.predecessorRevisionId).toBe("release-1");
     expect(stored.elementSelections[0]?.elementId).toBe("element-old");
     expect(stored.elementSelections).toHaveLength(2);
+  });
+
+  it("publishes an immutable revision and selects it in the direct successor", async () => {
+    const state = editableRegistryState();
+    const service = new ModelRegistryService(state.prisma as never);
+    const result = await service.extendRelease(
+      "registry-1",
+      {
+        name: "Revise Likeable",
+        predecessorRevisionId: "release-1",
+        revisions: [
+          {
+            elementId: "element-old",
+            predecessorRevisionId: "revision-old",
+            payload: likeable.payload,
+            presentation: { label: "Likeable", order: 7 },
+          },
+        ],
+      },
+      "gm-1",
+    );
+
+    expect(state.tx.modelElementRevision.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest's asymmetric matcher is intentionally dynamic at this assertion boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({
+          elementId: "element-old",
+          revisionNumber: 2,
+          predecessorRevisionId: "revision-old",
+          presentation: { label: "Likeable", order: 7 },
+        }),
+      }),
+    );
+    expect(result.revisedElements).toEqual([
+      expect.objectContaining({ key: likeable.key }),
+    ]);
+    const selections = state.releaseData()?.elementSelections as Array<{
+      elementId: string;
+      elementRevisionId: string;
+    }>;
+    expect(selections).toHaveLength(1);
+    expect(selections[0]?.elementId).toBe("element-old");
+    expect(selections[0]?.elementRevisionId).not.toBe("revision-old");
+    expect(state.tx.modelMigrationPlan.create).toHaveBeenCalledWith({
+      // Jest's asymmetric matcher is intentionally dynamic at this assertion boundary.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      data: expect.objectContaining({
+        sourceReleaseId: "release-1",
+        mappings: [],
+      }),
+    });
+  });
+
+  it("archives an element only by omitting it from a new immutable release", async () => {
+    const state = editableRegistryState();
+    const service = new ModelRegistryService(state.prisma as never);
+    const result = await service.extendRelease(
+      "registry-1",
+      {
+        name: "Archive Likeable",
+        predecessorRevisionId: "release-1",
+        archiveElementIds: ["element-old"],
+      },
+      "gm-1",
+    );
+
+    expect(state.releaseData()?.elementSelections).toEqual([]);
+    expect(state.tx.modelElementLineage.update).toHaveBeenCalledWith({
+      where: { id: "element-old" },
+      data: {
+        status: "ARCHIVED",
+        // Jest's asymmetric matcher is intentionally dynamic at this assertion boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        archivedAt: expect.any(Date),
+        metadataRevision: { increment: 1 },
+      },
+    });
+    expect(result.archivedElements).toEqual([
+      { id: "element-old", key: likeable.key },
+    ]);
+    expect(state.tx.modelMigrationPlan.create).toHaveBeenCalledWith({
+      // Jest's asymmetric matcher is intentionally dynamic at this assertion boundary.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      data: expect.objectContaining({
+        sourceReleaseId: "release-1",
+        mappings: [{ sourceElementId: "element-old" }],
+      }),
+    });
   });
 
   it("performs no writes when complete-release validation fails", async () => {

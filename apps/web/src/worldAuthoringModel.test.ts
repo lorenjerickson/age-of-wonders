@@ -56,18 +56,10 @@ describe("World authoring projection", () => {
       extensions: { "story:label": "Swarm" },
     };
     expect(
-      creatureEmbodimentPolicyForSave(
-        existing,
-        "preserve-extension",
-        "",
-      ),
+      creatureEmbodimentPolicyForSave(existing, "preserve-extension", ""),
     ).toEqual(existing);
     expect(
-      creatureEmbodimentPolicyForSave(
-        existing,
-        "one-per-realization",
-        "4",
-      ),
+      creatureEmbodimentPolicyForSave(existing, "one-per-realization", "4"),
     ).toEqual({
       strategy: "one-per-realization",
       maximumPerCampaignInstance: 4,
@@ -260,7 +252,11 @@ describe("World authoring projection", () => {
       kind: "vocabulary-option",
       semanticRole: "aow:attribute",
       status: "active",
-      currentRevision: { presentation: { label: "Likeable" }, payload: {} },
+      currentRevision: {
+        identity: { id: "opaque-revision-id", revisionNumber: 1 },
+        presentation: { label: "Likeable" },
+        payload: {},
+      },
     };
     const vocabulary = {
       ...element,
@@ -295,6 +291,8 @@ describe("World authoring projection", () => {
           semanticRole: "aow:attribute",
           sourceReleaseId: undefined,
           payload: {},
+          presentation: { label: "Likeable" },
+          revisionId: "opaque-revision-id",
         },
       ],
       equipmentSlots: [],
@@ -309,6 +307,8 @@ describe("World authoring projection", () => {
           semanticRole: "aow:attribute",
           sourceReleaseId: undefined,
           payload: {},
+          presentation: { label: "Likeable" },
+          revisionId: "opaque-revision-id",
         },
         {
           key: "homebrew:likeable",
@@ -319,6 +319,8 @@ describe("World authoring projection", () => {
           semanticRole: "aow:attribute",
           sourceReleaseId: undefined,
           payload: {},
+          presentation: { label: "Likeable" },
+          revisionId: "opaque-revision-id",
         },
       ],
       releases: [

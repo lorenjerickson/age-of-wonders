@@ -142,6 +142,8 @@ export interface WorldModelOption {
   semanticRole?: string;
   sourceReleaseId?: string;
   payload?: Record<string, JsonValue>;
+  presentation?: Record<string, JsonValue>;
+  revisionId?: string;
 }
 
 export interface EffectiveModelElementResponse {
@@ -153,6 +155,7 @@ export interface EffectiveModelElementResponse {
   status: string;
   sourceReleaseId?: string;
   currentRevision?: {
+    identity?: { id: string; revisionNumber: number };
     presentation?: Record<string, JsonValue>;
     payload?: Record<string, JsonValue>;
   };
@@ -196,6 +199,15 @@ export interface ModelRegistrySummary {
 }
 
 export interface ModelRegistryDetail extends ModelRegistrySummary {
+  elements: Array<{
+    id: string;
+    key: string;
+    kind: string;
+    semanticRole: string;
+    status: "active" | "archived";
+    currentRevision?: ModelElementRevisionResponse;
+    revisions: ModelElementRevisionResponse[];
+  }>;
   releases: Array<{
     identity: {
       id: string;
@@ -207,6 +219,19 @@ export interface ModelRegistryDetail extends ModelRegistrySummary {
     name: string;
     dependencies?: Array<{ releaseId: string }>;
   }>;
+}
+
+export interface ModelElementRevisionResponse {
+  identity: {
+    id: string;
+    lineageId: string;
+    revisionNumber: number;
+    predecessorRevisionId?: string;
+    publishedAt: string;
+  };
+  payload: Record<string, JsonValue>;
+  presentation: Record<string, JsonValue>;
+  dependencies?: Array<Record<string, JsonValue>>;
 }
 
 export interface WorldDefinitionDraft {
@@ -658,13 +683,26 @@ export function extendModelRegistryRelease(
   input: {
     name: string;
     predecessorRevisionId?: string;
-    elements: Array<{
+    elements?: Array<{
       key: string;
       kind: "vocabulary-option";
       semanticRole: string;
       applicability: Record<string, JsonValue>;
       payload: Record<string, JsonValue>;
       presentation: Record<string, JsonValue>;
+    }>;
+    revisions?: Array<{
+      elementId: string;
+      predecessorRevisionId: string;
+      payload: Record<string, JsonValue>;
+      presentation: Record<string, JsonValue>;
+      dependencies?: Array<Record<string, JsonValue>>;
+    }>;
+    archiveElementIds?: string[];
+    migrationMappings?: Array<{
+      sourceElementId?: string;
+      targetElementId?: string;
+      backfill?: Record<string, JsonValue>;
     }>;
   },
 ) {
@@ -680,11 +718,49 @@ export function extendModelRegistryRelease(
       dependencies?: Array<{ releaseId: string }>;
     };
     addedElements: Array<{ id: string; key: string }>;
+    revisedElements: Array<{ id: string; key: string }>;
+    archivedElements: Array<{ id: string; key: string }>;
   }>(`/model-registries/${encodeURIComponent(registryId)}/releases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+export function listModelMigrationPlans(registryId: string) {
+  return request<{
+    items: Array<{
+      id: string;
+      sourceReleaseId: string;
+      targetReleaseId: string;
+      sourceRelease: { name: string; revisionNumber: number };
+      targetRelease: { name: string; revisionNumber: number };
+      mappings: Array<Record<string, JsonValue>>;
+      createdAt: string;
+    }>;
+  }>(`/model-registries/${encodeURIComponent(registryId)}/migrations`);
+}
+
+export function createModelMigrationPlan(
+  registryId: string,
+  input: {
+    sourceReleaseId: string;
+    targetReleaseId: string;
+    mappings: Array<{
+      sourceElementId?: string;
+      targetElementId?: string;
+      backfill?: Record<string, JsonValue>;
+    }>;
+  },
+) {
+  return request<{ id: string }>(
+    `/model-registries/${encodeURIComponent(registryId)}/migrations`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function saveWorldDefinitionDraft(
