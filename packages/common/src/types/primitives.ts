@@ -22,6 +22,7 @@ export type DecisionId = DomainId<"decision">;
 export type EventId = DomainId<"event">;
 export type PlayerId = DomainId<"player">;
 export type UserId = DomainId<"user">;
+export type SystemAdministratorId = DomainId<"system-administrator">;
 export type PlayerProfileId = DomainId<"player-profile">;
 export type AuthenticationProviderAssociationId =
   DomainId<"authentication-provider-association">;

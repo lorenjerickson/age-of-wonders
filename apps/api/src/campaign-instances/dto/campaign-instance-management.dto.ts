@@ -59,9 +59,7 @@ const INSTANCE_STATUSES = [
   "archived",
 ] as const;
 
-export class UpdateCampaignInstanceLifecycleDto
-  implements CampaignInstanceLifecycleRequest
-{
+export class UpdateCampaignInstanceLifecycleDto implements CampaignInstanceLifecycleRequest {
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -72,9 +70,7 @@ export class UpdateCampaignInstanceLifecycleDto
   targetStatus!: (typeof INSTANCE_STATUSES)[number];
 }
 
-export class UpdateCampaignInstancePreparationDto
-  implements UpdateCampaignInstancePreparationRequest
-{
+export class UpdateCampaignInstancePreparationDto implements UpdateCampaignInstancePreparationRequest {
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -124,7 +120,9 @@ export class UpdateCampaignInstancePlotDto implements UpdateCampaignInstancePlot
   @Min(1)
   expectedRuntimeRevision!: number;
 
-  @ApiProperty({ enum: ["not-started", "active", "completed", "failed", "abandoned"] })
+  @ApiProperty({
+    enum: ["not-started", "active", "completed", "failed", "abandoned"],
+  })
   @IsIn(["not-started", "active", "completed", "failed", "abandoned"])
   @IsOptional()
   status?: UpdateCampaignInstancePlotRequest["status"];
@@ -152,13 +150,8 @@ export class UpdateCampaignInstancePlotDto implements UpdateCampaignInstancePlot
 }
 
 class PlacementReplacementInput {
-  @IsIn([
-    "existing-creature",
-    "existing-item",
-  ])
-  kind!:
-    | "existing-creature"
-    | "existing-item";
+  @IsIn(["existing-creature", "existing-item"])
+  kind!: "existing-creature" | "existing-item";
 
   @IsOptional()
   @IsString()
@@ -169,12 +162,9 @@ class PlacementReplacementInput {
   @IsString()
   @MaxLength(240)
   runtimeItemId?: string;
-
 }
 
-export class DecideCampaignInstancePlacementDto
-  implements CampaignInstancePlacementCommandRequest
-{
+export class DecideCampaignInstancePlacementDto implements CampaignInstancePlacementCommandRequest {
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -207,6 +197,13 @@ export class CreateCampaignInstanceInvitationDto {
   @ApiProperty({ enum: ["player", "spectator"] })
   @IsIn(["player", "spectator"])
   role!: "player" | "spectator";
+
+  @ApiPropertyOptional({ description: "Explicit existing Player profile" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  playerId?: string;
 
   @ApiPropertyOptional({ maxLength: 320 })
   @IsOptional()
@@ -253,4 +250,77 @@ export class UpdateCampaignInstanceAgentStatusDto {
   @ApiProperty({ enum: ["authorized", "paused", "revoked"] })
   @IsIn(["authorized", "paused", "revoked"])
   status!: "authorized" | "paused" | "revoked";
+}
+
+const MEMBERSHIP_STATUSES = ["active", "inactive", "left", "banned"] as const;
+
+export class UpdateCampaignInstanceMembershipStatusDto {
+  @IsIn(MEMBERSHIP_STATUSES)
+  expectedStatus!: (typeof MEMBERSHIP_STATUSES)[number];
+
+  @IsIn(MEMBERSHIP_STATUSES)
+  targetStatus!: (typeof MEMBERSHIP_STATUSES)[number];
+}
+
+export class CreateCampaignInstanceCharacterDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  playerMembershipId!: string;
+}
+
+const CHARACTER_STATUSES = [
+  "draft",
+  "active",
+  "inactive",
+  "retired",
+  "dead",
+] as const;
+
+export class UpdateCampaignInstanceCharacterStatusDto {
+  @IsIn(CHARACTER_STATUSES)
+  expectedStatus!: (typeof CHARACTER_STATUSES)[number];
+
+  @IsIn(CHARACTER_STATUSES)
+  targetStatus!: (typeof CHARACTER_STATUSES)[number];
+}
+
+export class SelectCampaignInstanceCharacterDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  characterId!: string;
+}
+
+export class ImportCampaignInstanceCharacterDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  sourceCampaignDefinitionId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  sourceCampaignInstanceId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  sourceCharacterId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  playerMembershipId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name?: string;
 }

@@ -7,6 +7,7 @@ import type { CampaignInstanceInvitationsService } from "./campaign-instance-inv
 import type { CampaignInstanceManagementService } from "./campaign-instance-management.service";
 import type { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import type { CampaignInstancesService } from "./campaign-instances.service";
+import type { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
 
 const request = {
   user: { id: "gm-1", displayName: "Game Master" },
@@ -28,14 +29,28 @@ function controller(assertParentOverride?: jest.Mock) {
   const management = {
     validate,
   } as unknown as CampaignInstanceManagementService;
+  const changeCharacterStatus = jest
+    .fn()
+    .mockResolvedValue({ status: "retired" });
+  const characters = {
+    changeCharacterStatus,
+  } as unknown as CampaignInstanceCharactersService;
   return {
     instances,
-    calls: { list, get, create, assertParent, validate },
+    calls: {
+      list,
+      get,
+      create,
+      assertParent,
+      validate,
+      changeCharacterStatus,
+    },
     subject: new CampaignInstanceHierarchyController(
       instances,
       management,
       {} as CampaignInstanceInvitationsService,
       {} as CampaignInstanceMigrationsService,
+      characters,
     ),
   };
 }
@@ -77,6 +92,33 @@ describe("CampaignInstanceHierarchyController", () => {
       "gm-1",
     );
     expect(calls.validate).not.toHaveBeenCalled();
+  });
+
+  it("scopes Character lifecycle commands before touching the child", async () => {
+    const { calls, subject } = controller();
+
+    await subject.changeCharacterStatus(
+      "definition-1",
+      "instance-1",
+      "character-1",
+      request,
+      { expectedStatus: "active", targetStatus: "retired" },
+    );
+
+    expect(calls.assertParent).toHaveBeenCalledWith(
+      "definition-1",
+      "instance-1",
+      "gm-1",
+    );
+    expect(calls.assertParent.mock.invocationCallOrder[0]).toBeLessThan(
+      calls.changeCharacterStatus.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(calls.changeCharacterStatus).toHaveBeenCalledWith(
+      "instance-1",
+      "character-1",
+      "gm-1",
+      { expectedStatus: "active", targetStatus: "retired" },
+    );
   });
 });
 

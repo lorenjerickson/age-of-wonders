@@ -71,6 +71,15 @@ export class ContactProtector {
     return this.protect(compact);
   }
 
+  /** Protect a provider subject or other opaque identity value without contact normalization. */
+  protectOpaque(value: string): ProtectedContact {
+    const normalized = value.trim();
+    if (!normalized || normalized.length > 1_000) {
+      throw new BadRequestException("Identity subject is invalid.");
+    }
+    return this.protect(normalized);
+  }
+
   decrypt(value: string): string {
     const [ivPart, tagPart, ciphertextPart] = value.split(".");
     if (!ivPart || !tagPart || !ciphertextPart) {

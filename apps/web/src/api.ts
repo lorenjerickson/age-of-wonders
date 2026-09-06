@@ -44,6 +44,14 @@ import type {
   UpdateCampaignSessionParticipantsRequest,
   UpdateCampaignSessionSummaryRequest,
   CampaignSessionSummaryProjection,
+  PlayerDetailProjection,
+  PlayerDirectoryProjection,
+  PlayerServerStanding,
+  ChangeCampaignInstanceMembershipStatusRequest,
+  CreateCampaignInstanceCharacterRequest,
+  ChangeCampaignInstanceCharacterStatusRequest,
+  SelectCampaignInstanceCharacterRequest,
+  ImportCampaignInstanceCharacterRequest,
 } from "@aow/common";
 
 const apiUrl = "/api";
@@ -500,7 +508,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface CurrentUser {
   displayName: string;
-  role: "gm" | "player" | "spectator";
+  role: "gm" | "administrator" | "player" | "spectator";
 }
 
 export interface CampaignParticipant {
@@ -535,11 +543,66 @@ export interface PublicCampaignInvitation {
 }
 
 export function loginAsGm(token: string) {
-  return request<{ user: CurrentUser }>("/auth/gm-session", {
+  return request<{ user: CurrentUser }>("/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
   });
+}
+
+export function getBootstrapStatus() {
+  return request<{ setupRequired: boolean }>("/auth/bootstrap");
+}
+
+export function establishAdministrator(input: {
+  token: string;
+  displayName: string;
+  email: string;
+  phone: string;
+  grantGameMaster: boolean;
+}) {
+  return request<{ user: CurrentUser }>("/auth/bootstrap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPlayers(
+  options: {
+    standing?: PlayerServerStanding;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+) {
+  const query = new URLSearchParams();
+  if (options.standing) query.set("standing", options.standing);
+  if (options.q) query.set("q", options.q);
+  if (options.limit !== undefined) query.set("limit", String(options.limit));
+  if (options.offset !== undefined) query.set("offset", String(options.offset));
+  return request<PlayerDirectoryProjection>(`/players?${query}`);
+}
+
+export function getPlayer(playerId: string) {
+  return request<PlayerDetailProjection>(
+    `/players/${encodeURIComponent(playerId)}`,
+  );
+}
+
+export function changePlayerStanding(
+  playerId: string,
+  expectedStanding: PlayerServerStanding,
+  targetStanding: PlayerServerStanding,
+) {
+  return request<{ displayName: string; standing: PlayerServerStanding }>(
+    `/players/${encodeURIComponent(playerId)}/actions/change-standing`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedStanding, targetStanding }),
+    },
+  );
 }
 
 export function getCurrentUser() {
@@ -1143,6 +1206,104 @@ export function getCampaignInstanceRoster(
 ) {
   return request<CampaignInstanceRoster>(
     instancePath(campaignDefinitionId, campaignInstanceId, "/roster"),
+  );
+}
+
+export function changeCampaignInstanceMembershipStatus(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  membershipId: string,
+  input: ChangeCampaignInstanceMembershipStatusRequest,
+) {
+  return request<{
+    campaignInstanceName: string;
+    membershipName: string;
+    status: string;
+  }>(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/memberships/${encodeURIComponent(membershipId)}/actions/change-status`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function createCampaignInstanceCharacter(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  input: CreateCampaignInstanceCharacterRequest,
+) {
+  return request(
+    instancePath(campaignDefinitionId, campaignInstanceId, "/characters"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function changeCampaignInstanceCharacterStatus(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  characterId: string,
+  input: ChangeCampaignInstanceCharacterStatusRequest,
+) {
+  return request(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/characters/${encodeURIComponent(characterId)}/actions/change-status`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function selectCampaignInstanceCharacter(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  membershipId: string,
+  input: SelectCampaignInstanceCharacterRequest,
+) {
+  return request(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/memberships/${encodeURIComponent(membershipId)}/actions/select-character`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function importCampaignInstanceCharacter(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  input: ImportCampaignInstanceCharacterRequest,
+) {
+  return request(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/character-imports",
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
   );
 }
 

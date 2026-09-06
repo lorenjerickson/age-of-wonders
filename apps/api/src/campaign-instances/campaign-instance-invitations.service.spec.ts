@@ -39,6 +39,9 @@ function harness(
       create: jest.fn().mockResolvedValue({ id: "attempt-1" }),
       update: jest.fn().mockResolvedValue({}),
     },
+    playerProfile: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     $transaction: jest.fn((operation: (client: typeof tx) => unknown) =>
       operation(tx),
     ),
@@ -60,6 +63,11 @@ function harness(
       })),
       protectPhone: jest.fn(),
       decrypt: jest.fn(() => "river@example.test"),
+      protectOpaque: jest.fn(() => ({
+        encrypted: "encrypted-identity",
+        hash: "identity-hash",
+        normalized: "identity",
+      })),
     } as never,
     { prepareSession: jest.fn() } as never,
     {
@@ -73,16 +81,14 @@ function harness(
   return { service, prisma, tx };
 }
 
-function acceptanceHarness(
-  profiles: Array<{
+function acceptanceHarness(invitedUser?: {
+  id: string;
+  displayName: string;
+  playerProfile: null | {
     id: string;
-    userId: string;
-    emailHash: string | null;
-    phoneHash: string | null;
     standing: "ACTIVE" | "INACTIVE" | "BANNED";
-    user: { id: string; displayName: string };
-  }>,
-) {
+  };
+}) {
   const invitation = {
     id: "invitation-1",
     campaignInstanceId: "instance-1",
@@ -93,6 +99,8 @@ function acceptanceHarness(
     emailHash: "email-hash",
     phoneEncrypted: "encrypted-phone",
     phoneHash: "phone-hash",
+    tokenHash: "token-hash",
+    invitedUserId: invitedUser?.id,
     expiresAt: new Date(Date.now() + 60_000),
     campaignInstance: { name: "Tuesday Glasswake", status: "ACTIVE" },
   };
@@ -102,10 +110,18 @@ function acceptanceHarness(
       update: jest.fn().mockResolvedValue({}),
     },
     playerProfile: {
-      findMany: jest.fn().mockResolvedValue(profiles),
-      create: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: "new-profile" }),
     },
-    user: { create: jest.fn() },
+    user: {
+      findUnique: jest.fn().mockResolvedValue(invitedUser ?? null),
+      create: jest.fn().mockResolvedValue({
+        id: "new-user",
+        displayName: "River",
+      }),
+    },
+    authenticationProviderAssociation: {
+      create: jest.fn().mockResolvedValue({}),
+    },
     campaignInstanceHumanMembership: { create: jest.fn() },
     authSession: { create: jest.fn() },
   };
@@ -121,7 +137,13 @@ function acceptanceHarness(
     prisma as never,
     {} as never,
     { hash: jest.fn(() => "token-hash") } as never,
-    {} as never,
+    {
+      protectOpaque: jest.fn(() => ({
+        encrypted: "encrypted-identity",
+        hash: "identity-hash",
+        normalized: "identity",
+      })),
+    } as never,
     {
       prepareSession: jest.fn(() => ({
         token: "session-token",
@@ -197,6 +219,53 @@ describe("CampaignInstanceInvitationsService", () => {
     expect(tx.campaignInstanceInvitation.create).not.toHaveBeenCalled();
   });
 
+  it("uses contact matches only to prevent claiming an existing Player", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.playerProfile.findFirst.mockResolvedValue({
+      displayName: "Existing River",
+    });
+
+    await expect(
+      service.create("instance-1", "gm-1", {
+        invitedName: "River",
+        role: "player",
+        email: "river@example.test",
+      }),
+    ).rejects.toThrow(
+      "Existing River already has a Player profile. Select that Player explicitly.",
+    );
+    expect(tx.campaignInstanceInvitation.create).not.toHaveBeenCalled();
+  });
+
+  it("binds an existing Player only when that profile is selected explicitly", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.playerProfile.findFirst.mockResolvedValue({
+      userId: "river-user",
+      displayName: "Existing River",
+      emailEncrypted: "encrypted-email",
+      emailHash: "email-hash",
+      phoneEncrypted: null,
+      phoneHash: null,
+    });
+
+    await service.create("instance-1", "gm-1", {
+      invitedName: "Ignored transport label",
+      role: "player",
+      playerId: "profile-river",
+    });
+
+    expect(tx.campaignInstanceInvitation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest asymmetric matchers are intentionally dynamic at this assertion boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({
+          invitedName: "Existing River",
+          invitedUserId: "river-user",
+        }),
+      }),
+    );
+  });
+
   it("enforces the same issuance bound when retrying an invitation", async () => {
     const { service, prisma, tx } = harness();
     prisma.campaignInstanceInvitation.findFirst.mockResolvedValue({
@@ -220,46 +289,36 @@ describe("CampaignInstanceInvitationsService", () => {
     expect(tx.campaignInstanceInvitation.create).not.toHaveBeenCalled();
   });
 
-  it("does not bind an invitation whose contacts resolve to different profiles", async () => {
-    const { service, tx } = acceptanceHarness([
-      {
-        id: "profile-email",
-        userId: "victim-user",
-        emailHash: "email-hash",
-        phoneHash: null,
-        standing: "ACTIVE",
-        user: { id: "victim-user", displayName: "Victim" },
-      },
-      {
-        id: "profile-phone",
-        userId: "other-user",
-        emailHash: null,
-        phoneHash: "phone-hash",
-        standing: "ACTIVE",
-        user: { id: "other-user", displayName: "Other" },
-      },
-    ]);
+  it("creates a new identity when an invitation is not explicitly bound", async () => {
+    const { service, tx } = acceptanceHarness();
+    tx.campaignInstanceHumanMembership.create.mockResolvedValue({
+      id: "membership-river",
+      role: "PLAYER",
+    });
 
-    await expect(
-      service.accept("invitation-token-long-enough"),
-    ).rejects.toThrow(
-      "The invitation contacts do not identify one active participant profile.",
+    await service.accept("invitation-token-long-enough");
+
+    expect(tx.user.create).toHaveBeenCalledTimes(1);
+    expect(tx.playerProfile.create).toHaveBeenCalledTimes(1);
+    expect(tx.authenticationProviderAssociation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest asymmetric matchers are intentionally dynamic at this assertion boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({
+          userId: "new-user",
+          playerProfileId: "new-profile",
+          providerKey: "aow:invitation",
+        }),
+      }),
     );
-    expect(tx.authSession.create).not.toHaveBeenCalled();
-    expect(tx.campaignInstanceHumanMembership.create).not.toHaveBeenCalled();
   });
 
-  it("reuses the one active profile matched by every invitation contact", async () => {
-    const { service, tx } = acceptanceHarness([
-      {
-        id: "profile-river",
-        userId: "river-user",
-        emailHash: "email-hash",
-        phoneHash: "phone-hash",
-        standing: "ACTIVE",
-        user: { id: "river-user", displayName: "River" },
-      },
-    ]);
+  it("reuses only the active identity explicitly bound when the invitation was issued", async () => {
+    const { service, tx } = acceptanceHarness({
+      id: "river-user",
+      displayName: "River",
+      playerProfile: { id: "profile-river", standing: "ACTIVE" },
+    });
     tx.campaignInstanceHumanMembership.create.mockResolvedValue({
       id: "membership-river",
       role: "PLAYER",
@@ -278,23 +337,16 @@ describe("CampaignInstanceInvitationsService", () => {
     );
   });
 
-  it("does not issue authentication for a non-active participant profile", async () => {
-    const { service, tx } = acceptanceHarness([
-      {
-        id: "profile-banned",
-        userId: "banned-user",
-        emailHash: "email-hash",
-        phoneHash: "phone-hash",
-        standing: "BANNED",
-        user: { id: "banned-user", displayName: "Banned participant" },
-      },
-    ]);
+  it("does not issue authentication for an explicitly bound non-active Player", async () => {
+    const { service, tx } = acceptanceHarness({
+      id: "banned-user",
+      displayName: "Banned participant",
+      playerProfile: { id: "profile-banned", standing: "BANNED" },
+    });
 
     await expect(
       service.accept("invitation-token-long-enough"),
-    ).rejects.toThrow(
-      "The invitation contacts do not identify one active participant profile.",
-    );
+    ).rejects.toThrow("The invited Player is not active on this server.");
     expect(tx.authSession.create).not.toHaveBeenCalled();
     expect(tx.campaignInstanceHumanMembership.create).not.toHaveBeenCalled();
   });

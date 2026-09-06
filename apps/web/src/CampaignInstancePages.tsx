@@ -25,9 +25,12 @@ import {
   applyCampaignInstanceRestore,
   configureCampaignInstanceAgent,
   commandCampaignSession,
+  changeCampaignInstanceCharacterStatus,
+  changeCampaignInstanceMembershipStatus,
   createCampaignSession,
   createCampaignInstance,
   createCampaignInstanceInvitation,
+  createCampaignInstanceCharacter,
   decideCampaignInstancePlacement,
   ejectCampaignSessionParticipant,
   getCampaignDefinition,
@@ -48,7 +51,9 @@ import {
   previewCampaignInstanceRestore,
   issueCampaignSessionInvitations,
   joinCampaignSession,
+  listPlayers,
   saveCampaignInstancePreparation,
+  selectCampaignInstanceCharacter,
   updateCampaignInstanceAgent,
   updateCampaignInstanceInvitation,
   updateCampaignInstancePlot,
@@ -89,12 +94,34 @@ import type {
   AgentId,
   CampaignDefinitionSnapshotId,
   CampaignInstanceSessionProjection,
+  CampaignInstanceMembershipId,
   CampaignInstanceMigrationMappingRequest,
   CampaignInstanceSnapshotId,
   NamespacedKey,
+  PlayerDirectoryItem,
+  PlayerProfileId,
+  CharacterId,
 } from "@aow/common";
 
 const pageClass = "mx-auto max-w-6xl px-6 py-12 lg:px-10";
+
+function membershipTargets(
+  status: "active" | "inactive" | "left" | "banned",
+): Array<"active" | "inactive" | "left" | "banned"> {
+  if (status === "active") return ["inactive", "left", "banned"];
+  if (status === "inactive") return ["active", "left", "banned"];
+  if (status === "banned") return ["inactive"];
+  return [];
+}
+
+function characterTargets(
+  status: "draft" | "active" | "inactive" | "retired" | "dead",
+): Array<"active" | "inactive" | "retired" | "dead"> {
+  if (status === "draft") return ["active"];
+  if (status === "active") return ["inactive", "retired", "dead"];
+  if (status === "inactive") return ["active", "retired", "dead"];
+  return [];
+}
 
 function PageIntro({
   eyebrow,
@@ -1034,6 +1061,12 @@ export function CampaignInstanceRosterPage() {
   const [role, setRole] = useState<"player" | "spectator">("player");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [existingPlayers, setExistingPlayers] = useState<
+    readonly PlayerDirectoryItem[]
+  >([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [characterName, setCharacterName] = useState("");
+  const [characterMembershipId, setCharacterMembershipId] = useState("");
   const invitationDirty = Boolean(
     invitedName.trim() || email.trim() || phone.trim() || role !== "player",
   );
@@ -1044,13 +1077,26 @@ export function CampaignInstanceRosterPage() {
     enableBeforeUnload: invitationDirty,
   });
   useEffect(() => {
-    void getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id)
-      .then(setData, () => setError("The Instance roster could not be loaded."))
+    void Promise.all([
+      getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id),
+      listPlayers({ standing: "active", limit: 200 }),
+    ])
+      .then(
+        ([roster, players]) => {
+          setData(roster);
+          setExistingPlayers(players.items);
+        },
+        () => setError("The Instance roster could not be loaded."),
+      )
       .finally(() => setLoading(false));
   }, [instance.campaignDefinitionId, instance.id]);
   async function invite(event: FormEvent) {
     event.preventDefault();
-    if (!invitedName.trim() || (!email.trim() && !phone.trim())) return;
+    if (
+      (!selectedPlayerId && !invitedName.trim()) ||
+      (!selectedPlayerId && !email.trim() && !phone.trim())
+    )
+      return;
     setBusy("invite");
     setError("");
     try {
@@ -1058,10 +1104,16 @@ export function CampaignInstanceRosterPage() {
         instance.campaignDefinitionId,
         instance.id,
         {
-          invitedName: invitedName.trim(),
+          invitedName:
+            existingPlayers.find(
+              (player) => player.playerId === selectedPlayerId,
+            )?.displayName ?? invitedName.trim(),
           role,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
+          playerId: selectedPlayerId
+            ? (selectedPlayerId as PlayerProfileId)
+            : undefined,
+          email: selectedPlayerId ? undefined : email.trim() || undefined,
+          phone: selectedPlayerId ? undefined : phone.trim() || undefined,
         },
       );
       setData(
@@ -1073,6 +1125,7 @@ export function CampaignInstanceRosterPage() {
       setInvitedName("");
       setEmail("");
       setPhone("");
+      setSelectedPlayerId("");
     } catch {
       setError(
         "The invitation was not created. The entered details remain available.",
@@ -1100,6 +1153,124 @@ export function CampaignInstanceRosterPage() {
     } catch {
       setError(
         `The invitation could not be ${action === "retry" ? "retried" : "revoked"}.`,
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function membershipStatus(
+    membershipId: string,
+    expectedStatus: "active" | "inactive" | "left" | "banned",
+    targetStatus: "active" | "inactive" | "left" | "banned",
+  ) {
+    setBusy(`membership:${membershipId}`);
+    setError("");
+    try {
+      await changeCampaignInstanceMembershipStatus(
+        instance.campaignDefinitionId,
+        instance.id,
+        membershipId,
+        { expectedStatus, targetStatus },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The membership could not be changed.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function createCharacter(event: FormEvent) {
+    event.preventDefault();
+    if (!characterName.trim() || !characterMembershipId) return;
+    setBusy("create-character");
+    setError("");
+    try {
+      await createCampaignInstanceCharacter(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          name: characterName.trim(),
+          playerMembershipId:
+            characterMembershipId as CampaignInstanceMembershipId,
+        },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+      setCharacterName("");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The Character could not be created.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function characterStatus(
+    characterId: string,
+    expectedStatus: "draft" | "active" | "inactive" | "retired" | "dead",
+    targetStatus: "active" | "inactive" | "retired" | "dead",
+  ) {
+    setBusy(`character:${characterId}`);
+    setError("");
+    try {
+      await changeCampaignInstanceCharacterStatus(
+        instance.campaignDefinitionId,
+        instance.id,
+        characterId,
+        { expectedStatus, targetStatus },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The Character could not be changed.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function selectCharacter(membershipId: string, characterId: string) {
+    setBusy(`character:${characterId}`);
+    setError("");
+    try {
+      await selectCampaignInstanceCharacter(
+        instance.campaignDefinitionId,
+        instance.id,
+        membershipId,
+        { characterId: characterId as CharacterId },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The active Character could not be selected.",
       );
     } finally {
       setBusy("");
@@ -1143,6 +1314,29 @@ export function CampaignInstanceRosterPage() {
                       Character: {member.activeCharacterName}
                     </p>
                   )}
+                  {member.role !== "gm" && (
+                    <Select
+                      className="mt-4 w-full"
+                      aria-label={`${member.displayName} membership status`}
+                      disabled={busy === `membership:${member.membershipId}`}
+                      value={member.status}
+                      onChange={(event) =>
+                        void membershipStatus(
+                          member.membershipId,
+                          member.status,
+                          event.currentTarget.value as typeof member.status,
+                        )
+                      }
+                    >
+                      {[member.status, ...membershipTargets(member.status)].map(
+                        (status) => (
+                          <option key={status} value={status}>
+                            {statusLabel(status)}
+                          </option>
+                        ),
+                      )}
+                    </Select>
+                  )}
                 </li>
               ))}
             </ul>
@@ -1160,6 +1354,24 @@ export function CampaignInstanceRosterPage() {
               </h2>
               <div className="mt-4 grid gap-4">
                 <Label>
+                  Existing Player
+                  <Select
+                    className="mt-2 w-full"
+                    value={selectedPlayerId}
+                    onChange={(event) => {
+                      setSelectedPlayerId(event.currentTarget.value);
+                      if (event.currentTarget.value) setRole("player");
+                    }}
+                  >
+                    <option value="">Invite someone new</option>
+                    {existingPlayers.map((player) => (
+                      <option key={player.playerId} value={player.playerId}>
+                        {player.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+                <Label>
                   Name
                   <Input
                     className="mt-2 w-full"
@@ -1167,7 +1379,8 @@ export function CampaignInstanceRosterPage() {
                     onChange={(event) =>
                       setInvitedName(event.currentTarget.value)
                     }
-                    required
+                    required={!selectedPlayerId}
+                    disabled={Boolean(selectedPlayerId)}
                   />
                 </Label>
                 <Label>
@@ -1175,6 +1388,7 @@ export function CampaignInstanceRosterPage() {
                   <Select
                     className="mt-2 w-full"
                     value={role}
+                    disabled={Boolean(selectedPlayerId)}
                     onChange={(event) =>
                       setRole(
                         event.currentTarget.value as "player" | "spectator",
@@ -1191,6 +1405,7 @@ export function CampaignInstanceRosterPage() {
                     className="mt-2 w-full"
                     type="email"
                     value={email}
+                    disabled={Boolean(selectedPlayerId)}
                     onChange={(event) => setEmail(event.currentTarget.value)}
                   />
                 </Label>
@@ -1200,6 +1415,7 @@ export function CampaignInstanceRosterPage() {
                     className="mt-2 w-full"
                     type="tel"
                     value={phone}
+                    disabled={Boolean(selectedPlayerId)}
                     onChange={(event) => setPhone(event.currentTarget.value)}
                   />
                 </Label>
@@ -1288,11 +1504,58 @@ export function CampaignInstanceRosterPage() {
                   Characters
                 </h2>
                 <p className="mt-2 text-sm text-base-content/60">
-                  Characters are bound to this Instance. Creation and import are
-                  handled in the next product slice.
+                  Characters are bound to one Player membership in this
+                  Instance. Imports create a distinct destination Character with
+                  provenance.
                 </p>
               </div>
             </div>
+            <form
+              className="mt-4 grid gap-3 rounded-box border border-base-300 bg-base-200 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
+              onSubmit={createCharacter}
+            >
+              <Label>
+                Character name
+                <Input
+                  className="mt-2 w-full"
+                  required
+                  maxLength={120}
+                  value={characterName}
+                  onChange={(event) =>
+                    setCharacterName(event.currentTarget.value)
+                  }
+                />
+              </Label>
+              <Label>
+                Player
+                <Select
+                  className="mt-2 w-full"
+                  required
+                  value={characterMembershipId}
+                  onChange={(event) =>
+                    setCharacterMembershipId(event.currentTarget.value)
+                  }
+                >
+                  <option value="">Select a Player</option>
+                  {data.memberships
+                    .filter(
+                      (member) =>
+                        member.role === "player" && member.status === "active",
+                    )
+                    .map((member) => (
+                      <option
+                        key={member.membershipId}
+                        value={member.membershipId}
+                      >
+                        {member.displayName}
+                      </option>
+                    ))}
+                </Select>
+              </Label>
+              <Button tone="primary" loading={busy === "create-character"}>
+                Create draft
+              </Button>
+            </form>
             <ul className="mt-4 grid gap-3 md:grid-cols-2">
               {data.characters.map((character) => (
                 <li
@@ -1309,6 +1572,56 @@ export function CampaignInstanceRosterPage() {
                     {statusLabel(character.status)} ·{" "}
                     {statusLabel(character.readiness)}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {characterTargets(character.status)
+                      .filter(
+                        (target) =>
+                          target !== "active" ||
+                          character.readiness === "ready",
+                      )
+                      .map((target) => (
+                        <Button
+                          key={target}
+                          type="button"
+                          size="sm"
+                          tone="outline"
+                          disabled={
+                            busy === `character:${character.characterId}`
+                          }
+                          onClick={() =>
+                            void characterStatus(
+                              character.characterId,
+                              character.status,
+                              target,
+                            )
+                          }
+                        >
+                          {statusLabel(target)}
+                        </Button>
+                      ))}
+                    {character.status === "draft" &&
+                      character.readiness !== "ready" && (
+                        <span className="text-xs text-base-content/60">
+                          Complete the Character sheet before activation.
+                        </span>
+                      )}
+                    {character.status === "active" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        tone="ghost"
+                        disabled={busy === `character:${character.characterId}`}
+                        onClick={() =>
+                          void selectCharacter(
+                            character.playerMembershipId,
+                            character.characterId,
+                          )
+                        }
+                      >
+                        Select for play
+                      </Button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

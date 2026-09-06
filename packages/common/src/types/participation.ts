@@ -16,6 +16,7 @@ import type {
   NamespacedKey,
   PartialAttributeCollection,
   PlayerProfileId,
+  SystemAdministratorId,
   SessionId,
   SessionParticipationId,
   StateIdentity,
@@ -92,10 +93,22 @@ export type PlayerServerStanding = "active" | "inactive" | "banned";
  */
 export interface AuthenticationProviderAssociation {
   readonly identity: StateIdentity<AuthenticationProviderAssociationId>;
-  readonly playerProfileId: PlayerProfileId;
+  readonly userId: UserId;
+  readonly playerProfileId?: PlayerProfileId;
   readonly provider: NamespacedKey;
   readonly status: "pending" | "associated" | "disabled";
   readonly associatedAt?: string;
+}
+
+/** Installation-level operator identity, independent of Game Master authority. */
+export interface SystemAdministrator {
+  readonly identity: StateIdentity<SystemAdministratorId>;
+  readonly userId: UserId;
+  readonly displayName: string;
+  readonly status: "active" | "disabled";
+  readonly hasEmail: boolean;
+  readonly hasPhone: boolean;
+  readonly createdAt: string;
 }
 
 /** Durable Player role/profile, independent of Campaign Instance participation. */

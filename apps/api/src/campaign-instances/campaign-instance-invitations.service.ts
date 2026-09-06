@@ -50,6 +50,9 @@ export class CampaignInstanceInvitationsService {
   async accept(token: string) {
     const invitation = await this.validInvitation(token);
     const prepared = this.auth.prepareSession("pending");
+    const invitationIdentity = this.contacts.protectOpaque(
+      `invitation:${invitation.tokenHash}`,
+    );
     const accepted = await this.prisma
       .$transaction(
         async (tx) => {
@@ -63,39 +66,23 @@ export class CampaignInstanceInvitationsService {
           });
           if (claimed.count !== 1)
             throw new ConflictException("Invitation is no longer available.");
-          const matchingProfiles = await tx.playerProfile.findMany({
-            where: {
-              OR: [
-                ...(invitation.emailHash
-                  ? [{ emailHash: invitation.emailHash }]
-                  : []),
-                ...(invitation.phoneHash
-                  ? [{ phoneHash: invitation.phoneHash }]
-                  : []),
-              ],
-            },
-            include: { user: true },
-          });
-          const exactProfiles = matchingProfiles.filter(
-            (profile) =>
-              (!invitation.emailHash ||
-                profile.emailHash === invitation.emailHash) &&
-              (!invitation.phoneHash ||
-                profile.phoneHash === invitation.phoneHash),
-          );
+          const existingUser = invitation.invitedUserId
+            ? await tx.user.findUnique({
+                where: { id: invitation.invitedUserId },
+                include: { playerProfile: true },
+              })
+            : null;
           if (
-            matchingProfiles.length > 0 &&
-            (matchingProfiles.length !== 1 ||
-              exactProfiles.length !== 1 ||
-              exactProfiles[0]?.standing !== "ACTIVE")
+            invitation.role === "PLAYER" &&
+            existingUser?.playerProfile?.standing !== undefined &&
+            existingUser.playerProfile.standing !== "ACTIVE"
           ) {
             throw new ConflictException(
-              "The invitation contacts do not identify one active participant profile.",
+              "The invited Player is not active on this server.",
             );
           }
-          const existingProfile = exactProfiles[0];
           const user =
-            existingProfile?.user ??
+            existingUser ??
             (await tx.user.create({
               data: {
                 displayName: invitation.invitedName ?? "Participant",
@@ -103,23 +90,38 @@ export class CampaignInstanceInvitationsService {
               },
             }));
           const profile =
-            existingProfile ??
-            (await tx.playerProfile.create({
+            invitation.role === "PLAYER"
+              ? (existingUser?.playerProfile ??
+                (await tx.playerProfile.create({
+                  data: {
+                    userId: user.id,
+                    displayName: invitation.invitedName ?? "Participant",
+                    emailEncrypted: invitation.emailEncrypted,
+                    emailHash: invitation.emailHash,
+                    phoneEncrypted: invitation.phoneEncrypted,
+                    phoneHash: invitation.phoneHash,
+                  },
+                })))
+              : null;
+          if (!existingUser) {
+            await tx.authenticationProviderAssociation.create({
               data: {
                 userId: user.id,
-                displayName: invitation.invitedName ?? "Participant",
-                emailEncrypted: invitation.emailEncrypted,
-                emailHash: invitation.emailHash,
-                phoneEncrypted: invitation.phoneEncrypted,
-                phoneHash: invitation.phoneHash,
+                playerProfileId: profile?.id,
+                providerKey: "aow:invitation",
+                providerSubjectHash: invitationIdentity.hash,
+                providerSubjectEncrypted: invitationIdentity.encrypted,
+                credentialReference: `campaign-instance-invitation:${invitation.id}`,
+                status: "ASSOCIATED",
+                associatedAt: new Date(),
               },
-              include: { user: true },
-            }));
+            });
+          }
           const membership = await tx.campaignInstanceHumanMembership.create({
             data: {
               campaignInstanceId: invitation.campaignInstanceId,
               userId: user.id,
-              playerProfileId: invitation.role === "PLAYER" ? profile.id : null,
+              playerProfileId: profile?.id ?? null,
               displayName: invitation.invitedName ?? user.displayName,
               role: invitation.role,
             },
@@ -165,11 +167,65 @@ export class CampaignInstanceInvitationsService {
     dto: CreateCampaignInstanceInvitationDto,
   ) {
     const instance = await this.owned(campaignInstanceId, ownerUserId);
-    const email = dto.email ? this.contacts.protectEmail(dto.email) : undefined;
-    const phone = dto.phone ? this.contacts.protectPhone(dto.phone) : undefined;
+    let email = dto.email ? this.contacts.protectEmail(dto.email) : undefined;
+    let phone = dto.phone ? this.contacts.protectPhone(dto.phone) : undefined;
+    let invitedUserId: string | undefined;
+    let invitedName = dto.invitedName.trim();
+    if (dto.playerId) {
+      if (dto.role !== "player") {
+        throw new ConflictException(
+          "Only a Player invitation can select an existing Player profile.",
+        );
+      }
+      if (email || phone) {
+        throw new ConflictException(
+          "Use the selected Player's protected contact methods without replacements.",
+        );
+      }
+      const player = await this.prisma.playerProfile.findFirst({
+        where: { id: dto.playerId, standing: "ACTIVE" },
+        select: {
+          userId: true,
+          displayName: true,
+          emailEncrypted: true,
+          emailHash: true,
+          phoneEncrypted: true,
+          phoneHash: true,
+        },
+      });
+      if (!player) {
+        throw new NotFoundException(
+          "The selected active Player was not found.",
+        );
+      }
+      invitedUserId = player.userId;
+      invitedName = player.displayName;
+      email =
+        player.emailEncrypted && player.emailHash
+          ? {
+              encrypted: player.emailEncrypted,
+              hash: player.emailHash,
+              normalized: this.contacts.decrypt(player.emailEncrypted),
+            }
+          : undefined;
+      phone =
+        player.phoneEncrypted && player.phoneHash
+          ? {
+              encrypted: player.phoneEncrypted,
+              hash: player.phoneHash,
+              normalized: this.contacts.decrypt(player.phoneEncrypted),
+            }
+          : undefined;
+    }
     if (!email && !phone) {
       throw new ConflictException(
         "An email address or phone number is required.",
+      );
+    }
+    if (!dto.playerId) {
+      await this.assertContactsDoNotClaimExistingPlayer(
+        email?.hash,
+        phone?.hash,
       );
     }
     const issuanceLimit = this.config.get<number>(
@@ -232,7 +288,8 @@ export class CampaignInstanceInvitationsService {
               dto.role === "player"
                 ? CampaignInstanceHumanRole.PLAYER
                 : CampaignInstanceHumanRole.SPECTATOR,
-            invitedName: dto.invitedName.trim(),
+            invitedName,
+            invitedUserId,
             emailEncrypted: email?.encrypted,
             emailHash: email?.hash,
             phoneEncrypted: phone?.encrypted,
@@ -279,7 +336,7 @@ export class CampaignInstanceInvitationsService {
     const joinUrl = `${this.config.get<string>("PUBLIC_WEB_URL", "http://localhost:5173")}/join/instance#token=${encodeURIComponent(issued.token)}`;
     const content = {
       subject: `Invitation to ${instance.name}`,
-      text: `${dto.invitedName.trim()}, you have been invited to join ${instance.name}. Open ${joinUrl}`,
+      text: `${invitedName}, you have been invited to join ${instance.name}. Open ${joinUrl}`,
     };
     const deliveries = await Promise.all([
       ...(email
@@ -495,6 +552,26 @@ export class CampaignInstanceInvitationsService {
       throw new NotFoundException("Invitation is invalid or unavailable.");
     }
     return invitation;
+  }
+
+  private async assertContactsDoNotClaimExistingPlayer(
+    emailHash?: string,
+    phoneHash?: string,
+  ): Promise<void> {
+    const existing = await this.prisma.playerProfile.findFirst({
+      where: {
+        OR: [
+          ...(emailHash ? [{ emailHash }] : []),
+          ...(phoneHash ? [{ phoneHash }] : []),
+        ],
+      },
+      select: { displayName: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `${existing.displayName} already has a Player profile. Select that Player explicitly.`,
+      );
+    }
   }
 
   private async deliver(

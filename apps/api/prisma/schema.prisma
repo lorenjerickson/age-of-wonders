@@ -170,6 +170,11 @@ enum PlayerServerStanding {
   BANNED
 }
 
+enum SystemAdministratorStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum AuthenticationProviderAssociationStatus {
   PENDING
   ASSOCIATED
@@ -322,6 +327,8 @@ model User {
   createdCampaignDefinitionForks             CampaignDefinitionForkProvenance[]      @relation("CampaignForkCreator")
   appliedCampaignWorldMigrations             CampaignDefinitionWorldMigrationAudit[] @relation("CampaignWorldMigrationActor")
   playerProfile                              PlayerProfile?
+  systemAdministrator                        SystemAdministrator?
+  authenticationProviderAssociations         AuthenticationProviderAssociation[]
   campaignInstanceMemberships                CampaignInstanceHumanMembership[]
   createdCampaignInstanceInvitations         CampaignInstanceInvitation[]            @relation("CampaignInstanceInvitationCreator")
   invitedCampaignInstanceInvitations         CampaignInstanceInvitation[]            @relation("CampaignInstanceInvitationUser")
@@ -331,6 +338,25 @@ model User {
   authoredSessionEvents                      CampaignSessionEvent[]                  @relation("CampaignSessionEventActor")
   createdSessionBoundaries                   CampaignSessionRuntimeBoundary[]        @relation("CampaignSessionBoundaryActor")
   createdSessionSummaries                    CampaignSessionSummary[]                @relation("CampaignSessionSummaryAuthor")
+}
+
+/// Installation-level operator established during first launch. This role is
+/// independent of Game Master authority even when the same User holds both.
+model SystemAdministrator {
+  id             String                    @id @default(uuid())
+  singletonKey   Int                       @unique @default(1)
+  userId         String                    @unique
+  displayName    String
+  emailEncrypted String
+  emailHash      String                    @unique
+  phoneEncrypted String
+  phoneHash      String                    @unique
+  status         SystemAdministratorStatus @default(ACTIVE)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, displayName])
 }
 
 /// Durable server-wide Player role, separate from any Campaign Instance.
@@ -358,7 +384,8 @@ model PlayerProfile {
 /// checks keep pending, associated, and disabled timestamps lifecycle-consistent.
 model AuthenticationProviderAssociation {
   id                       String                                  @id @default(uuid())
-  playerProfileId          String
+  userId                   String
+  playerProfileId          String?
   providerKey              String
   providerSubjectHash      String
   providerSubjectEncrypted String?
@@ -368,9 +395,12 @@ model AuthenticationProviderAssociation {
   disabledAt               DateTime?
   createdAt                DateTime                                @default(now())
   updatedAt                DateTime                                @updatedAt
-  playerProfile            PlayerProfile                           @relation(fields: [playerProfileId], references: [id], onDelete: Restrict)
+  user                     User                                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  playerProfile            PlayerProfile?                          @relation(fields: [playerProfileId, userId], references: [id, userId], onDelete: Restrict)
 
   @@unique([providerKey, providerSubjectHash])
+  @@unique([userId, providerKey])
+  @@index([userId, status])
   @@index([playerProfileId, status])
 }
 

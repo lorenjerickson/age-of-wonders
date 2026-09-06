@@ -22,6 +22,7 @@ import {
   CampaignSessionMeController,
   CampaignSessionMeOverviewController,
 } from "./campaign-participation.controller";
+import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
 
 @Module({
   imports: [NotificationsModule],
@@ -41,6 +42,7 @@ import {
     CampaignInstanceInvitationsService,
     CampaignInstanceMigrationsService,
     CampaignSessionService,
+    CampaignInstanceCharactersService,
     InvitationTokenService,
     ContactProtector,
     LegacyApiDeprecationInterceptor,

@@ -15,6 +15,7 @@ import type {
   ItemInstanceId,
   NamespacedKey,
   PlotDefinitionId,
+  PlayerProfileId,
   SessionId,
   SessionParticipationId,
   WorldPlacementDefinitionId,
@@ -270,6 +271,7 @@ export interface CampaignInstanceRosterProjection {
   }[];
   readonly characters: readonly {
     readonly characterId: CharacterId;
+    readonly playerMembershipId: CampaignInstanceMembershipId;
     readonly name: string;
     readonly playerName: string;
     readonly status: "draft" | "active" | "inactive" | "retired" | "dead";
@@ -423,6 +425,8 @@ export interface CampaignInstanceCreatureEmbodimentListProjection {
 export interface CreateCampaignInstanceInvitationRequest {
   readonly invitedName: string;
   readonly role: "player" | "spectator";
+  /** Explicit existing Player selection; never inferred from contact values. */
+  readonly playerId?: PlayerProfileId;
   readonly email?: string;
   readonly phone?: string;
 }
@@ -448,6 +452,33 @@ export interface CampaignInstanceInvitationActionResult {
   readonly campaignInstanceName: string;
   readonly invitationName: string;
   readonly status: "revoked";
+}
+
+export interface ChangeCampaignInstanceMembershipStatusRequest {
+  readonly expectedStatus: "active" | "inactive" | "left" | "banned";
+  readonly targetStatus: "active" | "inactive" | "left" | "banned";
+}
+
+export interface CreateCampaignInstanceCharacterRequest {
+  readonly name: string;
+  readonly playerMembershipId: CampaignInstanceMembershipId;
+}
+
+export interface ChangeCampaignInstanceCharacterStatusRequest {
+  readonly expectedStatus: "draft" | "active" | "inactive" | "retired" | "dead";
+  readonly targetStatus: "draft" | "active" | "inactive" | "retired" | "dead";
+}
+
+export interface SelectCampaignInstanceCharacterRequest {
+  readonly characterId: CharacterId;
+}
+
+export interface ImportCampaignInstanceCharacterRequest {
+  readonly sourceCampaignDefinitionId: CampaignDefinitionId;
+  readonly sourceCampaignInstanceId: CampaignInstanceId;
+  readonly sourceCharacterId: CharacterId;
+  readonly playerMembershipId: CampaignInstanceMembershipId;
+  readonly name?: string;
 }
 
 export type CampaignInstanceInvitationRetryResult =

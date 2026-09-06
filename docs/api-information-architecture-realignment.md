@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-authoring-wave-complete
+status: active-implementation-plan-identity-participation-wave-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,16 +21,18 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, and Campaign/World authoring waves are implemented. Canonical GM
-routes enforce Campaign Definition, Campaign Instance, and World ancestry; public invitation entry
-points live beneath `/api/invitations`; and authenticated locator and participant projections live
-beneath `/api/me`. First-party web callers use the canonical authoring roots `/api/worlds` and
-`/api/campaigns`. The former `/api/world-definitions`, `/api/campaign-definitions`, top-level
-Campaign Instance, Session, participation, and destructive root-Location World routes remain
-temporary compatibility aliases and emit `Deprecation: true`; no sunset date has been announced.
+The Session, Campaign Instance, Campaign/World authoring, and identity/participation waves are
+implemented. Canonical GM routes enforce Campaign Definition, Campaign Instance, and World
+ancestry; public invitation entry points live beneath `/api/invitations`; and authenticated locator
+and participant projections live beneath `/api/me`. First-party web callers use the canonical
+authoring roots `/api/worlds` and `/api/campaigns`. The former `/api/world-definitions`,
+`/api/campaign-definitions`, top-level Campaign Instance, Session, participation, and destructive
+root-Location World routes remain temporary compatibility aliases and emit `Deprecation: true`; no
+sunset date has been announced.
 
-Route families not named in the three completed-wave sections remain target architecture, not
-claims of completed implementation. The next planned wave is identity and participation.
+Route families not named in the four completed-wave sections remain target architecture, not
+claims of completed implementation. Character sheet authoring and the Auth0 adapter remain
+separate follow-up work on top of the provider-neutral identity and ownership boundaries.
 
 ## Binding route principles
 
@@ -332,6 +334,66 @@ emit `Deprecation: true`. The old `DELETE /api/worlds/:id` still deletes a legac
 hierarchy; it is explicitly deprecated and must not be interpreted as deletion of a versioned
 World Definition. Versioned Worlds remain archive-first and have no canonical delete operation.
 
+## Identity and participation implementation wave
+
+The fourth wave establishes installation identity separately from Campaign participation and adds
+the canonical Player and Instance-child lifecycle APIs:
+
+```text
+GET  /api/auth/bootstrap
+POST /api/auth/bootstrap
+POST /api/auth/session
+
+GET  /api/players
+GET  /api/players/:playerId
+POST /api/players/:playerId/actions/change-standing
+
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/memberships/:membershipId/actions/change-status
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/memberships/:membershipId/actions/select-character
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/actions/change-status
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/character-imports
+```
+
+First launch no longer invents a GM automatically. It requires the installation bootstrap
+credential plus administrator name, email, and phone; creates exactly one protected
+`SystemAdministrator`; and may independently grant GM authority to the same User. The bootstrap
+credential authenticates the active administrator whether or not that User is also a GM. The
+internal `aow:bootstrap` provider association is an adapter-neutral durable link that can coexist
+with a later Auth0 association. `/api/auth/gm-session` remains a deprecated alias for
+`/api/auth/session`.
+
+Authentication-provider associations now belong to a User and only optionally link to that User's
+Player profile. This permits administrators and invited Spectators to have durable authenticated
+identities without becoming Players. Instance invitation acceptance no longer searches for or
+claims a profile by contact similarity. An invitation is bound to an already-known User only when
+the GM explicitly selects that Player profile; a matching contact otherwise produces a collision,
+not an identity decision. Unbound acceptance creates a new User and internal provider association;
+a Player profile is created only for a Player invitation.
+
+The Player directory is a bounded, deterministically ordered server-wide projection. Standing is
+changed with an optimistic explicit action and remains independent of membership status and Session
+attendance. Its first-party screen shows human-readable contact, provider, Campaign, Instance, and
+Character context without rendering internal identifiers.
+
+Membership and Character commands scope Definition, Instance, child, and owner together. A current
+Session blocks removal of one of its participating memberships. GM membership follows Instance
+ownership rather than the ordinary participant status command. Character imports require a
+different source Instance owned by the same GM and the same durable Player User; each import creates
+a new destination identity, copies the source Character sheet into a destination-owned draft, and
+records complete provenance with no synchronization or transfer-back.
+Terminal `retired` and `dead` Characters cannot transition back. Activating a Character requires a
+Character sheet owned by the same destination Player membership, and selecting for play requires
+an active Character owned by the selected Player membership.
+
+This wave establishes Character ownership shells and lifecycle/provenance. It does not claim that
+the legacy Character sheet draft editor has been realigned: contextual Instance-bound sheet
+authoring, complete captured-schema validation at activation, and first-party import selection UI
+remain follow-up work. The current activation gate enforces sheet existence and ownership but does
+not yet represent complete schema conformance. The canonical import command and database
+constraints already prevent cross-Player, cross-owner, same-Instance, or identity-preserving
+transfers.
+
 ## Compatibility and rollout
 
 1. Add canonical controllers as aliases over the same services; do not duplicate domain logic.
@@ -357,8 +419,9 @@ World Definition. Versioned Worlds remain archive-first and have no canonical de
    runtime, roster, Characters, Agents, migrations, restores, and continuation.
 3. **Campaign and World authoring — complete:** product vocabulary, revision resources, Plots,
    placements, and World libraries.
-4. **Identity and participation — next:** Players, Instance memberships/invitations, Character workflows,
-   provider-neutral authentication, and first-admin bootstrap.
+4. **Identity and participation — complete vertical slice:** first-admin bootstrap, user-level
+   provider associations, Players, Instance memberships/invitations, and Character
+   ownership/lifecycle/import boundaries. Auth0 and Character sheet/import UX remain fast follows.
 5. **Model, AI, media, graph, and Settings:** explicit adoption/provenance and system-operator
    boundaries.
 6. **Legacy removal:** ambiguous `campaignId`, singleton World operations, generic domain writes,

@@ -23,6 +23,7 @@ import { CampaignInstanceInvitationsService } from "./campaign-instance-invitati
 import { CampaignInstanceManagementService } from "./campaign-instance-management.service";
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import { CampaignInstancesService } from "./campaign-instances.service";
+import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
 import {
   ApplyCampaignInstanceMigrationDto,
   ApplyCampaignInstanceRestoreDto,
@@ -31,10 +32,15 @@ import {
 } from "./dto/campaign-instance-migration.dto";
 import {
   ConfigureCampaignInstanceAgentDto,
+  CreateCampaignInstanceCharacterDto,
   CreateCampaignInstanceInvitationDto,
   DecideCampaignInstancePlacementDto,
+  ImportCampaignInstanceCharacterDto,
+  SelectCampaignInstanceCharacterDto,
   UpdateCampaignInstanceAgentStatusDto,
   UpdateCampaignInstanceLifecycleDto,
+  UpdateCampaignInstanceCharacterStatusDto,
+  UpdateCampaignInstanceMembershipStatusDto,
   UpdateCampaignInstancePlotDto,
   UpdateCampaignInstancePreparationDto,
 } from "./dto/campaign-instance-management.dto";
@@ -53,6 +59,8 @@ export class CampaignInstanceHierarchyController {
     private readonly invitations: CampaignInstanceInvitationsService,
     @Inject(CampaignInstanceMigrationsService)
     private readonly migrations: CampaignInstanceMigrationsService,
+    @Inject(CampaignInstanceCharactersService)
+    private readonly charactersService: CampaignInstanceCharactersService,
   ) {}
 
   private async scope(
@@ -262,6 +270,21 @@ export class CampaignInstanceHierarchyController {
     };
   }
 
+  @Get(":campaignInstanceId/memberships/:membershipId")
+  async membershipDetail(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("membershipId") membershipId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.membershipDetail(
+      campaignInstanceId,
+      membershipId,
+      request.user!.id,
+    );
+  }
+
   @Get(":campaignInstanceId/characters")
   async characters(
     @Param("campaignDefinitionId") campaignDefinitionId: string,
@@ -279,6 +302,107 @@ export class CampaignInstanceHierarchyController {
       items: roster.characters,
       total: roster.characters.length,
     };
+  }
+
+  @Get(":campaignInstanceId/characters/:characterId")
+  async characterDetail(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.characterDetail(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+    );
+  }
+
+  @Post(":campaignInstanceId/characters")
+  async createCharacter(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CreateCampaignInstanceCharacterDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.createCharacter(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(":campaignInstanceId/character-imports")
+  async importCharacter(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ImportCampaignInstanceCharacterDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.importCharacter(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(":campaignInstanceId/characters/:characterId/actions/change-status")
+  @HttpCode(HttpStatus.OK)
+  async changeCharacterStatus(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstanceCharacterStatusDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.changeCharacterStatus(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(":campaignInstanceId/memberships/:membershipId/actions/change-status")
+  @HttpCode(HttpStatus.OK)
+  async changeMembershipStatus(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("membershipId") membershipId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstanceMembershipStatusDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.changeMembershipStatus(
+      campaignInstanceId,
+      membershipId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(
+    ":campaignInstanceId/memberships/:membershipId/actions/select-character",
+  )
+  @HttpCode(HttpStatus.OK)
+  async selectCharacter(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("membershipId") membershipId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: SelectCampaignInstanceCharacterDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.charactersService.selectCharacter(
+      campaignInstanceId,
+      membershipId,
+      request.user!.id,
+      dto,
+    );
   }
 
   @Get(":campaignInstanceId/agents/available")

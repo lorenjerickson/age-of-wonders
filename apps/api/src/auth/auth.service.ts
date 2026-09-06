@@ -2,17 +2,24 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { UserRole } from "@prisma/client";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { ContactProtector } from "../invitations/invitation-security";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AuthenticatedUser } from "./auth.types";
 
+export interface EstablishAdministratorInput {
+  displayName: string;
+  email: string;
+  phone: string;
+  grantGameMaster: boolean;
+}
+
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   private readonly bootstrapFailures = new Map<
     string,
     { count: number; windowStartedAt: number }
@@ -20,22 +27,8 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly contacts: ContactProtector,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    void this.bootstrapToken();
-    if (!(await this.prisma.user.findFirst({ where: { role: UserRole.GM } }))) {
-      await this.prisma.user.create({
-        data: {
-          displayName: this.config.get<string>(
-            "GM_DISPLAY_NAME",
-            "Game Master",
-          ),
-          role: UserRole.GM,
-        },
-      });
-    }
-  }
 
   bootstrapToken(): string {
     const configured = this.config.get<string>("GM_BOOTSTRAP_TOKEN");
@@ -70,6 +63,128 @@ export class AuthService implements OnModuleInit {
     token: string,
     attemptKey = "unknown",
   ): Promise<AuthenticatedUser> {
+    this.verifyBootstrapCredential(token, attemptKey);
+    const administrator = await this.prisma.systemAdministrator.findFirst({
+      where: { status: "ACTIVE" },
+      include: { user: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!administrator) {
+      throw new UnauthorizedException(
+        "Active installation administration is required before sign in.",
+      );
+    }
+    return {
+      id: administrator.user.id,
+      displayName: administrator.user.displayName,
+      role: administrator.user.role,
+    };
+  }
+
+  async bootstrapStatus() {
+    return {
+      setupRequired:
+        (await this.prisma.systemAdministrator.count({
+          where: {},
+        })) === 0,
+    };
+  }
+
+  async establishFirstAdministrator(
+    token: string,
+    input: EstablishAdministratorInput,
+    attemptKey = "unknown",
+  ): Promise<AuthenticatedUser> {
+    this.verifyBootstrapCredential(token, attemptKey);
+    const email = this.contacts.protectEmail(input.email);
+    const phone = this.contacts.protectPhone(input.phone);
+    const providerSubject = this.contacts.protectOpaque(
+      randomBytes(32).toString("base64url"),
+    );
+    const displayName = input.displayName.trim();
+    if (!displayName) {
+      throw new UnauthorizedException("Administrator name is required.");
+    }
+    const administrator = await this.prisma
+      .$transaction(
+        async (tx) => {
+          if ((await tx.systemAdministrator.count()) !== 0) {
+            throw new HttpException(
+              "First-launch administration is already complete.",
+              HttpStatus.CONFLICT,
+            );
+          }
+          const existingGms = await tx.user.findMany({
+            where: { role: UserRole.GM },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: 2,
+          });
+          if (existingGms.length > 1) {
+            throw new HttpException(
+              "Multiple legacy Game Masters require an explicit administrator migration.",
+              HttpStatus.CONFLICT,
+            );
+          }
+          const existingGm = existingGms[0];
+          const user = existingGm
+            ? await tx.user.update({
+                where: { id: existingGm.id },
+                data: { displayName },
+              })
+            : await tx.user.create({
+                data: {
+                  displayName,
+                  role: input.grantGameMaster
+                    ? UserRole.GM
+                    : UserRole.PARTICIPANT,
+                },
+              });
+          const profile = await tx.playerProfile.findUnique({
+            where: { userId: user.id },
+            select: { id: true },
+          });
+          await tx.authenticationProviderAssociation.create({
+            data: {
+              userId: user.id,
+              playerProfileId: profile?.id,
+              providerKey: "aow:bootstrap",
+              providerSubjectHash: providerSubject.hash,
+              providerSubjectEncrypted: providerSubject.encrypted,
+              status: "ASSOCIATED",
+              associatedAt: new Date(),
+            },
+          });
+          const record = await tx.systemAdministrator.create({
+            data: {
+              userId: user.id,
+              displayName,
+              emailEncrypted: email.encrypted,
+              emailHash: email.hash,
+              phoneEncrypted: phone.encrypted,
+              phoneHash: phone.hash,
+            },
+          });
+          return { record, user };
+        },
+        { isolationLevel: "Serializable" },
+      )
+      .catch((error: unknown) => {
+        if (isPrismaCode(error, "P2002") || isPrismaCode(error, "P2034")) {
+          throw new HttpException(
+            "First-launch administration is already complete.",
+            HttpStatus.CONFLICT,
+          );
+        }
+        throw error;
+      });
+    return {
+      id: administrator.user.id,
+      displayName: administrator.user.displayName,
+      role: administrator.user.role,
+    };
+  }
+
+  private verifyBootstrapCredential(token: string, attemptKey: string): void {
     const now = Date.now();
     const prior = this.bootstrapFailures.get(attemptKey);
     if (
@@ -98,16 +213,18 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException("Bootstrap credentials are invalid.");
     }
     this.bootstrapFailures.delete(attemptKey);
-    const gm = await this.prisma.user.findFirst({
-      where: { role: UserRole.GM },
-    });
-    if (!gm) throw new UnauthorizedException("Game Master is unavailable.");
-    return { id: gm.id, displayName: gm.displayName, role: gm.role };
   }
 
   async publicUser(user: AuthenticatedUser) {
     if (user.role === UserRole.GM) {
       return { displayName: user.displayName, role: "gm" as const };
+    }
+    const administrator = await this.prisma.systemAdministrator.findUnique({
+      where: { userId: user.id },
+      select: { status: true },
+    });
+    if (administrator?.status === "ACTIVE") {
+      return { displayName: user.displayName, role: "administrator" as const };
     }
     const membership =
       await this.prisma.campaignInstanceHumanMembership.findFirst({
@@ -162,4 +279,13 @@ export class AuthService implements OnModuleInit {
   private hash(token: string): string {
     return createHash("sha256").update(token, "utf8").digest("hex");
   }
+}
+
+function isPrismaCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

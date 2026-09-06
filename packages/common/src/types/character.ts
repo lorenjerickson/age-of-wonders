@@ -7,7 +7,7 @@ import type {
   Attribute,
   AttributeCollection,
   AttributeScore,
-  CampaignMembershipId,
+  CampaignInstanceMembershipId,
   CharacterId,
   Definition,
   DefinitionId,
@@ -200,7 +200,7 @@ export interface CharacterState<
   Equipment extends EquipmentState = EquipmentState,
 > extends CreatureState<Extensions, Equipment, CharacterId> {
   /** Campaign membership that owns this character, including inactive predecessors. */
-  readonly ownerMembershipId: CampaignMembershipId;
+  readonly ownerMembershipId: CampaignInstanceMembershipId;
   /** Whether this character may currently represent its owning player in play. */
   readonly campaignStatus: "active" | "retired" | "dead";
   readonly level: number;
