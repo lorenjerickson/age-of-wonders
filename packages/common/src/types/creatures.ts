@@ -24,6 +24,7 @@ import type {
   ItemInstanceId,
   LocationId,
   MediaAssetId,
+  NamespacedKey,
   OpenString,
   PartialAttributeCollection,
   ResourcePool,
@@ -45,6 +46,91 @@ import type {
   SenseState,
   SkillState,
 } from "./character";
+
+/**
+ * Explicit runtime cardinality for a captured World Creature. Namespaced
+ * strategies are extension points and must have an installed implementation
+ * before an Instance can realize them.
+ */
+export interface CreatureInstanceEmbodimentPolicy<
+  Extensions extends ExtensionData = ExtensionData,
+> {
+  readonly strategy: "one-per-instance" | "one-per-realization" | NamespacedKey;
+  readonly maximumPerCampaignInstance?: number;
+  readonly extensions?: Extensions;
+}
+
+export interface ResolvedCreatureInstanceEmbodimentPolicy {
+  readonly policy: CreatureInstanceEmbodimentPolicy;
+  readonly source: "explicit" | "legacy-default";
+}
+
+/** Existing immutable captures default deterministically; new World drafts must be explicit. */
+export function resolveCreatureInstanceEmbodimentPolicy(
+  value: unknown,
+): ResolvedCreatureInstanceEmbodimentPolicy | undefined {
+  if (value === undefined) {
+    return {
+      policy: { strategy: "one-per-instance", maximumPerCampaignInstance: 1 },
+      source: "legacy-default",
+    };
+  }
+  return isCreatureInstanceEmbodimentPolicy(value)
+    ? { policy: value, source: "explicit" }
+    : undefined;
+}
+
+export function isCreatureInstanceEmbodimentPolicy(
+  value: unknown,
+): value is CreatureInstanceEmbodimentPolicy {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const policy = value as Record<string, unknown>;
+  if (
+    Object.keys(policy).some(
+      (key) =>
+        !["strategy", "maximumPerCampaignInstance", "extensions"].includes(key),
+    )
+  ) {
+    return false;
+  }
+  const strategy = policy.strategy;
+  if (
+    typeof strategy !== "string" ||
+    (strategy !== "one-per-instance" &&
+      strategy !== "one-per-realization" &&
+      !isNamespacedKey(strategy))
+  ) {
+    return false;
+  }
+  const maximum = policy.maximumPerCampaignInstance;
+  if (
+    maximum !== undefined &&
+    (!Number.isInteger(maximum) || (maximum as number) <= 0)
+  ) {
+    return false;
+  }
+  if (
+    strategy === "one-per-instance" &&
+    maximum !== undefined &&
+    maximum !== 1
+  ) {
+    return false;
+  }
+  return (
+    policy.extensions === undefined ||
+    (typeof policy.extensions === "object" &&
+      policy.extensions !== null &&
+      !Array.isArray(policy.extensions) &&
+      Object.keys(policy.extensions).every(isNamespacedKey))
+  );
+}
+
+function isNamespacedKey(value: string): value is NamespacedKey {
+  const separator = value.indexOf(":");
+  return separator > 0 && separator < value.length - 1;
+}
 
 export type ChallengeRating = number | `${number}/${number}`;
 

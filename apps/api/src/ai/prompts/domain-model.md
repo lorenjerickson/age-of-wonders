@@ -191,7 +191,49 @@ realization and points to its current immutable `CampaignInstanceSnapshot`. That
 captures both a Campaign Definition snapshot and the same World snapshot required by the captured
 Campaign Definition; migration creates the next snapshot with a direct predecessor and preserves
 the old snapshot. `CampaignInstanceRuntime` is the mutable continuing state identity and always
-names both its Campaign Instance and the Instance snapshot against which its records conform.
+names both its Campaign Instance and the Instance snapshot against which its records conform. Its
+monotonic `revision` is the compare-and-swap token for runtime writes. Its canonical
+`CampaignInstanceRuntimeState` owns Instance preparation, exact root/subplot progress overlays,
+placement-realization decisions, independent Creature embodiments, Item instances, and an optional
+campaign clock. Session records—not runtime JSON—are authoritative for active Session state.
+
+Captured placement identity is provenance, never mutable identity. A
+`CampaignInstancePlacementRealization` records a `planned`, `deferred`, `realized`, `replaced`, or
+`removed` decision and may refer to a Campaign placement, captured World placement, or explicit
+Instance-created content. Only realized/replaced decisions name an Instance-owned runtime Creature
+or Item. `CampaignInstanceCreatureEmbodiment` gives every realized Creature a new Instance-scoped
+runtime identity and exact source provenance. Its `creature` member is a bounded, server-owned
+runtime overlay (`identity`, `entityId`, human name, optional captured `definitionId`, optional
+current Location, and namespaced extensions), not a partial `CreatureState` produced by copying a
+Creature Definition. The captured Definition remains the immutable source of descriptive and rules
+content. Runtime Item creation likewise persists only defined `ItemInstance` fields and never
+spreads an authored Item Definition into mutable state. Instance-created Creature and Item
+replacement variants are intentionally absent from the public command in this slice; callers may
+select an existing runtime entity or realize captured content, but cannot submit arbitrary entity
+JSON. Two Campaign
+Instances that use the same named or unique captured Creature therefore own two independent
+embodiments.
+Campaign-placement embodiments that name a captured Creature retain the same resolved embodiment
+policy and count against the same per-source Instance maximum as direct World-placement
+embodiments; Campaign provenance cannot bypass `one-per-instance` cardinality.
+
+Instance migration rewrites only reference paths explicitly modeled by
+`CampaignInstanceRuntimeState`: preparation and canvas Locations, Plot identities, placement source
+and current Locations, captured Campaign/World placement identities, Creature source and overlay
+Definition/Location identities, Item Definition/Location identities, and schema-declared Model or
+extension references. Nested Objective, discovery claim, Plot Location context, and actor/Item
+intent identities are scoped to their owning Plot and Location context; migration compares and maps
+them with bounded, opaque hashed scope keys so long component IDs remain valid and equal local IDs
+in different Plots cannot collide. Candidates and submitted mappings must remain within the mapped
+parent Plot and Location context. The migration boundary permits mappings up to the same explicit
+50,000-record limit enforced on the captured-plus-nested migration expansion. Runtime
+actor, Item, Character, and placement-realization identities remain Instance-local and are validated
+against the runtime graph rather than rewritten. Arbitrary prose and ungoverned
+extension strings are never treated as identities. An extension schema may mark an exact string
+node (or array item/property node) with `x-aow-reference-resource` to make that node a migratable,
+target-validated captured resource reference. Structures deferred from this slice—full Character
+state, Session scene/event state, combat, and Rules execution state—are not present in canonical
+Instance runtime JSON and therefore are not claimed as migration coverage.
 
 `CampaignId`, `CampaignDefinition`, `CampaignState`, and their `campaignId` relationships remain
 legacy compatibility contracts for existing storage and callers. `CampaignId` is deprecated
@@ -406,30 +448,54 @@ stale revisions, and unavailable dependencies use neutral human-readable errors.
 ### Campaign Instance creation
 
 The GM-authorized `POST /campaign-instances` endpoint creates one played Campaign Instance from an
-explicit immutable Campaign Definition snapshot. Its request contains only a human-readable `name`
-and `campaignDefinitionSnapshotId`. It never accepts the ambiguous legacy `campaignId`, selects a
-snapshot by recency, or substitutes the mutable current Campaign or World authoring head.
+explicit immutable Campaign Definition snapshot. Its request contains a human-readable `name`,
+`campaignDefinitionSnapshotId`, and a protected idempotency key. It never accepts the ambiguous
+legacy `campaignId`, selects a snapshot by recency, or substitutes the mutable current Campaign or
+World authoring head. Persistence stores only a hash of the idempotency key, unique to the owning
+GM; the raw key is never retained.
 
 Creation is one serializable transaction. The service loads a selected Campaign Definition
 snapshot, its immutable Campaign revision, and the exact captured World snapshot and World revision
 required by that Campaign snapshot, scoped through a Campaign Definition owned by the authenticated
 GM. It verifies both source manifests and their persisted hashes before writing, and rejects missing,
 foreign-owned, or inconsistent provenance.
-It then creates a `PREPARING` Campaign Instance, an initial `CampaignInstanceSnapshot` with
+It then creates a `PREPARING` Campaign Instance with explicit `ownerUserId` and optimistic
+`metadataRevision`, an initial `CampaignInstanceSnapshot` with
 `snapshotNumber: 1` and `reason: "INITIAL"`, a mutable `CampaignInstanceRuntime` bound to that
-snapshot, and finally records the snapshot as the Instance's current snapshot.
-The authenticated GM is recorded as the creator of both the Campaign Instance and its initial
-snapshot; ownership/audit identity is never accepted from the request body.
+snapshot, a matching immutable initial runtime checkpoint, the owner's explicit GM participation
+membership, and finally records the snapshot as the Instance's current snapshot. The authenticated
+GM is recorded independently as owner, creator, checkpoint author, and initial GM participant;
+ownership/audit identity is never accepted from the request body. Legacy Instances may temporarily
+have no owner until explicit rollout assigns one, but newly created Instances may not.
 
 The initial Instance snapshot manifest is a deterministic compatibility capture. It replicates the
 complete Campaign Definition and World snapshot manifests together with their snapshot/revision
 identities, capture times, revision numbers, and content hashes. Its own content hash is derived
 from that complete manifest. This makes the Instance reproducible even after either authoring
-lineage advances. The runtime begins with `state: { "formatVersion": 1 }`; mutable play state is not
-written into Definition snapshots. Failure rolls back the whole transaction, so no Instance,
-snapshot, or runtime may exist alone.
+lineage advances. Runtime initialization materializes Definition preparation as Instance-owned
+values, creates `not-started` progress for every captured root Plot and subplot, and creates
+explicit planned/deferred decisions for captured Campaign placement intent. Mutable play state is
+not written into Definition snapshots. Failure rolls back the whole transaction, so no Instance,
+snapshot, runtime, initial checkpoint, or owner GM membership may exist alone.
 
 ### Relational Campaign Instance read API
+
+`packages/common/src/types/campaign-instance-api.ts` is the authoritative observable boundary for
+Campaign Instance administration. API serializers and web consumers use its human-safe list,
+detail, readiness, preparation, recursive Plot, placement, embodiment, roster, grouped Session,
+continuation, version, migration, restore, invitation, Agent, lifecycle, and mutation projections
+and requests rather than maintaining parallel response interfaces. `HumanRevisionReference`
+always supplies a human name, revision number, and canonical `authoringHref`; an opaque Definition
+identity may occur inside that URL but is never rendered as its label.
+Placement realization commands resolve captured Creature or Item sources on the server. Explicit
+replacement accepts only an existing Instance Creature or Item selected from the bounded,
+human-labeled replacement-option list. The placement projection provides that list with
+human names and type labels; opaque runtime identities are request or option values only and are
+never labels. Migration preview changes, conflicts, and compatible mapping candidates have
+independent bounded pages, totals, and next offsets. Mapping conflicts identify their resource
+scope and expose human-labeled compatible successors while keeping source and target identities
+as opaque command values. The plan hash always covers the complete semantic plan, never an
+individual presentation page.
 
 `GET /campaign-instances` lists each played realization by human-readable name and lifecycle status,
 with compact names and revision numbers for the Campaign Definition and World Definition captured
@@ -439,11 +505,13 @@ selects an Instance by recency.
 
 `GET /campaign-instances/:id` returns one explicitly selected Instance, its immutable compatible
 Campaign/World snapshot provenance, and non-payload runtime metadata such as storage revision and
-last update time. It does not return the mutable runtime JSON. Active Session state is currently
-omitted because the relational Instance-to-Session relationship has not yet been introduced; the
-API must not guess through a legacy `campaignId`. Both endpoints require GM authorization and use
-neutral not-found/unavailable responses that do not echo opaque identifiers. Both reads are scoped
-to Instances created by the authenticated GM; selecting another GM's Instance behaves as not found.
+last update time. It does not return the mutable runtime JSON. Active Session state comes only from
+the relational Instance-to-Session relationship through the server-derived continuation
+projection; the API must not guess through a legacy `campaignId` or accept a competing runtime
+field as authority. Both endpoints require GM authorization and use neutral not-found/unavailable
+responses that do not echo opaque identifiers. Both reads are scoped to Instances explicitly owned
+by the authenticated GM; selecting another GM's Instance behaves as not found. `createdByUserId`
+remains audit provenance and is not the authorization boundary.
 
 ### Legacy realignment shadow materialization
 
@@ -547,6 +615,7 @@ play APIs:
 | Protected authentication-provider association   | `AuthenticationProviderAssociation`    | Provider subjects use hash/encrypted columns and credentials use an external reference; plaintext subjects or credentials are forbidden; status and associated/disabled timestamps must form a coherent lifecycle |
 | `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`      | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                              |
 | Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`           | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                           |
+| Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                        |
 | Non-human Agent identity                        | `AgentIdentity`                        | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                            |
 | `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`   | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and contain only open namespaced string keys                                                                             |
 | `CampaignInstanceSession`                       | `CampaignInstanceSession`              | Explicit Instance FK with lifecycle-consistent start/conclusion/cancellation timestamps, schedule, event-log, summary, and extension metadata                                                                     |
@@ -558,6 +627,20 @@ namespaced Agent capability arrays, protected JSON shapes, exactly-one participa
 chronology, and complete one-way Character import provenance. A PostgreSQL partial unique index
 permits many active Campaign Instances but no more than one `ACTIVE` relational Session across the
 installation. Runtime code must not infer an active Session from legacy `campaignId` data.
+
+`CampaignInstance` also stores explicit nullable `ownerUserId` for an additive legacy rollout, a
+positive `metadataRevision` for lifecycle compare-and-swap, and nullable `creationKeyHash`. New
+creation requires an owner and stores only the hash of the protected idempotency key;
+`(ownerUserId, creationKeyHash)` is unique. `createdByUserId` remains audit provenance.
+
+`CampaignInstanceRuntimeCheckpoint` is an immutable exact state capture numbered within one
+Instance. `INITIAL`, `MIGRATION_SOURCE`, `MIGRATION_RESULT`, `RESTORE_SOURCE`, and
+`RESTORE_RESULT` reasons distinguish adoption boundaries. `CampaignInstanceMigrationAudit` binds
+source/result snapshots and source/result runtime checkpoints to the same Instance through
+composite foreign keys. Its result snapshot must directly name its source snapshot as predecessor.
+The audit stores the complete object-shaped resolution plan and its hash and is append-only. A
+restore creates a new snapshot/checkpoint pair from current runtime; it never rewinds a pointer or
+deletes later Session history.
 
 ## Persisted API resources
 
@@ -1261,6 +1344,19 @@ location ID, and `stationary`, `traveling`, or `lost` status.
   armor, physical classification and local aliases, combat statistics, inventory/equipment,
   disciplines, communication capabilities, action definition IDs, effects, conditions, resources,
   damage adjustments, triggers, optional transformed form, disposition, and extensions.
+- Every new canonical World `definitions` record whose payload `kind` is `creature` requires
+  `instanceEmbodimentPolicy`. Its `strategy` is `one-per-instance`, `one-per-realization`, or a
+  namespaced extension strategy, with optional positive `maximumPerCampaignInstance` and
+  extensions. `one-per-instance` reuses one independent embodiment of the captured source across
+  placements in that Instance; `one-per-realization` creates an independent embodiment for each
+  realized placement. A namespaced strategy must be implemented by the effective captured
+  model/plugin or Instance readiness blocks. Existing immutable snapshots without this field
+  resolve deterministically to `one-per-instance` with maximum 1 and retain
+`source: "legacy-default"` provenance; no policy is inferred from a Creature's name.
+- `CampaignInstanceAuditEvent` is append-only, bounded, and human-resolvable audit provenance for
+  Instance creation, lifecycle/runtime administration, invitations, Agent grants, migration, and
+  restore. Audit detail never contains plaintext contact data, invitation credentials, or protected
+  Agent configuration references.
 - Every `ItemDefinition` has a required construction quality of `ramshackle`, `standard`, `fine`,
   or `exquisite`. `ItemInstance` references an item definition and records its own required quality,
   quantity, current location,

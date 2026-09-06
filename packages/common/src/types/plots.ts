@@ -201,11 +201,13 @@ export type CreatureDiscoveryKnowledge =
       readonly provenance?: string;
     };
 
+export type PlotObjectiveProgressStatus = OpenString<
+  "not-started" | "active" | "completed" | "failed"
+>;
+
 export interface PlotObjectiveProgress {
   readonly objectiveId: string;
-  readonly status: OpenString<
-    "not-started" | "active" | "completed" | "failed"
-  >;
+  readonly status: PlotObjectiveProgressStatus;
   readonly notes?: string;
 }
 
@@ -216,14 +218,16 @@ export interface PlotProgressOverride {
 }
 
 /** Mutable overlay for one Plot in exactly one Campaign Instance. */
+export type CampaignInstancePlotProgressStatus = OpenString<
+  "not-started" | "active" | "completed" | "failed" | "abandoned"
+>;
+
 export interface CampaignInstancePlotProgress<
   Extensions extends ExtensionData = ExtensionData,
 > {
   readonly campaignInstanceId: CampaignInstanceId;
   readonly plotDefinitionId: PlotDefinitionId;
-  readonly status: OpenString<
-    "not-started" | "active" | "completed" | "failed" | "abandoned"
-  >;
+  readonly status: CampaignInstancePlotProgressStatus;
   readonly objectiveProgress?: readonly PlotObjectiveProgress[];
   readonly locationRealizations?: readonly PlotLocationRealization[];
   readonly creatureKnowledge?: readonly CreatureDiscoveryKnowledge[];

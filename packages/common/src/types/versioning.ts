@@ -16,8 +16,10 @@ import type {
   WorldDefinitionRevisionId,
   WorldDefinitionSnapshotId,
   WorldPlacementDefinitionId,
+  UserId,
 } from "./primitives";
 import type { CampaignDefinitionContent } from "./campaign-definition";
+import type { CampaignInstanceRuntimeState } from "./campaign-instance";
 
 /** Identity of one immutable published revision in a definition lineage. */
 export interface DefinitionRevisionIdentity<
@@ -141,15 +143,37 @@ export interface CampaignDefinitionSnapshot {
 export type CampaignInstanceStatus =
   "preparing" | "active" | "paused" | "concluded" | "archived";
 
+const CAMPAIGN_INSTANCE_STATUS_TRANSITIONS: Readonly<
+  Record<CampaignInstanceStatus, readonly CampaignInstanceStatus[]>
+> = Object.freeze({
+  preparing: ["active"],
+  active: ["paused", "concluded"],
+  paused: ["active", "concluded"],
+  concluded: ["archived"],
+  archived: ["concluded"],
+});
+
+/** Server-owned lifecycle transition policy; same-state writes are not transitions. */
+export function canTransitionCampaignInstanceStatus(
+  current: CampaignInstanceStatus,
+  target: CampaignInstanceStatus,
+): boolean {
+  return CAMPAIGN_INSTANCE_STATUS_TRANSITIONS[current].includes(target);
+}
+
 /** Stable identity for one played realization of a Campaign Definition. */
 export interface CampaignInstance<
   Extensions extends ExtensionData = ExtensionData,
 > {
   readonly identity: StateIdentity<CampaignInstanceId>;
   readonly name: string;
+  readonly ownerUserId: UserId;
+  readonly createdByUserId: UserId;
   readonly campaignDefinitionId: CampaignDefinitionId;
   readonly currentSnapshotId: CampaignInstanceSnapshotId;
   readonly status: CampaignInstanceStatus;
+  /** Storage compare-and-swap token for lifecycle and other Instance metadata. */
+  readonly metadataRevision: number;
   readonly createdAt: string;
   readonly concludedAt?: string;
   readonly archivedAt?: string;
@@ -165,11 +189,13 @@ export interface CampaignInstanceSnapshot {
   readonly campaignInstanceId: CampaignInstanceId;
   readonly snapshotNumber: number;
   readonly predecessorSnapshotId?: CampaignInstanceSnapshotId;
+  readonly reason: "initial" | "migration" | "restore";
   readonly campaignDefinitionSnapshotId: CampaignDefinitionSnapshotId;
   /** Must equal the World snapshot required by campaignDefinitionSnapshotId. */
   readonly worldDefinitionSnapshotId: WorldDefinitionSnapshotId;
   readonly adoptedAt: string;
   readonly manifest: SnapshotManifest;
+  readonly contentHash: string;
 }
 
 /** Mutable continuing state for one Campaign Instance and captured snapshot. */
@@ -179,6 +205,10 @@ export interface CampaignInstanceRuntime<
   readonly identity: StateIdentity<CampaignInstanceRuntimeId>;
   readonly campaignInstanceId: CampaignInstanceId;
   readonly campaignInstanceSnapshotId: CampaignInstanceSnapshotId;
+  /** Monotonic compare-and-swap token for every mutable runtime write. */
+  readonly revision: number;
+  readonly state: CampaignInstanceRuntimeState<Extensions>;
+  /** Session records are authoritative; this is a derived projection only. */
   readonly activeSessionId?: SessionId;
   readonly extensions?: Extensions;
 }

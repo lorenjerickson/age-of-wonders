@@ -36,13 +36,18 @@ export type CampaignDefinitionRevisionId =
 export type CampaignDefinitionSnapshotId =
   DomainId<"campaign-definition-snapshot">;
 export type PlotDefinitionId = DomainId<"plot-definition">;
-export type WorldPlacementDefinitionId =
-  DomainId<"world-placement-definition">;
+export type WorldPlacementDefinitionId = DomainId<"world-placement-definition">;
 export type CampaignPlacementDefinitionId =
   DomainId<"campaign-placement-definition">;
 export type CampaignInstanceId = DomainId<"campaign-instance">;
 export type CampaignInstanceSnapshotId = DomainId<"campaign-instance-snapshot">;
 export type CampaignInstanceRuntimeId = DomainId<"campaign-instance-runtime">;
+export type CampaignInstanceRuntimeCheckpointId =
+  DomainId<"campaign-instance-runtime-checkpoint">;
+export type CampaignInstancePlacementRealizationId =
+  DomainId<"campaign-instance-placement-realization">;
+export type CampaignInstanceMigrationAuditId =
+  DomainId<"campaign-instance-migration-audit">;
 export type CampaignInstanceMembershipId =
   DomainId<"campaign-instance-membership">;
 export type CampaignInstanceInvitationId =
