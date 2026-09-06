@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -21,19 +22,25 @@ describe("CampaignInstancesService", () => {
             id: "instance-1",
             name: "Tuesday Glasswake",
             status: "ACTIVE",
+            metadataRevision: 2,
             updatedAt: new Date("2026-09-04T12:00:00.000Z"),
             currentSnapshot: {
+              id: "instance-snapshot-2",
               snapshotNumber: 2,
+              reason: "MIGRATION",
+              adoptedAt: new Date("2026-09-03T12:00:00.000Z"),
               campaignDefinitionSnapshot: {
                 campaignDefinitionRevision: {
                   revisionNumber: 3,
                   name: "Ashes at Dawn, Third Edition",
+                  campaignDefinitionId: "campaign-definition-1",
                 },
               },
               worldDefinitionSnapshot: {
                 worldDefinitionRevision: {
                   revisionNumber: 5,
                   name: "Glasswake, Fifth Edition",
+                  worldDefinitionId: "world-definition-1",
                 },
               },
             },
@@ -51,16 +58,22 @@ describe("CampaignInstancesService", () => {
           id: "instance-1",
           name: "Tuesday Glasswake",
           status: "active",
+          metadataRevision: 2,
           updatedAt: "2026-09-04T12:00:00.000Z",
           currentSnapshot: {
+            snapshotId: "instance-snapshot-2",
             snapshotNumber: 2,
+            reason: "migration",
+            adoptedAt: "2026-09-03T12:00:00.000Z",
             campaignDefinition: {
               name: "Ashes at Dawn, Third Edition",
               revisionNumber: 3,
+              authoringHref: "/campaigns/definitions/campaign-definition-1",
             },
             worldDefinition: {
               name: "Glasswake, Fifth Edition",
               revisionNumber: 5,
+              authoringHref: "/worlds/world-definition-1",
             },
           },
         },
@@ -69,7 +82,7 @@ describe("CampaignInstancesService", () => {
     });
     expect(prisma.campaignInstance.findMany).toHaveBeenCalledTimes(1);
     const query = firstCallArgument(prisma.campaignInstance.findMany);
-    expect(query).toMatchObject({ where: { createdByUserId: "gm-1" } });
+    expect(query).toMatchObject({ where: { ownerUserId: "gm-1" } });
     expect(JSON.stringify(query)).not.toMatch(
       /"state"|manifest|currentRevision|sessions|domainRecord/,
     );
@@ -88,6 +101,7 @@ describe("CampaignInstancesService", () => {
           id: "instance-1",
           name: "Tuesday Glasswake",
           status: "PAUSED",
+          metadataRevision: 4,
           createdAt: new Date("2026-09-01T12:00:00.000Z"),
           updatedAt: new Date("2026-09-04T12:00:00.000Z"),
           concludedAt: null,
@@ -105,6 +119,7 @@ describe("CampaignInstancesService", () => {
               capturedAt: new Date("2026-09-03T11:30:00.000Z"),
               campaignDefinitionRevision: {
                 id: "campaign-revision-3",
+                campaignDefinitionId: "campaign-definition-1",
                 revisionNumber: 3,
                 name: "Ashes at Dawn, Third Edition",
                 contentHash: "campaign-revision-hash-3",
@@ -117,6 +132,7 @@ describe("CampaignInstancesService", () => {
               capturedAt: new Date("2026-09-03T10:30:00.000Z"),
               worldDefinitionRevision: {
                 id: "world-revision-5",
+                worldDefinitionId: "world-definition-1",
                 revisionNumber: 5,
                 name: "Glasswake, Fifth Edition",
                 contentHash: "world-revision-hash-5",
@@ -143,48 +159,35 @@ describe("CampaignInstancesService", () => {
       id: "instance-1",
       name: "Tuesday Glasswake",
       status: "paused",
+      metadataRevision: 4,
       createdAt: "2026-09-01T12:00:00.000Z",
       updatedAt: "2026-09-04T12:00:00.000Z",
       concludedAt: undefined,
       archivedAt: undefined,
       currentSnapshot: {
-        id: "instance-snapshot-2",
+        snapshotId: "instance-snapshot-2",
         snapshotNumber: 2,
-        predecessorSnapshotId: "instance-snapshot-1",
         reason: "migration",
-        contentHash: "instance-snapshot-hash-2",
         adoptedAt: "2026-09-03T12:00:00.000Z",
         campaignDefinition: {
-          snapshotId: "campaign-snapshot-3",
-          snapshotContentHash: "campaign-snapshot-hash-3",
-          capturedAt: "2026-09-03T11:30:00.000Z",
-          revisionId: "campaign-revision-3",
           revisionNumber: 3,
           name: "Ashes at Dawn, Third Edition",
-          revisionContentHash: "campaign-revision-hash-3",
-          publishedAt: "2026-09-03T11:00:00.000Z",
+          authoringHref: "/campaigns/definitions/campaign-definition-1",
         },
         worldDefinition: {
-          snapshotId: "world-snapshot-5",
-          snapshotContentHash: "world-snapshot-hash-5",
-          capturedAt: "2026-09-03T10:30:00.000Z",
-          revisionId: "world-revision-5",
           revisionNumber: 5,
           name: "Glasswake, Fifth Edition",
-          revisionContentHash: "world-revision-hash-5",
-          publishedAt: "2026-09-03T10:00:00.000Z",
+          authoringHref: "/worlds/world-definition-1",
         },
       },
       runtime: {
-        id: "runtime-1",
-        campaignInstanceSnapshotId: "instance-snapshot-2",
         revision: 12,
         updatedAt: "2026-09-04T11:59:00.000Z",
       },
     });
     const query = firstCallArgument(prisma.campaignInstance.findUnique);
     expect(JSON.stringify(query)).toContain(
-      '"where":{"id":"instance-1","createdByUserId":"gm-1"}',
+      '"where":{"id":"instance-1","ownerUserId":"gm-1"}',
     );
     expect(JSON.stringify(query)).not.toMatch(
       /"state"|manifest|currentRevision|sessions|domainRecord/,
@@ -290,7 +293,9 @@ describe("CampaignInstancesService", () => {
           id: "instance-1",
           name: "Tuesday Glasswake",
           status: "PREPARING",
+          metadataRevision: 1,
           createdAt: new Date("2026-09-04T12:00:00.000Z"),
+          updatedAt: new Date("2026-09-04T12:00:00.000Z"),
         }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -310,6 +315,9 @@ describe("CampaignInstancesService", () => {
           updatedAt: new Date("2026-09-04T12:00:02.000Z"),
         }),
       },
+      campaignInstanceHumanMembership: {
+        create: jest.fn().mockResolvedValue({}),
+      },
     };
     const prisma = {
       campaignInstance: { findMany: jest.fn(), findUnique: jest.fn() },
@@ -320,6 +328,7 @@ describe("CampaignInstancesService", () => {
 
     const result = await new CampaignInstancesService(prisma).create(
       {
+        idempotencyKey: "create-tuesday-glasswake-1",
         name: "  Tuesday Glasswake  ",
         campaignDefinitionSnapshotId: "campaign-snapshot-3",
       },
@@ -330,8 +339,9 @@ describe("CampaignInstancesService", () => {
       id: "instance-1",
       name: "Tuesday Glasswake",
       status: "preparing",
+      metadataRevision: 1,
       currentSnapshot: {
-        id: "instance-snapshot-1",
+        snapshotId: "instance-snapshot-1",
         snapshotNumber: 1,
         reason: "initial",
         campaignDefinition: {
@@ -343,7 +353,7 @@ describe("CampaignInstancesService", () => {
           revisionNumber: 5,
         },
       },
-      runtime: { id: "runtime-1", revision: 1 },
+      runtime: { revision: 1 },
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const transactionOptions = firstCallArgument(prisma.$transaction, 1);
@@ -366,6 +376,7 @@ describe("CampaignInstancesService", () => {
         name: "Tuesday Glasswake",
         status: "PREPARING",
         createdByUserId: "gm-1",
+        ownerUserId: "gm-1",
       },
     });
     const createSnapshotArgs = firstCallArgument(
@@ -411,8 +422,24 @@ describe("CampaignInstancesService", () => {
       data: {
         campaignInstanceId: "instance-1",
         campaignInstanceSnapshotId: "instance-snapshot-1",
-        state: { formatVersion: 1 },
+        state: {
+          formatVersion: 1,
+          preparation: {},
+          plotProgress: [],
+          placementRealizations: [],
+          creatureEmbodiments: [],
+          itemInstances: [],
+        },
         extensions: {},
+      },
+    });
+    expect(tx.campaignInstanceHumanMembership.create).toHaveBeenCalledWith({
+      data: {
+        campaignInstanceId: "instance-1",
+        userId: "gm-1",
+        displayName: "Game Master",
+        role: "GM",
+        status: "ACTIVE",
       },
     });
     expect(tx.campaignInstance.update).toHaveBeenCalledWith({
@@ -430,6 +457,7 @@ describe("CampaignInstancesService", () => {
     await expect(
       new CampaignInstancesService(prisma).create(
         {
+          idempotencyKey: "create-corrupt-capture-1",
           name: "Corrupt capture",
           campaignDefinitionSnapshotId: "campaign-snapshot-3",
         },
@@ -454,6 +482,7 @@ describe("CampaignInstancesService", () => {
       campaignInstance: { create: write, update: write },
       campaignInstanceSnapshot: { create: write },
       campaignInstanceRuntime: { create: write },
+      campaignInstanceHumanMembership: { create: write },
     };
     const prisma = {
       campaignInstance: { findMany: jest.fn(), findUnique: jest.fn() },
@@ -465,6 +494,7 @@ describe("CampaignInstancesService", () => {
     await expect(
       new CampaignInstancesService(prisma).create(
         {
+          idempotencyKey: "create-missing-snapshot-1",
           name: "Tuesday Glasswake",
           campaignDefinitionSnapshotId: "missing-snapshot-id",
         },
@@ -478,6 +508,51 @@ describe("CampaignInstancesService", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it("rejects reuse of a creation key for different Instance details before writing", async () => {
+    const write = jest.fn();
+    const tx = {
+      campaignDefinitionSnapshot: { findUnique: jest.fn() },
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "prior-instance",
+          name: "Original table",
+          campaignDefinitionId: "campaign-definition-1",
+          currentSnapshot: {
+            campaignDefinitionSnapshotId: "campaign-snapshot-1",
+          },
+        }),
+        create: write,
+        update: write,
+      },
+      campaignInstanceSnapshot: { create: write },
+      campaignInstanceRuntime: { create: write },
+      campaignInstanceHumanMembership: { create: write },
+    };
+    const prisma = {
+      campaignInstance: { findMany: jest.fn(), findUnique: jest.fn() },
+      $transaction: jest.fn((operation: (client: typeof tx) => unknown) =>
+        Promise.resolve(operation(tx)),
+      ),
+    };
+
+    await expect(
+      new CampaignInstancesService(prisma).create(
+        {
+          idempotencyKey: "same-create-command-key",
+          name: "Different table",
+          campaignDefinitionSnapshotId: "campaign-snapshot-2",
+        },
+        "gm-1",
+      ),
+    ).rejects.toEqual(
+      new ConflictException(
+        "This create request key was already used for different Campaign Instance details.",
+      ),
+    );
+    expect(tx.campaignDefinitionSnapshot.findUnique).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed input and inconsistent captured provenance neutrally", async () => {
     const prismaWithoutTransaction = {
       campaignInstance: { findMany: jest.fn(), findUnique: jest.fn() },
@@ -485,6 +560,7 @@ describe("CampaignInstancesService", () => {
     await expect(
       new CampaignInstancesService(prismaWithoutTransaction).create(
         {
+          idempotencyKey: "create-invalid-name-1",
           name: "   ",
           campaignDefinitionSnapshotId: "snapshot-1",
         },
@@ -534,6 +610,7 @@ describe("CampaignInstancesService", () => {
       campaignInstance: { create: write, update: write },
       campaignInstanceSnapshot: { create: write },
       campaignInstanceRuntime: { create: write },
+      campaignInstanceHumanMembership: { create: write },
     };
     const prisma = {
       campaignInstance: { findMany: jest.fn(), findUnique: jest.fn() },
@@ -545,6 +622,7 @@ describe("CampaignInstancesService", () => {
     await expect(
       new CampaignInstancesService(prisma).create(
         {
+          idempotencyKey: "create-inconsistent-capture-1",
           name: "Tuesday Glasswake",
           campaignDefinitionSnapshotId: "snapshot-1",
         },

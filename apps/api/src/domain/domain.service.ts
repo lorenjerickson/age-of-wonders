@@ -26,7 +26,7 @@ export class DomainService {
   ) {}
 
   async create(resource: DomainResource, data: Record<string, unknown>) {
-    this.assertLegacyCampaignWriteDisabled(resource);
+    this.assertLegacyRuntimeWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, data);
     const metadata = readResourceMetadata(resource, data);
     if (
@@ -127,7 +127,7 @@ export class DomainService {
     id: string,
     dto: ReplaceDomainResourceDto,
   ) {
-    this.assertLegacyCampaignWriteDisabled(resource);
+    this.assertLegacyRuntimeWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, dto.data);
     const metadata = readResourceMetadata(resource, dto.data);
     if (metadata.id !== id) {
@@ -201,7 +201,7 @@ export class DomainService {
   }
 
   async remove(resource: DomainResource, id: string) {
-    this.assertLegacyCampaignWriteDisabled(resource);
+    this.assertLegacyRuntimeWriteDisabled(resource);
     try {
       const record = await this.prisma.domainRecord.delete({
         where: { resource_id: { resource, id } },
@@ -221,10 +221,20 @@ export class DomainService {
     }
   }
 
-  private assertLegacyCampaignWriteDisabled(resource: DomainResource): void {
-    if (resource === "campaigns") {
+  private assertLegacyRuntimeWriteDisabled(resource: DomainResource): void {
+    if (
+      [
+        "campaigns",
+        "games",
+        "sessions",
+        "scenes",
+        "encounters",
+        "pending-decisions",
+        "game-events",
+      ].includes(resource)
+    ) {
       throw new ConflictException(
-        "Legacy Campaign writes are disabled. Use Campaign Definition authoring.",
+        "Legacy campaign and play-state writes are disabled. Use Campaign Definition authoring or Campaign Instance management.",
       );
     }
   }

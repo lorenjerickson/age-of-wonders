@@ -9,6 +9,7 @@ describe("CreateCampaignInstanceDto", () => {
     await expect(
       validate(
         dto({
+          idempotencyKey: "create-campaign-instance-1",
           name: "Tuesday Glasswake",
           campaignDefinitionSnapshotId: "campaign-snapshot-3",
         }),
@@ -20,6 +21,7 @@ describe("CreateCampaignInstanceDto", () => {
   it("rejects blank input and the ambiguous legacy campaignId", async () => {
     const errors = await validate(
       dto({
+        idempotencyKey: " ",
         name: "   ",
         campaignDefinitionSnapshotId: "   ",
         campaignId: "legacy-campaign-1",
@@ -30,6 +32,7 @@ describe("CreateCampaignInstanceDto", () => {
     expect(errors.map((error) => error.property).sort()).toEqual([
       "campaignDefinitionSnapshotId",
       "campaignId",
+      "idempotencyKey",
       "name",
     ]);
   });

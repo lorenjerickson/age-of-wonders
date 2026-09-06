@@ -43,7 +43,7 @@ export class DomainController {
     @Body() dto: CreateDomainResourceDto,
   ) {
     const resource = assertDomainResource(resourceValue);
-    assertLegacyCampaignWriteDisabled(resource);
+    assertLegacyRuntimeWriteDisabled(resource);
     return this.domain.create(resource, dto.data);
   }
 
@@ -70,7 +70,7 @@ export class DomainController {
     @Body() dto: ReplaceDomainResourceDto,
   ) {
     const resource = assertDomainResource(resourceValue);
-    assertLegacyCampaignWriteDisabled(resource);
+    assertLegacyRuntimeWriteDisabled(resource);
     return this.domain.replace(resource, id, dto);
   }
 
@@ -83,15 +83,25 @@ export class DomainController {
     @Param("id") id: string,
   ): Promise<void> {
     const resource = assertDomainResource(resourceValue);
-    assertLegacyCampaignWriteDisabled(resource);
+    assertLegacyRuntimeWriteDisabled(resource);
     await this.domain.remove(resource, id);
   }
 }
 
-function assertLegacyCampaignWriteDisabled(resource: string): void {
-  if (resource === "campaigns") {
+const QUARANTINED_LEGACY_WRITES = new Set([
+  "campaigns",
+  "games",
+  "sessions",
+  "scenes",
+  "encounters",
+  "pending-decisions",
+  "game-events",
+]);
+
+function assertLegacyRuntimeWriteDisabled(resource: string): void {
+  if (QUARANTINED_LEGACY_WRITES.has(resource)) {
     throw new ConflictException(
-      "Legacy Campaign writes are disabled. Use Campaign Definition authoring.",
+      "Legacy campaign and play-state writes are disabled. Use Campaign Definition authoring or Campaign Instance management.",
     );
   }
 }

@@ -1,4 +1,5 @@
 import { isPublicationJson } from "../domain/snapshot-manifest";
+import { isCreatureInstanceEmbodimentPolicy } from "@aow/common";
 import type { WorldDraftRecordDto } from "./dto/world-definition-authoring.dto";
 
 export interface WorldDraftValidationIssue {
@@ -90,6 +91,7 @@ export function validateWorldDefinitionDraft(
     requireRecord(byId, "locations", id, "Location", add);
   for (const id of definitions)
     requireRecord(byId, "definitions", id, "Definition", add);
+  validateCreatureEmbodimentPolicies(definitions, byId, add);
   for (const id of schemas) {
     if (
       !byId.has(`extension-schemas\0${id}`) &&
@@ -132,6 +134,34 @@ export function validateWorldDefinitionDraft(
       a.code.localeCompare(b.code) || a.subject.localeCompare(b.subject),
   );
   return { valid: issues.length === 0, issues };
+}
+
+function validateCreatureEmbodimentPolicies(
+  definitionIds: readonly string[],
+  byId: ReadonlyMap<string, WorldDraftRecordDto>,
+  add: (c: string, s: string, d: string) => void,
+): void {
+  for (const id of definitionIds) {
+    const record = byId.get(`definitions\0${id}`);
+    if (
+      !record ||
+      !isObject(record.payload) ||
+      record.payload.kind !== "creature"
+    ) {
+      continue;
+    }
+    if (
+      !isCreatureInstanceEmbodimentPolicy(
+        record.payload.instanceEmbodimentPolicy,
+      )
+    ) {
+      add(
+        "creature-embodiment-policy-invalid",
+        recordName(record),
+        "A Creature Definition requires an explicit valid Instance embodiment policy.",
+      );
+    }
+  }
 }
 
 function validateWorldPlacements(
@@ -197,11 +227,13 @@ function validateWorldPlacements(
         "The placement Location is not present in this World revision.",
       );
     }
-    if (!worldPlacementSourceExists(
-      record.payload.source,
-      definitions,
-      legacyCreatures,
-    )) {
+    if (
+      !worldPlacementSourceExists(
+        record.payload.source,
+        definitions,
+        legacyCreatures,
+      )
+    ) {
       add(
         "world-placement-source-not-found",
         subject,
@@ -240,9 +272,11 @@ function isWorldPlacement(
       (typeof value.notes !== "string" || value.notes.length > 4_000)) ||
     (value.scale !== undefined &&
       (!finite(value.scale) || value.scale <= 0 || value.scale > 100)) ||
-    (value.mapPosition !== undefined && !normalizedCoordinate(value.mapPosition)) ||
+    (value.mapPosition !== undefined &&
+      !normalizedCoordinate(value.mapPosition)) ||
     (value.conformance !== undefined && !modelConformance(value.conformance)) ||
-    (value.modelValues !== undefined && !publicationObject(value.modelValues)) ||
+    (value.modelValues !== undefined &&
+      !publicationObject(value.modelValues)) ||
     (value.extensions !== undefined && !isObject(value.extensions))
   ) {
     return false;
@@ -251,9 +285,12 @@ function isWorldPlacement(
 }
 
 function modelConformance(value: unknown): boolean {
-  return isObject(value) && boundedNonEmpty(value.conceptId, 240) &&
+  return (
+    isObject(value) &&
+    boundedNonEmpty(value.conceptId, 240) &&
     Array.isArray(value.modelSchemaReleaseIds) &&
-    value.modelSchemaReleaseIds.every((id) => boundedNonEmpty(id, 240));
+    value.modelSchemaReleaseIds.every((id) => boundedNonEmpty(id, 240))
+  );
 }
 
 function publicationObject(value: unknown): boolean {
@@ -261,25 +298,34 @@ function publicationObject(value: unknown): boolean {
 }
 
 function publicationValue(value: unknown): boolean {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return true;
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(publicationValue);
   return publicationObject(value);
 }
 
-function isWorldPlacementSource(value: unknown): value is Record<string, unknown> {
+function isWorldPlacementSource(
+  value: unknown,
+): value is Record<string, unknown> {
   if (!isObject(value)) return false;
   if (value.kind === "world-creature") {
-    return onlyKeys(value, ["kind", "creatureId"]) &&
-      boundedNonEmpty(value.creatureId, 240);
+    return (
+      onlyKeys(value, ["kind", "creatureId"]) &&
+      boundedNonEmpty(value.creatureId, 240)
+    );
   }
   if (value.kind === "world-item") {
-    return onlyKeys(value, ["kind", "itemDefinitionId"]) &&
-      boundedNonEmpty(value.itemDefinitionId, 240);
+    return (
+      onlyKeys(value, ["kind", "itemDefinitionId"]) &&
+      boundedNonEmpty(value.itemDefinitionId, 240)
+    );
   }
-  return value.kind === "registered-content" &&
+  return (
+    value.kind === "registered-content" &&
     onlyKeys(value, ["kind", "definitionId"]) &&
-    boundedNonEmpty(value.definitionId, 240);
+    boundedNonEmpty(value.definitionId, 240)
+  );
 }
 
 function worldPlacementSourceExists(
@@ -302,10 +348,17 @@ function worldPlacementSourceExists(
 }
 
 function normalizedCoordinate(value: unknown): boolean {
-  return isObject(value) && onlyKeys(value, ["kind", "x", "y"]) &&
+  return (
+    isObject(value) &&
+    onlyKeys(value, ["kind", "x", "y"]) &&
     value.kind === "normalized-map" &&
-    finite(value.x) && value.x >= 0 && value.x <= 1 &&
-    finite(value.y) && value.y >= 0 && value.y <= 1;
+    finite(value.x) &&
+    value.x >= 0 &&
+    value.x <= 1 &&
+    finite(value.y) &&
+    value.y >= 0 &&
+    value.y <= 1
+  );
 }
 
 function finite(value: unknown): value is number {
@@ -313,10 +366,15 @@ function finite(value: unknown): value is number {
 }
 
 function boundedNonEmpty(value: unknown, max: number): value is string {
-  return typeof value === "string" && value.trim().length > 0 && value.length <= max;
+  return (
+    typeof value === "string" && value.trim().length > 0 && value.length <= max
+  );
 }
 
-function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+function onlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
   const known = new Set(allowed);
   return Object.keys(value).every((key) => known.has(key));
 }

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 export const MAX_SNAPSHOT_RECORDS = 5_000;
+/** Captured records plus Plot-owned components addressable during one migration. */
+export const MAX_MIGRATION_EXPANDED_RECORDS = MAX_SNAPSHOT_RECORDS * 10;
 export const MAX_PUBLICATION_JSON_DEPTH = 64;
 
 export interface SnapshotRecordInput {

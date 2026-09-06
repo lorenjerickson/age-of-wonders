@@ -12,7 +12,12 @@ describe("CampaignInstancesController", () => {
       get: jest.fn().mockResolvedValue({ name: "Tuesday Glasswake" }),
       create: jest.fn().mockResolvedValue({ name: "Wednesday Glasswake" }),
     };
-    const controller = new CampaignInstancesController(service);
+    const controller = new CampaignInstancesController(
+      service,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
     const request = {
       headers: {},
       user: { id: "gm-1", displayName: "GM", role: UserRole.GM },
@@ -28,6 +33,7 @@ describe("CampaignInstancesController", () => {
       controller.create(
         request,
         {
+          idempotencyKey: "create-wednesday-glasswake-1",
           name: "Wednesday Glasswake",
           campaignDefinitionSnapshotId: "campaign-snapshot-3",
         },
@@ -35,10 +41,12 @@ describe("CampaignInstancesController", () => {
     ).resolves.toEqual({ name: "Wednesday Glasswake" });
     expect(service.create).toHaveBeenCalledWith(
       {
+        idempotencyKey: "create-wednesday-glasswake-1",
         name: "Wednesday Glasswake",
         campaignDefinitionSnapshotId: "campaign-snapshot-3",
       },
       "gm-1",
+      "GM",
     );
   });
 
