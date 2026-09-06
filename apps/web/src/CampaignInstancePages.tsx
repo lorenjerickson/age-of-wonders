@@ -41,6 +41,7 @@ import {
   getCampaignInstancePreparation,
   getCampaignInstanceRoster,
   getCampaignInstanceCharacterReview,
+  getCampaignInstanceCharacterImportOptions,
   getCampaignInstanceSessions,
   getCampaignSession,
   getCampaignSessionEvents,
@@ -51,6 +52,7 @@ import {
   previewCampaignInstanceMigration,
   previewCampaignInstanceRestore,
   issueCampaignSessionInvitations,
+  importCampaignInstanceCharacter,
   joinCampaignSession,
   listPlayers,
   saveCampaignInstancePreparation,
@@ -104,6 +106,8 @@ import type {
   PlayerProfileId,
   CharacterId,
   CampaignInstanceCharacterReviewProjection,
+  CampaignInstanceCharacterImportOptionProjection,
+  CampaignInstanceCharacterImportOptionsProjection,
 } from "@aow/common";
 
 const pageClass = "mx-auto max-w-6xl px-6 py-12 lg:px-10";
@@ -1054,6 +1058,34 @@ export function CampaignInstancePlacementsPage() {
   );
 }
 
+export function ImportSelectionSummary({
+  selected,
+}: {
+  selected?: CampaignInstanceCharacterImportOptionProjection;
+}) {
+  if (!selected) return null;
+  return (
+    <dl className="mt-4 grid gap-3 rounded-box bg-base-100 p-4 text-sm sm:grid-cols-3">
+      <div>
+        <dt className="text-base-content/55">Destination Player</dt>
+        <dd className="mt-1 font-medium">{selected.playerName}</dd>
+      </div>
+      <div>
+        <dt className="text-base-content/55">Source Campaign</dt>
+        <dd className="mt-1 font-medium">
+          {selected.sourceCampaignDefinitionName}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-base-content/55">Source Instance</dt>
+        <dd className="mt-1 font-medium">
+          {selected.sourceCampaignInstanceName}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export function CampaignInstanceRosterPage() {
   const { instance } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstanceRoster>();
@@ -1073,14 +1105,23 @@ export function CampaignInstanceRosterPage() {
   const [characterReview, setCharacterReview] =
     useState<CampaignInstanceCharacterReviewProjection>();
   const [characterReviewNote, setCharacterReviewNote] = useState("");
+  const [showCharacterImport, setShowCharacterImport] = useState(false);
+  const [characterImportOptions, setCharacterImportOptions] =
+    useState<CampaignInstanceCharacterImportOptionsProjection>();
+  const [sourceCharacterId, setSourceCharacterId] = useState("");
+  const [importedCharacterName, setImportedCharacterName] = useState("");
+  const [characterImportNotice, setCharacterImportNotice] = useState("");
   const invitationDirty = Boolean(
     invitedName.trim() || email.trim() || phone.trim() || role !== "player",
   );
+  const characterImportDirty = Boolean(
+    showCharacterImport && (sourceCharacterId || importedCharacterName.trim()),
+  );
   useBlocker({
     shouldBlockFn: () =>
-      invitationDirty &&
-      !window.confirm("Leave without sending or clearing this invitation?"),
-    enableBeforeUnload: invitationDirty,
+      (invitationDirty || characterImportDirty) &&
+      !window.confirm("Leave without finishing or clearing these changes?"),
+    enableBeforeUnload: invitationDirty || characterImportDirty,
   });
   useEffect(() => {
     void Promise.all([
@@ -1221,6 +1262,92 @@ export function CampaignInstanceRosterPage() {
         caught instanceof Error
           ? caught.message
           : "The Character could not be created.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openCharacterImport() {
+    if (showCharacterImport) {
+      setShowCharacterImport(false);
+      setSourceCharacterId("");
+      setImportedCharacterName("");
+      return;
+    }
+    setShowCharacterImport(true);
+    setCharacterImportNotice("");
+    if (characterImportOptions) return;
+    setBusy("load-character-imports");
+    setError("");
+    try {
+      setCharacterImportOptions(
+        await getCampaignInstanceCharacterImportOptions(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Eligible Characters could not be loaded.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function importCharacter(event: FormEvent) {
+    event.preventDefault();
+    const source = characterImportOptions?.items.find(
+      (candidate) => candidate.sourceCharacterId === sourceCharacterId,
+    );
+    if (!source || !importedCharacterName.trim()) return;
+    setBusy("import-character");
+    setError("");
+    setCharacterImportNotice("");
+    try {
+      const imported = await importCampaignInstanceCharacter(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          sourceCampaignDefinitionId: source.sourceCampaignDefinitionId,
+          sourceCampaignInstanceId: source.sourceCampaignInstanceId,
+          sourceCharacterId: source.sourceCharacterId,
+          playerMembershipId: source.playerMembershipId,
+          name: importedCharacterName.trim(),
+        },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
+      setShowCharacterImport(false);
+      setSourceCharacterId("");
+      setImportedCharacterName("");
+      setCharacterImportOptions(undefined);
+      setCharacterImportNotice(
+        `${imported.character.name} was copied for ${source.playerName}. The destination draft must be reconciled and approved before activation.`,
+      );
+      try {
+        const review = await getCampaignInstanceCharacterReview(
+          instance.campaignDefinitionId,
+          instance.id,
+          imported.character.characterId,
+        );
+        setCharacterReview(review);
+        setCharacterReviewNote(review.reviewNote ?? "");
+      } catch {
+        // The import succeeded; a review refresh can be requested independently.
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The Character could not be imported.",
       );
     } finally {
       setBusy("");
@@ -1573,6 +1700,16 @@ export function CampaignInstanceRosterPage() {
                   provenance.
                 </p>
               </div>
+              <Button
+                type="button"
+                tone="outline"
+                loading={busy === "load-character-imports"}
+                aria-expanded={showCharacterImport}
+                aria-controls="character-import-panel"
+                onClick={() => void openCharacterImport()}
+              >
+                {showCharacterImport ? "Cancel import" : "Import Character"}
+              </Button>
             </div>
             <form
               className="mt-4 grid gap-3 rounded-box border border-base-300 bg-base-200 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
@@ -1620,6 +1757,113 @@ export function CampaignInstanceRosterPage() {
                 Create draft
               </Button>
             </form>
+            {characterImportNotice && (
+              <Alert tone="success" className="mt-4">
+                {characterImportNotice}
+              </Alert>
+            )}
+            {showCharacterImport && (
+              <form
+                id="character-import-panel"
+                className="mt-4 rounded-box border border-secondary/30 bg-secondary/[0.06] p-5"
+                onSubmit={importCharacter}
+              >
+                <p className="text-xs font-semibold tracking-[0.16em] text-secondary uppercase">
+                  One-way copy
+                </p>
+                <h3 className="mt-1 text-xl font-semibold">
+                  Import from another Campaign Instance
+                </h3>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-base-content/65">
+                  Import creates a new Character bound to this Instance. It does
+                  not move, link, or later synchronize the source. Only approved
+                  source sheets belonging to the same Player are available.
+                </p>
+                {characterImportOptions &&
+                characterImportOptions.items.length > 0 ? (
+                  <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                    <Label>
+                      Source Character
+                      <Select
+                        className="mt-2 w-full"
+                        required
+                        value={sourceCharacterId}
+                        onChange={(event) => {
+                          const selected = characterImportOptions.items.find(
+                            (candidate) =>
+                              candidate.sourceCharacterId ===
+                              event.currentTarget.value,
+                          );
+                          setSourceCharacterId(event.currentTarget.value);
+                          setImportedCharacterName(
+                            selected?.sourceCharacterName ?? "",
+                          );
+                        }}
+                      >
+                        <option value="">Select an approved Character</option>
+                        {characterImportOptions.items.map((candidate) => (
+                          <option
+                            key={candidate.sourceCharacterId}
+                            value={candidate.sourceCharacterId}
+                          >
+                            {candidate.sourceCharacterName} —{" "}
+                            {candidate.playerName} —{" "}
+                            {candidate.sourceCampaignInstanceName}
+                          </option>
+                        ))}
+                      </Select>
+                    </Label>
+                    <Label>
+                      Destination name
+                      <Input
+                        className="mt-2 w-full"
+                        required
+                        maxLength={120}
+                        value={importedCharacterName}
+                        onChange={(event) =>
+                          setImportedCharacterName(event.currentTarget.value)
+                        }
+                      />
+                    </Label>
+                    <Button
+                      tone="primary"
+                      loading={busy === "import-character"}
+                      disabled={!sourceCharacterId}
+                    >
+                      Copy as draft
+                    </Button>
+                  </div>
+                ) : characterImportOptions ? (
+                  <Alert className="mt-4">
+                    No approved Characters from another owned Instance match an
+                    active Player in this roster.
+                  </Alert>
+                ) : (
+                  <p
+                    className="mt-4 text-sm text-base-content/55"
+                    aria-live="polite"
+                  >
+                    Loading eligible Characters…
+                  </p>
+                )}
+                {characterImportOptions &&
+                  characterImportOptions.total >
+                    characterImportOptions.items.length && (
+                    <p className="mt-3 text-xs text-base-content/55">
+                      Showing the first {characterImportOptions.items.length} of{" "}
+                      {characterImportOptions.total} eligible Characters.
+                    </p>
+                  )}
+                {characterImportOptions && sourceCharacterId && (
+                  <ImportSelectionSummary
+                    selected={characterImportOptions.items.find(
+                      (candidate) =>
+                        candidate.sourceCharacterId === sourceCharacterId,
+                    )}
+                  />
+                )}
+              </form>
+            )}
             {characterReview && (
               <section className="mt-4 rounded-box border border-primary/30 bg-primary/[0.06] p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">

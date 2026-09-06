@@ -30,8 +30,16 @@ function harness() {
     },
   };
   const prisma = {
-    campaignInstanceHumanMembership: { findFirst: jest.fn() },
-    campaignInstanceCharacterAssociation: { findFirst: jest.fn() },
+    campaignInstance: { findFirst: jest.fn() },
+    campaignInstanceHumanMembership: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+    },
+    campaignInstanceCharacterAssociation: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     sessionParticipation: { findFirst: jest.fn().mockResolvedValue(null) },
     domainRecord: { findUnique: jest.fn() },
     $transaction: jest.fn((operation: (client: typeof tx) => unknown) =>
@@ -59,6 +67,72 @@ function harness() {
 }
 
 describe("CampaignInstanceCharactersService", () => {
+  it("offers imports only for matching Players in other owned Instances", async () => {
+    const { service, prisma } = harness();
+    prisma.campaignInstance.findFirst.mockResolvedValue({
+      name: "Tuesday Glasswake",
+    });
+    prisma.campaignInstanceHumanMembership.findMany.mockResolvedValue([
+      {
+        id: "membership-destination",
+        userId: "player-user",
+        displayName: "River",
+      },
+    ]);
+    prisma.campaignInstanceCharacterAssociation.findMany.mockResolvedValue([
+      {
+        characterId: "source-character",
+        characterName: "Aster Vale",
+        status: "RETIRED",
+        playerMembership: { userId: "player-user" },
+        campaignInstance: {
+          id: "source-instance",
+          name: "Earlier Glasswake",
+          campaignDefinition: {
+            id: "source-definition",
+            name: "Glasswake",
+          },
+        },
+      },
+    ]);
+    prisma.campaignInstanceCharacterAssociation.count.mockResolvedValue(1);
+
+    await expect(
+      service.characterImportOptions("instance-1", "gm-1", 50, 0),
+    ).resolves.toEqual({
+      campaignInstanceId: "instance-1",
+      campaignInstanceName: "Tuesday Glasswake",
+      items: [
+        {
+          playerMembershipId: "membership-destination",
+          playerName: "River",
+          sourceCampaignDefinitionId: "source-definition",
+          sourceCampaignDefinitionName: "Glasswake",
+          sourceCampaignInstanceId: "source-instance",
+          sourceCampaignInstanceName: "Earlier Glasswake",
+          sourceCharacterId: "source-character",
+          sourceCharacterName: "Aster Vale",
+          sourceCharacterStatus: "retired",
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    expect(
+      prisma.campaignInstanceCharacterAssociation.findMany,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          campaignInstanceId: { not: "instance-1" },
+          status: { not: "DRAFT" },
+          campaignInstance: { ownerUserId: "gm-1" },
+          draft: { status: "COMPLETE" },
+        }) as unknown,
+      }),
+    );
+  });
+
   it("blocks membership changes while the member participates in a current Session", async () => {
     const { service, prisma, tx } = harness();
     prisma.campaignInstanceHumanMembership.findFirst.mockResolvedValue({

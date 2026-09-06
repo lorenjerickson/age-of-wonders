@@ -33,8 +33,12 @@ function controller(assertParentOverride?: jest.Mock) {
   const changeCharacterStatus = jest
     .fn()
     .mockResolvedValue({ status: "retired" });
+  const characterImportOptions = jest
+    .fn()
+    .mockResolvedValue({ items: [], total: 0 });
   const characters = {
     changeCharacterStatus,
+    characterImportOptions,
   } as unknown as CampaignInstanceCharactersService;
   const reviewDetail = jest
     .fn()
@@ -53,6 +57,7 @@ function controller(assertParentOverride?: jest.Mock) {
       assertParent,
       validate,
       changeCharacterStatus,
+      characterImportOptions,
       reviewDetail,
       review,
     },
@@ -131,6 +136,44 @@ describe("CampaignInstanceHierarchyController", () => {
       "gm-1",
       { expectedStatus: "active", targetStatus: "retired" },
     );
+  });
+
+  it("scopes Character import options to the destination ancestry", async () => {
+    const { calls, subject } = controller();
+
+    await subject.characterImportOptions(
+      "definition-1",
+      "instance-1",
+      request,
+      "25",
+      "0",
+    );
+
+    expect(calls.assertParent).toHaveBeenCalledWith(
+      "definition-1",
+      "instance-1",
+      "gm-1",
+    );
+    expect(calls.characterImportOptions).toHaveBeenCalledWith(
+      "instance-1",
+      "gm-1",
+      25,
+      0,
+    );
+  });
+
+  it("does not discover import sources when destination ancestry is invalid", async () => {
+    const parentError = new NotFoundException(
+      "The selected Campaign Instance was not found.",
+    );
+    const { calls, subject } = controller(
+      jest.fn().mockRejectedValue(parentError),
+    );
+
+    await expect(
+      subject.characterImportOptions("definition-other", "instance-1", request),
+    ).rejects.toBe(parentError);
+    expect(calls.characterImportOptions).not.toHaveBeenCalled();
   });
 
   it("scopes Character review reads and decisions before touching the draft", async () => {

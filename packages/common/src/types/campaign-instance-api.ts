@@ -592,6 +592,37 @@ export interface ImportCampaignInstanceCharacterRequest {
   readonly name?: string;
 }
 
+export interface CampaignInstanceCharacterImportOptionProjection {
+  readonly playerMembershipId: CampaignInstanceMembershipId;
+  readonly playerName: string;
+  readonly sourceCampaignDefinitionId: CampaignDefinitionId;
+  readonly sourceCampaignDefinitionName: string;
+  readonly sourceCampaignInstanceId: CampaignInstanceId;
+  readonly sourceCampaignInstanceName: string;
+  readonly sourceCharacterId: CharacterId;
+  readonly sourceCharacterName: string;
+  readonly sourceCharacterStatus: "active" | "inactive" | "retired" | "dead";
+}
+
+export interface CampaignInstanceCharacterImportOptionsProjection {
+  readonly campaignInstanceId: CampaignInstanceId;
+  readonly campaignInstanceName: string;
+  readonly items: readonly CampaignInstanceCharacterImportOptionProjection[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CampaignInstanceCharacterCommandResult {
+  readonly campaignInstanceName: string;
+  readonly character: {
+    readonly characterId: CharacterId;
+    readonly name: string;
+    readonly status: "draft" | "active" | "inactive" | "retired" | "dead";
+    readonly origin: "created-in-instance" | "one-way-import";
+  };
+}
+
 export type CampaignInstanceInvitationRetryResult =
   CampaignInstanceInvitationCommandResult;
 

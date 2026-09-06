@@ -353,6 +353,24 @@ export class CampaignInstanceHierarchyController {
     );
   }
 
+  @Get(":campaignInstanceId/character-imports/options")
+  async characterImportOptions(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    const page = parsePagination(limit, offset);
+    return this.charactersService.characterImportOptions(
+      campaignInstanceId,
+      request.user!.id,
+      page.limit,
+      page.offset,
+    );
+  }
+
   @Post(":campaignInstanceId/characters/:characterId/actions/change-status")
   @HttpCode(HttpStatus.OK)
   async changeCharacterStatus(

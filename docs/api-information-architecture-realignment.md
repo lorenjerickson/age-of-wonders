@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-character-completion-wave-complete
+status: active-implementation-plan-character-import-experience-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -22,8 +22,8 @@ an isolated naming cleanup.
 ## Delivery status
 
 The Session, Campaign Instance, Campaign/World authoring, identity/participation, initial
-system-boundary, legacy-removal, Instance-native Character-sheet, and Character completion/review
-waves are implemented.
+system-boundary, legacy-removal, Instance-native Character-sheet, Character completion/review, and
+first-party one-way Character import waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
 invitation entry points live beneath `/api/invitations`; and authenticated locator and participant
 projections live beneath `/api/me`. First-party web callers use the canonical authoring roots
@@ -34,8 +34,7 @@ destructive root-Location World routes are no longer registered.
 
 Route families not named in the completed-wave sections remain target architecture, not
 claims of completed implementation. The Auth0 adapter, writable secret and operational Settings,
-first-party Character import selection, and fully contextual World/Campaign AI and media commands
-remain separate follow-up work.
+and fully contextual World/Campaign AI and media commands remain separate follow-up work.
 
 ## Binding route principles
 
@@ -260,6 +259,8 @@ GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/creature
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/roster
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/memberships
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/character-imports/options
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/character-imports
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/review
 POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/actions/review
 GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents/available
@@ -407,9 +408,12 @@ hard-coded UI change. Submission and approval
 validate Background, Profession, Heritage, every captured Attribute roll/assignment, and optional
 starting equipment against the current captured snapshot. A later Instance migration therefore
 requires stale approval to be reopened and reviewed rather than silently materializing against a
-different schema. First-party import selection UI remains follow-up work. The canonical import
-command creates a distinct destination draft and the database constraints prevent cross-Player,
-cross-owner, same-Instance, or identity-preserving transfers.
+different schema. The first-party import flow lists only approved, previously activated source
+sheets from another Instance owned by the same GM and belonging to the same durable Player as an
+active destination membership. It identifies every choice with human-readable Player, Campaign,
+Instance, and Character names while keeping command identifiers out of visible labels. The
+canonical import command creates a distinct destination draft and the database constraints prevent
+cross-Player, cross-owner, same-Instance, or identity-preserving transfers.
 
 ## Model, AI, media, graph, and Settings implementation wave
 
@@ -494,6 +498,13 @@ transaction as the lifecycle transition. The materialized creation sheet is deli
 presented as a fabricated full `CharacterState`; runtime rule compilation remains responsible for
 combining it with captured Profession, Heritage, Item, and Rule definitions.
 
+The import-experience wave adds a bounded, destination-scoped import-options projection and a
+progressively disclosed roster workflow. The GM selects a human-labeled source, may rename the
+copy, sees the destination Player and source Campaign/Instance before confirming, and is taken to
+the new draft's GM review after the copy. The UI explicitly describes the operation as one-way: it
+does not move, link, synchronize, or preserve the source Character identity. The destination draft
+must be reconciled with its own captured schema and approved before activation.
+
 ## Compatibility and rollout
 
 1. Add canonical controllers as aliases over the same services; do not duplicate domain logic.
@@ -522,8 +533,8 @@ combining it with captured Profession, Heritage, Item, and Rule definitions.
 4. **Identity and participation — complete vertical slice:** first-admin bootstrap, user-level
    provider associations, Players, Instance memberships/invitations, Character
    ownership/lifecycle/import boundaries, Instance-native resumable Character sheets,
-   captured-schema submission, GM review, and activation materialization. Auth0 and first-party
-   import selection UX remain fast follows.
+   captured-schema submission, GM review, activation materialization, and first-party one-way
+   import selection. Auth0 remains a fast follow.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
    adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
    authority boundaries. Writable hosted configuration and fully contextual content operations

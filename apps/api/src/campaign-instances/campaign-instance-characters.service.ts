@@ -351,6 +351,113 @@ export class CampaignInstanceCharactersService {
     return this.characterResult(destination.campaignInstance.name, imported);
   }
 
+  async characterImportOptions(
+    instanceId: string,
+    ownerUserId: string,
+    limit: number,
+    offset: number,
+  ) {
+    const [instance, destinations] = await Promise.all([
+      this.prisma.campaignInstance.findFirst({
+        where: { id: instanceId, ownerUserId },
+        select: { name: true },
+      }),
+      this.prisma.campaignInstanceHumanMembership.findMany({
+        where: {
+          campaignInstanceId: instanceId,
+          role: "PLAYER",
+          status: "ACTIVE",
+          playerProfile: { standing: "ACTIVE" },
+        },
+        select: { id: true, userId: true, displayName: true },
+      }),
+    ]);
+    if (!instance) {
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
+    }
+    const destinationByUserId = new Map(
+      destinations.map((membership) => [membership.userId, membership]),
+    );
+    if (!destinationByUserId.size) {
+      return {
+        campaignInstanceId: instanceId,
+        campaignInstanceName: instance.name,
+        items: [],
+        total: 0,
+        limit,
+        offset,
+      };
+    }
+    const where = {
+      campaignInstanceId: { not: instanceId },
+      status: { not: "DRAFT" as const },
+      campaignInstance: { ownerUserId },
+      playerMembership: {
+        userId: { in: [...destinationByUserId.keys()] },
+        role: "PLAYER" as const,
+      },
+      draft: { status: "COMPLETE" as const },
+    };
+    const [sources, total] = await Promise.all([
+      this.prisma.campaignInstanceCharacterAssociation.findMany({
+        where,
+        orderBy: [
+          { playerMembership: { displayName: "asc" } },
+          { campaignInstance: { name: "asc" } },
+          { characterName: "asc" },
+          { characterId: "asc" },
+        ],
+        take: limit,
+        skip: offset,
+        select: {
+          characterId: true,
+          characterName: true,
+          status: true,
+          playerMembership: { select: { userId: true } },
+          campaignInstance: {
+            select: {
+              id: true,
+              name: true,
+              campaignDefinition: { select: { id: true, name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.campaignInstanceCharacterAssociation.count({ where }),
+    ]);
+    return {
+      campaignInstanceId: instanceId,
+      campaignInstanceName: instance.name,
+      items: sources.flatMap((source) => {
+        const destination = destinationByUserId.get(
+          source.playerMembership.userId,
+        );
+        return destination
+          ? [
+              {
+                playerMembershipId: destination.id,
+                playerName: destination.displayName,
+                sourceCampaignDefinitionId:
+                  source.campaignInstance.campaignDefinition.id,
+                sourceCampaignDefinitionName:
+                  source.campaignInstance.campaignDefinition.name,
+                sourceCampaignInstanceId: source.campaignInstance.id,
+                sourceCampaignInstanceName: source.campaignInstance.name,
+                sourceCharacterId: source.characterId,
+                sourceCharacterName: source.characterName,
+                sourceCharacterStatus: source.status.toLowerCase(),
+              },
+            ]
+          : [];
+      }),
+      total,
+      limit,
+      offset,
+    };
+  }
+
   async changeCharacterStatus(
     instanceId: string,
     characterId: string,

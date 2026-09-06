@@ -50,6 +50,8 @@ import type {
   ChangeCampaignInstanceCharacterStatusRequest,
   SelectCampaignInstanceCharacterRequest,
   ImportCampaignInstanceCharacterRequest,
+  CampaignInstanceCharacterCommandResult,
+  CampaignInstanceCharacterImportOptionsProjection,
   PlayerCampaignInstanceCharacterDraftListProjection,
   PlayerCampaignInstanceCharacterDraftProjection,
   PlayerCharacterCreationOptionsProjection,
@@ -1241,7 +1243,7 @@ export function importCampaignInstanceCharacter(
   campaignInstanceId: string,
   input: ImportCampaignInstanceCharacterRequest,
 ) {
-  return request(
+  return request<CampaignInstanceCharacterCommandResult>(
     instancePath(
       campaignDefinitionId,
       campaignInstanceId,
@@ -1252,6 +1254,25 @@ export function importCampaignInstanceCharacter(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
+  );
+}
+
+export function getCampaignInstanceCharacterImportOptions(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  limit = 200,
+  offset = 0,
+) {
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return request<CampaignInstanceCharacterImportOptionsProjection>(
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/character-imports/options?${query}`,
+    ),
   );
 }
 

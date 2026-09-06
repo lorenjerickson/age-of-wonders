@@ -1552,7 +1552,12 @@ A Player may edit only `in-progress`, then
 submit for review; submitted and complete drafts are locked. The GM may approve a conformant draft
 or request changes. Activation repeats validation against the current Instance snapshot before
 materializing `CampaignInstanceCharacterSheet`, which is creation output rather than a fabricated
-complete `CharacterState`. The unscoped `/character-drafts` HTTP API has been removed.
+complete `CharacterState`. A bounded `character-imports/options` projection beneath the destination
+Campaign Definition and Campaign Instance lists only human-labeled, previously activated source
+Characters from another Instance owned by the same GM whose durable Player identity matches an
+active destination Player membership. Import creates a new `in-progress` destination draft with a
+new Character identity and provenance; it never moves, links, synchronizes, or auto-approves the
+copy. The unscoped `/character-drafts` HTTP API has been removed.
 
 Invitation acceptance never claims a profile by heuristically matching recipient contact data. An
 invitation is bound to a known User only when the GM explicitly selects that Player profile;
