@@ -406,11 +406,13 @@ export class CampaignInstancesService {
             reason: row.currentSnapshot.reason.toLowerCase(),
             adoptedAt: row.currentSnapshot.adoptedAt.toISOString(),
             campaignDefinition: revisionSummary(
-              row.currentSnapshot.campaignDefinitionSnapshot.campaignDefinitionRevision,
+              row.currentSnapshot.campaignDefinitionSnapshot
+                .campaignDefinitionRevision,
               "campaign",
             ),
             worldDefinition: revisionSummary(
-              row.currentSnapshot.worldDefinitionSnapshot.worldDefinitionRevision,
+              row.currentSnapshot.worldDefinitionSnapshot
+                .worldDefinitionRevision,
               "world",
             ),
           }
@@ -559,13 +561,15 @@ export class CampaignInstancesService {
                 subjectName: instance.name,
                 subjectType: "Campaign Instance",
                 detail: {
-                  campaignDefinitionName: selected.campaignDefinitionRevision.name,
+                  campaignDefinitionName:
+                    selected.campaignDefinitionRevision.name,
                   campaignDefinitionRevision:
                     selected.campaignDefinitionRevision.revisionNumber,
                   worldDefinitionName:
                     selected.capturedWorldSnapshot.worldDefinitionRevision.name,
                   worldDefinitionRevision:
-                    selected.capturedWorldSnapshot.worldDefinitionRevision.revisionNumber,
+                    selected.capturedWorldSnapshot.worldDefinitionRevision
+                      .revisionNumber,
                 },
               },
             });
@@ -646,7 +650,8 @@ export class CampaignInstancesService {
         if (
           prior &&
           prior.name === name &&
-          prior.currentSnapshot?.campaignDefinitionSnapshotId === selectedSnapshotId
+          prior.currentSnapshot?.campaignDefinitionSnapshotId ===
+            selectedSnapshotId
         ) {
           return this.get(prior.id, createdByUserId);
         }
@@ -815,7 +820,8 @@ function initialRuntimeState(
   const creatureEmbodiments = worldRecords
     .filter((record) => {
       const creature = object(record.payload);
-      if (record.resourceType !== "definitions" || creature.kind !== "creature") return false;
+      if (record.resourceType !== "definitions" || creature.kind !== "creature")
+        return false;
       const resolved = resolveCreatureInstanceEmbodimentPolicy(
         creature.instanceEmbodimentPolicy,
       );
@@ -899,7 +905,9 @@ function initialRuntimeState(
             worldPlacementDefinitionId: record.sourceId,
           },
           sourceLocationId:
-            typeof placement.locationId === "string" ? placement.locationId : "",
+            typeof placement.locationId === "string"
+              ? placement.locationId
+              : "",
           status: "planned",
         };
       }),
@@ -919,7 +927,9 @@ function initialRuntimeState(
       ...(Array.isArray(preparationDefaults.locationCanvases)
         ? { locationCanvases: preparationDefaults.locationCanvases }
         : {}),
-      ...(preparationDefaults.extensions && typeof preparationDefaults.extensions === "object" && !Array.isArray(preparationDefaults.extensions)
+      ...(preparationDefaults.extensions &&
+      typeof preparationDefaults.extensions === "object" &&
+      !Array.isArray(preparationDefaults.extensions)
         ? { extensions: preparationDefaults.extensions }
         : {}),
     },
@@ -941,11 +951,14 @@ function array(value: unknown): unknown[] {
 }
 
 function humanName(value: Record<string, unknown>, fallback: string) {
-  return typeof value.name === "string" && value.name.trim() ? value.name.trim() : fallback;
+  return typeof value.name === "string" && value.name.trim()
+    ? value.name.trim()
+    : fallback;
 }
 
 function selectedDefinition(selected: SelectedCampaignDefinitionSnapshotRow) {
   return {
+    definitionId: selected.campaignDefinitionId,
     revisionNumber: selected.campaignDefinitionRevision.revisionNumber,
     name: selected.campaignDefinitionRevision.name,
     authoringHref: `/campaigns/definitions/${selected.campaignDefinitionId}`,
@@ -956,6 +969,7 @@ function selectedWorld(
   selected: SelectedCampaignDefinitionSnapshotRow["capturedWorldSnapshot"],
 ) {
   return {
+    definitionId: selected.worldDefinitionId,
     revisionNumber: selected.worldDefinitionRevision.revisionNumber,
     name: selected.worldDefinitionRevision.name,
     authoringHref: `/worlds/${selected.worldDefinitionId}`,
@@ -967,11 +981,14 @@ function revisionSummary(
   kind: "campaign" | "world",
 ) {
   return {
+    definitionId:
+      kind === "campaign" ? row.campaignDefinitionId : row.worldDefinitionId,
     name: row.name,
     revisionNumber: row.revisionNumber,
-    authoringHref: kind === "campaign"
-      ? `/campaigns/definitions/${row.campaignDefinitionId}`
-      : `/worlds/${row.worldDefinitionId}`,
+    authoringHref:
+      kind === "campaign"
+        ? `/campaigns/definitions/${row.campaignDefinitionId}`
+        : `/worlds/${row.worldDefinitionId}`,
   };
 }
 

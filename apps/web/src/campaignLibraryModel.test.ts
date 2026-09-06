@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { CampaignInstanceId, CampaignInstanceSnapshotId } from "@aow/common";
+import type {
+  CampaignInstanceId,
+  CampaignInstanceSnapshotId,
+} from "@aow/common";
 import {
   campaignDefinitionCard,
   campaignInstanceCard,
@@ -52,11 +55,13 @@ describe("Campaign library presentation", () => {
         reason: "initial",
         adoptedAt: "2026-09-04T12:00:00.000Z",
         campaignDefinition: {
+          definitionId: "definition-opaque-id" as never,
           name: "Ashes of Greyhaven",
           revisionNumber: 3,
           authoringHref: "/campaigns/definitions/definition-opaque-id",
         },
         worldDefinition: {
+          definitionId: "world-opaque-id" as never,
           name: "Greyhaven",
           revisionNumber: 7,
           authoringHref: "/worlds/world-opaque-id",

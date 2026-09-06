@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Button, Checkbox } from "@aow/ui";
 import { InternalLink } from "./navigation";
-import { getCampaignSession, getCampaignSessionReadiness } from "./api";
+import {
+  getCampaignInstance,
+  getCampaignSession,
+  getCampaignSessionReadiness,
+} from "./api";
 import {
   parseQuickStartProgress,
   quickStartActivityIsComplete,
@@ -158,40 +162,53 @@ export function QuickStartGuide({
       setCompletedSteps(new Set([0]));
       return;
     }
-    void Promise.all([
-      getCampaignSession(instanceId, sessionId),
-      getCampaignSessionReadiness(instanceId, sessionId),
-    ]).then(
-      ([session, readiness]) => {
-        if (cancelled) return;
-        const invitees = session.participants.filter(
-          ({ role }) => role === "player" || role === "spectator",
-        );
-        const next = new Set<number>([0, 1]);
-        if (session.participants.some(({ role }) => role === "player")) {
-          next.add(2);
+    void getCampaignInstance(instanceId)
+      .then((instance) => {
+        const campaignDefinitionId =
+          instance.currentSnapshot?.campaignDefinition.definitionId;
+        if (!campaignDefinitionId) {
+          throw new Error("Campaign Definition context is unavailable.");
         }
-        if (
-          session.status !== "planned" &&
-          invitees.length > 0 &&
-          invitees.every(({ response }) => response !== "not-requested")
-        ) {
-          next.add(3);
-        }
-        if (
-          readiness.ready ||
-          ["active", "paused", "concluded"].includes(session.status)
-        ) {
-          next.add(4);
-        }
-        setCompletedSteps(next);
-        setComplete(
-          activityKey,
-          quickStartActivityIsComplete(next, activity.steps.length),
-        );
-      },
-      () => undefined,
-    );
+        return Promise.all([
+          getCampaignSession(campaignDefinitionId, instanceId, sessionId),
+          getCampaignSessionReadiness(
+            campaignDefinitionId,
+            instanceId,
+            sessionId,
+          ),
+        ]);
+      })
+      .then(
+        ([session, readiness]) => {
+          if (cancelled) return;
+          const invitees = session.participants.filter(
+            ({ role }) => role === "player" || role === "spectator",
+          );
+          const next = new Set<number>([0, 1]);
+          if (session.participants.some(({ role }) => role === "player")) {
+            next.add(2);
+          }
+          if (
+            session.status !== "planned" &&
+            invitees.length > 0 &&
+            invitees.every(({ response }) => response !== "not-requested")
+          ) {
+            next.add(3);
+          }
+          if (
+            readiness.ready ||
+            ["active", "paused", "concluded"].includes(session.status)
+          ) {
+            next.add(4);
+          }
+          setCompletedSteps(next);
+          setComplete(
+            activityKey,
+            quickStartActivityIsComplete(next, activity.steps.length),
+          );
+        },
+        () => undefined,
+      );
     return () => {
       cancelled = true;
     };

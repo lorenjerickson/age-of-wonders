@@ -688,6 +688,11 @@ The audit stores the complete object-shaped resolution plan and its hash and is 
 restore creates a new snapshot/checkpoint pair from current runtime; it never rewinds a pointer or
 deletes later Session history.
 
+Human-readable captured-revision projections also carry the stable World or Campaign Definition
+lineage ID for contextual routes and commands. That identifier is transport context only: clients
+must use the accompanying name and revision as visible labels and must never render the opaque ID
+to a GM.
+
 ## Persisted API resources
 
 The generic domain API persists the legacy compatibility resources below. The identifier used by

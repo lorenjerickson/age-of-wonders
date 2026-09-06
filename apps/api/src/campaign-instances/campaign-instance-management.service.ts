@@ -1550,6 +1550,10 @@ function revisionReference(
   kind: "campaign" | "world",
 ) {
   return {
+    definitionId:
+      kind === "campaign"
+        ? revision.campaignDefinitionId
+        : revision.worldDefinitionId,
     name: revision.name,
     revisionNumber: revision.revisionNumber,
     authoringHref:

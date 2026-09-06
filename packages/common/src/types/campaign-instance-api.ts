@@ -6,6 +6,7 @@ import type {
   CampaignInstancePlacementRealizationId,
   CampaignInstanceSnapshotId,
   CampaignDefinitionSnapshotId,
+  CampaignDefinitionId,
   CampaignPlacementDefinitionId,
   AgentId,
   CharacterId,
@@ -17,6 +18,7 @@ import type {
   SessionId,
   SessionParticipationId,
   WorldPlacementDefinitionId,
+  WorldDefinitionId,
 } from "./primitives";
 import type {
   CampaignSessionStatus,
@@ -43,6 +45,8 @@ export interface CreateCampaignInstanceRequest {
 }
 
 export interface HumanRevisionReference {
+  /** Stable lineage identity for contextual routes and commands; never use as a visible label. */
+  readonly definitionId: CampaignDefinitionId | WorldDefinitionId;
   readonly name: string;
   readonly revisionNumber: number;
   /** Canonical owning-authoring route; the visible link label uses name/revision. */

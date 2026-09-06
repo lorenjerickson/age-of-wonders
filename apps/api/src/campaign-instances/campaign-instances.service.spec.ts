@@ -66,11 +66,13 @@ describe("CampaignInstancesService", () => {
             reason: "migration",
             adoptedAt: "2026-09-03T12:00:00.000Z",
             campaignDefinition: {
+              definitionId: "campaign-definition-1",
               name: "Ashes at Dawn, Third Edition",
               revisionNumber: 3,
               authoringHref: "/campaigns/definitions/campaign-definition-1",
             },
             worldDefinition: {
+              definitionId: "world-definition-1",
               name: "Glasswake, Fifth Edition",
               revisionNumber: 5,
               authoringHref: "/worlds/world-definition-1",
@@ -170,11 +172,13 @@ describe("CampaignInstancesService", () => {
         reason: "migration",
         adoptedAt: "2026-09-03T12:00:00.000Z",
         campaignDefinition: {
+          definitionId: "campaign-definition-1",
           revisionNumber: 3,
           name: "Ashes at Dawn, Third Edition",
           authoringHref: "/campaigns/definitions/campaign-definition-1",
         },
         worldDefinition: {
+          definitionId: "world-definition-1",
           revisionNumber: 5,
           name: "Glasswake, Fifth Edition",
           authoringHref: "/worlds/world-definition-1",

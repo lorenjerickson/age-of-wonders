@@ -18,6 +18,35 @@ describe("Campaign Session contracts", () => {
     expect(canTransitionCampaignSessionStatus(from, to)).toBe(expected);
   });
 
+  it("rejects a Campaign Instance addressed beneath the wrong Definition", async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const service = new CampaignSessionService(
+      { campaignInstance: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.assertCampaignDefinitionParent(
+        "different-definition",
+        "instance-1",
+        "gm-1",
+      ),
+    ).rejects.toThrow("The selected Campaign Instance was not found.");
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "instance-1",
+        campaignDefinitionId: "different-definition",
+        ownerUserId: "gm-1",
+      },
+      select: { id: true },
+    });
+  });
+
   it("keeps required Player readiness separate from optional Spectator presence", async () => {
     const prisma = {
       campaignInstance: {

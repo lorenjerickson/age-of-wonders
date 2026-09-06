@@ -9,45 +9,23 @@ import {
   Req,
   Res,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
-import {
-  IsIn,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from "class-validator";
 import type { Request, Response } from "express";
 import { setSessionCookie } from "../auth/auth.controller";
 import { SessionGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { CampaignInstanceInvitationsService } from "./campaign-instance-invitations.service";
 import { CampaignSessionService } from "./campaign-session.service";
-
-class InstanceInvitationTokenDto {
-  @IsString()
-  @MinLength(16)
-  token!: string;
-}
-
-class SessionInvitationResponseDto extends InstanceInvitationTokenDto {
-  @IsIn(["accepted", "declined"])
-  response!: "accepted" | "declined";
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1_000)
-  message?: string;
-}
-
-class PresenceConnectionDto {
-  @IsString()
-  @MinLength(16)
-  @MaxLength(200)
-  connectionKey!: string;
-}
+import {
+  InstanceInvitationTokenDto,
+  PresenceConnectionDto,
+  SessionInvitationResponseDto,
+} from "./dto/campaign-participation.dto";
+import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
 
 @Controller("campaign-instance-invitations")
+@UseInterceptors(LegacyApiDeprecationInterceptor)
 export class CampaignInstanceParticipationController {
   constructor(
     private readonly invitations: CampaignInstanceInvitationsService,

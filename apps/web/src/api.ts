@@ -1174,18 +1174,29 @@ export function updateCampaignInstanceAgent(
   );
 }
 
-export function getCampaignInstanceSessions(campaignInstanceId: string) {
+const campaignSessionsPath = (
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  suffix = "",
+) =>
+  `/campaigns/${encodeURIComponent(campaignDefinitionId)}/instances/${encodeURIComponent(campaignInstanceId)}/sessions${suffix}`;
+
+export function getCampaignInstanceSessions(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceSessions>(
-    instancePath(campaignInstanceId, "/sessions"),
+    campaignSessionsPath(campaignDefinitionId, campaignInstanceId),
   );
 }
 
 export function createCampaignSession(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: CreateCampaignSessionRequest,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(campaignInstanceId, "/sessions"),
+    campaignSessionsPath(campaignDefinitionId, campaignInstanceId),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1195,26 +1206,30 @@ export function createCampaignSession(
 }
 
 export function getCampaignSession(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}`,
+      `/${encodeURIComponent(sessionId)}`,
     ),
   );
 }
 
 export function updateCampaignSession(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   input: UpdateCampaignSessionRequest,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}`,
+      `/${encodeURIComponent(sessionId)}`,
     ),
     {
       method: "PATCH",
@@ -1225,14 +1240,16 @@ export function updateCampaignSession(
 }
 
 export function updateCampaignSessionParticipants(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   input: UpdateCampaignSessionParticipantsRequest,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/participants`,
+      `/${encodeURIComponent(sessionId)}/participants`,
     ),
     {
       method: "PUT",
@@ -1243,15 +1260,17 @@ export function updateCampaignSessionParticipants(
 }
 
 export function ejectCampaignSessionParticipant(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   participationId: string,
   expectedMetadataRevision: number,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/participants/${encodeURIComponent(participationId)}/eject`,
+      `/${encodeURIComponent(sessionId)}/participants/${encodeURIComponent(participationId)}/actions/eject`,
     ),
     {
       method: "POST",
@@ -1262,18 +1281,21 @@ export function ejectCampaignSessionParticipant(
 }
 
 export function getCampaignSessionReadiness(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
 ) {
   return request<CampaignSessionReadiness>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/readiness`,
+      `/${encodeURIComponent(sessionId)}/readiness`,
     ),
   );
 }
 
 export function issueCampaignSessionInvitations(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
 ) {
@@ -1286,15 +1308,17 @@ export function issueCampaignSessionInvitations(
       expiresAt: string;
     }[];
   }>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/invitations`,
+      `/${encodeURIComponent(sessionId)}/invitations`,
     ),
     { method: "POST" },
   );
 }
 
 export function commandCampaignSession(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   command:
@@ -1308,9 +1332,10 @@ export function commandCampaignSession(
   input: CampaignSessionLifecycleRequest,
 ) {
   return request<CampaignSessionDetail>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/${command}`,
+      `/${encodeURIComponent(sessionId)}/actions/${command}`,
     ),
     {
       method: "POST",
@@ -1331,7 +1356,7 @@ export function joinCampaignSession(
     present: boolean;
     expiresAt: string;
   }>(
-    `/api/campaign-instance-invitations/instances/${encodeURIComponent(campaignInstanceId)}/sessions/${encodeURIComponent(sessionId)}/join`,
+    `/me/campaign-instances/${encodeURIComponent(campaignInstanceId)}/sessions/${encodeURIComponent(sessionId)}/presence/join`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1350,7 +1375,7 @@ export interface PublicCampaignInstanceInvitation {
 
 export function resolveCampaignInstanceInvitation(token: string) {
   return request<PublicCampaignInstanceInvitation>(
-    "/api/campaign-instance-invitations/resolve",
+    "/invitations/instance/resolve",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1363,7 +1388,7 @@ export function acceptCampaignInstanceInvitation(token: string) {
   return request<{
     user: { displayName: string; role: "player" | "spectator" };
     campaignInstanceName: string;
-  }>("/api/campaign-instance-invitations/accept", {
+  }>("/invitations/instance/accept", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
@@ -1382,7 +1407,7 @@ export interface PublicCampaignSessionInvitation {
 
 export function resolveCampaignSessionInvitation(token: string) {
   return request<PublicCampaignSessionInvitation>(
-    "/api/campaign-instance-invitations/sessions/resolve",
+    "/invitations/session/resolve",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1402,7 +1427,7 @@ export function respondToCampaignSessionInvitation(
     participantName: string;
     response: "accepted" | "declined";
     lobbyHref: string;
-  }>("/api/campaign-instance-invitations/sessions/respond", {
+  }>("/invitations/session/respond", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, response, message }),
@@ -1453,7 +1478,7 @@ export interface CampaignSessionEvents {
 }
 
 function participantSessionPath(campaignInstanceId: string, sessionId: string) {
-  return `/api/campaign-instance-invitations/instances/${encodeURIComponent(campaignInstanceId)}/sessions/${encodeURIComponent(sessionId)}`;
+  return `/me/campaign-instances/${encodeURIComponent(campaignInstanceId)}/sessions/${encodeURIComponent(sessionId)}`;
 }
 
 export function getParticipantCampaignSession(
@@ -1484,11 +1509,14 @@ export function heartbeatCampaignSession(
     sessionName: string;
     participantName: string;
     present: true;
-  }>(`${participantSessionPath(campaignInstanceId, sessionId)}/heartbeat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connectionKey }),
-  });
+  }>(
+    `${participantSessionPath(campaignInstanceId, sessionId)}/presence/heartbeat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ connectionKey }),
+    },
+  );
 }
 
 export function leaveCampaignSession(
@@ -1500,22 +1528,27 @@ export function leaveCampaignSession(
     sessionName: string;
     participantName: string;
     present: false;
-  }>(`${participantSessionPath(campaignInstanceId, sessionId)}/leave`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connectionKey }),
-  });
+  }>(
+    `${participantSessionPath(campaignInstanceId, sessionId)}/presence/leave`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ connectionKey }),
+    },
+  );
 }
 
 export function updateCampaignSessionSummary(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   input: UpdateCampaignSessionSummaryRequest,
 ) {
   return request<CampaignSessionSummary>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/summary`,
+      `/${encodeURIComponent(sessionId)}/summary`,
     ),
     {
       method: "PUT",
@@ -1526,26 +1559,30 @@ export function updateCampaignSessionSummary(
 }
 
 export function getCampaignSessionSummary(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
 ) {
   return request<CampaignSessionSummary>(
-    instancePath(
+    campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/summary`,
+      `/${encodeURIComponent(sessionId)}/summary`,
     ),
   );
 }
 
 export function getCampaignSessionEvents(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   sessionId: string,
   afterSequence = 0,
 ) {
   return request<CampaignSessionEvents>(
-    `${instancePath(
+    `${campaignSessionsPath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/sessions/${encodeURIComponent(sessionId)}/events`,
+      `/${encodeURIComponent(sessionId)}/events`,
     )}?afterSequence=${afterSequence}`,
   );
 }
@@ -1566,7 +1603,7 @@ export function getGmResumableSession() {
       status: "active" | "paused";
       label: "Continue" | "Resume";
     } | null;
-  }>("/api/campaign-instances/resumable-session");
+  }>("/me/resumable-session");
 }
 
 export function getCampaignInstanceVersions(campaignInstanceId: string) {

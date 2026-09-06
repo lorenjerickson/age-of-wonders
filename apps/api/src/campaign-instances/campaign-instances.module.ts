@@ -11,12 +11,23 @@ import {
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import { CampaignSessionService } from "./campaign-session.service";
 import { CampaignInstanceParticipationController } from "./campaign-instance-participation.controller";
+import { CampaignSessionsController } from "./campaign-sessions.controller";
+import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
+import {
+  CampaignInvitationEntryController,
+  CampaignSessionMeController,
+  CampaignSessionMeOverviewController,
+} from "./campaign-participation.controller";
 
 @Module({
   imports: [NotificationsModule],
   controllers: [
     CampaignInstancesController,
     CampaignInstanceParticipationController,
+    CampaignSessionsController,
+    CampaignInvitationEntryController,
+    CampaignSessionMeOverviewController,
+    CampaignSessionMeController,
   ],
   providers: [
     CampaignInstancesService,
@@ -26,6 +37,7 @@ import { CampaignInstanceParticipationController } from "./campaign-instance-par
     CampaignSessionService,
     InvitationTokenService,
     ContactProtector,
+    LegacyApiDeprecationInterceptor,
   ],
   exports: [CampaignInstancesService],
 })

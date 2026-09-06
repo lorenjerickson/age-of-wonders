@@ -1537,6 +1537,8 @@ export function CampaignInstanceAgentsPage() {
 
 export function CampaignInstanceSessionsPage() {
   const { instance, continuation } = useCampaignInstance();
+  const campaignDefinitionId =
+    instance.currentSnapshot?.campaignDefinition.definitionId;
   const [data, setData] = useState<CampaignInstanceSessions>();
   const [roster, setRoster] = useState<CampaignInstanceRoster>();
   const [loading, setLoading] = useState(true);
@@ -1549,7 +1551,11 @@ export function CampaignInstanceSessionsPage() {
   const suffix = quickStartSuffix(useLocation().searchStr);
   useEffect(() => {
     void Promise.all([
-      getCampaignInstanceSessions(instance.id),
+      campaignDefinitionId
+        ? getCampaignInstanceSessions(campaignDefinitionId, instance.id)
+        : Promise.reject(
+            new Error("Campaign Definition context is unavailable."),
+          ),
       getCampaignInstanceRoster(instance.id),
     ])
       .then(
@@ -1561,7 +1567,7 @@ export function CampaignInstanceSessionsPage() {
           setError("Sessions could not be loaded for this Campaign Instance."),
       )
       .finally(() => setLoading(false));
-  }, [instance.id]);
+  }, [campaignDefinitionId, instance.id]);
   async function plan(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -1581,15 +1587,22 @@ export function CampaignInstanceSessionsPage() {
               entry.role === "spectator" && selected.has(entry.membershipId),
           )
           .map((entry) => entry.membershipId) ?? [];
-      const session = await createCampaignSession(instance.id, {
-        idempotencyKey: crypto.randomUUID(),
-        name,
-        scheduledFor: scheduledFor
-          ? new Date(scheduledFor).toISOString()
-          : undefined,
-        playerMembershipIds: players,
-        spectatorMembershipIds: spectators,
-      });
+      if (!campaignDefinitionId) {
+        throw new Error("Campaign Definition context is unavailable.");
+      }
+      const session = await createCampaignSession(
+        campaignDefinitionId,
+        instance.id,
+        {
+          idempotencyKey: crypto.randomUUID(),
+          name,
+          scheduledFor: scheduledFor
+            ? new Date(scheduledFor).toISOString()
+            : undefined,
+          playerMembershipIds: players,
+          spectatorMembershipIds: spectators,
+        },
+      );
       await navigate(
         `/campaigns/instances/${encodeURIComponent(instance.id)}/sessions/${encodeURIComponent(session.id)}${suffix}`,
       );
@@ -1771,6 +1784,8 @@ export function CampaignSessionPage({
   operational?: boolean;
 }) {
   const { instance, refresh: refreshInstance } = useCampaignInstance();
+  const campaignDefinitionId =
+    instance.currentSnapshot?.campaignDefinition.definitionId;
   const [session, setSession] = useState<CampaignSessionDetail>();
   const [readiness, setReadiness] = useState<CampaignSessionReadiness>();
   const [events, setEvents] = useState<CampaignSessionEvents>();
@@ -1783,16 +1798,23 @@ export function CampaignSessionPage({
   const suffix = quickStartSuffix(useLocation().searchStr);
 
   async function load() {
+    if (!campaignDefinitionId) {
+      throw new Error("Campaign Definition context is unavailable.");
+    }
     const [nextSession, nextReadiness, nextEvents] = await Promise.all([
-      getCampaignSession(instance.id, sessionId),
-      getCampaignSessionReadiness(instance.id, sessionId),
-      getCampaignSessionEvents(instance.id, sessionId),
+      getCampaignSession(campaignDefinitionId, instance.id, sessionId),
+      getCampaignSessionReadiness(campaignDefinitionId, instance.id, sessionId),
+      getCampaignSessionEvents(campaignDefinitionId, instance.id, sessionId),
     ]);
     setSession(nextSession);
     setReadiness(nextReadiness);
     setEvents(nextEvents);
     if (nextSession.status === "concluded") {
-      const summary = await getCampaignSessionSummary(instance.id, sessionId);
+      const summary = await getCampaignSessionSummary(
+        campaignDefinitionId,
+        instance.id,
+        sessionId,
+      );
       setSummaryNarrative(summary.narrative);
       setPrivateGmNotes(summary.privateGmNotes ?? "");
     }
@@ -1801,7 +1823,7 @@ export function CampaignSessionPage({
     void load()
       .catch(() => setError("The Session could not be loaded."))
       .finally(() => setLoading(false));
-  }, [instance.id, sessionId]);
+  }, [campaignDefinitionId, instance.id, sessionId]);
 
   async function act(
     command:
@@ -1822,12 +1844,21 @@ export function CampaignSessionPage({
     setBusy(command);
     setError("");
     try {
-      await commandCampaignSession(instance.id, session.id, command, {
-        expectedMetadataRevision: session.metadataRevision,
-        expectedRuntimeRevision: readiness.runtimeRevision,
-        readinessToken: readiness.token,
-        reason,
-      });
+      if (!campaignDefinitionId) {
+        throw new Error("Campaign Definition context is unavailable.");
+      }
+      await commandCampaignSession(
+        campaignDefinitionId,
+        instance.id,
+        session.id,
+        command,
+        {
+          expectedMetadataRevision: session.metadataRevision,
+          expectedRuntimeRevision: readiness.runtimeRevision,
+          readinessToken: readiness.token,
+          reason,
+        },
+      );
       await Promise.all([load(), refreshInstance()]);
       setNotice(
         `${session.name} ${command === "start" ? "started" : command === "resume" ? "resumed" : command.replace("-", " ")}.`,
@@ -1874,6 +1905,7 @@ export function CampaignSessionPage({
     setError("");
     try {
       const result = await issueCampaignSessionInvitations(
+        campaignDefinitionId!,
         instance.id,
         session.id,
       );
@@ -1902,6 +1934,7 @@ export function CampaignSessionPage({
     setError("");
     try {
       await ejectCampaignSessionParticipant(
+        campaignDefinitionId!,
         instance.id,
         session.id,
         participant.participationId,
@@ -1927,6 +1960,7 @@ export function CampaignSessionPage({
     setError("");
     try {
       const result = await updateCampaignSessionSummary(
+        campaignDefinitionId!,
         instance.id,
         session.id,
         {

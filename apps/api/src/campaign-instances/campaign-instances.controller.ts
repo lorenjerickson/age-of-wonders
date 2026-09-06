@@ -12,6 +12,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
@@ -45,6 +46,7 @@ import {
   UpdateCampaignSessionParticipantsDto,
   UpdateCampaignSessionSummaryDto,
 } from "./dto/campaign-session.dto";
+import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
 
 @ApiTags("campaign instances")
 @Controller("campaign-instances")
@@ -88,6 +90,7 @@ export class CampaignInstancesController {
   }
 
   @Get("resumable-session")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   resumableSession(@Req() request: Request & AuthenticatedRequest) {
     return this.campaignSessions.resumableForGm(request.user!.id);
   }
@@ -263,6 +266,7 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessions(
     @Param("id") id: string,
     @Req() request: Request & AuthenticatedRequest,
@@ -271,6 +275,7 @@ export class CampaignInstancesController {
   }
 
   @Post(":id/sessions")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   planSession(
     @Param("id") id: string,
     @Req() request: Request & AuthenticatedRequest,
@@ -280,6 +285,7 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions/:sessionId")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessionDetail(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -289,6 +295,7 @@ export class CampaignInstancesController {
   }
 
   @Patch(":id/sessions/:sessionId")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   updateSession(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -299,6 +306,7 @@ export class CampaignInstancesController {
   }
 
   @Put(":id/sessions/:sessionId/participants")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   updateSessionParticipants(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -314,6 +322,7 @@ export class CampaignInstancesController {
   }
 
   @Post(":id/sessions/:sessionId/participants/:participationId/eject")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   ejectSessionParticipant(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -331,6 +340,7 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions/:sessionId/readiness")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessionReadiness(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -340,6 +350,7 @@ export class CampaignInstancesController {
   }
 
   @Post(":id/sessions/:sessionId/invitations")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   issueSessionInvitations(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -353,6 +364,7 @@ export class CampaignInstancesController {
   }
 
   @Post(":id/sessions/:sessionId/invitations/:invitationId/retry")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   retrySessionInvitation(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -368,6 +380,7 @@ export class CampaignInstancesController {
   }
 
   @Delete(":id/sessions/:sessionId/invitations/:invitationId")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   revokeSessionInvitation(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -383,6 +396,7 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions/:sessionId/events")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessionEvents(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -401,6 +415,7 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions/:sessionId/summary")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessionSummary(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -410,6 +425,7 @@ export class CampaignInstancesController {
   }
 
   @Post(":id/sessions/:sessionId/:command")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   sessionCommand(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,
@@ -427,6 +443,7 @@ export class CampaignInstancesController {
   }
 
   @Put(":id/sessions/:sessionId/summary")
+  @UseInterceptors(LegacyApiDeprecationInterceptor)
   updateSessionSummary(
     @Param("id") id: string,
     @Param("sessionId") sessionId: string,

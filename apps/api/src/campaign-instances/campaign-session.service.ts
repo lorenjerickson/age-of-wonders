@@ -54,6 +54,26 @@ export class CampaignSessionService {
     @Inject(SMS_NOTIFICATION_PORT) private readonly sms: NotificationPort,
   ) {}
 
+  async assertCampaignDefinitionParent(
+    campaignDefinitionId: string,
+    instanceId: string,
+    userId: string,
+  ) {
+    const instance = await this.prisma.campaignInstance.findFirst({
+      where: {
+        id: instanceId,
+        campaignDefinitionId,
+        ownerUserId: userId,
+      },
+      select: { id: true },
+    });
+    if (!instance) {
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
+    }
+  }
+
   async resumableForGm(userId: string) {
     const session = await this.prisma.campaignInstanceSession.findFirst({
       where: {
