@@ -26,15 +26,16 @@ export const QUICK_START_ACTIVITIES = [
     ],
   },
   {
-    key: "review-campaign-instance",
-    title: "Review a Campaign Instance",
+    key: "create-campaign-instance",
+    title: "Create your first Campaign Instance",
     description:
-      "Open a played realization without entering Definition authoring.",
-    href: "/campaigns?quickStart=review-campaign-instance",
+      "Create a played realization from an exact published Campaign Definition revision.",
+    href: "/campaigns/instances/new?quickStart=create-campaign-instance",
     steps: [
-      "Find the Instances section.",
-      "Manage an active Campaign Instance.",
-      "Review its captured compatible pair and runtime status.",
+      "Choose a named published Campaign Definition revision.",
+      "Confirm the required World revision.",
+      "Create and name the Campaign Instance.",
+      "Review its captured compatible pair and preparation readiness.",
     ],
   },
   {

@@ -41,6 +41,7 @@ import {
   hierarchyRows,
   attributeNumberConfig,
   definitionConformance,
+  creatureEmbodimentPolicyForSave,
   draftAdoptingRegistryRelease,
   locationParentOptions,
   modelExtensionKey,
@@ -61,6 +62,87 @@ const objectValue = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+type EmbodimentStrategy =
+  | ""
+  | "one-per-instance"
+  | "one-per-realization"
+  | "preserve-extension";
+
+export function CreatureEmbodimentPolicyFields({
+  strategy,
+  maximum,
+  legacy,
+  onStrategyChange,
+  onMaximumChange,
+}: {
+  strategy: EmbodimentStrategy;
+  maximum: string;
+  legacy: boolean;
+  onStrategyChange(value: EmbodimentStrategy): void;
+  onMaximumChange(value: string): void;
+}) {
+  return (
+    <Fieldset className="rounded-box border border-base-300 p-4">
+      <Legend className="px-2 font-semibold">
+        Campaign Instance embodiment
+      </Legend>
+      <p
+        id="embodiment-policy-help"
+        className="mb-3 text-sm text-base-content/60"
+      >
+        Choose whether placements share one named embodiment or create an
+        independent embodiment for every realized placement.
+      </p>
+      <Field label="Embodiment policy" required>
+        <Select
+          required
+          value={strategy}
+          aria-describedby="embodiment-policy-help"
+          onChange={(event) =>
+            onStrategyChange(event.currentTarget.value as EmbodimentStrategy)
+          }
+          className="mt-2 w-full"
+        >
+          <option value="" disabled>
+            Choose an embodiment policy
+          </option>
+          <option value="one-per-instance">
+            One per Campaign Instance (recommended)
+          </option>
+          <option value="one-per-realization">One per realized placement</option>
+          {strategy === "preserve-extension" && (
+            <option value="preserve-extension">
+              Preserve installed extension strategy
+            </option>
+          )}
+        </Select>
+      </Field>
+      {strategy === "one-per-realization" && (
+        <Field
+          label="Maximum per Campaign Instance (optional)"
+          className="mt-4"
+        >
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={maximum}
+            onChange={(event) => onMaximumChange(event.currentTarget.value)}
+            className="mt-2 w-full"
+          />
+        </Field>
+      )}
+      {legacy && (
+        <Alert tone="warning" className="mt-4">
+          Existing captured content defaults to one per Campaign Instance, but
+          this working draft needs an explicit choice before its next
+          publication.
+        </Alert>
+      )}
+    </Fieldset>
+  );
+}
 
 export function WorldOverviewPage() {
   const { definition, draft, canEdit } = useWorldAuthoring();
@@ -597,6 +679,25 @@ export function DraftRecordEditor({
         )
       : [],
   );
+  const initialEmbodimentPolicy = objectValue(
+    initial.instanceEmbodimentPolicy,
+  );
+  const initialEmbodimentStrategy = String(
+    initialEmbodimentPolicy.strategy ?? "",
+  );
+  const [embodimentStrategy, setEmbodimentStrategy] = useState<EmbodimentStrategy>(
+    initialEmbodimentStrategy === "one-per-instance" ||
+      initialEmbodimentStrategy === "one-per-realization"
+      ? initialEmbodimentStrategy
+      : initialEmbodimentStrategy.includes(":")
+        ? "preserve-extension"
+        : "",
+  );
+  const [embodimentMaximum, setEmbodimentMaximum] = useState(
+    initialEmbodimentPolicy.maximumPerCampaignInstance === undefined
+      ? ""
+      : String(initialEmbodimentPolicy.maximumPerCampaignInstance),
+  );
   const [saved, setSaved] = useState(false);
   const conformance =
     draft && kind !== "locations"
@@ -609,6 +710,8 @@ export function DraftRecordEditor({
     parentId,
     attributes,
     slots,
+    embodimentStrategy,
+    embodimentMaximum,
   });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
@@ -669,7 +772,17 @@ export function DraftRecordEditor({
                 : { kind: "within-parent", parentLocationId: parentId },
             }
           : {}),
-        ...(kind === "creatures" ? { attributes, equipmentSlots: slots } : {}),
+        ...(kind === "creatures"
+          ? {
+              attributes,
+              equipmentSlots: slots,
+              instanceEmbodimentPolicy: creatureEmbodimentPolicyForSave(
+                initial.instanceEmbodimentPolicy,
+                embodimentStrategy,
+                embodimentMaximum,
+              ),
+            }
+          : {}),
         ...(kind === "items"
           ? { itemFamilyKey: subtype, compatibleEquipmentSlots: slots }
           : {}),
@@ -803,6 +916,15 @@ export function DraftRecordEditor({
               inventing a free-text taxonomy.
             </Alert>
           )}
+          {kind === "creatures" && (
+            <CreatureEmbodimentPolicyFields
+              strategy={embodimentStrategy}
+              maximum={embodimentMaximum}
+              legacy={!initial.instanceEmbodimentPolicy && Boolean(existing)}
+              onStrategyChange={setEmbodimentStrategy}
+              onMaximumChange={setEmbodimentMaximum}
+            />
+          )}
           {kind !== "locations" && !conformance && (
             <Alert tone="warning">
               The effective {kind === "creatures" ? "Creature" : "Item"}
@@ -918,7 +1040,8 @@ export function DraftRecordEditor({
                 draft.status === "stale" ||
                 (needsParent && !parentId) ||
                 (kind !== "locations" && !conformance) ||
-                (kind === "items" && !subtype)
+                (kind === "items" && !subtype) ||
+                (kind === "creatures" && !embodimentStrategy)
               }
             >
               Save to working draft

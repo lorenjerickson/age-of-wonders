@@ -6,6 +6,7 @@ import {
   draftContextLabel,
   contentAdoptingRegistryRelease,
   definitionConformance,
+  creatureEmbodimentPolicyForSave,
   draftAdoptingRegistryRelease,
   draftWithIndexedRecord,
   draftWithoutWorldPlacement,
@@ -39,6 +40,41 @@ const record = (
 ): WorldDraftRecord => ({ resourceType, sourceId, payload });
 
 describe("World authoring projection", () => {
+  it("requires an explicit new Creature embodiment policy", () => {
+    expect(creatureEmbodimentPolicyForSave(undefined, "", "")).toBeUndefined();
+    expect(
+      creatureEmbodimentPolicyForSave(undefined, "one-per-instance", ""),
+    ).toEqual({
+      strategy: "one-per-instance",
+      maximumPerCampaignInstance: 1,
+    });
+  });
+
+  it("preserves extensions and supports a repeatable Creature maximum", () => {
+    const existing = {
+      strategy: "story:swarm",
+      extensions: { "story:label": "Swarm" },
+    };
+    expect(
+      creatureEmbodimentPolicyForSave(
+        existing,
+        "preserve-extension",
+        "",
+      ),
+    ).toEqual(existing);
+    expect(
+      creatureEmbodimentPolicyForSave(
+        existing,
+        "one-per-realization",
+        "4",
+      ),
+    ).toEqual({
+      strategy: "one-per-realization",
+      maximumPerCampaignInstance: 4,
+      extensions: { "story:label": "Swarm" },
+    });
+  });
+
   it("preserves only validated Campaign return context", () => {
     const suffix = campaignReturnSuffix(
       "/campaigns/definitions/bells/plots",

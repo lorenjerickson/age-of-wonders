@@ -18,6 +18,8 @@ import {
 } from "@aow/ui";
 import {
   checkHealth,
+  getCampaignInstanceContinuation,
+  type CampaignInstanceContinuation,
   type CampaignInstanceList,
   type DomainList,
   type DomainRecord,
@@ -332,6 +334,9 @@ export function LandingPage({
   initialInstances: ReadSection<CampaignInstanceList>;
 }) {
   const [healthy, setHealthy] = useState(initialHealthy ?? false);
+  const [continuations, setContinuations] = useState<
+    Record<string, CampaignInstanceContinuation | undefined>
+  >({});
 
   useEffect(() => {
     if (initialHealthy === undefined) {
@@ -347,6 +352,24 @@ export function LandingPage({
         (instance) => instance.status.toLowerCase() === "active",
       )
     : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      activeInstances.map(async (instance) => [
+        instance.id,
+        await getCampaignInstanceContinuation(instance.id),
+      ] as const),
+    ).then(
+      (entries) => {
+        if (!cancelled) setContinuations(Object.fromEntries(entries));
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [initialInstances]);
 
   return (
     <main className="min-h-screen bg-base-100 text-base-content">
@@ -448,19 +471,31 @@ export function LandingPage({
                       >
                         Manage Instance
                       </RouterButtonLink>
-                      <Button
-                        disabled
-                        size="sm"
-                        aria-describedby={`continue-campaign-${index}`}
-                      >
-                        Continue
-                      </Button>
+                      {continuations[instance.id]?.enabled ? (
+                        <RouterButtonLink
+                          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions`}
+                          tone="primary"
+                          size="sm"
+                          aria-describedby={`continue-campaign-${index}`}
+                        >
+                          {continuations[instance.id]?.label}
+                        </RouterButtonLink>
+                      ) : (
+                        <Button
+                          disabled
+                          size="sm"
+                          aria-describedby={`continue-campaign-${index}`}
+                        >
+                          {continuations[instance.id]?.label ?? "Continue"}
+                        </Button>
+                      )}
                     </div>
                     <p
                       id={`continue-campaign-${index}`}
                       className="text-xs text-base-content/50"
                     >
-                      No resumable Session is linked yet.
+                      {continuations[instance.id]?.detail ??
+                        "Checking resumable Sessions…"}
                     </p>
                   </div>
                 </article>
@@ -658,116 +693,6 @@ export function ResourceEditorPage({
           />
           {message && <Alert className="mt-4">{message}</Alert>}
         </form>
-      </div>
-    </main>
-  );
-}
-
-export function SessionsPage({
-  initialSessions,
-  initialCampaign,
-}: {
-  initialSessions?: DomainRecord[];
-  initialCampaign?: DomainRecord;
-} = {}) {
-  const [sessions, setSessions] = useState<DomainRecord[]>(
-    initialSessions ?? [],
-  );
-  const [campaign, setCampaign] = useState<DomainRecord | undefined>(
-    initialCampaign,
-  );
-  const [loading, setLoading] = useState(initialSessions === undefined);
-
-  useEffect(() => {
-    if (initialSessions) return;
-    void Promise.all([
-      listDomainRecords("sessions", {
-        limit: 100,
-        sort: "createdAt",
-        order: "desc",
-      }),
-      listDomainRecords("campaigns", {
-        limit: 1,
-        sort: "updatedAt",
-        order: "desc",
-      }),
-    ]).then(
-      ([sessionResult, campaignResult]) => {
-        const currentCampaign = campaignResult.items[0];
-        setSessions(
-          currentCampaign
-            ? sessionResult.items.filter(
-                (session) => session.data.campaignId === currentCampaign.id,
-              )
-            : [],
-        );
-        setCampaign(currentCampaign);
-        setLoading(false);
-      },
-      () => setLoading(false),
-    );
-  }, [initialSessions]);
-
-  const workspaceHref = campaign
-    ? `/campaigns/${encodeURIComponent(campaign.id)}/locations`
-    : "/campaigns";
-
-  return (
-    <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="w-full px-6 py-8 lg:px-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-base-300 pb-6">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
-              World journal
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Sessions</h1>
-            <p className="mt-2 text-sm text-base-content/55">
-              Sessions mark periods of play; world and location state continues
-              between them.
-            </p>
-          </div>
-          <RouterButtonLink href={workspaceHref} tone="primary">
-            Open location workspace
-          </RouterButtonLink>
-        </div>
-        {loading ? (
-          <p className="py-10 text-sm text-base-content/50">
-            Loading session history…
-          </p>
-        ) : sessions.length ? (
-          <ol className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {sessions.map((session) => (
-              <li
-                key={session.id}
-                className="rounded-box border border-base-300 bg-base-200/65 p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="font-semibold">
-                    {session.name ?? "Untitled session"}
-                  </h2>
-                  <Badge outline className="capitalize">
-                    {typeof session.data.status === "string"
-                      ? session.data.status.replaceAll("-", " ")
-                      : "Recorded"}
-                  </Badge>
-                </div>
-                <p className="mt-3 text-sm text-base-content/50">
-                  {typeof session.data.notes === "string" &&
-                  session.data.notes.trim()
-                    ? session.data.notes
-                    : "No session notes yet."}
-                </p>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className="mt-6 rounded-box border border-dashed border-base-300 p-8 text-center">
-            <h2 className="font-semibold">No sessions recorded yet</h2>
-            <p className="mt-2 text-sm text-base-content/50">
-              Start the first session from any location workspace.
-            </p>
-          </div>
-        )}
       </div>
     </main>
   );

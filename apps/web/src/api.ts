@@ -4,6 +4,39 @@ import type {
   CharacterSelections,
 } from "./characterCreationModel";
 import type { CreateInvitationRequest } from "./campaignParticipationModel";
+import type {
+  ApplyCampaignInstanceMigrationRequest,
+  ApplyCampaignInstanceRestoreRequest,
+  CampaignInstanceContinuationProjection,
+  CampaignInstanceCreatureEmbodimentListProjection,
+  CampaignInstanceDetailProjection,
+  CampaignInstanceLifecycleRequest,
+  CampaignInstanceLifecycleResult,
+  CampaignInstanceListItemProjection,
+  CampaignInstanceListProjection,
+  CampaignInstanceMigrationPreviewProjection,
+  CampaignInstanceMigrationResult,
+  CampaignInstanceMutationResult,
+  CampaignInstancePlacementCommandRequest,
+  CampaignInstancePlacementListProjection,
+  CampaignInstancePlotListProjection,
+  CampaignInstancePreparationProjection,
+  CampaignInstanceReadinessProjection,
+  CampaignInstanceRestorePreviewRequest,
+  CampaignInstanceRosterProjection,
+  CampaignInstanceSessionListProjection,
+  CampaignInstanceVersionListProjection,
+  CampaignInstanceAgentCommandResult,
+  CampaignInstanceAvailableAgentListProjection,
+  CampaignInstanceInvitationActionResult,
+  CampaignInstanceInvitationCommandResult,
+  ConfigureCampaignInstanceAgentRequest,
+  CreateCampaignInstanceInvitationRequest,
+  CreateCampaignInstanceRequest,
+  UpdateCampaignInstancePlotRequest,
+  UpdateCampaignInstancePreparationRequest,
+  UpdateCampaignInstanceAgentStatusRequest,
+} from "@aow/common";
 
 const apiUrl = "/api";
 
@@ -405,62 +438,21 @@ export interface CapturedDefinitionSummary {
   name: string;
 }
 
-export interface CampaignInstanceSummary {
-  id: string;
-  name: string;
-  status: string;
-  updatedAt: string;
-  currentSnapshot?: {
-    snapshotNumber: number;
-    campaignDefinition: CapturedDefinitionSummary;
-    worldDefinition: CapturedDefinitionSummary;
-  };
-}
+export type CampaignInstanceSummary = CampaignInstanceListItemProjection;
+export type CampaignInstanceList = CampaignInstanceListProjection;
+export type CampaignInstanceDetail = CampaignInstanceDetailProjection;
+export type CampaignInstanceReadiness = CampaignInstanceReadinessProjection;
+export type CampaignInstanceContinuation = CampaignInstanceContinuationProjection;
 
-export interface CampaignInstanceList {
-  items: CampaignInstanceSummary[];
-  total: number;
-}
+export type CampaignInstancePreparation = CampaignInstancePreparationProjection;
+export type CampaignInstancePlotProjection = CampaignInstancePlotListProjection;
+export type CampaignInstancePlacementProjection = CampaignInstancePlacementListProjection;
+export type CampaignInstanceRoster = CampaignInstanceRosterProjection;
+export type CampaignInstanceAvailableAgents = CampaignInstanceAvailableAgentListProjection;
+export type CampaignInstanceSessions = CampaignInstanceSessionListProjection;
 
-export interface CampaignInstanceDetail {
-  id: string;
-  name: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  concludedAt?: string;
-  archivedAt?: string;
-  currentSnapshot?: {
-    id: string;
-    snapshotNumber: number;
-    predecessorSnapshotId?: string;
-    reason: string;
-    contentHash: string;
-    adoptedAt: string;
-    campaignDefinition: CapturedDefinitionSummary & {
-      snapshotId: string;
-      revisionId: string;
-      snapshotContentHash: string;
-      revisionContentHash: string;
-      capturedAt: string;
-      publishedAt: string;
-    };
-    worldDefinition: CapturedDefinitionSummary & {
-      snapshotId: string;
-      revisionId: string;
-      snapshotContentHash: string;
-      revisionContentHash: string;
-      capturedAt: string;
-      publishedAt: string;
-    };
-  };
-  runtime?: {
-    id: string;
-    campaignInstanceSnapshotId: string;
-    revision: number;
-    updatedAt: string;
-  };
-}
+export type CampaignInstanceVersions = CampaignInstanceVersionListProjection;
+export type CampaignInstanceMigrationPreview = CampaignInstanceMigrationPreviewProjection;
 
 export interface MediaAsset {
   id: string;
@@ -977,6 +969,264 @@ export function listCampaignInstances() {
 export function getCampaignInstance(campaignInstanceId: string) {
   return request<CampaignInstanceDetail>(
     `/campaign-instances/${encodeURIComponent(campaignInstanceId)}`,
+  );
+}
+
+export function createCampaignInstance(input: CreateCampaignInstanceRequest) {
+  return request<CampaignInstanceDetail>("/campaign-instances", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": input.idempotencyKey,
+    },
+    body: JSON.stringify({
+      name: input.name,
+      campaignDefinitionSnapshotId: input.campaignDefinitionSnapshotId,
+      idempotencyKey: input.idempotencyKey,
+    }),
+  });
+}
+
+const instancePath = (campaignInstanceId: string, suffix: string) =>
+  `/campaign-instances/${encodeURIComponent(campaignInstanceId)}${suffix}`;
+
+export function validateCampaignInstance(campaignInstanceId: string) {
+  return request<CampaignInstanceReadiness>(
+    instancePath(campaignInstanceId, "/validate"),
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function updateCampaignInstanceLifecycle(
+  campaignInstanceId: string,
+  input: CampaignInstanceLifecycleRequest,
+) {
+  return request<CampaignInstanceLifecycleResult>(
+    instancePath(campaignInstanceId, "/lifecycle"),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getCampaignInstancePreparation(campaignInstanceId: string) {
+  return request<CampaignInstancePreparation>(
+    instancePath(campaignInstanceId, "/preparation"),
+  );
+}
+
+export function saveCampaignInstancePreparation(
+  campaignInstanceId: string,
+  input: UpdateCampaignInstancePreparationRequest,
+) {
+  return request<CampaignInstancePreparation>(
+    instancePath(campaignInstanceId, "/preparation"),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getCampaignInstancePlots(campaignInstanceId: string) {
+  return request<CampaignInstancePlotProjection>(
+    instancePath(campaignInstanceId, "/plots"),
+  );
+}
+
+export function updateCampaignInstancePlot(
+  campaignInstanceId: string,
+  plotDefinitionId: string,
+  input: UpdateCampaignInstancePlotRequest,
+) {
+  return request<CampaignInstanceMutationResult>(
+    instancePath(
+      campaignInstanceId,
+      `/plots/${encodeURIComponent(plotDefinitionId)}`,
+    ),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getCampaignInstancePlacements(campaignInstanceId: string) {
+  return request<CampaignInstancePlacementProjection>(
+    instancePath(campaignInstanceId, "/placements"),
+  );
+}
+
+export function getCampaignInstanceEmbodiments(campaignInstanceId: string) {
+  return request<CampaignInstanceCreatureEmbodimentListProjection>(
+    instancePath(campaignInstanceId, "/embodiments"),
+  );
+}
+
+export function decideCampaignInstancePlacement(
+  campaignInstanceId: string,
+  realizationId: string,
+  input: CampaignInstancePlacementCommandRequest,
+) {
+  return request<CampaignInstanceMutationResult>(
+    instancePath(
+      campaignInstanceId,
+      `/placements/${encodeURIComponent(realizationId)}/${input.action}`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getCampaignInstanceRoster(campaignInstanceId: string) {
+  return request<CampaignInstanceRoster>(
+    instancePath(campaignInstanceId, "/roster"),
+  );
+}
+
+export function getCampaignInstanceAvailableAgents(campaignInstanceId: string) {
+  return request<CampaignInstanceAvailableAgents>(
+    instancePath(campaignInstanceId, "/available-agents"),
+  );
+}
+
+export function createCampaignInstanceInvitation(
+  campaignInstanceId: string,
+  input: CreateCampaignInstanceInvitationRequest,
+) {
+  return request<CampaignInstanceInvitationCommandResult>(
+    instancePath(campaignInstanceId, "/invitations"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateCampaignInstanceInvitation(
+  campaignInstanceId: string,
+  invitationId: string,
+  action: "retry" | "revoke",
+) {
+  return request<CampaignInstanceInvitationActionResult>(
+    instancePath(campaignInstanceId, `/invitations/${encodeURIComponent(invitationId)}${action === "retry" ? "/retry" : ""}`),
+    { method: action === "retry" ? "POST" : "DELETE" },
+  );
+}
+
+export function configureCampaignInstanceAgent(
+  campaignInstanceId: string,
+  input: ConfigureCampaignInstanceAgentRequest,
+) {
+  return request<CampaignInstanceAgentCommandResult>(
+    instancePath(campaignInstanceId, "/agents"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateCampaignInstanceAgent(
+  campaignInstanceId: string,
+  agentParticipationId: string,
+  input: UpdateCampaignInstanceAgentStatusRequest,
+) {
+  return request<CampaignInstanceAgentCommandResult>(
+    instancePath(
+      campaignInstanceId,
+      `/agents/${encodeURIComponent(agentParticipationId)}`,
+    ),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getCampaignInstanceSessions(campaignInstanceId: string) {
+  return request<CampaignInstanceSessions>(
+    instancePath(campaignInstanceId, "/sessions"),
+  );
+}
+
+export function getCampaignInstanceContinuation(campaignInstanceId: string) {
+  return request<CampaignInstanceContinuation>(
+    instancePath(campaignInstanceId, "/continuation"),
+  );
+}
+
+export function getCampaignInstanceVersions(campaignInstanceId: string) {
+  return request<CampaignInstanceVersions>(
+    instancePath(campaignInstanceId, "/versions"),
+  );
+}
+
+export function previewCampaignInstanceMigration(
+  campaignInstanceId: string,
+  input: import("@aow/common").CampaignInstanceMigrationPreviewRequest,
+) {
+  return request<CampaignInstanceMigrationPreview>(
+    instancePath(campaignInstanceId, "/migrations/preview"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function applyCampaignInstanceMigration(
+  campaignInstanceId: string,
+  input: ApplyCampaignInstanceMigrationRequest,
+) {
+  return request<CampaignInstanceMigrationResult>(
+    instancePath(campaignInstanceId, "/migrations/apply"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function previewCampaignInstanceRestore(
+  campaignInstanceId: string,
+  input: CampaignInstanceRestorePreviewRequest,
+) {
+  return request<CampaignInstanceMigrationPreview>(
+    instancePath(campaignInstanceId, "/restores/preview"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function applyCampaignInstanceRestore(
+  campaignInstanceId: string,
+  input: ApplyCampaignInstanceRestoreRequest,
+) {
+  return request<CampaignInstanceMigrationResult>(
+    instancePath(campaignInstanceId, "/restores/apply"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
   );
 }
 

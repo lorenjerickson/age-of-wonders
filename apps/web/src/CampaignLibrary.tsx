@@ -92,6 +92,8 @@ export function CampaignLibraryPage({
         empty="No Campaign Definitions are available yet."
         error={definitions.ok ? undefined : definitions.message}
         quickStartSuffix={quickStartSuffix}
+        createHref={`/campaigns/instances/new${quickStartSuffix}`}
+        createLabel="Create Campaign Instance"
       />
       <CampaignSection
         id="campaign-instances"
@@ -116,6 +118,8 @@ function CampaignSection({
   empty,
   error,
   quickStartSuffix,
+  createHref,
+  createLabel,
 }: {
   id: string;
   eyebrow: string;
@@ -125,15 +129,24 @@ function CampaignSection({
   empty: string;
   error?: string;
   quickStartSuffix: string;
+  createHref?: string;
+  createLabel?: string;
 }) {
   return (
     <section className="mt-14" aria-labelledby={`${id}-heading`}>
       <p className="text-xs font-semibold tracking-[0.16em] text-base-content/45 uppercase">
         {eyebrow}
       </p>
-      <h2 id={`${id}-heading`} className="mt-2 text-2xl font-semibold">
-        {title}
-      </h2>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+        <h2 id={`${id}-heading`} className="text-2xl font-semibold">
+          {title}
+        </h2>
+        {createHref && createLabel && (
+          <InternalLink className="btn btn-primary btn-sm" href={createHref}>
+            {createLabel}
+          </InternalLink>
+        )}
+      </div>
       <p className="mt-2 max-w-3xl text-base-content/60">{description}</p>
       {error ? (
         <div className="alert alert-error mt-6 max-w-3xl">

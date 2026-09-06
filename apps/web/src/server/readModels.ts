@@ -63,8 +63,6 @@ function listPath(
   return `/domain/${resource}?${parameters}`;
 }
 
-const recentOptions = { limit: 1, sort: "updatedAt", order: "desc" } as const;
-
 export type ReadSection<T> =
   { ok: true; data: T } | { ok: false; message: string };
 
@@ -307,29 +305,3 @@ export const readCampaignInstance = createServerFn({ method: "GET" })
       throw error;
     }
   });
-
-export const readSessions = createServerFn({ method: "GET" }).handler(
-  async () => {
-    const [sessions, campaigns] = await Promise.all([
-      serverApiRequest<SerializableDomainList>(
-        listPath("sessions", {
-          limit: 100,
-          sort: "createdAt",
-          order: "desc",
-        }),
-      ),
-      serverApiRequest<SerializableDomainList>(
-        listPath("campaigns", recentOptions),
-      ),
-    ]);
-    const campaign = campaigns.items[0];
-    return {
-      campaign,
-      sessions: campaign
-        ? sessions.items.filter(
-            (session) => session.data.campaignId === campaign.id,
-          )
-        : [],
-    };
-  },
-);
