@@ -51,11 +51,23 @@ describe("CampaignInstanceManagementService", () => {
 
   it("resolves continuation without recency or cross-Instance fallback", async () => {
     const prisma = {
-      campaignInstance: { findFirst: jest.fn().mockResolvedValue(ownedInstance) },
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue(ownedInstance),
+      },
       campaignInstanceSession: {
         findMany: jest.fn().mockResolvedValue([
-          { id: "paused", name: "The Return", status: "PAUSED", scheduledFor: null },
-          { id: "planned", name: "Tomorrow", status: "PLANNED", scheduledFor: null },
+          {
+            id: "paused",
+            name: "The Return",
+            status: "PAUSED",
+            scheduledFor: null,
+          },
+          {
+            id: "planned",
+            name: "Tomorrow",
+            status: "PLANNED",
+            scheduledFor: null,
+          },
         ]),
       },
     };
@@ -74,7 +86,7 @@ describe("CampaignInstanceManagementService", () => {
       expect.objectContaining({
         where: {
           campaignInstanceId: "instance-1",
-          status: { in: ["ACTIVE", "PAUSED", "PLANNED"] },
+          status: { in: ["ACTIVE", "PAUSED", "LOBBY", "PLANNED"] },
         },
         orderBy: [{ status: "asc" }, { name: "asc" }, { id: "asc" }],
       }),
@@ -90,7 +102,9 @@ describe("CampaignInstanceManagementService", () => {
       ])
       .mockResolvedValueOnce([]);
     const service = new CampaignInstanceManagementService({
-      campaignInstance: { findFirst: jest.fn().mockResolvedValue(ownedInstance) },
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue(ownedInstance),
+      },
       campaignInstanceSession: { findMany },
     } as never);
     await expect(service.continuation("instance-1", "gm-1")).resolves.toEqual({
@@ -111,6 +125,34 @@ describe("CampaignInstanceManagementService", () => {
     });
   });
 
+  it("returns an open lobby instead of suggesting another Session", async () => {
+    const service = new CampaignInstanceManagementService({
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue(ownedInstance),
+      },
+      campaignInstanceSession: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "lobby",
+            name: "Gathering at the Gate",
+            status: "LOBBY",
+            scheduledFor: null,
+          },
+        ]),
+      },
+    } as never);
+
+    await expect(service.continuation("instance-1", "gm-1")).resolves.toEqual({
+      campaignInstanceId: "instance-1",
+      campaignInstanceName: "Tuesday Glasswake",
+      kind: "open-planned",
+      label: "Open Session",
+      enabled: true,
+      detail: "Gathering at the Gate has an open lobby.",
+      session: { id: "lobby", name: "Gathering at the Gate" },
+    });
+  });
+
   it("enforces strict lifecycle transitions through an owner-scoped CAS", async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
@@ -118,8 +160,12 @@ describe("CampaignInstanceManagementService", () => {
         findFirst: jest.fn().mockResolvedValue(ownedInstance),
         updateMany,
       },
-      campaignInstanceHumanMembership: { count: jest.fn().mockResolvedValue(1) },
-      campaignInstanceRuntime: { findUnique: jest.fn().mockResolvedValue(ownedInstance.runtime) },
+      campaignInstanceHumanMembership: {
+        count: jest.fn().mockResolvedValue(1),
+      },
+      campaignInstanceRuntime: {
+        findUnique: jest.fn().mockResolvedValue(ownedInstance.runtime),
+      },
     };
     const service = new CampaignInstanceManagementService(prisma as never);
     await expect(
@@ -162,9 +208,14 @@ describe("CampaignInstanceManagementService", () => {
 
   it("preserves runtime state and rejects stale preparation writes", async () => {
     const findFirst = jest.fn().mockResolvedValue(ownedInstance);
-    const updateMany = jest.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    const updateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
     const prisma = {
+      $executeRawUnsafe: jest.fn().mockResolvedValue(0),
       campaignInstance: { findFirst },
+      campaignInstanceSession: { findFirst: jest.fn().mockResolvedValue(null) },
       campaignInstanceRuntime: { updateMany },
     };
     const service = new CampaignInstanceManagementService(prisma as never);
@@ -198,7 +249,9 @@ describe("CampaignInstanceManagementService", () => {
         expectedRuntimeRevision: 3,
         preparation: {},
       }),
-    ).rejects.toEqual(new ConflictException("Instance runtime changed; reload and retry."));
+    ).rejects.toEqual(
+      new ConflictException("Instance runtime changed; reload and retry."),
+    );
   });
 
   it("projects bounded human-labeled replacement options for runtime Creatures and Items", async () => {
@@ -234,7 +287,9 @@ describe("CampaignInstanceManagementService", () => {
       totalReplacementOptions: 2,
       replacementOptionsTruncated: false,
     });
-    expect(JSON.stringify(result.replacementOptions)).toContain("creature-opaque");
+    expect(JSON.stringify(result.replacementOptions)).toContain(
+      "creature-opaque",
+    );
     expect(JSON.stringify(result.replacementOptions)).toContain("item-opaque");
   });
 
@@ -251,14 +306,20 @@ describe("CampaignInstanceManagementService", () => {
   });
 
   it("lists only owner-scoped, bounded, human-labeled available Agents", async () => {
-    const findMany = jest.fn().mockResolvedValue([
-      { id: "agent-1", name: "Plot Weaver", status: "ACTIVE" },
-    ]);
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([
+        { id: "agent-1", name: "Plot Weaver", status: "ACTIVE" },
+      ]);
     const service = new CampaignInstanceManagementService({
-      campaignInstance: { findFirst: jest.fn().mockResolvedValue(ownedInstance) },
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue(ownedInstance),
+      },
       agentIdentity: { findMany },
     } as never);
-    await expect(service.availableAgents("instance-1", "gm-1")).resolves.toEqual({
+    await expect(
+      service.availableAgents("instance-1", "gm-1"),
+    ).resolves.toEqual({
       campaignInstanceId: "instance-1",
       campaignInstanceName: "Tuesday Glasswake",
       items: [{ agentId: "agent-1", name: "Plot Weaver", status: "active" }],
@@ -269,28 +330,33 @@ describe("CampaignInstanceManagementService", () => {
     expect(query).toContain('"take":200');
   });
 
-  it("creates Agent participation once and rejects credential-like capabilities", async () => {
+  it("creates Agent participation only with appropriately scoped core Session capabilities", async () => {
     const create = jest.fn().mockResolvedValue({
       id: "participation-1",
       agentName: "Plot Weaver",
       status: "CONFIGURED",
     });
     const service = new CampaignInstanceManagementService({
-      campaignInstance: { findFirst: jest.fn().mockResolvedValue(ownedInstance) },
+      campaignInstance: {
+        findFirst: jest.fn().mockResolvedValue(ownedInstance),
+      },
       agentIdentity: {
-        findFirst: jest.fn().mockResolvedValue({ id: "agent-1", name: "Plot Weaver" }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "agent-1", name: "Plot Weaver" }),
       },
       campaignInstanceAgentParticipation: { create },
     } as never);
     await expect(
       service.configureAgent("instance-1", "gm-1", {
         agentId: "agent-1",
-        observe: ["plot:suggest", "plot:suggest"],
-        act: [],
+        observe: ["aow:event-stream", "aow:event-stream"],
+        act: ["aow:draft-narrative"],
       }),
     ).resolves.toMatchObject({
       agentName: "Plot Weaver",
-      observeCapabilities: ["plot:suggest"],
+      observeCapabilities: ["aow:event-stream"],
+      actCapabilities: ["aow:draft-narrative"],
     });
     expect(create).toHaveBeenCalledTimes(1);
     await expect(
@@ -300,5 +366,14 @@ describe("CampaignInstanceManagementService", () => {
         act: [],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.configureAgent("instance-1", "gm-1", {
+        agentId: "agent-1",
+        observe: ["aow:draft-narrative"],
+        act: [],
+      }),
+    ).rejects.toThrow(
+      "Agent observe capabilities must use the core Session capability registry.",
+    );
   });
 });

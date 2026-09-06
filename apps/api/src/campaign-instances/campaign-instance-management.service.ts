@@ -12,6 +12,8 @@ import {
   Prisma,
 } from "@prisma/client";
 import {
+  CORE_SESSION_AGENT_ACT_CAPABILITIES,
+  CORE_SESSION_AGENT_OBSERVE_CAPABILITIES,
   canTransitionCampaignInstanceStatus,
   resolveCreatureInstanceEmbodimentPolicy,
   validateCampaignInstanceRuntimeState,
@@ -37,10 +39,14 @@ export class CampaignInstanceManagementService {
     checks.push({
       key: "captured-pair",
       label: "Captured Campaign and World",
-      status: instance.currentSnapshotId && instance.currentSnapshot ? "ready" as const : "blocked" as const,
-      detail: instance.currentSnapshotId && instance.currentSnapshot
-        ? "A consistent captured Campaign and World pair is selected."
-        : "Capture a Campaign and World pair before activation.",
+      status:
+        instance.currentSnapshotId && instance.currentSnapshot
+          ? ("ready" as const)
+          : ("blocked" as const),
+      detail:
+        instance.currentSnapshotId && instance.currentSnapshot
+          ? "A consistent captured Campaign and World pair is selected."
+          : "Capture a Campaign and World pair before activation.",
     });
     let runtimeIssues: readonly { detail: string }[] = [];
     if (instance.runtime && runtimeState(instance.runtime.state)) {
@@ -50,39 +56,56 @@ export class CampaignInstanceManagementService {
           instance,
         );
       } catch {
-        runtimeIssues = [{ detail: "The continuing Instance state is malformed." }];
+        runtimeIssues = [
+          { detail: "The continuing Instance state is malformed." },
+        ];
       }
     }
     checks.push({
       key: "runtime",
       label: "Instance runtime",
       status:
-        instance.runtime && runtimeState(instance.runtime.state) && runtimeIssues.length === 0
-          ? "ready" as const
-          : "blocked" as const,
-      detail: instance.runtime && runtimeState(instance.runtime.state) && runtimeIssues.length === 0
-        ? "Continuing Instance state is available."
-        : runtimeIssues[0]?.detail ?? "The continuing Instance state is unavailable or invalid.",
+        instance.runtime &&
+        runtimeState(instance.runtime.state) &&
+        runtimeIssues.length === 0
+          ? ("ready" as const)
+          : ("blocked" as const),
+      detail:
+        instance.runtime &&
+        runtimeState(instance.runtime.state) &&
+        runtimeIssues.length === 0
+          ? "Continuing Instance state is available."
+          : (runtimeIssues[0]?.detail ??
+            "The continuing Instance state is unavailable or invalid."),
     });
     const gmCount = await this.prisma.campaignInstanceHumanMembership.count({
-      where: { campaignInstanceId: id, role: CampaignInstanceHumanRole.GM, status: "ACTIVE" },
+      where: {
+        campaignInstanceId: id,
+        role: CampaignInstanceHumanRole.GM,
+        status: "ACTIVE",
+      },
     });
     checks.push({
       key: "gm-membership",
       label: "Game Master",
-      status: gmCount > 0 ? "ready" as const : "blocked" as const,
-      detail: gmCount > 0
-        ? "An active GM participates in this Campaign Instance."
-        : "Add an active GM participant before activation.",
+      status: gmCount > 0 ? ("ready" as const) : ("blocked" as const),
+      detail:
+        gmCount > 0
+          ? "An active GM participates in this Campaign Instance."
+          : "Add an active GM participant before activation.",
     });
-    const policyProblems = capturedCreaturePolicyProblems(instance.currentSnapshot);
+    const policyProblems = capturedCreaturePolicyProblems(
+      instance.currentSnapshot,
+    );
     checks.push({
       key: "creature-embodiment-policies",
       label: "Creature embodiment policies",
-      status: policyProblems.length === 0 ? "ready" as const : "blocked" as const,
-      detail: policyProblems.length === 0
-        ? "Captured Creature embodiment policies are resolvable."
-        : "One or more captured Creatures has a malformed or unsupported embodiment policy.",
+      status:
+        policyProblems.length === 0 ? ("ready" as const) : ("blocked" as const),
+      detail:
+        policyProblems.length === 0
+          ? "Captured Creature embodiment policies are resolvable."
+          : "One or more captured Creatures has a malformed or unsupported embodiment policy.",
     });
     return {
       campaignInstanceId: id,
@@ -112,7 +135,9 @@ export class CampaignInstanceManagementService {
     if (target === "ACTIVE") {
       const readiness = await this.validate(id, ownerUserId);
       if (!readiness.readyToActivate) {
-        throw new BadRequestException("The Campaign Instance is not ready to activate.");
+        throw new BadRequestException(
+          "The Campaign Instance is not ready to activate.",
+        );
       }
     }
     const now = new Date();
@@ -139,7 +164,9 @@ export class CampaignInstanceManagementService {
           },
         });
         if (updated.count !== 1) {
-          throw new ConflictException("Campaign Instance status changed; reload and retry.");
+          throw new ConflictException(
+            "Campaign Instance status changed; reload and retry.",
+          );
         }
       },
     );
@@ -186,7 +213,10 @@ export class CampaignInstanceManagementService {
         ? { extensions: cleanJsonObject(dto.preparation.extensions, 10_000) }
         : {}),
     };
-    const nextState = { ...state, preparation: cleanJsonValue(preparation, 50_000) };
+    const nextState = {
+      ...state,
+      preparation: cleanJsonValue(preparation, 50_000),
+    };
     await this.writeRuntime(
       instance,
       ownerUserId,
@@ -210,7 +240,12 @@ export class CampaignInstanceManagementService {
     const progressById = new Map(
       arrayValue(state.plotProgress).map((entry) => {
         const progress = objectValue(entry);
-        return [typeof progress.plotDefinitionId === "string" ? progress.plotDefinitionId : "", progress] as const;
+        return [
+          typeof progress.plotDefinitionId === "string"
+            ? progress.plotDefinitionId
+            : "",
+          progress,
+        ] as const;
       }),
     );
     const records = snapshotRecords(
@@ -218,7 +253,9 @@ export class CampaignInstanceManagementService {
       "plots",
     );
     const definitions = new Map(
-      records.map((record) => [record.sourceId, objectValue(record.payload)] as const),
+      records.map(
+        (record) => [record.sourceId, objectValue(record.payload)] as const,
+      ),
     );
     const build = (plotDefinitionId: string): Record<string, unknown> => {
       const definition = definitions.get(plotDefinitionId) ?? {};
@@ -229,28 +266,41 @@ export class CampaignInstanceManagementService {
         name: humanName(definition, "Unnamed Plot"),
         ...(parentId ? { parentPlotDefinitionId: parentId } : {}),
         ...(parentId
-          ? { parentPlotName: humanName(definitions.get(parentId), "Parent Plot") }
+          ? {
+              parentPlotName: humanName(
+                definitions.get(parentId),
+                "Parent Plot",
+              ),
+            }
           : {}),
-        status: typeof progress.status === "string" ? progress.status : "not-started",
-        objectiveProgress: arrayValue(progress.objectiveProgress).map((entry) => {
-          const objectiveProgress = objectValue(entry);
-          const objective = arrayValue(definition.objectives)
-            .map(objectValue)
-            .find((candidate) => candidate.id === objectiveProgress.objectiveId);
-          return {
-            objectiveId: objectiveProgress.objectiveId,
-            objectiveName: humanName(objective, "Unnamed Objective"),
-            status:
-              typeof objectiveProgress.status === "string"
-                ? objectiveProgress.status
-                : "not-started",
-            ...(typeof objectiveProgress.notes === "string"
-              ? { notes: objectiveProgress.notes }
-              : {}),
-          };
-        }),
+        status:
+          typeof progress.status === "string" ? progress.status : "not-started",
+        objectiveProgress: arrayValue(progress.objectiveProgress).map(
+          (entry) => {
+            const objectiveProgress = objectValue(entry);
+            const objective = arrayValue(definition.objectives)
+              .map(objectValue)
+              .find(
+                (candidate) => candidate.id === objectiveProgress.objectiveId,
+              );
+            return {
+              objectiveId: objectiveProgress.objectiveId,
+              objectiveName: humanName(objective, "Unnamed Objective"),
+              status:
+                typeof objectiveProgress.status === "string"
+                  ? objectiveProgress.status
+                  : "not-started",
+              ...(typeof objectiveProgress.notes === "string"
+                ? { notes: objectiveProgress.notes }
+                : {}),
+            };
+          },
+        ),
         children: records
-          .filter((record) => plotParentId(objectValue(record.payload)) === plotDefinitionId)
+          .filter(
+            (record) =>
+              plotParentId(objectValue(record.payload)) === plotDefinitionId,
+          )
           .map((record) => build(record.sourceId)),
       };
     };
@@ -277,7 +327,9 @@ export class CampaignInstanceManagementService {
       (entry) => objectValue(entry).plotDefinitionId === plotDefinitionId,
     );
     if (index < 0) {
-      throw new NotFoundException("The selected Plot was not found in this Instance snapshot.");
+      throw new NotFoundException(
+        "The selected Plot was not found in this Instance snapshot.",
+      );
     }
     const progress = {
       ...objectValue(current[index]),
@@ -287,7 +339,9 @@ export class CampaignInstanceManagementService {
             objectiveProgress: dto.objectiveProgress.map((objective) => ({
               objectiveId: objective.objectiveId,
               status: objective.status,
-              ...(objective.notes?.trim() ? { notes: objective.notes.trim() } : {}),
+              ...(objective.notes?.trim()
+                ? { notes: objective.notes.trim() }
+                : {}),
             })),
           }
         : {}),
@@ -314,7 +368,12 @@ export class CampaignInstanceManagementService {
       campaignInstanceId: id,
       campaignInstanceName: instance.name,
       runtimeRevision: dto.expectedRuntimeRevision + 1,
-      affected: [{ name: humanNameFromPlot(instance, plotDefinitionId), typeLabel: "Plot" }],
+      affected: [
+        {
+          name: humanNameFromPlot(instance, plotDefinitionId),
+          typeLabel: "Plot",
+        },
+      ],
     };
   }
 
@@ -322,32 +381,38 @@ export class CampaignInstanceManagementService {
     const instance = await this.owned(id, ownerUserId);
     const state = requireRuntime(instance);
     const locations = capturedLocationNames(instance);
-    const creatureReplacementOptions = arrayValue(state.creatureEmbodiments)
-      .flatMap((value) => {
-        const embodiment = objectValue(value);
-        const creature = objectValue(embodiment.creature);
-        return typeof embodiment.runtimeCreatureId === "string"
-          ? [{
+    const creatureReplacementOptions = arrayValue(
+      state.creatureEmbodiments,
+    ).flatMap((value) => {
+      const embodiment = objectValue(value);
+      const creature = objectValue(embodiment.creature);
+      return typeof embodiment.runtimeCreatureId === "string"
+        ? [
+            {
               kind: "existing-creature" as const,
               runtimeCreatureId: embodiment.runtimeCreatureId,
               name: humanName(creature, "Unnamed Creature"),
               typeLabel: "Creature" as const,
-            }]
-          : [];
-      });
+            },
+          ]
+        : [];
+    });
     const itemReplacementOptions = arrayValue(state.itemInstances).flatMap(
       (value) => {
         const item = objectValue(value);
         return typeof item.id === "string"
-          ? [{
-              kind: "existing-item" as const,
-              runtimeItemId: item.id,
-              name:
-                typeof item.nameOverride === "string" && item.nameOverride.trim()
-                  ? item.nameOverride.trim()
-                  : "Unnamed Item",
-              typeLabel: "Item" as const,
-            }]
+          ? [
+              {
+                kind: "existing-item" as const,
+                runtimeItemId: item.id,
+                name:
+                  typeof item.nameOverride === "string" &&
+                  item.nameOverride.trim()
+                    ? item.nameOverride.trim()
+                    : "Unnamed Item",
+                typeLabel: "Item" as const,
+              },
+            ]
           : [];
       },
     );
@@ -369,26 +434,49 @@ export class CampaignInstanceManagementService {
           name: humanName(realization, "Instance placement"),
           status: realization.status,
           sourceTypeLabel:
-            source.kind === "campaign-placement" ? "Campaign placement" :
-            source.kind === "captured-world-placement" ? "World placement" : "Instance placement",
+            source.kind === "campaign-placement"
+              ? "Campaign placement"
+              : source.kind === "captured-world-placement"
+                ? "World placement"
+                : "Instance placement",
           sourceName: humanName(realization, "Captured placement"),
-          sourceLocationName: typeof realization.sourceLocationId === "string"
-            ? locations.get(realization.sourceLocationId) ?? "Captured Location"
-            : "Captured Location",
+          sourceLocationName:
+            typeof realization.sourceLocationId === "string"
+              ? (locations.get(realization.sourceLocationId) ??
+                "Captured Location")
+              : "Captured Location",
           ...(typeof realization.currentLocationId === "string"
-            ? { currentLocationName: locations.get(realization.currentLocationId) ?? "Captured Location" }
+            ? {
+                currentLocationName:
+                  locations.get(realization.currentLocationId) ??
+                  "Captured Location",
+              }
             : {}),
           ...(typeof source.campaignPlacementDefinitionId === "string"
-            ? { campaignPlacementDefinitionId: source.campaignPlacementDefinitionId }
+            ? {
+                campaignPlacementDefinitionId:
+                  source.campaignPlacementDefinitionId,
+              }
             : {}),
           ...(typeof source.capturedWorldPlacementDefinitionId === "string"
-            ? { capturedWorldPlacementDefinitionId: source.capturedWorldPlacementDefinitionId }
+            ? {
+                capturedWorldPlacementDefinitionId:
+                  source.capturedWorldPlacementDefinitionId,
+              }
             : {}),
           ...(typeof source.worldPlacementDefinitionId === "string"
-            ? { capturedWorldPlacementDefinitionId: source.worldPlacementDefinitionId }
+            ? {
+                capturedWorldPlacementDefinitionId:
+                  source.worldPlacementDefinitionId,
+              }
             : {}),
           ...(typeof realizedEntity.kind === "string"
-            ? { realizedEntity: { ...realizedEntity, name: humanName(realization, "Runtime entity") } }
+            ? {
+                realizedEntity: {
+                  ...realizedEntity,
+                  name: humanName(realization, "Runtime entity"),
+                },
+              }
             : {}),
         };
       }),
@@ -411,7 +499,9 @@ export class CampaignInstanceManagementService {
       (entry) => objectValue(objectValue(entry).identity).id === realizationId,
     );
     if (index < 0) {
-      throw new NotFoundException("The selected Instance placement was not found.");
+      throw new NotFoundException(
+        "The selected Instance placement was not found.",
+      );
     }
     const prior = objectValue(current[index]);
     const status =
@@ -423,7 +513,9 @@ export class CampaignInstanceManagementService {
             ? "replaced"
             : "realized";
     if (prior.status === status) {
-      throw new ConflictException("This placement already has the requested status.");
+      throw new ConflictException(
+        "This placement already has the requested status.",
+      );
     }
     if (dto.action === "replace" && !dto.replacement) {
       throw new BadRequestException("Choose a replacement runtime entity.");
@@ -467,7 +559,12 @@ export class CampaignInstanceManagementService {
       campaignInstanceId: id,
       campaignInstanceName: instance.name,
       runtimeRevision: dto.expectedRuntimeRevision + 1,
-      affected: [{ name: humanName(prior, "Instance placement"), typeLabel: "Placement" }],
+      affected: [
+        {
+          name: humanName(prior, "Instance placement"),
+          typeLabel: "Placement",
+        },
+      ],
     };
   }
 
@@ -610,29 +707,41 @@ export class CampaignInstanceManagementService {
     dto: ConfigureCampaignInstanceAgentDto,
   ) {
     await this.ownedEditable(id, ownerUserId);
-    const observe = capabilities(dto.observe);
-    const act = capabilities(dto.act);
+    const observe = capabilities(
+      dto.observe,
+      CORE_SESSION_AGENT_OBSERVE_CAPABILITIES,
+      "observe",
+    );
+    const act = capabilities(
+      dto.act,
+      CORE_SESSION_AGENT_ACT_CAPABILITIES,
+      "act",
+    );
     const agent = await this.prisma.agentIdentity.findFirst({
       where: { id: dto.agentId, ownerUserId, status: "ACTIVE" },
       select: { id: true, name: true },
     });
-    if (!agent) throw new NotFoundException("The selected Agent was not found.");
+    if (!agent)
+      throw new NotFoundException("The selected Agent was not found.");
     const participation = await this.withAudit(
       id,
       ownerUserId,
       "instance.agent.configured",
       agent.name,
       "Agent",
-      { observeCapabilityCount: observe.length, actCapabilityCount: act.length },
+      {
+        observeCapabilityCount: observe.length,
+        actCapabilityCount: act.length,
+      },
       async (client) => {
         try {
           return await client.campaignInstanceAgentParticipation.create({
             data: {
-          campaignInstanceId: id,
-          agentId: agent.id,
-          agentName: agent.name,
-          observeCapabilities: observe,
-          actCapabilities: act,
+              campaignInstanceId: id,
+              agentId: agent.id,
+              agentName: agent.name,
+              observeCapabilities: observe,
+              actCapabilities: act,
             },
             select: { id: true, agentName: true, status: true },
           });
@@ -688,16 +797,22 @@ export class CampaignInstanceManagementService {
   ) {
     await this.ownedEditable(id, ownerUserId);
     if (!agentStatusTransition(dto.expectedStatus, dto.status)) {
-      throw new BadRequestException("The requested Agent status transition is not allowed.");
+      throw new BadRequestException(
+        "The requested Agent status transition is not allowed.",
+      );
     }
-    const selectedAgent = await this.prisma.campaignInstanceAgentParticipation.findFirst({
-      where: { id: participationId, campaignInstanceId: id },
-      select: { agentName: true },
-    });
+    const selectedAgent =
+      await this.prisma.campaignInstanceAgentParticipation.findFirst({
+        where: { id: participationId, campaignInstanceId: id },
+        select: { agentName: true },
+      });
     if (!selectedAgent) {
-      throw new NotFoundException("The selected Agent participation was not found.");
+      throw new NotFoundException(
+        "The selected Agent participation was not found.",
+      );
     }
-    const status = dto.status.toUpperCase() as CampaignInstanceAgentParticipationStatus;
+    const status =
+      dto.status.toUpperCase() as CampaignInstanceAgentParticipationStatus;
     const participation = await this.withAudit(
       id,
       ownerUserId,
@@ -706,16 +821,20 @@ export class CampaignInstanceManagementService {
       "Agent",
       { from: dto.expectedStatus, to: dto.status },
       async (client) => {
-        const updated = await client.campaignInstanceAgentParticipation.updateMany({
-          where: {
-            id: participationId,
-            campaignInstanceId: id,
-            status: dto.expectedStatus.toUpperCase() as CampaignInstanceAgentParticipationStatus,
-          },
-          data: { status },
-        });
+        const updated =
+          await client.campaignInstanceAgentParticipation.updateMany({
+            where: {
+              id: participationId,
+              campaignInstanceId: id,
+              status:
+                dto.expectedStatus.toUpperCase() as CampaignInstanceAgentParticipationStatus,
+            },
+            data: { status },
+          });
         if (updated.count !== 1) {
-          throw new ConflictException("Agent participation changed; reload and retry.");
+          throw new ConflictException(
+            "Agent participation changed; reload and retry.",
+          );
         }
         return client.campaignInstanceAgentParticipation.findFirst({
           where: { id: participationId, campaignInstanceId: id },
@@ -730,7 +849,9 @@ export class CampaignInstanceManagementService {
       },
     );
     if (!participation) {
-      throw new NotFoundException("The selected Agent participation was not found.");
+      throw new NotFoundException(
+        "The selected Agent participation was not found.",
+      );
     }
     return {
       campaignInstanceId: id,
@@ -747,12 +868,18 @@ export class CampaignInstanceManagementService {
     await this.owned(id, ownerUserId);
     const rows = await this.prisma.campaignInstanceSession.findMany({
       where: { campaignInstanceId: id },
-      orderBy: [{ status: "asc" }, { scheduledFor: "asc" }, { name: "asc" }, { id: "asc" }],
+      orderBy: [
+        { status: "asc" },
+        { scheduledFor: "asc" },
+        { name: "asc" },
+        { id: "asc" },
+      ],
       take: 200,
       select: {
         id: true,
         name: true,
         status: true,
+        metadataRevision: true,
         scheduledFor: true,
         startedAt: true,
         concludedAt: true,
@@ -761,22 +888,29 @@ export class CampaignInstanceManagementService {
       },
     });
     const items = rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        status: row.status.toLowerCase(),
-        scheduledFor: row.scheduledFor?.toISOString(),
-        startedAt: row.startedAt?.toISOString(),
-        concludedAt: row.concludedAt?.toISOString(),
-        cancelledAt: row.cancelledAt?.toISOString(),
-        participantCount: row._count.participations,
-      }));
+      id: row.id,
+      name: row.name,
+      status: row.status.toLowerCase(),
+      metadataRevision: row.metadataRevision,
+      scheduledFor: row.scheduledFor?.toISOString(),
+      startedAt: row.startedAt?.toISOString(),
+      concludedAt: row.concludedAt?.toISOString(),
+      cancelledAt: row.cancelledAt?.toISOString(),
+      participantCount: row._count.participations,
+    }));
     const instance = await this.owned(id, ownerUserId);
     return {
       campaignInstanceId: id,
       campaignInstanceName: instance.name,
-      current: items.filter((row) => row.status === "active" || row.status === "paused"),
-      planned: items.filter((row) => row.status === "planned"),
-      history: items.filter((row) => row.status === "concluded" || row.status === "cancelled"),
+      current: items.filter(
+        (row) => row.status === "active" || row.status === "paused",
+      ),
+      planned: items.filter(
+        (row) => row.status === "planned" || row.status === "lobby",
+      ),
+      history: items.filter(
+        (row) => row.status === "concluded" || row.status === "cancelled",
+      ),
       total: items.length,
     };
   }
@@ -786,14 +920,19 @@ export class CampaignInstanceManagementService {
     const sessions = await this.prisma.campaignInstanceSession.findMany({
       where: {
         campaignInstanceId: id,
-        status: { in: ["ACTIVE", "PAUSED", "PLANNED"] },
+        status: { in: ["ACTIVE", "PAUSED", "LOBBY", "PLANNED"] },
       },
       orderBy: [{ status: "asc" }, { name: "asc" }, { id: "asc" }],
       select: { id: true, name: true, status: true, scheduledFor: true },
     });
     const active = sessions.filter((row) => row.status === "ACTIVE");
     const paused = sessions.filter((row) => row.status === "PAUSED");
-    const selected = active.length === 1 ? active[0] : paused.length === 1 ? paused[0] : undefined;
+    const selected =
+      active.length === 1
+        ? active[0]
+        : paused.length === 1
+          ? paused[0]
+          : undefined;
     if (selected) {
       const kind = selected.status === "ACTIVE" ? "continue" : "resume";
       return {
@@ -806,7 +945,14 @@ export class CampaignInstanceManagementService {
         session: { id: selected.id, name: selected.name },
       };
     }
-    const eligible = active.length > 1 ? active : paused.length > 1 ? paused : sessions.filter((row) => row.status === "PLANNED");
+    const eligible =
+      active.length > 1
+        ? active
+        : paused.length > 1
+          ? paused
+          : sessions.filter(
+              (row) => row.status === "LOBBY" || row.status === "PLANNED",
+            );
     if (eligible.length === 1) {
       return {
         campaignInstanceId: id,
@@ -814,7 +960,10 @@ export class CampaignInstanceManagementService {
         kind: "open-planned",
         label: "Open Session",
         enabled: true,
-        detail: `${eligible[0].name} is planned.`,
+        detail:
+          eligible[0].status === "LOBBY"
+            ? `${eligible[0].name} has an open lobby.`
+            : `${eligible[0].name} is planned.`,
         session: { id: eligible[0].id, name: eligible[0].name },
       };
     }
@@ -856,7 +1005,10 @@ export class CampaignInstanceManagementService {
         },
       },
     });
-    if (!instance?.currentSnapshot) throw new NotFoundException("The selected Campaign Instance was not found.");
+    if (!instance?.currentSnapshot)
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
     const currentSnapshot = instance.currentSnapshot;
     const rows = await this.prisma.campaignInstanceSnapshot.findMany({
       where: { campaignInstanceId: id },
@@ -867,36 +1019,67 @@ export class CampaignInstanceManagementService {
         reason: true,
         adoptedAt: true,
         campaignDefinitionSnapshot: {
-          select: { campaignDefinitionRevision: { select: { name: true, revisionNumber: true, campaignDefinitionId: true } } },
+          select: {
+            campaignDefinitionRevision: {
+              select: {
+                name: true,
+                revisionNumber: true,
+                campaignDefinitionId: true,
+              },
+            },
+          },
         },
         worldDefinitionSnapshot: {
-          select: { worldDefinitionRevision: { select: { name: true, revisionNumber: true, worldDefinitionId: true } } },
+          select: {
+            worldDefinitionRevision: {
+              select: {
+                name: true,
+                revisionNumber: true,
+                worldDefinitionId: true,
+              },
+            },
+          },
         },
       },
-      });
+    });
     const targets = await this.prisma.campaignDefinitionSnapshot.findMany({
-        where: {
-          campaignDefinitionId: instance.campaignDefinitionId,
-          campaignDefinitionRevision: {
-            predecessorRevisionId:
-              currentSnapshot.campaignDefinitionSnapshot.campaignDefinitionRevisionId,
-            campaignDefinition: { ownerUserId },
+      where: {
+        campaignDefinitionId: instance.campaignDefinitionId,
+        campaignDefinitionRevision: {
+          predecessorRevisionId:
+            currentSnapshot.campaignDefinitionSnapshot
+              .campaignDefinitionRevisionId,
+          campaignDefinition: { ownerUserId },
+        },
+      },
+      orderBy: [{ capturedAt: "desc" }, { id: "asc" }],
+      take: 50,
+      select: {
+        id: true,
+        campaignDefinitionRevision: {
+          select: {
+            name: true,
+            revisionNumber: true,
+            campaignDefinitionId: true,
           },
         },
-        orderBy: [{ capturedAt: "desc" }, { id: "asc" }],
-        take: 50,
-        select: {
-          id: true,
-          campaignDefinitionRevision: { select: { name: true, revisionNumber: true, campaignDefinitionId: true } },
-          capturedWorldSnapshot: {
-            select: { worldDefinitionRevision: { select: { name: true, revisionNumber: true, worldDefinitionId: true } } },
+        capturedWorldSnapshot: {
+          select: {
+            worldDefinitionRevision: {
+              select: {
+                name: true,
+                revisionNumber: true,
+                worldDefinitionId: true,
+              },
+            },
           },
         },
-      });
+      },
+    });
     const activeSession = await this.prisma.campaignInstanceSession.findFirst({
-        where: { campaignInstanceId: id, status: "ACTIVE" },
-        select: { name: true },
-      });
+      where: { campaignInstanceId: id, status: "ACTIVE" },
+      select: { name: true },
+    });
     const items = rows.map((row) => ({
       snapshotId: row.id,
       snapshotNumber: row.snapshotNumber,
@@ -921,13 +1104,21 @@ export class CampaignInstanceManagementService {
       items,
       migrationTargets: targets.map((target) => ({
         campaignDefinitionSnapshotId: target.id,
-        campaignDefinition: revisionReference(target.campaignDefinitionRevision, "campaign"),
-        worldDefinition: revisionReference(target.capturedWorldSnapshot.worldDefinitionRevision, "world"),
+        campaignDefinition: revisionReference(
+          target.campaignDefinitionRevision,
+          "campaign",
+        ),
+        worldDefinition: revisionReference(
+          target.capturedWorldSnapshot.worldDefinitionRevision,
+          "world",
+        ),
       })),
       ...(restoreTarget ? { restoreTarget } : {}),
       migrationAvailable: !activeSession && targets.length > 0,
       ...(activeSession
-        ? { migrationBlockedReason: `${activeSession.name} must stop before migration.` }
+        ? {
+            migrationBlockedReason: `${activeSession.name} must stop before migration.`,
+          }
         : {}),
     };
   }
@@ -951,7 +1142,9 @@ export class CampaignInstanceManagementService {
       },
     });
     if (!instance) {
-      throw new NotFoundException("The selected Campaign Instance was not found.");
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
     }
     return instance;
   }
@@ -985,8 +1178,26 @@ export class CampaignInstanceManagementService {
       action,
       subjectName,
       subjectType,
-      { fromRuntimeRevision: expectedRevision, toRuntimeRevision: expectedRevision + 1 },
+      {
+        fromRuntimeRevision: expectedRevision,
+        toRuntimeRevision: expectedRevision + 1,
+      },
       async (client) => {
+        await client.$executeRawUnsafe(
+          'LOCK TABLE "CampaignInstanceSession" IN SHARE ROW EXCLUSIVE MODE',
+        );
+        const openSession = await client.campaignInstanceSession.findFirst({
+          where: {
+            campaignInstanceId: instance.id,
+            status: { in: ["ACTIVE", "PAUSED"] },
+          },
+          select: { name: true },
+        });
+        if (openSession) {
+          throw new ConflictException(
+            `Pause or conclude ${openSession.name} before changing Campaign Instance state.`,
+          );
+        }
         const updated = await client.campaignInstanceRuntime.updateMany({
           where: {
             id: instance.runtime!.id,
@@ -996,7 +1207,9 @@ export class CampaignInstanceManagementService {
           data: { state: state, revision: { increment: 1 } },
         });
         if (updated.count !== 1) {
-          throw new ConflictException("Instance runtime changed; reload and retry.");
+          throw new ConflictException(
+            "Instance runtime changed; reload and retry.",
+          );
         }
       },
     );
@@ -1009,9 +1222,13 @@ export class CampaignInstanceManagementService {
     subjectName: string,
     subjectType: string,
     detail: Prisma.InputJsonObject,
-    operation: (client: Prisma.TransactionClient | PrismaService) => Promise<Result>,
+    operation: (
+      client: Prisma.TransactionClient | PrismaService,
+    ) => Promise<Result>,
   ): Promise<Result> {
-    const execute = async (client: Prisma.TransactionClient | PrismaService) => {
+    const execute = async (
+      client: Prisma.TransactionClient | PrismaService,
+    ) => {
       const result = await operation(client);
       await client.campaignInstanceAuditEvent.create({
         data: {
@@ -1032,13 +1249,20 @@ export class CampaignInstanceManagementService {
   }
 }
 
-function runtimeState(value: unknown): value is Record<string, Prisma.JsonValue> {
+function runtimeState(
+  value: unknown,
+): value is Record<string, Prisma.JsonValue> {
   return objectValue(value).formatVersion === 1;
 }
 
-function requireRuntime(instance: { name: string; runtime: { state: unknown } | null }) {
+function requireRuntime(instance: {
+  name: string;
+  runtime: { state: unknown } | null;
+}) {
   if (!instance.runtime || !runtimeState(instance.runtime.state)) {
-    throw new ConflictException(`${instance.name} has no valid continuing runtime state.`);
+    throw new ConflictException(
+      `${instance.name} has no valid continuing runtime state.`,
+    );
   }
   return instance.runtime.state;
 }
@@ -1061,7 +1285,10 @@ function cleanJsonObject(value: Record<string, unknown>, maximumBytes: number) {
   return JSON.parse(text) as Record<string, Prisma.JsonValue>;
 }
 
-function cleanJsonValue(value: unknown, maximumBytes: number): Prisma.JsonValue {
+function cleanJsonValue(
+  value: unknown,
+  maximumBytes: number,
+): Prisma.JsonValue {
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text, "utf8") > maximumBytes) {
     throw new BadRequestException("Submitted Instance data is too large.");
@@ -1069,7 +1296,11 @@ function cleanJsonValue(value: unknown, maximumBytes: number): Prisma.JsonValue 
   return JSON.parse(text) as Prisma.JsonValue;
 }
 
-function capabilities(values: readonly string[]) {
+function capabilities(
+  values: readonly string[],
+  allowedValues: readonly string[],
+  kind: "observe" | "act",
+) {
   const normalized = [...new Set(values.map((value) => value.trim()))];
   if (
     normalized.length > 100 ||
@@ -1077,17 +1308,27 @@ function capabilities(values: readonly string[]) {
       (value) => value.length > 120 || !/^[^:\s]+:[^:\s]+$/.test(value),
     )
   ) {
-    throw new BadRequestException("Agent capabilities must use namespaced keys.");
+    throw new BadRequestException(
+      "Agent capabilities must use namespaced keys.",
+    );
   }
   if (
     normalized.some(
       (value) =>
         /^(auth|identity|credentials|secrets?):/i.test(value) ||
-        /(^|[-_.:])(impersonate|assume-user|session-token|secrets?)([-_.:]|$)/i.test(value),
+        /(^|[-_.:])(impersonate|assume-user|session-token|secrets?)([-_.:]|$)/i.test(
+          value,
+        ),
     )
   ) {
     throw new BadRequestException(
       "Agent capabilities cannot grant credential or human identity authority.",
+    );
+  }
+  const allowed = new Set(allowedValues);
+  if (normalized.some((value) => !allowed.has(value))) {
+    throw new BadRequestException(
+      `Agent ${kind} capabilities must use the core Session capability registry.`,
     );
   }
   return normalized;
@@ -1115,20 +1356,26 @@ function agentStatusTransition(
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
-function capturedCreaturePolicyProblems(
+export function capturedCreaturePolicyProblems(
   snapshot: {
     worldDefinitionSnapshot: { manifest: unknown };
   } | null,
 ): string[] {
-  if (!snapshot || !isCanonicalSnapshotManifest(snapshot.worldDefinitionSnapshot.manifest)) {
+  if (
+    !snapshot ||
+    !isCanonicalSnapshotManifest(snapshot.worldDefinitionSnapshot.manifest)
+  ) {
     return ["captured-world-unavailable"];
   }
   return snapshot.worldDefinitionSnapshot.manifest.records.flatMap((record) => {
     const payload = objectValue(record.payload);
-    if (record.resourceType !== "definitions" || payload.kind !== "creature") return [];
+    if (record.resourceType !== "definitions" || payload.kind !== "creature")
+      return [];
     const resolved = resolveCreatureInstanceEmbodimentPolicy(
       payload.instanceEmbodimentPolicy,
     );
@@ -1140,18 +1387,18 @@ function capturedCreaturePolicyProblems(
   });
 }
 
-function snapshotRecords(
-  manifest: unknown,
-  resourceType: string,
-) {
+function snapshotRecords(manifest: unknown, resourceType: string) {
   return isCanonicalSnapshotManifest(manifest)
     ? manifest.records.filter((record) => record.resourceType === resourceType)
     : [];
 }
 
-function plotParentId(plot: Record<string, Prisma.JsonValue>): string | undefined {
+function plotParentId(
+  plot: Record<string, Prisma.JsonValue>,
+): string | undefined {
   const parent = objectValue(plot.parent);
-  return parent.kind === "subplot" && typeof parent.parentPlotDefinitionId === "string"
+  return parent.kind === "subplot" &&
+    typeof parent.parentPlotDefinitionId === "string"
     ? parent.parentPlotDefinitionId
     : undefined;
 }
@@ -1185,7 +1432,10 @@ function capturedLocationNames(instance: {
     snapshotRecords(
       instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
       "locations",
-    ).map((record) => [record.sourceId, humanName(record.payload, "Captured Location")]),
+    ).map((record) => [
+      record.sourceId,
+      humanName(record.payload, "Captured Location"),
+    ]),
   );
 }
 
@@ -1204,11 +1454,7 @@ function latestDeliveries(
   return [...latest.values()].map((attempt) => ({
     channel: attempt.channel.toLowerCase() as "email" | "sms",
     status: attempt.status.toLowerCase() as
-      | "pending"
-      | "sent"
-      | "captured"
-      | "delivered"
-      | "failed",
+      "pending" | "sent" | "captured" | "delivered" | "failed",
     lastAttemptedAt: attempt.attemptedAt.toISOString(),
     ...(attempt.status === "FAILED"
       ? { failureMessage: "Delivery failed; retry the invitation." }
@@ -1216,7 +1462,7 @@ function latestDeliveries(
   }));
 }
 
-function validateRuntimeForCapturedPair(
+export function validateRuntimeForCapturedPair(
   state: Record<string, Prisma.JsonValue>,
   instance: {
     id: string;
@@ -1227,8 +1473,10 @@ function validateRuntimeForCapturedPair(
     } | null;
   },
 ) {
-  const campaignManifest = instance.currentSnapshot?.campaignDefinitionSnapshot.manifest;
-  const worldManifest = instance.currentSnapshot?.worldDefinitionSnapshot.manifest;
+  const campaignManifest =
+    instance.currentSnapshot?.campaignDefinitionSnapshot.manifest;
+  const worldManifest =
+    instance.currentSnapshot?.worldDefinitionSnapshot.manifest;
   if (
     !instance.currentSnapshotId ||
     !isCanonicalSnapshotManifest(campaignManifest) ||
@@ -1253,7 +1501,8 @@ function validateRuntimeForCapturedPair(
   const capturedCreaturePolicies = new Map();
   for (const record of worldManifest.records) {
     const payload = objectValue(record.payload);
-    if (record.resourceType !== "definitions" || payload.kind !== "creature") continue;
+    if (record.resourceType !== "definitions" || payload.kind !== "creature")
+      continue;
     const policy = resolveCreatureInstanceEmbodimentPolicy(
       payload.instanceEmbodimentPolicy,
     );
@@ -1265,27 +1514,30 @@ function validateRuntimeForCapturedPair(
       capturedCreaturePolicies.set(record.sourceId, policy);
     }
   }
-  return validateCampaignInstanceRuntimeState(state as never, {
-    campaignInstanceId: instance.id,
-    campaignInstanceSnapshotId: instance.currentSnapshotId,
-    capturedPlotObjectiveIds,
-    capturedLocationIds: new Set(
-      worldManifest.records
-        .filter((record) => record.resourceType === "locations")
-        .map((record) => record.sourceId),
-    ),
-    capturedCampaignPlacementIds: new Set(
-      campaignManifest.records
-        .filter((record) => record.resourceType === "campaign-placements")
-        .map((record) => record.sourceId),
-    ),
-    capturedWorldPlacementIds: new Set(
-      worldManifest.records
-        .filter((record) => record.resourceType === "world-placements")
-        .map((record) => record.sourceId),
-    ),
-    capturedCreaturePolicies,
-  } as never).issues;
+  return validateCampaignInstanceRuntimeState(
+    state as never,
+    {
+      campaignInstanceId: instance.id,
+      campaignInstanceSnapshotId: instance.currentSnapshotId,
+      capturedPlotObjectiveIds,
+      capturedLocationIds: new Set(
+        worldManifest.records
+          .filter((record) => record.resourceType === "locations")
+          .map((record) => record.sourceId),
+      ),
+      capturedCampaignPlacementIds: new Set(
+        campaignManifest.records
+          .filter((record) => record.resourceType === "campaign-placements")
+          .map((record) => record.sourceId),
+      ),
+      capturedWorldPlacementIds: new Set(
+        worldManifest.records
+          .filter((record) => record.resourceType === "world-placements")
+          .map((record) => record.sourceId),
+      ),
+      capturedCreaturePolicies,
+    } as never,
+  ).issues;
 }
 
 function revisionReference(
@@ -1324,25 +1576,41 @@ function resolvePlacementEntity(
   if (replacement?.kind === "existing-creature") {
     if (
       !creatureEmbodiments.some(
-        (entry) => objectValue(entry).runtimeCreatureId === replacement.runtimeCreatureId,
+        (entry) =>
+          objectValue(entry).runtimeCreatureId ===
+          replacement.runtimeCreatureId,
       )
     ) {
-      throw new BadRequestException("The selected Creature is not in this Campaign Instance.");
+      throw new BadRequestException(
+        "The selected Creature is not in this Campaign Instance.",
+      );
     }
     return {
       creatureEmbodiments,
       itemInstances,
-      realizedEntity: { kind: "creature", runtimeCreatureId: replacement.runtimeCreatureId },
+      realizedEntity: {
+        kind: "creature",
+        runtimeCreatureId: replacement.runtimeCreatureId,
+      },
     };
   }
   if (replacement?.kind === "existing-item") {
-    if (!itemInstances.some((entry) => objectValue(entry).id === replacement.runtimeItemId)) {
-      throw new BadRequestException("The selected Item is not in this Campaign Instance.");
+    if (
+      !itemInstances.some(
+        (entry) => objectValue(entry).id === replacement.runtimeItemId,
+      )
+    ) {
+      throw new BadRequestException(
+        "The selected Item is not in this Campaign Instance.",
+      );
     }
     return {
       creatureEmbodiments,
       itemInstances,
-      realizedEntity: { kind: "item", runtimeItemId: replacement.runtimeItemId },
+      realizedEntity: {
+        kind: "item",
+        runtimeItemId: replacement.runtimeItemId,
+      },
     };
   }
   const source = objectValue(realization.source);
@@ -1387,40 +1655,51 @@ function resolvePlacementEntity(
     }
     const existing = creatureEmbodiments
       .map(objectValue)
-      .find((entry) => objectValue(entry.source).sourceCreatureId === definitionId);
+      .find(
+        (entry) => objectValue(entry.source).sourceCreatureId === definitionId,
+      );
     if (existing && policy.policy.strategy === "one-per-instance") {
       return {
         creatureEmbodiments,
         itemInstances,
-        realizedEntity: { kind: "creature", runtimeCreatureId: existing.runtimeCreatureId },
+        realizedEntity: {
+          kind: "creature",
+          runtimeCreatureId: existing.runtimeCreatureId,
+        },
       };
     }
     const runtimeCreatureId = randomUUID();
     const runtimeEntityId = randomUUID();
-    creatureEmbodiments.push(cleanJsonValue({
-      campaignInstanceId: instance.id,
-      runtimeCreatureId,
-      runtimeEntityId,
-      source:
-        source.kind === "campaign-placement"
-          ? {
-              kind: "campaign-placement",
-              campaignPlacementDefinitionId: source.campaignPlacementDefinitionId,
-              sourceCreatureId: definitionId,
-              embodimentPolicy: policy,
-            }
-          : {
-              kind: "captured-world-creature",
-              sourceCreatureId: definitionId,
-              embodimentPolicy: policy,
-            },
-      creature: runtimeCreature(
-        humanName(definition, "Unnamed Creature"),
-        runtimeCreatureId,
-        runtimeEntityId,
-        definitionId,
+    creatureEmbodiments.push(
+      cleanJsonValue(
+        {
+          campaignInstanceId: instance.id,
+          runtimeCreatureId,
+          runtimeEntityId,
+          source:
+            source.kind === "campaign-placement"
+              ? {
+                  kind: "campaign-placement",
+                  campaignPlacementDefinitionId:
+                    source.campaignPlacementDefinitionId,
+                  sourceCreatureId: definitionId,
+                  embodimentPolicy: policy,
+                }
+              : {
+                  kind: "captured-world-creature",
+                  sourceCreatureId: definitionId,
+                  embodimentPolicy: policy,
+                },
+          creature: runtimeCreature(
+            humanName(definition, "Unnamed Creature"),
+            runtimeCreatureId,
+            runtimeEntityId,
+            definitionId,
+          ),
+        },
+        50_000,
       ),
-    }, 50_000));
+    );
     return {
       creatureEmbodiments,
       itemInstances,
@@ -1461,7 +1740,9 @@ function capturedPlacement(
     const campaign = snapshotRecords(
       instance.currentSnapshot?.campaignDefinitionSnapshot.manifest,
       "campaign-placements",
-    ).find((record) => record.sourceId === provenance.campaignPlacementDefinitionId);
+    ).find(
+      (record) => record.sourceId === provenance.campaignPlacementDefinitionId,
+    );
     const placement = objectValue(campaign?.payload);
     if (placement.kind !== "world-decoration") return placement;
     const worldId = placement.capturedWorldPlacementId;
@@ -1476,7 +1757,9 @@ function capturedPlacement(
     snapshotRecords(
       instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
       "world-placements",
-    ).find((record) => record.sourceId === provenance.worldPlacementDefinitionId)?.payload,
+    ).find(
+      (record) => record.sourceId === provenance.worldPlacementDefinitionId,
+    )?.payload,
   );
 }
 

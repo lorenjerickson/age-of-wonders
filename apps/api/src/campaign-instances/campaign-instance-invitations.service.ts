@@ -9,6 +9,7 @@ import {
   CampaignInstanceHumanRole,
   DeliveryChannel,
   DeliveryStatus,
+  UserRole,
 } from "@prisma/client";
 import {
   ContactProtector,
@@ -20,6 +21,7 @@ import {
   SMS_NOTIFICATION_PORT,
 } from "../notifications/notification.port";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuthService } from "../auth/auth.service";
 import type { CreateCampaignInstanceInvitationDto } from "./dto/campaign-instance-management.dto";
 
 @Injectable()
@@ -29,9 +31,133 @@ export class CampaignInstanceInvitationsService {
     private readonly config: ConfigService,
     private readonly tokens: InvitationTokenService,
     private readonly contacts: ContactProtector,
+    private readonly auth: AuthService,
     @Inject(EMAIL_NOTIFICATION_PORT) private readonly email: NotificationPort,
     @Inject(SMS_NOTIFICATION_PORT) private readonly sms: NotificationPort,
   ) {}
+
+  async resolve(token: string) {
+    const invitation = await this.validInvitation(token);
+    return {
+      campaignInstanceName: invitation.campaignInstance.name,
+      invitedName: invitation.invitedName ?? "Invited participant",
+      role: invitation.role.toLowerCase(),
+      status: "pending" as const,
+      expiresAt: invitation.expiresAt.toISOString(),
+    };
+  }
+
+  async accept(token: string) {
+    const invitation = await this.validInvitation(token);
+    const prepared = this.auth.prepareSession("pending");
+    const accepted = await this.prisma
+      .$transaction(
+        async (tx) => {
+          const claimed = await tx.campaignInstanceInvitation.updateMany({
+            where: {
+              id: invitation.id,
+              status: "PENDING",
+              expiresAt: { gt: new Date() },
+            },
+            data: { status: "ACCEPTED", acceptedAt: new Date() },
+          });
+          if (claimed.count !== 1)
+            throw new ConflictException("Invitation is no longer available.");
+          const matchingProfiles = await tx.playerProfile.findMany({
+            where: {
+              OR: [
+                ...(invitation.emailHash
+                  ? [{ emailHash: invitation.emailHash }]
+                  : []),
+                ...(invitation.phoneHash
+                  ? [{ phoneHash: invitation.phoneHash }]
+                  : []),
+              ],
+            },
+            include: { user: true },
+          });
+          const exactProfiles = matchingProfiles.filter(
+            (profile) =>
+              (!invitation.emailHash ||
+                profile.emailHash === invitation.emailHash) &&
+              (!invitation.phoneHash ||
+                profile.phoneHash === invitation.phoneHash),
+          );
+          if (
+            matchingProfiles.length > 0 &&
+            (matchingProfiles.length !== 1 ||
+              exactProfiles.length !== 1 ||
+              exactProfiles[0]?.standing !== "ACTIVE")
+          ) {
+            throw new ConflictException(
+              "The invitation contacts do not identify one active participant profile.",
+            );
+          }
+          const existingProfile = exactProfiles[0];
+          const user =
+            existingProfile?.user ??
+            (await tx.user.create({
+              data: {
+                displayName: invitation.invitedName ?? "Participant",
+                role: UserRole.PARTICIPANT,
+              },
+            }));
+          const profile =
+            existingProfile ??
+            (await tx.playerProfile.create({
+              data: {
+                userId: user.id,
+                displayName: invitation.invitedName ?? "Participant",
+                emailEncrypted: invitation.emailEncrypted,
+                emailHash: invitation.emailHash,
+                phoneEncrypted: invitation.phoneEncrypted,
+                phoneHash: invitation.phoneHash,
+              },
+              include: { user: true },
+            }));
+          const membership = await tx.campaignInstanceHumanMembership.create({
+            data: {
+              campaignInstanceId: invitation.campaignInstanceId,
+              userId: user.id,
+              playerProfileId: invitation.role === "PLAYER" ? profile.id : null,
+              displayName: invitation.invitedName ?? user.displayName,
+              role: invitation.role,
+            },
+          });
+          await tx.authSession.create({
+            data: { ...prepared.data, userId: user.id },
+          });
+          await tx.campaignInstanceInvitation.update({
+            where: { id: invitation.id },
+            data: {
+              invitedUserId: user.id,
+              acceptedMembershipId: membership.id,
+            },
+          });
+          return { user, membership };
+        },
+        { isolationLevel: "Serializable" },
+      )
+      .catch((error: unknown) => {
+        if (isPrismaCode(error, "P2002") || isPrismaCode(error, "P2034")) {
+          throw new ConflictException(
+            "This identity already participates in the Campaign Instance.",
+          );
+        }
+        throw error;
+      });
+    return {
+      sessionToken: prepared.token,
+      user: {
+        displayName: accepted.user.displayName,
+        role:
+          accepted.membership.role === "SPECTATOR"
+            ? ("spectator" as const)
+            : ("player" as const),
+      },
+      campaignInstanceName: invitation.campaignInstance.name,
+    };
+  }
 
   async create(
     campaignInstanceId: string,
@@ -42,7 +168,9 @@ export class CampaignInstanceInvitationsService {
     const email = dto.email ? this.contacts.protectEmail(dto.email) : undefined;
     const phone = dto.phone ? this.contacts.protectPhone(dto.phone) : undefined;
     if (!email && !phone) {
-      throw new ConflictException("An email address or phone number is required.");
+      throw new ConflictException(
+        "An email address or phone number is required.",
+      );
     }
     const issuanceLimit = this.config.get<number>(
       "CAMPAIGN_INSTANCE_INVITATION_HOURLY_LIMIT",
@@ -98,29 +226,29 @@ export class CampaignInstanceInvitationsService {
           );
         }
         const created = await tx.campaignInstanceInvitation.create({
-      data: {
-        campaignInstanceId,
-        role:
-          dto.role === "player"
-            ? CampaignInstanceHumanRole.PLAYER
-            : CampaignInstanceHumanRole.SPECTATOR,
-        invitedName: dto.invitedName.trim(),
-        emailEncrypted: email?.encrypted,
-        emailHash: email?.hash,
-        phoneEncrypted: phone?.encrypted,
-        phoneHash: phone?.hash,
-        tokenHash: issued.tokenHash,
-        expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000),
-        createdByUserId: ownerUserId,
-      },
-      select: {
-        id: true,
-        invitedName: true,
-        role: true,
-        status: true,
-        expiresAt: true,
-        createdAt: true,
-      },
+          data: {
+            campaignInstanceId,
+            role:
+              dto.role === "player"
+                ? CampaignInstanceHumanRole.PLAYER
+                : CampaignInstanceHumanRole.SPECTATOR,
+            invitedName: dto.invitedName.trim(),
+            emailEncrypted: email?.encrypted,
+            emailHash: email?.hash,
+            phoneEncrypted: phone?.encrypted,
+            phoneHash: phone?.hash,
+            tokenHash: issued.tokenHash,
+            expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000),
+            createdByUserId: ownerUserId,
+          },
+          select: {
+            id: true,
+            invitedName: true,
+            role: true,
+            status: true,
+            expiresAt: true,
+            createdAt: true,
+          },
         });
         await tx.campaignInstanceAuditEvent.create({
           data: {
@@ -155,10 +283,28 @@ export class CampaignInstanceInvitationsService {
     };
     const deliveries = await Promise.all([
       ...(email
-        ? [this.deliver(this.email, email.normalized, campaignInstanceId, invitation.id, "email", content)]
+        ? [
+            this.deliver(
+              this.email,
+              email.normalized,
+              campaignInstanceId,
+              invitation.id,
+              "email",
+              content,
+            ),
+          ]
         : []),
       ...(phone
-        ? [this.deliver(this.sms, phone.normalized, campaignInstanceId, invitation.id, "sms", content)]
+        ? [
+            this.deliver(
+              this.sms,
+              phone.normalized,
+              campaignInstanceId,
+              invitation.id,
+              "sms",
+              content,
+            ),
+          ]
         : []),
     ]);
     return {
@@ -214,11 +360,20 @@ export class CampaignInstanceInvitationsService {
   async retry(id: string, invitationId: string, ownerUserId: string) {
     const instance = await this.owned(id, ownerUserId);
     const prior = await this.prisma.campaignInstanceInvitation.findFirst({
-      where: { id: invitationId, campaignInstanceId: id, status: { in: ["PENDING", "EXPIRED"] } },
+      where: {
+        id: invitationId,
+        campaignInstanceId: id,
+        status: { in: ["PENDING", "EXPIRED"] },
+      },
     });
-    if (!prior) throw new NotFoundException("The selected invitation was not found.");
-    const email = prior.emailEncrypted ? this.contacts.decrypt(prior.emailEncrypted) : undefined;
-    const phone = prior.phoneEncrypted ? this.contacts.decrypt(prior.phoneEncrypted) : undefined;
+    if (!prior)
+      throw new NotFoundException("The selected invitation was not found.");
+    const email = prior.emailEncrypted
+      ? this.contacts.decrypt(prior.emailEncrypted)
+      : undefined;
+    const phone = prior.phoneEncrypted
+      ? this.contacts.decrypt(prior.phoneEncrypted)
+      : undefined;
     const issued = this.tokens.issue();
     const ttlHours = this.config.get<number>("INVITATION_TTL_HOURS", 168);
     const issuanceLimit = this.config.get<number>(
@@ -246,7 +401,8 @@ export class CampaignInstanceInvitationsService {
         where: { id: prior.id, campaignInstanceId: id, status: prior.status },
         data: { status: "REVOKED", revokedAt: new Date() },
       });
-      if (claimed.count !== 1) throw new ConflictException("Invitation changed; reload and retry.");
+      if (claimed.count !== 1)
+        throw new ConflictException("Invitation changed; reload and retry.");
       const created = await tx.campaignInstanceInvitation.create({
         data: {
           campaignInstanceId: id,
@@ -271,10 +427,7 @@ export class CampaignInstanceInvitationsService {
           subjectType: "Invitation",
           detail: {
             role: created.role.toLowerCase(),
-            channels: [
-              ...(email ? ["email"] : []),
-              ...(phone ? ["sms"] : []),
-            ],
+            channels: [...(email ? ["email"] : []), ...(phone ? ["sms"] : [])],
           },
         },
       });
@@ -286,8 +439,21 @@ export class CampaignInstanceInvitationsService {
       text: `${prior.invitedName ?? "Participant"}, you have been invited to join ${instance.name}. Open ${joinUrl}`,
     };
     const deliveries = await Promise.all([
-      ...(email ? [this.deliver(this.email, email, id, replacement.id, "email", content)] : []),
-      ...(phone ? [this.deliver(this.sms, phone, id, replacement.id, "sms", content)] : []),
+      ...(email
+        ? [
+            this.deliver(
+              this.email,
+              email,
+              id,
+              replacement.id,
+              "email",
+              content,
+            ),
+          ]
+        : []),
+      ...(phone
+        ? [this.deliver(this.sms, phone, id, replacement.id, "sms", content)]
+        : []),
     ]);
     return {
       campaignInstanceId: id,
@@ -308,8 +474,27 @@ export class CampaignInstanceInvitationsService {
       where: { id, ownerUserId },
       select: { id: true, name: true, status: true },
     });
-    if (!instance) throw new NotFoundException("The selected Campaign Instance was not found.");
+    if (!instance)
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
     return instance;
+  }
+
+  private async validInvitation(token: string) {
+    const invitation = await this.prisma.campaignInstanceInvitation.findUnique({
+      where: { tokenHash: this.tokens.hash(token) },
+      include: { campaignInstance: { select: { name: true, status: true } } },
+    });
+    if (
+      !invitation ||
+      invitation.status !== "PENDING" ||
+      invitation.expiresAt.getTime() <= Date.now() ||
+      ["CONCLUDED", "ARCHIVED"].includes(invitation.campaignInstance.status)
+    ) {
+      throw new NotFoundException("Invitation is invalid or unavailable.");
+    }
+    return invitation;
   }
 
   private async deliver(

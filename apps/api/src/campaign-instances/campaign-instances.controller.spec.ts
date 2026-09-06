@@ -17,27 +17,28 @@ describe("CampaignInstancesController", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const request = {
       headers: {},
       user: { id: "gm-1", displayName: "GM", role: UserRole.GM },
     } as Request & AuthenticatedRequest;
 
-    await expect(controller.list(request)).resolves.toEqual({ items: [], total: 0 });
+    await expect(controller.list(request)).resolves.toEqual({
+      items: [],
+      total: 0,
+    });
     await expect(controller.get("instance-1", request)).resolves.toEqual({
       name: "Tuesday Glasswake",
     });
     expect(service.list).toHaveBeenCalledWith("gm-1");
     expect(service.get).toHaveBeenCalledWith("instance-1", "gm-1");
     await expect(
-      controller.create(
-        request,
-        {
-          idempotencyKey: "create-wednesday-glasswake-1",
-          name: "Wednesday Glasswake",
-          campaignDefinitionSnapshotId: "campaign-snapshot-3",
-        },
-      ),
+      controller.create(request, {
+        idempotencyKey: "create-wednesday-glasswake-1",
+        name: "Wednesday Glasswake",
+        campaignDefinitionSnapshotId: "campaign-snapshot-3",
+      }),
     ).resolves.toEqual({ name: "Wednesday Glasswake" });
     expect(service.create).toHaveBeenCalledWith(
       {

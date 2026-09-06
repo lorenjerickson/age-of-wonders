@@ -109,11 +109,16 @@ export class AuthService implements OnModuleInit {
     if (user.role === UserRole.GM) {
       return { displayName: user.displayName, role: "gm" as const };
     }
-    const membership = await this.prisma.campaignMembership.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: "asc" },
-      select: { role: true },
-    });
+    const membership =
+      await this.prisma.campaignInstanceHumanMembership.findFirst({
+        where: {
+          userId: user.id,
+          status: "ACTIVE",
+          role: { in: ["PLAYER", "SPECTATOR"] },
+        },
+        orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+        select: { role: true },
+      });
     return {
       displayName: user.displayName,
       role: membership?.role === "SPECTATOR" ? "spectator" : "player",

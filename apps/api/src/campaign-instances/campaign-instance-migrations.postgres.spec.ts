@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ConflictException } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
+import { CampaignSessionService } from "./campaign-session.service";
 
 const databaseUrl = process.env.CAMPAIGN_INSTANCE_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
@@ -19,13 +22,24 @@ interface Fixture {
 describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
   let prisma!: PrismaClient;
   let service!: CampaignInstanceMigrationsService;
+  let sessions!: CampaignSessionService;
 
   beforeAll(async () => {
-    if (!databaseUrl) throw new Error("PostgreSQL test database is unavailable.");
+    if (!databaseUrl)
+      throw new Error("PostgreSQL test database is unavailable.");
     assertDisposableDatabase(databaseUrl);
     prisma = new PrismaClient({ datasourceUrl: databaseUrl });
     await prisma.$connect();
     service = new CampaignInstanceMigrationsService(prisma as never);
+    sessions = new CampaignSessionService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
   });
 
   afterAll(async () => {
@@ -159,9 +173,12 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
       service.apply(fixture.campaignInstanceId, fixture.ownerUserId, request),
     ]);
 
-    expect(outcomes.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(
+      outcomes.filter(({ status }) => status === "fulfilled"),
+    ).toHaveLength(1);
     const rejected = outcomes.filter(
-      (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
+      (outcome): outcome is PromiseRejectedResult =>
+        outcome.status === "rejected",
     );
     expect(rejected).toHaveLength(1);
     expect(rejected[0]?.reason).toBeInstanceOf(ConflictException);
@@ -192,11 +209,7 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
 
     try {
       await expect(
-        service.apply(
-          fixture.campaignInstanceId,
-          fixture.ownerUserId,
-          request,
-        ),
+        service.apply(fixture.campaignInstanceId, fixture.ownerUserId, request),
       ).rejects.toThrow("forced late Campaign Instance migration failure");
       await expectUnchanged(prisma, fixture);
     } finally {
@@ -208,7 +221,582 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
       );
     }
   }, 40_000);
+
+  it("creates one logical Session under concurrent idempotent retries", async () => {
+    const fixture = await seedFixture(prisma);
+    const request = {
+      idempotencyKey: `session-create-${randomUUID()}`,
+      name: "Concurrent planning",
+    };
+    const results = await Promise.all([
+      sessions.create(fixture.campaignInstanceId, fixture.ownerUserId, request),
+      sessions.create(fixture.campaignInstanceId, fixture.ownerUserId, request),
+    ]);
+
+    expect(results[0].id).toBe(results[1].id);
+    await expect(
+      prisma.campaignInstanceSession.count({
+        where: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          name: "Concurrent planning",
+        },
+      }),
+    ).resolves.toBe(1);
+  }, 40_000);
+
+  it("rejects an upgrade when more than one resumable Session exists", async () => {
+    const fixture = await seedFixture(prisma);
+    const now = new Date();
+    const preflight = campaignSessionResumablePreflightSql();
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          'DROP INDEX "CampaignInstanceSession_single_resumable_installation_key"',
+        );
+        await tx.campaignInstanceSession.update({
+          where: { id: fixture.sessionId },
+          data: { status: "PAUSED", startedAt: now, pausedAt: now },
+        });
+        await tx.campaignInstanceSession.create({
+          data: {
+            id: `${fixture.sessionId}-second-paused`,
+            campaignInstanceId: fixture.campaignInstanceId,
+            name: "Second legacy paused Session",
+            status: "PAUSED",
+            startedAt: now,
+            pausedAt: now,
+          },
+        });
+        await tx.$executeRawUnsafe(preflight);
+      }),
+    ).rejects.toThrow(
+      "Campaign Session migration blocked: found 0 ACTIVE and 2 PAUSED Sessions",
+    );
+  }, 40_000);
+
+  it("rejects ambiguous Player contact hashes before creating unique indexes", async () => {
+    const prefix = `contact-preflight-${randomUUID()}`;
+    const preflight = playerProfileContactPreflightSql();
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('DROP INDEX "PlayerProfile_emailHash_key"');
+        await tx.user.createMany({
+          data: [
+            {
+              id: `${prefix}-first-user`,
+              displayName: "First contact",
+              role: "PARTICIPANT",
+            },
+            {
+              id: `${prefix}-second-user`,
+              displayName: "Second contact",
+              role: "PARTICIPANT",
+            },
+          ],
+        });
+        await tx.playerProfile.createMany({
+          data: [
+            {
+              id: `${prefix}-first-profile`,
+              userId: `${prefix}-first-user`,
+              displayName: "First contact",
+              emailHash: `${prefix}-duplicate-email`,
+            },
+            {
+              id: `${prefix}-second-profile`,
+              userId: `${prefix}-second-user`,
+              displayName: "Second contact",
+              emailHash: `${prefix}-duplicate-email`,
+            },
+          ],
+        });
+        await tx.$executeRawUnsafe(preflight);
+      }),
+    ).rejects.toThrow(
+      "Player profiles contain 1 duplicate email-hash groups across 2 profiles and 0 duplicate phone-hash groups across 0 profiles",
+    );
+  }, 40_000);
+
+  it("enforces unique non-null Player email and phone hashes", async () => {
+    const prefix = `contact-unique-${randomUUID()}`;
+    await prisma.user.createMany({
+      data: [
+        {
+          id: `${prefix}-first-user`,
+          displayName: "First unique contact",
+          role: "PARTICIPANT",
+        },
+        {
+          id: `${prefix}-second-user`,
+          displayName: "Second unique contact",
+          role: "PARTICIPANT",
+        },
+        {
+          id: `${prefix}-third-user`,
+          displayName: "Third unique contact",
+          role: "PARTICIPANT",
+        },
+        {
+          id: `${prefix}-fourth-user`,
+          displayName: "Fourth unique contact",
+          role: "PARTICIPANT",
+        },
+      ],
+    });
+    await prisma.playerProfile.create({
+      data: {
+        userId: `${prefix}-first-user`,
+        displayName: "First unique contact",
+        emailHash: `${prefix}-email`,
+      },
+    });
+    await expect(
+      prisma.playerProfile.create({
+        data: {
+          userId: `${prefix}-second-user`,
+          displayName: "Second unique contact",
+          emailHash: `${prefix}-email`,
+        },
+      }),
+    ).rejects.toThrow();
+    await prisma.playerProfile.create({
+      data: {
+        userId: `${prefix}-third-user`,
+        displayName: "Third unique contact",
+        phoneHash: `${prefix}-phone`,
+      },
+    });
+    await expect(
+      prisma.playerProfile.create({
+        data: {
+          userId: `${prefix}-fourth-user`,
+          displayName: "Fourth unique contact",
+          phoneHash: `${prefix}-phone`,
+        },
+      }),
+    ).rejects.toThrow();
+  }, 40_000);
+
+  it("enforces Session and invitation lifecycle shapes in PostgreSQL", async () => {
+    const fixture = await seedFixture(prisma);
+    await expect(
+      prisma.campaignInstanceSession.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          name: "Invalid lobby",
+          status: "LOBBY",
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.campaignSessionRuntimeBoundary.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: fixture.sessionId,
+          snapshotId: fixture.sourceSnapshotId,
+          runtimeRevision: 0,
+          reason: "START",
+          eventSequence: 1,
+          contentHash: "invalid-runtime-revision",
+          actorUserId: fixture.ownerUserId,
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.campaignInstanceSession.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          name: "Invalid revision",
+          metadataRevision: 0,
+        },
+      }),
+    ).rejects.toThrow();
+
+    const session = await sessions.create(
+      fixture.campaignInstanceId,
+      fixture.ownerUserId,
+      {
+        idempotencyKey: `invitation-shape-${randomUUID()}`,
+        name: "Invitation shape checks",
+      },
+    );
+    const participation = await prisma.sessionParticipation.findFirstOrThrow({
+      where: { sessionId: session.id, role: "GM" },
+    });
+    const issuedAt = new Date();
+    await expect(
+      prisma.campaignSessionInvitation.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: session.id,
+          participationId: participation.id,
+          revision: 0,
+          tokenHash: `invalid-revision-${randomUUID()}`,
+          issuedByUserId: fixture.ownerUserId,
+          issuedAt,
+          expiresAt: new Date(issuedAt.getTime() + 60_000),
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.campaignSessionInvitation.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: session.id,
+          participationId: participation.id,
+          tokenHash: `invalid-expiry-${randomUUID()}`,
+          issuedByUserId: fixture.ownerUserId,
+          issuedAt,
+          expiresAt: issuedAt,
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.campaignSessionInvitation.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: session.id,
+          participationId: participation.id,
+          tokenHash: `invalid-accepted-status-${randomUUID()}`,
+          status: "ACCEPTED",
+          issuedByUserId: fixture.ownerUserId,
+          issuedAt,
+          expiresAt: new Date(issuedAt.getTime() + 60_000),
+        },
+      }),
+    ).rejects.toThrow();
+  }, 40_000);
+
+  it("enforces one pending invitation and same-participation predecessor lineage", async () => {
+    const fixture = await seedFixture(prisma);
+    const firstSession = await sessions.create(
+      fixture.campaignInstanceId,
+      fixture.ownerUserId,
+      {
+        idempotencyKey: `first-lineage-${randomUUID()}`,
+        name: "First invitation lineage",
+      },
+    );
+    const firstParticipation =
+      await prisma.sessionParticipation.findFirstOrThrow({
+        where: { sessionId: firstSession.id, role: "GM" },
+      });
+    const now = new Date();
+    const firstInvitation = await prisma.campaignSessionInvitation.create({
+      data: {
+        campaignInstanceId: fixture.campaignInstanceId,
+        sessionId: firstSession.id,
+        participationId: firstParticipation.id,
+        tokenHash: `first-pending-${randomUUID()}`,
+        issuedByUserId: fixture.ownerUserId,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 60_000),
+      },
+    });
+    await expect(
+      prisma.campaignSessionInvitation.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: firstSession.id,
+          participationId: firstParticipation.id,
+          revision: 2,
+          predecessorInvitationId: firstInvitation.id,
+          tokenHash: `duplicate-pending-${randomUUID()}`,
+          issuedByUserId: fixture.ownerUserId,
+          issuedAt: now,
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+      }),
+    ).rejects.toThrow();
+
+    await prisma.campaignSessionInvitation.update({
+      where: { id: firstInvitation.id },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    });
+    const secondSession = await sessions.create(
+      fixture.campaignInstanceId,
+      fixture.ownerUserId,
+      {
+        idempotencyKey: `second-lineage-${randomUUID()}`,
+        name: "Second invitation lineage",
+      },
+    );
+    const secondParticipation =
+      await prisma.sessionParticipation.findFirstOrThrow({
+        where: { sessionId: secondSession.id, role: "GM" },
+      });
+    await expect(
+      prisma.campaignSessionInvitation.create({
+        data: {
+          campaignInstanceId: fixture.campaignInstanceId,
+          sessionId: secondSession.id,
+          participationId: secondParticipation.id,
+          revision: 2,
+          predecessorInvitationId: firstInvitation.id,
+          tokenHash: `cross-scope-predecessor-${randomUUID()}`,
+          issuedByUserId: fixture.ownerUserId,
+          issuedAt: now,
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+      }),
+    ).rejects.toThrow();
+  }, 40_000);
+
+  it("allows exactly one of two ready lobbies to start", async () => {
+    const fixture = await seedFixture(prisma);
+    const first = await sessions.create(
+      fixture.campaignInstanceId,
+      fixture.ownerUserId,
+      {
+        idempotencyKey: `first-lobby-${randomUUID()}`,
+        name: "First ready lobby",
+      },
+    );
+    const second = await sessions.create(
+      fixture.campaignInstanceId,
+      fixture.ownerUserId,
+      {
+        idempotencyKey: `second-lobby-${randomUUID()}`,
+        name: "Second ready lobby",
+      },
+    );
+    const firstLobby = await sessions.command(
+      fixture.campaignInstanceId,
+      first.id,
+      fixture.ownerUserId,
+      "open-lobby",
+      { expectedMetadataRevision: first.metadataRevision },
+    );
+    const secondLobby = await sessions.command(
+      fixture.campaignInstanceId,
+      second.id,
+      fixture.ownerUserId,
+      "open-lobby",
+      { expectedMetadataRevision: second.metadataRevision },
+    );
+    await Promise.all([
+      sessions.join(
+        fixture.campaignInstanceId,
+        first.id,
+        fixture.ownerUserId,
+        `presence-first-${randomUUID()}`,
+      ),
+      sessions.join(
+        fixture.campaignInstanceId,
+        second.id,
+        fixture.ownerUserId,
+        `presence-second-${randomUUID()}`,
+      ),
+    ]);
+    const [firstReady, secondReady] = await Promise.all([
+      sessions.readiness(
+        fixture.campaignInstanceId,
+        first.id,
+        fixture.ownerUserId,
+      ),
+      sessions.readiness(
+        fixture.campaignInstanceId,
+        second.id,
+        fixture.ownerUserId,
+      ),
+    ]);
+    const outcomes = await Promise.allSettled([
+      sessions.command(
+        fixture.campaignInstanceId,
+        first.id,
+        fixture.ownerUserId,
+        "start",
+        {
+          expectedMetadataRevision: firstLobby.metadataRevision,
+          expectedRuntimeRevision: firstReady.runtimeRevision,
+          readinessToken: firstReady.token,
+        },
+      ),
+      sessions.command(
+        fixture.campaignInstanceId,
+        second.id,
+        fixture.ownerUserId,
+        "start",
+        {
+          expectedMetadataRevision: secondLobby.metadataRevision,
+          expectedRuntimeRevision: secondReady.runtimeRevision,
+          readinessToken: secondReady.token,
+        },
+      ),
+    ]);
+
+    const fulfilled = outcomes.filter(
+      (
+        outcome,
+      ): outcome is PromiseFulfilledResult<
+        Awaited<ReturnType<typeof sessions.command>>
+      > => outcome.status === "fulfilled",
+    );
+    expect(fulfilled).toHaveLength(1);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "rejected"),
+    ).toHaveLength(1);
+    const winner = fulfilled[0].value;
+    await sessions.command(
+      fixture.campaignInstanceId,
+      winner.id,
+      fixture.ownerUserId,
+      "conclude",
+      { expectedMetadataRevision: winner.metadataRevision },
+    );
+    await expect(
+      prisma.campaignSessionEvent.updateMany({
+        where: { sessionId: winner.id },
+        data: { summary: "Mutation must fail" },
+      }),
+    ).rejects.toThrow("Campaign Session history is append-only");
+  }, 40_000);
+
+  it("rolls back summary approval when the late outbox write fails", async () => {
+    const fixture = await seedFixture(prisma);
+    const concluded = await createAndConcludeSession(
+      sessions,
+      fixture,
+      "Summary rollback",
+    );
+    const suffix = randomUUID().replaceAll("-", "");
+    const functionName = `fail_session_outbox_${suffix}`;
+    const triggerName = `fail_session_outbox_${suffix}`;
+    await prisma.$executeRawUnsafe(`
+      CREATE FUNCTION "${functionName}"() RETURNS trigger AS $function$
+      BEGIN
+        IF NEW."campaignInstanceId" = '${fixture.campaignInstanceId}' THEN
+          RAISE EXCEPTION 'forced late Session outbox failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $function$ LANGUAGE plpgsql
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER "${triggerName}"
+      BEFORE INSERT ON "CampaignSessionOutboxEvent"
+      FOR EACH ROW EXECUTE FUNCTION "${functionName}"()
+    `);
+    try {
+      await expect(
+        sessions.updateSummary(
+          fixture.campaignInstanceId,
+          concluded.id,
+          fixture.ownerUserId,
+          {
+            expectedSessionRevision: concluded.metadataRevision,
+            narrative: "This approval must roll back.",
+          },
+        ),
+      ).rejects.toThrow("forced late Session outbox failure");
+      const [storedSession, summary, outboxCount] = await Promise.all([
+        prisma.campaignInstanceSession.findUniqueOrThrow({
+          where: { id: concluded.id },
+        }),
+        prisma.campaignSessionSummary.findUniqueOrThrow({
+          where: {
+            sessionId_revision: { sessionId: concluded.id, revision: 1 },
+          },
+        }),
+        prisma.campaignSessionOutboxEvent.count({
+          where: { sessionId: concluded.id },
+        }),
+      ]);
+      expect(storedSession.metadataRevision).toBe(concluded.metadataRevision);
+      expect(storedSession.summaryStatus).toBe("DRAFT");
+      expect(summary).toMatchObject({ status: "DRAFT", narrative: "" });
+      expect(outboxCount).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        `DROP TRIGGER IF EXISTS "${triggerName}" ON "CampaignSessionOutboxEvent"`,
+      );
+      await prisma.$executeRawUnsafe(
+        `DROP FUNCTION IF EXISTS "${functionName}"()`,
+      );
+    }
+
+    const approved = await sessions.updateSummary(
+      fixture.campaignInstanceId,
+      concluded.id,
+      fixture.ownerUserId,
+      {
+        expectedSessionRevision: concluded.metadataRevision,
+        narrative: "Approved summary",
+      },
+    );
+    const approvedSession =
+      await prisma.campaignInstanceSession.findUniqueOrThrow({
+        where: { id: concluded.id },
+        select: { metadataRevision: true },
+      });
+    const amended = await sessions.updateSummary(
+      fixture.campaignInstanceId,
+      concluded.id,
+      fixture.ownerUserId,
+      {
+        expectedSessionRevision: approvedSession.metadataRevision,
+        narrative: "Amended summary",
+      },
+    );
+    expect(amended.eventSequenceThrough).toBe(approved.eventSequenceThrough);
+    await expect(
+      prisma.campaignSessionSummary.update({
+        where: { sessionId_revision: { sessionId: concluded.id, revision: 1 } },
+        data: { narrative: "Mutation must fail" },
+      }),
+    ).rejects.toThrow("Approved Campaign Session summaries are immutable");
+  }, 40_000);
 });
+
+async function createAndConcludeSession(
+  sessions: CampaignSessionService,
+  fixture: Fixture,
+  name: string,
+) {
+  const planned = await sessions.create(
+    fixture.campaignInstanceId,
+    fixture.ownerUserId,
+    { idempotencyKey: `${name}-${randomUUID()}`, name },
+  );
+  const lobby = await sessions.command(
+    fixture.campaignInstanceId,
+    planned.id,
+    fixture.ownerUserId,
+    "open-lobby",
+    { expectedMetadataRevision: planned.metadataRevision },
+  );
+  await sessions.join(
+    fixture.campaignInstanceId,
+    planned.id,
+    fixture.ownerUserId,
+    `presence-${randomUUID()}`,
+  );
+  const readiness = await sessions.readiness(
+    fixture.campaignInstanceId,
+    planned.id,
+    fixture.ownerUserId,
+  );
+  const active = await sessions.command(
+    fixture.campaignInstanceId,
+    planned.id,
+    fixture.ownerUserId,
+    "start",
+    {
+      expectedMetadataRevision: lobby.metadataRevision,
+      expectedRuntimeRevision: readiness.runtimeRevision,
+      readinessToken: readiness.token,
+    },
+  );
+  return sessions.command(
+    fixture.campaignInstanceId,
+    planned.id,
+    fixture.ownerUserId,
+    "conclude",
+    { expectedMetadataRevision: active.metadataRevision },
+  );
+}
 
 async function seedFixture(prisma: PrismaClient): Promise<Fixture> {
   const prefix = `postgres-${randomUUID()}`;
@@ -360,8 +948,17 @@ async function seedFixture(prisma: PrismaClient): Promise<Fixture> {
       id: campaignInstanceId,
       campaignDefinitionId,
       name: "PostgreSQL verification instance",
+      status: "ACTIVE",
       ownerUserId,
       createdByUserId: ownerUserId,
+    },
+  });
+  await prisma.campaignInstanceHumanMembership.create({
+    data: {
+      campaignInstanceId,
+      userId: ownerUserId,
+      displayName: "PostgreSQL verifier",
+      role: "GM",
     },
   });
   await prisma.campaignInstanceSnapshot.create({
@@ -494,14 +1091,12 @@ async function expectMigrated(prisma: PrismaClient, fixture: Fixture) {
 async function pauseSession(prisma: PrismaClient, sessionId: string) {
   await prisma.campaignInstanceSession.update({
     where: { id: sessionId },
-    data: { status: "PAUSED" },
+    data: { status: "CONCLUDED", concludedAt: new Date() },
   });
 }
 
 function revisionManifest(
-  resourceType:
-    | "campaign-definition-revision"
-    | "world-definition-revision",
+  resourceType: "campaign-definition-revision" | "world-definition-revision",
   sourceId: string,
   sourceRevision: number,
 ) {
@@ -563,4 +1158,31 @@ function assertDisposableDatabase(value: string) {
       "CAMPAIGN_INSTANCE_TEST_DATABASE_URL must name an explicit test, verify, or disposable database.",
     );
   }
+}
+
+function campaignSessionResumablePreflightSql() {
+  return migrationBlockSql("campaign_session_resumable_preflight");
+}
+
+function playerProfileContactPreflightSql() {
+  return migrationBlockSql("player_profile_contact_preflight");
+}
+
+function migrationBlockSql(delimiter: string) {
+  const migration = readFileSync(
+    join(
+      __dirname,
+      "../../prisma/migrations/20260908000000_campaign_session_vertical_slice/migration.sql",
+    ),
+    "utf8",
+  );
+  const marker = `$${delimiter}$`;
+  const start = migration.indexOf(`DO ${marker}`);
+  const end = migration.indexOf(`${marker};`, start);
+  const preflight =
+    start >= 0 && end >= 0
+      ? migration.slice(start, end + marker.length + 1)
+      : undefined;
+  if (!preflight) throw new Error(`${delimiter} SQL is unavailable.`);
+  return preflight;
 }

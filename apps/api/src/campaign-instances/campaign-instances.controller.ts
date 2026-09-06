@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -36,6 +37,14 @@ import {
   UpdateCampaignInstancePreparationDto,
 } from "./dto/campaign-instance-management.dto";
 import { CreateCampaignInstanceDto } from "./dto/create-campaign-instance.dto";
+import { CampaignSessionService } from "./campaign-session.service";
+import {
+  CampaignSessionLifecycleDto,
+  CreateCampaignSessionDto,
+  UpdateCampaignSessionDto,
+  UpdateCampaignSessionParticipantsDto,
+  UpdateCampaignSessionSummaryDto,
+} from "./dto/campaign-session.dto";
 
 @ApiTags("campaign instances")
 @Controller("campaign-instances")
@@ -53,6 +62,8 @@ export class CampaignInstancesController {
     private readonly invitations: CampaignInstanceInvitationsService,
     @Inject(CampaignInstanceMigrationsService)
     private readonly migrations: CampaignInstanceMigrationsService,
+    @Inject(CampaignSessionService)
+    private readonly campaignSessions: CampaignSessionService,
   ) {}
 
   @Get()
@@ -76,20 +87,25 @@ export class CampaignInstancesController {
     );
   }
 
+  @Get("resumable-session")
+  resumableSession(@Req() request: Request & AuthenticatedRequest) {
+    return this.campaignSessions.resumableForGm(request.user!.id);
+  }
+
   @Get(":id")
   @ApiParam({ name: "id", description: "Campaign Instance ID" })
   @ApiOperation({
     summary: "Get one Campaign Instance without exposing runtime state",
   })
-  get(
-    @Param("id") id: string,
-    @Req() request: Request & AuthenticatedRequest,
-  ) {
+  get(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
     return this.instances.get(id, request.user!.id);
   }
 
   @Post(":id/validate")
-  validate(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  validate(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.validate(id, request.user!.id);
   }
 
@@ -103,7 +119,10 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/preparation")
-  preparation(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  preparation(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.preparation(id, request.user!.id);
   }
 
@@ -117,7 +136,10 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/plots")
-  plots(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  plots(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.plots(id, request.user!.id);
   }
 
@@ -128,11 +150,19 @@ export class CampaignInstancesController {
     @Req() request: Request & AuthenticatedRequest,
     @Body() dto: UpdateCampaignInstancePlotDto,
   ) {
-    return this.management.updatePlot(id, plotDefinitionId, request.user!.id, dto);
+    return this.management.updatePlot(
+      id,
+      plotDefinitionId,
+      request.user!.id,
+      dto,
+    );
   }
 
   @Get(":id/placements")
-  placements(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  placements(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.placements(id, request.user!.id);
   }
 
@@ -145,7 +175,9 @@ export class CampaignInstancesController {
     @Body() dto: DecideCampaignInstancePlacementDto,
   ) {
     if (action !== dto.action) {
-      throw new BadRequestException("The placement action does not match the request path.");
+      throw new BadRequestException(
+        "The placement action does not match the request path.",
+      );
     }
     return this.management.decidePlacement(
       id,
@@ -156,12 +188,18 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/embodiments")
-  embodiments(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  embodiments(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.embodiments(id, request.user!.id);
   }
 
   @Get(":id/roster")
-  roster(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  roster(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.roster(id, request.user!.id);
   }
 
@@ -225,17 +263,197 @@ export class CampaignInstancesController {
   }
 
   @Get(":id/sessions")
-  sessions(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  sessions(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.sessions(id, request.user!.id);
   }
 
+  @Post(":id/sessions")
+  planSession(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CreateCampaignSessionDto,
+  ) {
+    return this.campaignSessions.create(id, request.user!.id, dto);
+  }
+
+  @Get(":id/sessions/:sessionId")
+  sessionDetail(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.detail(id, sessionId, request.user!.id);
+  }
+
+  @Patch(":id/sessions/:sessionId")
+  updateSession(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignSessionDto,
+  ) {
+    return this.campaignSessions.update(id, sessionId, request.user!.id, dto);
+  }
+
+  @Put(":id/sessions/:sessionId/participants")
+  updateSessionParticipants(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignSessionParticipantsDto,
+  ) {
+    return this.campaignSessions.replaceParticipants(
+      id,
+      sessionId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(":id/sessions/:sessionId/participants/:participationId/eject")
+  ejectSessionParticipant(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Param("participationId") participationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CampaignSessionLifecycleDto,
+  ) {
+    return this.campaignSessions.eject(
+      id,
+      sessionId,
+      participationId,
+      request.user!.id,
+      dto.expectedMetadataRevision,
+    );
+  }
+
+  @Get(":id/sessions/:sessionId/readiness")
+  sessionReadiness(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.readiness(id, sessionId, request.user!.id);
+  }
+
+  @Post(":id/sessions/:sessionId/invitations")
+  issueSessionInvitations(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.issueInvitations(
+      id,
+      sessionId,
+      request.user!.id,
+    );
+  }
+
+  @Post(":id/sessions/:sessionId/invitations/:invitationId/retry")
+  retrySessionInvitation(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Param("invitationId") invitationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.retryInvitation(
+      id,
+      sessionId,
+      invitationId,
+      request.user!.id,
+    );
+  }
+
+  @Delete(":id/sessions/:sessionId/invitations/:invitationId")
+  revokeSessionInvitation(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Param("invitationId") invitationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.revokeInvitation(
+      id,
+      sessionId,
+      invitationId,
+      request.user!.id,
+    );
+  }
+
+  @Get(":id/sessions/:sessionId/events")
+  sessionEvents(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Query("afterSequence") afterSequence?: string,
+  ) {
+    const parsed = afterSequence ? Number.parseInt(afterSequence, 10) : 0;
+    if (!Number.isSafeInteger(parsed) || parsed < 0)
+      throw new BadRequestException("The event cursor is invalid.");
+    return this.campaignSessions.events(
+      id,
+      sessionId,
+      request.user!.id,
+      parsed,
+    );
+  }
+
+  @Get(":id/sessions/:sessionId/summary")
+  sessionSummary(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.campaignSessions.summary(id, sessionId, request.user!.id);
+  }
+
+  @Post(":id/sessions/:sessionId/:command")
+  sessionCommand(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Param("command") command: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CampaignSessionLifecycleDto,
+  ) {
+    return this.campaignSessions.command(
+      id,
+      sessionId,
+      request.user!.id,
+      command,
+      dto,
+    );
+  }
+
+  @Put(":id/sessions/:sessionId/summary")
+  updateSessionSummary(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignSessionSummaryDto,
+  ) {
+    return this.campaignSessions.updateSummary(
+      id,
+      sessionId,
+      request.user!.id,
+      dto,
+    );
+  }
+
   @Get(":id/continuation")
-  continuation(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  continuation(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.continuation(id, request.user!.id);
   }
 
   @Get(":id/versions")
-  versions(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
+  versions(
+    @Param("id") id: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
     return this.management.versions(id, request.user!.id);
   }
 
