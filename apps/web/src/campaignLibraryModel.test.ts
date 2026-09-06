@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  CampaignDefinitionId,
   CampaignInstanceId,
   CampaignInstanceSnapshotId,
 } from "@aow/common";
@@ -45,6 +46,7 @@ describe("Campaign library presentation", () => {
   it("maps Instances to management without implying a resumable Session", () => {
     const card = campaignInstanceCard({
       id: "instance-opaque-id" as CampaignInstanceId,
+      campaignDefinitionId: "definition-opaque-id" as CampaignDefinitionId,
       name: "Thursday Night Greyhaven",
       status: "active",
       metadataRevision: 1,

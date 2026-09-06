@@ -11,6 +11,10 @@ import {
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import { CampaignSessionService } from "./campaign-session.service";
 import { CampaignInstanceParticipationController } from "./campaign-instance-participation.controller";
+import {
+  CampaignInstanceHierarchyController,
+  CampaignInstanceMeController,
+} from "./campaign-instance-hierarchy.controller";
 import { CampaignSessionsController } from "./campaign-sessions.controller";
 import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interceptor";
 import {
@@ -24,6 +28,8 @@ import {
   controllers: [
     CampaignInstancesController,
     CampaignInstanceParticipationController,
+    CampaignInstanceHierarchyController,
+    CampaignInstanceMeController,
     CampaignSessionsController,
     CampaignInvitationEntryController,
     CampaignSessionMeOverviewController,

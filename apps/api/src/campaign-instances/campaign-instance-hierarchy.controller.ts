@@ -1,0 +1,503 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
+import type { Request } from "express";
+import { GmGuard } from "../auth/auth.guard";
+import type { AuthenticatedRequest } from "../auth/auth.types";
+import { CampaignInstanceInvitationsService } from "./campaign-instance-invitations.service";
+import { CampaignInstanceManagementService } from "./campaign-instance-management.service";
+import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
+import { CampaignInstancesService } from "./campaign-instances.service";
+import {
+  ApplyCampaignInstanceMigrationDto,
+  ApplyCampaignInstanceRestoreDto,
+  PreviewCampaignInstanceMigrationDto,
+  PreviewCampaignInstanceRestoreDto,
+} from "./dto/campaign-instance-migration.dto";
+import {
+  ConfigureCampaignInstanceAgentDto,
+  CreateCampaignInstanceInvitationDto,
+  DecideCampaignInstancePlacementDto,
+  UpdateCampaignInstanceAgentStatusDto,
+  UpdateCampaignInstanceLifecycleDto,
+  UpdateCampaignInstancePlotDto,
+  UpdateCampaignInstancePreparationDto,
+} from "./dto/campaign-instance-management.dto";
+import { CreateCampaignInstanceDto } from "./dto/create-campaign-instance.dto";
+
+@ApiTags("campaign instances")
+@Controller("campaigns/:campaignDefinitionId/instances")
+@UseGuards(GmGuard)
+export class CampaignInstanceHierarchyController {
+  constructor(
+    @Inject(CampaignInstancesService)
+    private readonly instances: CampaignInstancesService,
+    @Inject(CampaignInstanceManagementService)
+    private readonly management: CampaignInstanceManagementService,
+    @Inject(CampaignInstanceInvitationsService)
+    private readonly invitations: CampaignInstanceInvitationsService,
+    @Inject(CampaignInstanceMigrationsService)
+    private readonly migrations: CampaignInstanceMigrationsService,
+  ) {}
+
+  private async scope(
+    campaignDefinitionId: string,
+    campaignInstanceId: string,
+    request: Request & AuthenticatedRequest,
+  ) {
+    await this.instances.assertParent(
+      campaignDefinitionId,
+      campaignInstanceId,
+      request.user!.id,
+    );
+  }
+
+  @Get()
+  list(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+  ) {
+    const page = parsePagination(limit, offset);
+    return this.instances.list(
+      request.user!.id,
+      campaignDefinitionId,
+      page.limit,
+      page.offset,
+    );
+  }
+
+  @Post()
+  create(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CreateCampaignInstanceDto,
+  ) {
+    return this.instances.create(
+      dto,
+      request.user!.id,
+      request.user!.displayName,
+      campaignDefinitionId,
+    );
+  }
+
+  @Get(":campaignInstanceId")
+  detail(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.instances.get(
+      campaignInstanceId,
+      request.user!.id,
+      campaignDefinitionId,
+    );
+  }
+
+  @Post(":campaignInstanceId/actions/validate")
+  @HttpCode(HttpStatus.OK)
+  async validate(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.validate(campaignInstanceId, request.user!.id);
+  }
+
+  @Post(":campaignInstanceId/actions/change-status")
+  @HttpCode(HttpStatus.OK)
+  async updateLifecycle(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstanceLifecycleDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.updateLifecycle(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/runtime/preparation")
+  async preparation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.preparation(campaignInstanceId, request.user!.id);
+  }
+
+  @Put(":campaignInstanceId/runtime/preparation")
+  async updatePreparation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstancePreparationDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.updatePreparation(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/plots")
+  async plots(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.plots(campaignInstanceId, request.user!.id);
+  }
+
+  @Patch(":campaignInstanceId/plots/:plotDefinitionId")
+  async updatePlot(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("plotDefinitionId") plotDefinitionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstancePlotDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.updatePlot(
+      campaignInstanceId,
+      plotDefinitionId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/placements")
+  async placements(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.placements(campaignInstanceId, request.user!.id);
+  }
+
+  @Post(":campaignInstanceId/placements/:realizationId/actions/:action")
+  @HttpCode(HttpStatus.OK)
+  async decidePlacement(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("realizationId") realizationId: string,
+    @Param("action") action: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: DecideCampaignInstancePlacementDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    if (action !== dto.action) {
+      throw new BadRequestException(
+        "The placement action does not match the request path.",
+      );
+    }
+    return this.management.decidePlacement(
+      campaignInstanceId,
+      realizationId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/creature-embodiments")
+  async embodiments(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.embodiments(campaignInstanceId, request.user!.id);
+  }
+
+  @Get(":campaignInstanceId/roster")
+  async roster(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.roster(campaignInstanceId, request.user!.id);
+  }
+
+  @Get(":campaignInstanceId/memberships")
+  async memberships(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    const roster = await this.management.roster(
+      campaignInstanceId,
+      request.user!.id,
+    );
+    return {
+      campaignInstanceId: roster.campaignInstanceId,
+      campaignInstanceName: roster.campaignInstanceName,
+      items: roster.memberships,
+      total: roster.memberships.length,
+    };
+  }
+
+  @Get(":campaignInstanceId/characters")
+  async characters(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    const roster = await this.management.roster(
+      campaignInstanceId,
+      request.user!.id,
+    );
+    return {
+      campaignInstanceId: roster.campaignInstanceId,
+      campaignInstanceName: roster.campaignInstanceName,
+      items: roster.characters,
+      total: roster.characters.length,
+    };
+  }
+
+  @Get(":campaignInstanceId/agents/available")
+  async availableAgents(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.availableAgents(
+      campaignInstanceId,
+      request.user!.id,
+    );
+  }
+
+  @Post(":campaignInstanceId/invitations")
+  async createInvitation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: CreateCampaignInstanceInvitationDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.invitations.create(campaignInstanceId, request.user!.id, dto);
+  }
+
+  @Post(":campaignInstanceId/invitations/:invitationId/actions/retry")
+  async retryInvitation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("invitationId") invitationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.invitations.retry(
+      campaignInstanceId,
+      invitationId,
+      request.user!.id,
+    );
+  }
+
+  @Delete(":campaignInstanceId/invitations/:invitationId")
+  async revokeInvitation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("invitationId") invitationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.invitations.revoke(
+      campaignInstanceId,
+      invitationId,
+      request.user!.id,
+    );
+  }
+
+  @Post(":campaignInstanceId/agents")
+  async configureAgent(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ConfigureCampaignInstanceAgentDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.configureAgent(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Patch(":campaignInstanceId/agents/:agentParticipationId")
+  async updateAgentStatus(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("agentParticipationId") agentParticipationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdateCampaignInstanceAgentStatusDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.updateAgentStatus(
+      campaignInstanceId,
+      agentParticipationId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/continuation")
+  async continuation(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.continuation(campaignInstanceId, request.user!.id);
+  }
+
+  @Get(":campaignInstanceId/snapshots")
+  async snapshots(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.versions(campaignInstanceId, request.user!.id);
+  }
+
+  @Post(":campaignInstanceId/migrations/preview")
+  @HttpCode(HttpStatus.OK)
+  async previewMigration(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: PreviewCampaignInstanceMigrationDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.migrations.preview(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+      "migration",
+    );
+  }
+
+  @Post(":campaignInstanceId/migrations")
+  async applyMigration(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ApplyCampaignInstanceMigrationDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.migrations.apply(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+      "migration",
+    );
+  }
+
+  @Post(":campaignInstanceId/restores/preview")
+  @HttpCode(HttpStatus.OK)
+  async previewRestore(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: PreviewCampaignInstanceRestoreDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.migrations.previewRestore(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+
+  @Post(":campaignInstanceId/restores")
+  async applyRestore(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ApplyCampaignInstanceRestoreDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.migrations.applyRestore(
+      campaignInstanceId,
+      request.user!.id,
+      dto,
+    );
+  }
+}
+
+@ApiTags("current GM campaign instances")
+@Controller("me/campaign-instances")
+@UseGuards(GmGuard)
+export class CampaignInstanceMeController {
+  constructor(
+    @Inject(CampaignInstancesService)
+    private readonly instances: CampaignInstancesService,
+  ) {}
+
+  @Get()
+  list(
+    @Req() request: Request & AuthenticatedRequest,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+  ) {
+    const page = parsePagination(limit, offset);
+    return this.instances.list(
+      request.user!.id,
+      undefined,
+      page.limit,
+      page.offset,
+    );
+  }
+
+  @Get(":campaignInstanceId")
+  detail(
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.instances.get(campaignInstanceId, request.user!.id);
+  }
+}
+
+function parsePagination(limitValue?: string, offsetValue?: string) {
+  const limit =
+    limitValue === undefined ? 200 : Number.parseInt(limitValue, 10);
+  const offset =
+    offsetValue === undefined ? 0 : Number.parseInt(offsetValue, 10);
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 200 ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0
+  ) {
+    throw new BadRequestException("The Campaign Instance page is invalid.");
+  }
+  return { limit, offset };
+}

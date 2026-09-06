@@ -978,36 +978,49 @@ export function applyCampaignWorldMigration(
 }
 
 export function listCampaignInstances() {
-  return request<CampaignInstanceList>("/campaign-instances");
+  return request<CampaignInstanceList>("/me/campaign-instances");
 }
 
 export function getCampaignInstance(campaignInstanceId: string) {
   return request<CampaignInstanceDetail>(
-    `/campaign-instances/${encodeURIComponent(campaignInstanceId)}`,
+    `/me/campaign-instances/${encodeURIComponent(campaignInstanceId)}`,
   );
 }
 
-export function createCampaignInstance(input: CreateCampaignInstanceRequest) {
-  return request<CampaignInstanceDetail>("/campaign-instances", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": input.idempotencyKey,
+export function createCampaignInstance(
+  campaignDefinitionId: string,
+  input: CreateCampaignInstanceRequest,
+) {
+  return request<CampaignInstanceDetail>(
+    `/campaigns/${encodeURIComponent(campaignDefinitionId)}/instances`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": input.idempotencyKey,
+      },
+      body: JSON.stringify({
+        name: input.name,
+        campaignDefinitionSnapshotId: input.campaignDefinitionSnapshotId,
+        idempotencyKey: input.idempotencyKey,
+      }),
     },
-    body: JSON.stringify({
-      name: input.name,
-      campaignDefinitionSnapshotId: input.campaignDefinitionSnapshotId,
-      idempotencyKey: input.idempotencyKey,
-    }),
-  });
+  );
 }
 
-const instancePath = (campaignInstanceId: string, suffix: string) =>
-  `/campaign-instances/${encodeURIComponent(campaignInstanceId)}${suffix}`;
+const instancePath = (
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  suffix: string,
+) =>
+  `/campaigns/${encodeURIComponent(campaignDefinitionId)}/instances/${encodeURIComponent(campaignInstanceId)}${suffix}`;
 
-export function validateCampaignInstance(campaignInstanceId: string) {
+export function validateCampaignInstance(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceReadiness>(
-    instancePath(campaignInstanceId, "/validate"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/actions/validate"),
     {
       method: "POST",
     },
@@ -1015,31 +1028,48 @@ export function validateCampaignInstance(campaignInstanceId: string) {
 }
 
 export function updateCampaignInstanceLifecycle(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: CampaignInstanceLifecycleRequest,
 ) {
   return request<CampaignInstanceLifecycleResult>(
-    instancePath(campaignInstanceId, "/lifecycle"),
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/actions/change-status",
+    ),
     {
-      method: "PATCH",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
   );
 }
 
-export function getCampaignInstancePreparation(campaignInstanceId: string) {
+export function getCampaignInstancePreparation(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstancePreparation>(
-    instancePath(campaignInstanceId, "/preparation"),
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/runtime/preparation",
+    ),
   );
 }
 
 export function saveCampaignInstancePreparation(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: UpdateCampaignInstancePreparationRequest,
 ) {
   return request<CampaignInstancePreparation>(
-    instancePath(campaignInstanceId, "/preparation"),
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/runtime/preparation",
+    ),
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1048,19 +1078,24 @@ export function saveCampaignInstancePreparation(
   );
 }
 
-export function getCampaignInstancePlots(campaignInstanceId: string) {
+export function getCampaignInstancePlots(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstancePlotProjection>(
-    instancePath(campaignInstanceId, "/plots"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/plots"),
   );
 }
 
 export function updateCampaignInstancePlot(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   plotDefinitionId: string,
   input: UpdateCampaignInstancePlotRequest,
 ) {
   return request<CampaignInstanceMutationResult>(
     instancePath(
+      campaignDefinitionId,
       campaignInstanceId,
       `/plots/${encodeURIComponent(plotDefinitionId)}`,
     ),
@@ -1072,27 +1107,39 @@ export function updateCampaignInstancePlot(
   );
 }
 
-export function getCampaignInstancePlacements(campaignInstanceId: string) {
+export function getCampaignInstancePlacements(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstancePlacementProjection>(
-    instancePath(campaignInstanceId, "/placements"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/placements"),
   );
 }
 
-export function getCampaignInstanceEmbodiments(campaignInstanceId: string) {
+export function getCampaignInstanceEmbodiments(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceCreatureEmbodimentListProjection>(
-    instancePath(campaignInstanceId, "/embodiments"),
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/creature-embodiments",
+    ),
   );
 }
 
 export function decideCampaignInstancePlacement(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   realizationId: string,
   input: CampaignInstancePlacementCommandRequest,
 ) {
   return request<CampaignInstanceMutationResult>(
     instancePath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/placements/${encodeURIComponent(realizationId)}/${input.action}`,
+      `/placements/${encodeURIComponent(realizationId)}/actions/${input.action}`,
     ),
     {
       method: "POST",
@@ -1102,24 +1149,31 @@ export function decideCampaignInstancePlacement(
   );
 }
 
-export function getCampaignInstanceRoster(campaignInstanceId: string) {
+export function getCampaignInstanceRoster(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceRoster>(
-    instancePath(campaignInstanceId, "/roster"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/roster"),
   );
 }
 
-export function getCampaignInstanceAvailableAgents(campaignInstanceId: string) {
+export function getCampaignInstanceAvailableAgents(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceAvailableAgents>(
-    instancePath(campaignInstanceId, "/available-agents"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/agents/available"),
   );
 }
 
 export function createCampaignInstanceInvitation(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: CreateCampaignInstanceInvitationRequest,
 ) {
   return request<CampaignInstanceInvitationCommandResult>(
-    instancePath(campaignInstanceId, "/invitations"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/invitations"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1129,25 +1183,28 @@ export function createCampaignInstanceInvitation(
 }
 
 export function updateCampaignInstanceInvitation(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   invitationId: string,
   action: "retry" | "revoke",
 ) {
   return request<CampaignInstanceInvitationActionResult>(
     instancePath(
+      campaignDefinitionId,
       campaignInstanceId,
-      `/invitations/${encodeURIComponent(invitationId)}${action === "retry" ? "/retry" : ""}`,
+      `/invitations/${encodeURIComponent(invitationId)}${action === "retry" ? "/actions/retry" : ""}`,
     ),
     { method: action === "retry" ? "POST" : "DELETE" },
   );
 }
 
 export function configureCampaignInstanceAgent(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: ConfigureCampaignInstanceAgentRequest,
 ) {
   return request<CampaignInstanceAgentCommandResult>(
-    instancePath(campaignInstanceId, "/agents"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/agents"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1157,12 +1214,14 @@ export function configureCampaignInstanceAgent(
 }
 
 export function updateCampaignInstanceAgent(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   agentParticipationId: string,
   input: UpdateCampaignInstanceAgentStatusRequest,
 ) {
   return request<CampaignInstanceAgentCommandResult>(
     instancePath(
+      campaignDefinitionId,
       campaignInstanceId,
       `/agents/${encodeURIComponent(agentParticipationId)}`,
     ),
@@ -1587,9 +1646,12 @@ export function getCampaignSessionEvents(
   );
 }
 
-export function getCampaignInstanceContinuation(campaignInstanceId: string) {
+export function getCampaignInstanceContinuation(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceContinuation>(
-    instancePath(campaignInstanceId, "/continuation"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/continuation"),
   );
 }
 
@@ -1606,18 +1668,26 @@ export function getGmResumableSession() {
   }>("/me/resumable-session");
 }
 
-export function getCampaignInstanceVersions(campaignInstanceId: string) {
+export function getCampaignInstanceVersions(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+) {
   return request<CampaignInstanceVersions>(
-    instancePath(campaignInstanceId, "/versions"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/snapshots"),
   );
 }
 
 export function previewCampaignInstanceMigration(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: import("@aow/common").CampaignInstanceMigrationPreviewRequest,
 ) {
   return request<CampaignInstanceMigrationPreview>(
-    instancePath(campaignInstanceId, "/migrations/preview"),
+    instancePath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      "/migrations/preview",
+    ),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1627,11 +1697,12 @@ export function previewCampaignInstanceMigration(
 }
 
 export function applyCampaignInstanceMigration(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: ApplyCampaignInstanceMigrationRequest,
 ) {
   return request<CampaignInstanceMigrationResult>(
-    instancePath(campaignInstanceId, "/migrations/apply"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/migrations"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1641,11 +1712,12 @@ export function applyCampaignInstanceMigration(
 }
 
 export function previewCampaignInstanceRestore(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: CampaignInstanceRestorePreviewRequest,
 ) {
   return request<CampaignInstanceMigrationPreview>(
-    instancePath(campaignInstanceId, "/restores/preview"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/restores/preview"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1655,11 +1727,12 @@ export function previewCampaignInstanceRestore(
 }
 
 export function applyCampaignInstanceRestore(
+  campaignDefinitionId: string,
   campaignInstanceId: string,
   input: ApplyCampaignInstanceRestoreRequest,
 ) {
   return request<CampaignInstanceMigrationResult>(
-    instancePath(campaignInstanceId, "/restores/apply"),
+    instancePath(campaignDefinitionId, campaignInstanceId, "/restores"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

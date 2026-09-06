@@ -64,6 +64,8 @@ export interface CampaignInstanceCapturedPairProjection {
 
 export interface CampaignInstanceListItemProjection {
   readonly id: CampaignInstanceId;
+  /** Stable Definition lineage used for contextual routes; never render as a visible label. */
+  readonly campaignDefinitionId: CampaignDefinitionId;
   readonly name: string;
   readonly status: CampaignInstanceStatus;
   readonly metadataRevision: number;
@@ -74,6 +76,8 @@ export interface CampaignInstanceListItemProjection {
 export interface CampaignInstanceListProjection {
   readonly items: readonly CampaignInstanceListItemProjection[];
   readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
 }
 
 export interface CampaignInstanceRuntimeMetadataProjection {

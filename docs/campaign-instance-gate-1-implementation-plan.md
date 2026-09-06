@@ -4,6 +4,10 @@ Status: **Gate 2 approved; implementation committed locally**
 
 Record type: **Completed implementation plan; not the canonical product architecture**
 
+> The route inventory in section 5 is **deprecated and excluded from future API analysis and
+> generation**. It records the compatibility API delivered by this historical slice. Use
+> `docs/api-information-architecture-realignment.md` for current and target routes.
+
 ## 1. Outcome
 
 Deliver a coherent, discrete Campaign Instance management experience that turns one explicitly
@@ -327,6 +331,10 @@ Once aggregate replacements are usable:
   data-cutover plan is approved.
 
 ## 5. Public API direction
+
+**Section status: deprecated compatibility history; excluded from future API analysis and
+generation.** The canonical replacements are recorded in
+`docs/api-information-architecture-realignment.md`.
 
 Retain:
 

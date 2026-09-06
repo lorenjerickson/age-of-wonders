@@ -164,8 +164,7 @@ export function QuickStartGuide({
     }
     void getCampaignInstance(instanceId)
       .then((instance) => {
-        const campaignDefinitionId =
-          instance.currentSnapshot?.campaignDefinition.definitionId;
+        const campaignDefinitionId = instance.campaignDefinitionId;
         if (!campaignDefinitionId) {
           throw new Error("Campaign Definition context is unavailable.");
         }

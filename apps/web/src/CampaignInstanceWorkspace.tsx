@@ -51,15 +51,18 @@ export function CampaignInstanceProvider({
     useState<CampaignInstanceContinuation>();
   async function refresh() {
     const [nextReadiness, nextContinuation] = await Promise.all([
-      validateCampaignInstance(instance.id),
-      getCampaignInstanceContinuation(instance.id),
+      validateCampaignInstance(instance.campaignDefinitionId, instance.id),
+      getCampaignInstanceContinuation(
+        instance.campaignDefinitionId,
+        instance.id,
+      ),
     ]);
     setReadiness(nextReadiness);
     setContinuation(nextContinuation);
   }
   useEffect(() => {
     void refresh().catch(() => undefined);
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   return (
     <InstanceContext.Provider
       value={{ instance, readiness, continuation, refresh }}
@@ -289,14 +292,18 @@ export function CampaignInstanceLifecycleActions() {
     setBusy(true);
     setMessage("");
     try {
-      await updateCampaignInstanceLifecycle(instance.id, {
-        targetStatus: (action === "activate"
-          ? "active"
-          : action === "restore"
-            ? "concluded"
-            : action) as CampaignInstanceDetail["status"],
-        expectedMetadataRevision: instance.metadataRevision,
-      });
+      await updateCampaignInstanceLifecycle(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          targetStatus: (action === "activate"
+            ? "active"
+            : action === "restore"
+              ? "concluded"
+              : action) as CampaignInstanceDetail["status"],
+          expectedMetadataRevision: instance.metadataRevision,
+        },
+      );
       await router.invalidate();
     } catch {
       setMessage(

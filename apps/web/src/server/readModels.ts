@@ -96,7 +96,7 @@ export const readLanding = createServerFn({ method: "GET" }).handler(
         "World Definitions could not be loaded.",
       ),
       readSection(
-        () => serverApiRequest<CampaignInstanceList>("/campaign-instances"),
+        () => serverApiRequest<CampaignInstanceList>("/me/campaign-instances"),
         "Campaign Instances could not be loaded.",
       ),
     ]);
@@ -236,7 +236,7 @@ export const readCampaignLibrary = createServerFn({ method: "GET" }).handler(
         "Campaign Definitions could not be loaded.",
       ),
       readSection(
-        () => serverApiRequest<CampaignInstanceList>("/campaign-instances"),
+        () => serverApiRequest<CampaignInstanceList>("/me/campaign-instances"),
         "Campaign Instances could not be loaded.",
       ),
     ]);
@@ -277,7 +277,8 @@ export const readCampaignDefinitionAuthoring = createServerFn({ method: "GET" })
           `/campaign-definitions/${encodeURIComponent(data.campaignDefinitionId)}/draft`,
         );
       } catch (error) {
-        if (!(error instanceof ServerApiError) || error.status !== 404) throw error;
+        if (!(error instanceof ServerApiError) || error.status !== 404)
+          throw error;
       }
       return { found: true as const, definition, draft };
     } catch (error) {
@@ -295,7 +296,7 @@ export const readCampaignInstance = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     try {
       const instance = await serverApiRequest<CampaignInstanceDetail>(
-        `/campaign-instances/${encodeURIComponent(data.campaignInstanceId)}`,
+        `/me/campaign-instances/${encodeURIComponent(data.campaignInstanceId)}`,
       );
       return { found: true as const, instance };
     } catch (error) {

@@ -51,6 +51,7 @@ import { LegacyApiDeprecationInterceptor } from "./legacy-api-deprecation.interc
 @ApiTags("campaign instances")
 @Controller("campaign-instances")
 @UseGuards(GmGuard)
+@UseInterceptors(LegacyApiDeprecationInterceptor)
 export class CampaignInstancesController {
   constructor(
     @Inject(CampaignInstancesService)

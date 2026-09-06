@@ -396,7 +396,10 @@ export function LandingPage({
         async (instance) =>
           [
             instance.id,
-            await getCampaignInstanceContinuation(instance.id),
+            await getCampaignInstanceContinuation(
+              instance.campaignDefinitionId,
+              instance.id,
+            ),
           ] as const,
       ),
     ).then(

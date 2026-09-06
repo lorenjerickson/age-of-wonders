@@ -38,17 +38,17 @@ fill it with a conflicting statement from a deprecated document.
 These documents may be used only for their stated scope and may not override the canonical
 architecture or implemented domain source of truth.
 
-| Document                                                                  | Status and scope                                                                                                        |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `campaign-session-gate-1-implementation-plan.md`                          | Completed Session delivery record; also owns the recorded contextual API hierarchy fast-follow and Session limitations. |
-| `api-information-architecture-realignment.md`                             | Active product-wide API inventory, target route policy, compatibility plan, and implementation waves.                   |
-| `campaign-instance-gate-1-implementation-plan.md`                         | Completed Campaign Instance delivery record.                                                                            |
-| `combat-system-requirements.md`                                           | Draft requirements for the intentionally deferred Rules/combat exploration.                                             |
-| `science-and-technology-domain-refactor.md`                               | Implemented science/technology semantics and rollout record.                                                            |
-| `database-migration-adoption.md`                                          | Operational database-migration runbook.                                                                                 |
-| `graph-index-reliability-design.md`                                       | Proposed graph-projection reliability work; not proof of implementation.                                                |
-| `ssr-ssg-migration-implementation.md`                                     | Implemented web rendering/runtime record.                                                                               |
-| `spa-to-ssr-ssg-migration-plan.md` and `ssr-ssg-phase-0-spike-results.md` | Historical design evidence for the implemented SSR migration; not current product requirements.                         |
+| Document                                                                  | Status and scope                                                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `campaign-session-gate-1-implementation-plan.md`                          | Completed Session delivery record; its compatibility route inventory is deprecated and excluded from current API analysis.           |
+| `api-information-architecture-realignment.md`                             | Active product-wide API inventory, target route policy, compatibility plan, and implementation waves.                                |
+| `campaign-instance-gate-1-implementation-plan.md`                         | Completed Campaign Instance delivery record; its compatibility route inventory is deprecated and excluded from current API analysis. |
+| `combat-system-requirements.md`                                           | Draft requirements for the intentionally deferred Rules/combat exploration.                                                          |
+| `science-and-technology-domain-refactor.md`                               | Implemented science/technology semantics and rollout record.                                                                         |
+| `database-migration-adoption.md`                                          | Operational database-migration runbook.                                                                                              |
+| `graph-index-reliability-design.md`                                       | Proposed graph-projection reliability work; not proof of implementation.                                                             |
+| `ssr-ssg-migration-implementation.md`                                     | Implemented web rendering/runtime record.                                                                                            |
+| `spa-to-ssr-ssg-migration-plan.md` and `ssr-ssg-phase-0-spike-results.md` | Historical design evidence for the implemented SSR migration; not current product requirements.                                      |
 
 ## Explicit exclusion registry
 
@@ -63,26 +63,34 @@ historical analysis or migration archaeology.
 | `campaign-design.md`                       | Predates Definition/Instance separation, recursive Plots, captured World snapshots, and migration.       | `information-architecture-domain-model-realignment.md` plus current common types |
 | `project-state-gap-analysis-2026-08-31.md` | Point-in-time assessment predating the realignment vertical slices; its scores and priorities are stale. | This status index plus current code/tests/Git                                    |
 
+The following sections are excluded on the same terms while the remainder of their documents stays
+available as completed implementation history:
+
+| Excluded section                                             | Why excluded                                     | Replacement                                   |
+| ------------------------------------------------------------ | ------------------------------------------------ | --------------------------------------------- |
+| `campaign-instance-gate-1-implementation-plan.md`, section 5 | Lists the superseded top-level compatibility API | `api-information-architecture-realignment.md` |
+| `campaign-session-gate-1-implementation-plan.md`, section 7  | Lists the superseded Session compatibility API   | `api-information-architecture-realignment.md` |
+
 No prompt builder, retrieval pipeline, documentation search corpus, or generated-content workflow
 may ingest an excluded document. File-wide deprecation notices are intentionally retained so a
 direct reader cannot mistake historical content for current authority.
 
 ## Realignment implementation status
 
-| Area                                                                                               | Status                                                                                                                          |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Primary navigation and discrete World/Campaign Definition/Campaign Instance/Session workspaces     | Implemented                                                                                                                     |
-| Multiple World lineages, drafts, revisions, snapshots, and authoring                               | Implemented vertical slice                                                                                                      |
-| Campaign Definition lineage, captured World, recursive Plots, placements, and migration            | Implemented vertical slice                                                                                                      |
-| Campaign Instance snapshots, runtime, progress, roster, Characters, Agents, migration, and restore | Implemented vertical slice                                                                                                      |
-| Session planning, lobby, participation, lifecycle, event history, summaries, and Continue/Resume   | Implemented vertical slice                                                                                                      |
-| Editable model registry and World-scoped model controls                                            | Partial; not every vocabulary, relationship, dependency, or migration is authorable                                             |
-| Quick Start                                                                                        | Partial; Session completion is authoritative, earlier activities remain locally self-confirmed                                  |
-| Players and identity                                                                               | Partial; global directory, Auth0, full Character lifecycle, and import UX remain                                                |
-| Hosted Setup and system Settings                                                                   | Structure only; operational configuration and first-admin bootstrap remain                                                      |
-| Rules                                                                                              | Deliberately deferred                                                                                                           |
-| Product-wide API hierarchy and consistency                                                         | In progress; Session hierarchy, public invitation entry, and authenticated participant routes are implemented as the first wave |
-| Legacy routes, generic resources, compatibility types, and ambiguous `campaignId` cutover          | Not complete                                                                                                                    |
+| Area                                                                                               | Status                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary navigation and discrete World/Campaign Definition/Campaign Instance/Session workspaces     | Implemented                                                                                                                                   |
+| Multiple World lineages, drafts, revisions, snapshots, and authoring                               | Implemented vertical slice                                                                                                                    |
+| Campaign Definition lineage, captured World, recursive Plots, placements, and migration            | Implemented vertical slice                                                                                                                    |
+| Campaign Instance snapshots, runtime, progress, roster, Characters, Agents, migration, and restore | Implemented vertical slice                                                                                                                    |
+| Session planning, lobby, participation, lifecycle, event history, summaries, and Continue/Resume   | Implemented vertical slice                                                                                                                    |
+| Editable model registry and World-scoped model controls                                            | Partial; not every vocabulary, relationship, dependency, or migration is authorable                                                           |
+| Quick Start                                                                                        | Partial; Session completion is authoritative, earlier activities remain locally self-confirmed                                                |
+| Players and identity                                                                               | Partial; global directory, Auth0, full Character lifecycle, and import UX remain                                                              |
+| Hosted Setup and system Settings                                                                   | Structure only; operational configuration and first-admin bootstrap remain                                                                    |
+| Rules                                                                                              | Deliberately deferred                                                                                                                         |
+| Product-wide API hierarchy and consistency                                                         | In progress; Session and Campaign Instance hierarchies, public invitation entry, and authenticated locator/participant routes are implemented |
+| Legacy routes, generic resources, compatibility types, and ambiguous `campaignId` cutover          | Not complete                                                                                                                                  |
 
 ## Update rules
 

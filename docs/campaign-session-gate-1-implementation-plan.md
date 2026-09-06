@@ -6,6 +6,10 @@ Scope: Session planning, lobby, participation, lifecycle, journal boundaries, an
 
 Depends on: Campaign Instance vertical slice through `bc6aacd`
 
+> The route inventory in section 7 is **deprecated and excluded from future API analysis and
+> generation**. It records the compatibility API delivered by this historical slice. Use
+> `docs/api-information-architecture-realignment.md` for current and target routes.
+
 ## 1. Outcome
 
 This slice makes a Session a usable, resumable period of play belonging to exactly one Campaign
@@ -389,6 +393,10 @@ Database deployment must assess row counts and run during low traffic because en
 constraint validation, and index creation may block writes.
 
 ## 7. API direction
+
+**Section status: deprecated compatibility history; excluded from future API analysis and
+generation.** The canonical replacements are recorded in
+`docs/api-information-architecture-realignment.md`.
 
 All mutation endpoints require idempotency keys where retries could duplicate records and CAS
 revisions where stale browser state could overwrite a newer decision.

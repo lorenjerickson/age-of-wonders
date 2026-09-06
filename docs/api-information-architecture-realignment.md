@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-session-wave-complete
+status: active-implementation-plan-instance-wave-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,14 +21,15 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session hierarchy wave is implemented. Canonical GM routes now enforce the Campaign Definition
-and Campaign Instance ancestry, public invitation entry points live beneath `/api/invitations`, and
-authenticated participant operations live beneath `/api/me`. First-party web callers use these
-routes. The former Session and participation routes remain temporary compatibility aliases and emit
-`Deprecation: true`; no sunset date has been announced.
+The Session and Campaign Instance hierarchy waves are implemented. Canonical GM routes enforce the
+Campaign Definition and Campaign Instance ancestry, public invitation entry points live beneath
+`/api/invitations`, and authenticated locator and participant projections live beneath `/api/me`.
+First-party web callers use these routes. The former top-level Campaign Instance, Session, and
+participation routes remain temporary compatibility aliases and emit `Deprecation: true`; no sunset
+date has been announced.
 
 The remaining route families in this document are target architecture, not claims of completed
-implementation. The next planned wave is the Campaign Instance hierarchy.
+implementation. The next planned wave is Campaign and World authoring.
 
 ## Binding route principles
 
@@ -224,6 +225,61 @@ GET  /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/events
 
 The authenticated membership supplies the person/Agent relationship; Campaign Definition ancestry
 is not part of the participant's task and need not be repeated.
+
+## Campaign Instance implementation wave
+
+The second wave introduces the stable Definition lineage as required route context for every GM
+Instance mutation and owned child resource:
+
+```text
+GET  /api/campaigns/:campaignDefinitionId/instances
+POST /api/campaigns/:campaignDefinitionId/instances
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/actions/validate
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/actions/change-status
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/runtime/preparation
+PUT  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/runtime/preparation
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/plots
+PATCH /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/plots/:plotDefinitionId
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/placements
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/placements/:realizationId/actions/:action
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/creature-embodiments
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/roster
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/memberships
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents/available
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents
+PATCH /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/agents/:agentParticipationId
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/invitations
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/invitations/:invitationId/actions/retry
+DELETE /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/invitations/:invitationId
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/continuation
+GET  /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/snapshots
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/migrations/preview
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/migrations
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/restores/preview
+POST /api/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/restores
+```
+
+Creation scopes the selected Campaign Definition snapshot to the Definition in the route, so a
+payload cannot attach an Instance to another Definition lineage. Every existing Instance child
+operation verifies Definition, Instance, and owner together before delegating to the established
+domain transaction.
+
+The application's intentionally shorter GM URLs bootstrap through read-only, identity-scoped
+locator projections:
+
+```text
+GET /api/me/campaign-instances
+GET /api/me/campaign-instances/:campaignInstanceId
+```
+
+Those projections expose the stable Campaign Definition lineage ID as transport context, while
+continuing to use human-readable names and revisions for visible labels. Membership and Character
+collection reads reflect the currently implemented roster associations. Full Character creation,
+activation, retirement, and one-way import workflows remain part of the later identity and
+participation wave. Instance collection reads are deterministically ordered and bounded to at most
+200 records per request with `limit`, `offset`, and `total` metadata.
 
 ## Compatibility and rollout
 

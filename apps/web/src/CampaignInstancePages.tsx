@@ -239,7 +239,7 @@ export function CampaignInstanceCreatePage() {
     setBusy(true);
     setMessage("");
     try {
-      const created = await createCampaignInstance({
+      const created = await createCampaignInstance(definitionId, {
         name: name.trim(),
         campaignDefinitionSnapshotId:
           snapshotId as CampaignDefinitionSnapshotId,
@@ -518,7 +518,10 @@ function InstancePreparationForm() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   useEffect(() => {
-    void getCampaignInstancePreparation(instance.id).then(
+    void getCampaignInstancePreparation(
+      instance.campaignDefinitionId,
+      instance.id,
+    ).then(
       (value) => {
         setPreparation(value);
         setStartingContext(value.preparation.startingContext ?? "");
@@ -526,7 +529,7 @@ function InstancePreparationForm() {
       },
       () => setError("Instance preparation could not be loaded."),
     );
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   useBlocker({
     shouldBlockFn: () =>
       dirty &&
@@ -540,14 +543,18 @@ function InstancePreparationForm() {
     setError("");
     setStatus("");
     try {
-      const saved = await saveCampaignInstancePreparation(instance.id, {
-        expectedRuntimeRevision: preparation.runtimeRevision,
-        preparation: {
-          ...preparation.preparation,
-          startingContext: startingContext.trim(),
-          mapVariations: stagingNotes.trim(),
+      const saved = await saveCampaignInstancePreparation(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          expectedRuntimeRevision: preparation.runtimeRevision,
+          preparation: {
+            ...preparation.preparation,
+            startingContext: startingContext.trim(),
+            mapVariations: stagingNotes.trim(),
+          },
         },
-      });
+      );
       setPreparation(saved);
       setDirty(false);
       setStatus("Instance preparation saved.");
@@ -624,12 +631,12 @@ export function CampaignInstancePlotsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   useEffect(() => {
-    void getCampaignInstancePlots(instance.id)
+    void getCampaignInstancePlots(instance.campaignDefinitionId, instance.id)
       .then(setData, () =>
         setError("Instance Plot progress could not be loaded."),
       )
       .finally(() => setLoading(false));
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   async function update(
     plotId: string,
     input: Omit<
@@ -642,11 +649,21 @@ export function CampaignInstancePlotsPage() {
     setBusy(busyKey);
     setError("");
     try {
-      await updateCampaignInstancePlot(instance.id, plotId, {
-        expectedRuntimeRevision: data.runtimeRevision,
-        ...input,
-      });
-      setData(await getCampaignInstancePlots(instance.id));
+      await updateCampaignInstancePlot(
+        instance.campaignDefinitionId,
+        instance.id,
+        plotId,
+        {
+          expectedRuntimeRevision: data.runtimeRevision,
+          ...input,
+        },
+      );
+      setData(
+        await getCampaignInstancePlots(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
     } catch (caught) {
       setError(
         caught instanceof ApiRequestError && caught.status === 409
@@ -805,8 +822,11 @@ export function CampaignInstancePlacementsPage() {
   });
   useEffect(() => {
     void Promise.all([
-      getCampaignInstancePlacements(instance.id),
-      getCampaignInstanceEmbodiments(instance.id),
+      getCampaignInstancePlacements(instance.campaignDefinitionId, instance.id),
+      getCampaignInstanceEmbodiments(
+        instance.campaignDefinitionId,
+        instance.id,
+      ),
     ])
       .then(
         ([placements, creatures]) => {
@@ -816,7 +836,7 @@ export function CampaignInstancePlacementsPage() {
         () => setError("Instance placements could not be loaded."),
       )
       .finally(() => setLoading(false));
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   async function decide(
     id: string,
     action: "realize" | "defer" | "replace" | "remove",
@@ -831,8 +851,18 @@ export function CampaignInstancePlacementsPage() {
         replacementSelections[id],
       );
       if (!command) return;
-      await decideCampaignInstancePlacement(instance.id, id, command);
-      setData(await getCampaignInstancePlacements(instance.id));
+      await decideCampaignInstancePlacement(
+        instance.campaignDefinitionId,
+        instance.id,
+        id,
+        command,
+      );
+      setData(
+        await getCampaignInstancePlacements(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
       if (action === "replace") {
         setReplacementSelections((current) => ({ ...current, [id]: "" }));
       }
@@ -1014,23 +1044,32 @@ export function CampaignInstanceRosterPage() {
     enableBeforeUnload: invitationDirty,
   });
   useEffect(() => {
-    void getCampaignInstanceRoster(instance.id)
+    void getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id)
       .then(setData, () => setError("The Instance roster could not be loaded."))
       .finally(() => setLoading(false));
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   async function invite(event: FormEvent) {
     event.preventDefault();
     if (!invitedName.trim() || (!email.trim() && !phone.trim())) return;
     setBusy("invite");
     setError("");
     try {
-      await createCampaignInstanceInvitation(instance.id, {
-        invitedName: invitedName.trim(),
-        role,
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-      });
-      setData(await getCampaignInstanceRoster(instance.id));
+      await createCampaignInstanceInvitation(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          invitedName: invitedName.trim(),
+          role,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+        },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
       setInvitedName("");
       setEmail("");
       setPhone("");
@@ -1046,8 +1085,18 @@ export function CampaignInstanceRosterPage() {
     setBusy(id);
     setError("");
     try {
-      await updateCampaignInstanceInvitation(instance.id, id, action);
-      setData(await getCampaignInstanceRoster(instance.id));
+      await updateCampaignInstanceInvitation(
+        instance.campaignDefinitionId,
+        instance.id,
+        id,
+        action,
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
     } catch {
       setError(
         `The invitation could not be ${action === "retry" ? "retried" : "revoked"}.`,
@@ -1309,8 +1358,11 @@ export function CampaignInstanceAgentsPage() {
   });
   useEffect(() => {
     void Promise.all([
-      getCampaignInstanceRoster(instance.id),
-      getCampaignInstanceAvailableAgents(instance.id),
+      getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id),
+      getCampaignInstanceAvailableAgents(
+        instance.campaignDefinitionId,
+        instance.id,
+      ),
     ]).then(
       ([roster, choices]) => {
         setData(roster);
@@ -1318,7 +1370,7 @@ export function CampaignInstanceAgentsPage() {
       },
       () => setError("Agents could not be loaded."),
     );
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   const capabilityKeys = (value: string) =>
     value
       .split("\n")
@@ -1337,14 +1389,21 @@ export function CampaignInstanceAgentsPage() {
     setBusy("new");
     setError("");
     try {
-      await configureCampaignInstanceAgent(instance.id, {
-        agentId: agentId as AgentId,
-        observe: capabilityKeys(observe),
-        act: capabilityKeys(act),
-      });
+      await configureCampaignInstanceAgent(
+        instance.campaignDefinitionId,
+        instance.id,
+        {
+          agentId: agentId as AgentId,
+          observe: capabilityKeys(observe),
+          act: capabilityKeys(act),
+        },
+      );
       const [roster, choices] = await Promise.all([
-        getCampaignInstanceRoster(instance.id),
-        getCampaignInstanceAvailableAgents(instance.id),
+        getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id),
+        getCampaignInstanceAvailableAgents(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
       ]);
       setData(roster);
       setAvailable(choices);
@@ -1365,11 +1424,21 @@ export function CampaignInstanceAgentsPage() {
     setBusy(id);
     setError("");
     try {
-      await updateCampaignInstanceAgent(instance.id, id, {
-        expectedStatus: current,
-        status: next,
-      });
-      setData(await getCampaignInstanceRoster(instance.id));
+      await updateCampaignInstanceAgent(
+        instance.campaignDefinitionId,
+        instance.id,
+        id,
+        {
+          expectedStatus: current,
+          status: next,
+        },
+      );
+      setData(
+        await getCampaignInstanceRoster(
+          instance.campaignDefinitionId,
+          instance.id,
+        ),
+      );
     } catch {
       setError("The Agent status was not changed.");
     } finally {
@@ -1537,8 +1606,7 @@ export function CampaignInstanceAgentsPage() {
 
 export function CampaignInstanceSessionsPage() {
   const { instance, continuation } = useCampaignInstance();
-  const campaignDefinitionId =
-    instance.currentSnapshot?.campaignDefinition.definitionId;
+  const campaignDefinitionId = instance.campaignDefinitionId;
   const [data, setData] = useState<CampaignInstanceSessions>();
   const [roster, setRoster] = useState<CampaignInstanceRoster>();
   const [loading, setLoading] = useState(true);
@@ -1556,7 +1624,7 @@ export function CampaignInstanceSessionsPage() {
         : Promise.reject(
             new Error("Campaign Definition context is unavailable."),
           ),
-      getCampaignInstanceRoster(instance.id),
+      getCampaignInstanceRoster(instance.campaignDefinitionId, instance.id),
     ])
       .then(
         ([sessions, nextRoster]) => {
@@ -1784,8 +1852,7 @@ export function CampaignSessionPage({
   operational?: boolean;
 }) {
   const { instance, refresh: refreshInstance } = useCampaignInstance();
-  const campaignDefinitionId =
-    instance.currentSnapshot?.campaignDefinition.definitionId;
+  const campaignDefinitionId = instance.campaignDefinitionId;
   const [session, setSession] = useState<CampaignSessionDetail>();
   const [readiness, setReadiness] = useState<CampaignSessionReadiness>();
   const [events, setEvents] = useState<CampaignSessionEvents>();
@@ -2303,12 +2370,12 @@ export function CampaignInstanceVersionsPage() {
   const [error, setError] = useState("");
   const suffix = quickStartSuffix(useLocation().searchStr);
   useEffect(() => {
-    void getCampaignInstanceVersions(instance.id)
+    void getCampaignInstanceVersions(instance.campaignDefinitionId, instance.id)
       .then(setData, () =>
         setError("Instance version history could not be loaded."),
       )
       .finally(() => setLoading(false));
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   return (
     <main className={pageClass}>
       <PageIntro
@@ -2415,10 +2482,13 @@ export function CampaignInstanceMigrationPage() {
   );
   const restoring = Boolean(restoreSnapshotId);
   useEffect(() => {
-    void getCampaignInstanceVersions(instance.id).then(setVersions, () =>
+    void getCampaignInstanceVersions(
+      instance.campaignDefinitionId,
+      instance.id,
+    ).then(setVersions, () =>
       setError("Migration choices could not be loaded."),
     );
-  }, [instance.id]);
+  }, [instance.campaignDefinitionId, instance.id]);
   async function previewMigration(
     requestedMappings: readonly CampaignInstanceMigrationMappingRequest[] = mappings,
   ) {
@@ -2447,22 +2517,30 @@ export function CampaignInstanceMigrationPage() {
           candidateLimit: 50,
         };
         const nextPreview = await (restoring
-          ? previewCampaignInstanceRestore(instance.id, {
-              sourceSnapshotId,
-              targetInstanceSnapshotId:
-                restoreSnapshotId as CampaignInstanceSnapshotId,
-              expectedRuntimeRevision: instance.runtime.revision,
-              mappings: requestedMappings,
-              ...paging,
-            })
-          : previewCampaignInstanceMigration(instance.id, {
-              sourceSnapshotId,
-              targetCampaignDefinitionSnapshotId:
-                targetId as CampaignDefinitionSnapshotId,
-              expectedRuntimeRevision: instance.runtime.revision,
-              mappings: requestedMappings,
-              ...paging,
-            }));
+          ? previewCampaignInstanceRestore(
+              instance.campaignDefinitionId,
+              instance.id,
+              {
+                sourceSnapshotId,
+                targetInstanceSnapshotId:
+                  restoreSnapshotId as CampaignInstanceSnapshotId,
+                expectedRuntimeRevision: instance.runtime.revision,
+                mappings: requestedMappings,
+                ...paging,
+              },
+            )
+          : previewCampaignInstanceMigration(
+              instance.campaignDefinitionId,
+              instance.id,
+              {
+                sourceSnapshotId,
+                targetCampaignDefinitionSnapshotId:
+                  targetId as CampaignDefinitionSnapshotId,
+                expectedRuntimeRevision: instance.runtime.revision,
+                mappings: requestedMappings,
+                ...paging,
+              },
+            ));
         if (pages[0] && pages[0].planHash !== nextPreview.planHash) {
           throw new Error(
             "Migration plan changed while its pages were loading.",
@@ -2520,22 +2598,30 @@ export function CampaignInstanceMigrationPage() {
         candidateLimit: 50,
       };
       const next = await (restoring && restoreSnapshotId
-        ? previewCampaignInstanceRestore(instance.id, {
-            sourceSnapshotId,
-            targetInstanceSnapshotId:
-              restoreSnapshotId as CampaignInstanceSnapshotId,
-            expectedRuntimeRevision: instance.runtime.revision,
-            mappings,
-            ...paging,
-          })
-        : previewCampaignInstanceMigration(instance.id, {
-            sourceSnapshotId,
-            targetCampaignDefinitionSnapshotId:
-              targetId as CampaignDefinitionSnapshotId,
-            expectedRuntimeRevision: instance.runtime.revision,
-            mappings,
-            ...paging,
-          }));
+        ? previewCampaignInstanceRestore(
+            instance.campaignDefinitionId,
+            instance.id,
+            {
+              sourceSnapshotId,
+              targetInstanceSnapshotId:
+                restoreSnapshotId as CampaignInstanceSnapshotId,
+              expectedRuntimeRevision: instance.runtime.revision,
+              mappings,
+              ...paging,
+            },
+          )
+        : previewCampaignInstanceMigration(
+            instance.campaignDefinitionId,
+            instance.id,
+            {
+              sourceSnapshotId,
+              targetCampaignDefinitionSnapshotId:
+                targetId as CampaignDefinitionSnapshotId,
+              expectedRuntimeRevision: instance.runtime.revision,
+              mappings,
+              ...paging,
+            },
+          ));
       if (next.planHash !== preview.planHash) {
         throw new Error(
           "Migration plan changed while candidates were loading.",
@@ -2561,23 +2647,31 @@ export function CampaignInstanceMigrationPage() {
     setBusy(true);
     try {
       if (restoring && restoreSnapshotId) {
-        await applyCampaignInstanceRestore(instance.id, {
-          sourceSnapshotId,
-          targetInstanceSnapshotId:
-            restoreSnapshotId as CampaignInstanceSnapshotId,
-          expectedRuntimeRevision: instance.runtime.revision,
-          planHash: preview.planHash,
-          mappings,
-        });
+        await applyCampaignInstanceRestore(
+          instance.campaignDefinitionId,
+          instance.id,
+          {
+            sourceSnapshotId,
+            targetInstanceSnapshotId:
+              restoreSnapshotId as CampaignInstanceSnapshotId,
+            expectedRuntimeRevision: instance.runtime.revision,
+            planHash: preview.planHash,
+            mappings,
+          },
+        );
       } else {
-        await applyCampaignInstanceMigration(instance.id, {
-          sourceSnapshotId,
-          targetCampaignDefinitionSnapshotId:
-            targetId as CampaignDefinitionSnapshotId,
-          expectedRuntimeRevision: instance.runtime.revision,
-          planHash: preview.planHash,
-          mappings,
-        });
+        await applyCampaignInstanceMigration(
+          instance.campaignDefinitionId,
+          instance.id,
+          {
+            sourceSnapshotId,
+            targetCampaignDefinitionSnapshotId:
+              targetId as CampaignDefinitionSnapshotId,
+            expectedRuntimeRevision: instance.runtime.revision,
+            planHash: preview.planHash,
+            mappings,
+          },
+        );
       }
       await router.navigate({
         to: `/campaigns/instances/${instance.id}/versions`,

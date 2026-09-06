@@ -447,12 +447,13 @@ stale revisions, and unavailable dependencies use neutral human-readable errors.
 
 ### Campaign Instance creation
 
-The GM-authorized `POST /campaign-instances` endpoint creates one played Campaign Instance from an
-explicit immutable Campaign Definition snapshot. Its request contains a human-readable `name`,
-`campaignDefinitionSnapshotId`, and a protected idempotency key. It never accepts the ambiguous
-legacy `campaignId`, selects a snapshot by recency, or substitutes the mutable current Campaign or
-World authoring head. Persistence stores only a hash of the idempotency key, unique to the owning
-GM; the raw key is never retained.
+The GM-authorized `POST /campaigns/:campaignDefinitionId/instances` endpoint creates one played
+Campaign Instance from an explicit immutable Campaign Definition snapshot. Its request contains a
+human-readable `name`, `campaignDefinitionSnapshotId`, and a protected idempotency key. The selected
+snapshot and every idempotent retry must belong to the Definition lineage named in the route. It
+never accepts the ambiguous legacy `campaignId`, selects a snapshot by recency, or substitutes the
+mutable current Campaign or World authoring head. Persistence stores only a hash of the idempotency
+key, unique to the owning GM; the raw key is never retained.
 
 Creation is one serializable transaction. The service loads a selected Campaign Definition
 snapshot, its immutable Campaign revision, and the exact captured World snapshot and World revision
@@ -497,21 +498,26 @@ scope and expose human-labeled compatible successors while keeping source and ta
 as opaque command values. The plan hash always covers the complete semantic plan, never an
 individual presentation page.
 
-`GET /campaign-instances` lists each played realization by human-readable name and lifecycle status,
-with compact names and revision numbers for the Campaign Definition and World Definition captured
-by its current `CampaignInstanceSnapshot`. It omits runtime state and snapshot manifests. The query
-walks only the stored snapshot relationships; it never follows mutable Definition heads and never
-selects an Instance by recency.
+`GET /campaigns/:campaignDefinitionId/instances` lists the authenticated GM's played realizations
+for one stable Definition lineage. `GET /me/campaign-instances` provides the bounded cross-Definition
+locator projection needed by the Campaign library and intentionally shorter GM URLs. Both list by
+human-readable name and lifecycle status, with compact names and revision numbers for the Campaign
+Definition and World Definition captured by the current `CampaignInstanceSnapshot`. They omit
+runtime state and snapshot manifests. Queries walk only stored snapshot relationships; they never
+follow mutable Definition heads or select an Instance by recency.
 
-`GET /campaign-instances/:id` returns one explicitly selected Instance, its immutable compatible
-Campaign/World snapshot provenance, and non-payload runtime metadata such as storage revision and
-last update time. It does not return the mutable runtime JSON. Active Session state comes only from
-the relational Instance-to-Session relationship through the server-derived continuation
-projection; the API must not guess through a legacy `campaignId` or accept a competing runtime
-field as authority. Both endpoints require GM authorization and use neutral not-found/unavailable
-responses that do not echo opaque identifiers. Both reads are scoped to Instances explicitly owned
-by the authenticated GM; selecting another GM's Instance behaves as not found. `createdByUserId`
-remains audit provenance and is not the authorization boundary.
+`GET /campaigns/:campaignDefinitionId/instances/:campaignInstanceId` returns one explicitly selected
+Instance beneath its stable Definition parent. `GET /me/campaign-instances/:campaignInstanceId` is
+the read-only authenticated locator equivalent. Each returns immutable compatible Campaign/World
+snapshot provenance and non-payload runtime metadata such as storage revision and last update time;
+neither returns mutable runtime JSON. Active Session state comes only from the relational
+Instance-to-Session relationship through the server-derived continuation projection; the API must
+not guess through a legacy `campaignId` or accept a competing runtime field as authority. These
+endpoints require GM authorization and use neutral not-found/unavailable responses that do not echo
+opaque identifiers. Reads are scoped to Instances explicitly owned by the authenticated GM, and
+canonical child operations additionally prove the Definition/Instance relationship. Selecting
+another GM's Instance or presenting it beneath a different Definition behaves as not found.
+`createdByUserId` remains audit provenance and is not the authorization boundary.
 
 ### Legacy realignment shadow materialization
 
@@ -688,10 +694,12 @@ The audit stores the complete object-shaped resolution plan and its hash and is 
 restore creates a new snapshot/checkpoint pair from current runtime; it never rewinds a pointer or
 deletes later Session history.
 
-Human-readable captured-revision projections also carry the stable World or Campaign Definition
-lineage ID for contextual routes and commands. That identifier is transport context only: clients
-must use the accompanying name and revision as visible labels and must never render the opaque ID
-to a GM.
+Campaign Instance projections carry their stable Campaign Definition lineage ID, and human-readable
+captured-revision projections carry the corresponding World or Campaign Definition lineage ID.
+These identifiers provide contextual route and command scope only: clients must use the accompanying
+names and revisions as visible labels and must never render an opaque ID to a GM.
+Campaign Instance list projections are deterministically ordered and expose bounded `limit`,
+`offset`, and `total` pagination metadata.
 
 ## Persisted API resources
 

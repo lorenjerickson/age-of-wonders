@@ -27,6 +27,7 @@ interface CapturedRevisionSummaryRow {
 
 interface CampaignInstanceListRow {
   readonly id: string;
+  readonly campaignDefinitionId: string;
   readonly name: string;
   readonly status: string;
   readonly metadataRevision: number;
@@ -59,6 +60,7 @@ interface CapturedDefinitionDetailRow {
 
 interface CampaignInstanceDetailRow {
   readonly id: string;
+  readonly campaignDefinitionId: string;
   readonly name: string;
   readonly status: string;
   readonly metadataRevision: number;
@@ -92,10 +94,12 @@ interface CampaignInstanceDetailRow {
 export interface CampaignInstanceReader {
   readonly campaignInstance: {
     findMany(args: unknown): Promise<readonly CampaignInstanceListRow[]>;
+    count?(args: unknown): Promise<number>;
     findUnique(args: unknown): Promise<CampaignInstanceDetailRow | null>;
     findFirst?(args: unknown): Promise<{
       id: string;
       name: string;
+      campaignDefinitionId: string;
       currentSnapshot: { campaignDefinitionSnapshotId: string } | null;
     } | null>;
   };
@@ -203,6 +207,7 @@ const worldRevisionSummarySelect = {
 
 const listSelect = {
   id: true,
+  campaignDefinitionId: true,
   name: true,
   status: true,
   metadataRevision: true,
@@ -247,6 +252,7 @@ const worldRevisionDetailSelect = {
 
 const detailSelect = {
   id: true,
+  campaignDefinitionId: true,
   name: true,
   status: true,
   metadataRevision: true,
@@ -331,14 +337,29 @@ export class CampaignInstancesService {
     private readonly prisma: CampaignInstanceStore,
   ) {}
 
-  async list(createdByUserId: string) {
+  async list(
+    createdByUserId: string,
+    campaignDefinitionId?: string,
+    limit = 200,
+    offset = 0,
+  ) {
     let rows: readonly CampaignInstanceListRow[];
+    let total: number;
+    const where = {
+      ownerUserId: createdByUserId,
+      ...(campaignDefinitionId ? { campaignDefinitionId } : {}),
+    };
     try {
       rows = await this.prisma.campaignInstance.findMany({
-        where: { ownerUserId: createdByUserId },
+        where,
         select: listSelect,
         orderBy: [{ status: "asc" }, { name: "asc" }, { id: "asc" }],
+        take: limit,
+        skip: offset,
       });
+      total = this.prisma.campaignInstance.count
+        ? await this.prisma.campaignInstance.count({ where })
+        : rows.length;
     } catch {
       this.unavailable();
     }
@@ -346,6 +367,7 @@ export class CampaignInstancesService {
     return {
       items: rows.map((row) => ({
         id: row.id,
+        campaignDefinitionId: row.campaignDefinitionId,
         name: row.name,
         status: row.status.toLowerCase(),
         metadataRevision: row.metadataRevision,
@@ -369,15 +391,25 @@ export class CampaignInstancesService {
             }
           : undefined,
       })),
-      total: rows.length,
+      total,
+      limit,
+      offset,
     };
   }
 
-  async get(id: string, createdByUserId: string) {
+  async get(
+    id: string,
+    createdByUserId: string,
+    campaignDefinitionId?: string,
+  ) {
     let row: CampaignInstanceDetailRow | null;
     try {
       row = await this.prisma.campaignInstance.findUnique({
-        where: { id, ownerUserId: createdByUserId },
+        where: {
+          id,
+          ownerUserId: createdByUserId,
+          ...(campaignDefinitionId ? { campaignDefinitionId } : {}),
+        },
         select: detailSelect,
       });
     } catch {
@@ -392,6 +424,7 @@ export class CampaignInstancesService {
 
     return {
       id: row.id,
+      campaignDefinitionId: row.campaignDefinitionId,
       name: row.name,
       status: row.status.toLowerCase(),
       metadataRevision: row.metadataRevision,
@@ -430,6 +463,7 @@ export class CampaignInstancesService {
     dto: CreateCampaignInstanceDto,
     createdByUserId: string,
     creatorDisplayName = "Game Master",
+    campaignDefinitionId?: string,
   ) {
     const name = dto.name?.trim();
     if (!name) {
@@ -471,6 +505,8 @@ export class CampaignInstancesService {
           if (prior) {
             if (
               prior.name !== name ||
+              (campaignDefinitionId !== undefined &&
+                prior.campaignDefinitionId !== campaignDefinitionId) ||
               prior.currentSnapshot?.campaignDefinitionSnapshotId !==
                 selectedSnapshotId
             ) {
@@ -483,6 +519,7 @@ export class CampaignInstancesService {
           const selected = await tx.campaignDefinitionSnapshot.findUnique({
             where: {
               id: selectedSnapshotId,
+              ...(campaignDefinitionId ? { campaignDefinitionId } : {}),
               campaignDefinition: { ownerUserId: createdByUserId },
             },
             select: selectedSnapshotSelect,
@@ -596,6 +633,7 @@ export class CampaignInstancesService {
 
           return {
             id: instance.id,
+            campaignDefinitionId: selected.campaignDefinitionId,
             name: instance.name,
             status: instance.status.toLowerCase(),
             metadataRevision: instance.metadataRevision,
@@ -619,7 +657,11 @@ export class CampaignInstancesService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       )) as Record<string, unknown>;
       if (typeof result.idempotentInstanceId === "string") {
-        return this.get(result.idempotentInstanceId, createdByUserId);
+        return this.get(
+          result.idempotentInstanceId,
+          createdByUserId,
+          campaignDefinitionId,
+        );
       }
       return result;
     } catch (error) {
@@ -644,12 +686,15 @@ export class CampaignInstancesService {
           select: {
             id: true,
             name: true,
+            campaignDefinitionId: true,
             currentSnapshot: { select: { campaignDefinitionSnapshotId: true } },
           },
         });
         if (
           prior &&
           prior.name === name &&
+          (campaignDefinitionId === undefined ||
+            prior.campaignDefinitionId === campaignDefinitionId) &&
           prior.currentSnapshot?.campaignDefinitionSnapshotId ===
             selectedSnapshotId
         ) {
@@ -662,6 +707,35 @@ export class CampaignInstancesService {
         }
       }
       this.unavailable();
+    }
+  }
+
+  async assertParent(
+    campaignDefinitionId: string,
+    campaignInstanceId: string,
+    ownerUserId: string,
+  ) {
+    let instance: {
+      readonly id: string;
+      readonly campaignDefinitionId: string;
+    } | null;
+    try {
+      instance =
+        (await this.prisma.campaignInstance.findFirst?.({
+          where: {
+            id: campaignInstanceId,
+            campaignDefinitionId,
+            ownerUserId,
+          },
+          select: { id: true, campaignDefinitionId: true },
+        })) ?? null;
+    } catch {
+      this.unavailable();
+    }
+    if (!instance) {
+      throw new NotFoundException(
+        "The selected Campaign Instance was not found.",
+      );
     }
   }
 

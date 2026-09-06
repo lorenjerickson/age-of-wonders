@@ -20,6 +20,7 @@ describe("CampaignInstancesService", () => {
         findMany: jest.fn().mockResolvedValue([
           {
             id: "instance-1",
+            campaignDefinitionId: "campaign-definition-1",
             name: "Tuesday Glasswake",
             status: "ACTIVE",
             metadataRevision: 2,
@@ -46,16 +47,21 @@ describe("CampaignInstancesService", () => {
             },
           },
         ]),
+        count: jest.fn().mockResolvedValue(1),
         findUnique: jest.fn(),
       },
     };
 
-    const result = await new CampaignInstancesService(prisma).list("gm-1");
+    const result = await new CampaignInstancesService(prisma).list(
+      "gm-1",
+      "campaign-definition-1",
+    );
 
     expect(result).toEqual({
       items: [
         {
           id: "instance-1",
+          campaignDefinitionId: "campaign-definition-1",
           name: "Tuesday Glasswake",
           status: "active",
           metadataRevision: 2,
@@ -81,10 +87,25 @@ describe("CampaignInstancesService", () => {
         },
       ],
       total: 1,
+      limit: 200,
+      offset: 0,
     });
     expect(prisma.campaignInstance.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.campaignInstance.count).toHaveBeenCalledWith({
+      where: {
+        ownerUserId: "gm-1",
+        campaignDefinitionId: "campaign-definition-1",
+      },
+    });
     const query = firstCallArgument(prisma.campaignInstance.findMany);
-    expect(query).toMatchObject({ where: { ownerUserId: "gm-1" } });
+    expect(query).toMatchObject({
+      where: {
+        ownerUserId: "gm-1",
+        campaignDefinitionId: "campaign-definition-1",
+      },
+      take: 200,
+      skip: 0,
+    });
     expect(JSON.stringify(query)).not.toMatch(
       /"state"|manifest|currentRevision|sessions|domainRecord/,
     );
@@ -101,6 +122,7 @@ describe("CampaignInstancesService", () => {
         findMany: jest.fn(),
         findUnique: jest.fn().mockResolvedValue({
           id: "instance-1",
+          campaignDefinitionId: "campaign-definition-1",
           name: "Tuesday Glasswake",
           status: "PAUSED",
           metadataRevision: 4,
@@ -155,10 +177,12 @@ describe("CampaignInstancesService", () => {
     const result = await new CampaignInstancesService(prisma).get(
       "instance-1",
       "gm-1",
+      "campaign-definition-1",
     );
 
     expect(result).toEqual({
       id: "instance-1",
+      campaignDefinitionId: "campaign-definition-1",
       name: "Tuesday Glasswake",
       status: "paused",
       metadataRevision: 4,
@@ -191,7 +215,7 @@ describe("CampaignInstancesService", () => {
     });
     const query = firstCallArgument(prisma.campaignInstance.findUnique);
     expect(JSON.stringify(query)).toContain(
-      '"where":{"id":"instance-1","ownerUserId":"gm-1"}',
+      '"where":{"id":"instance-1","ownerUserId":"gm-1","campaignDefinitionId":"campaign-definition-1"}',
     );
     expect(JSON.stringify(query)).not.toMatch(
       /"state"|manifest|currentRevision|sessions|domainRecord/,
@@ -208,7 +232,10 @@ describe("CampaignInstancesService", () => {
       },
     };
     const opaqueId = "2cf3db72-opaque-campaign-instance-id";
-    const operation = new CampaignInstancesService(prisma).get(opaqueId, "gm-1");
+    const operation = new CampaignInstancesService(prisma).get(
+      opaqueId,
+      "gm-1",
+    );
 
     await expect(operation).rejects.toEqual(
       new NotFoundException("The selected Campaign Instance was not found."),
@@ -337,10 +364,13 @@ describe("CampaignInstancesService", () => {
         campaignDefinitionSnapshotId: "campaign-snapshot-3",
       },
       "gm-1",
+      "Game Master",
+      "campaign-definition-1",
     );
 
     expect(result).toMatchObject({
       id: "instance-1",
+      campaignDefinitionId: "campaign-definition-1",
       name: "Tuesday Glasswake",
       status: "preparing",
       metadataRevision: 1,
@@ -370,6 +400,7 @@ describe("CampaignInstancesService", () => {
     expect(findSnapshotArgs).toMatchObject({
       where: {
         id: "campaign-snapshot-3",
+        campaignDefinitionId: "campaign-definition-1",
         campaignDefinition: { ownerUserId: "gm-1" },
       },
     });
@@ -415,7 +446,9 @@ describe("CampaignInstancesService", () => {
     expect(campaignCapture).toMatchObject({
       payload: { manifest: campaignManifest },
     });
-    expect(worldCapture).toMatchObject({ payload: { manifest: worldManifest } });
+    expect(worldCapture).toMatchObject({
+      payload: { manifest: worldManifest },
+    });
     expect(JSON.stringify(createSnapshotArgs)).toMatch(
       /"contentHash":"[a-f0-9]{64}"/,
     );
@@ -477,6 +510,31 @@ describe("CampaignInstancesService", () => {
     expect(tx.campaignInstanceRuntime.create).not.toHaveBeenCalled();
   });
 
+  it("rejects an Instance addressed beneath the wrong Definition lineage", async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const service = new CampaignInstancesService({
+      campaignInstance: {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        findFirst,
+      },
+    });
+
+    await expect(
+      service.assertParent("campaign-definition-other", "instance-1", "gm-1"),
+    ).rejects.toEqual(
+      new NotFoundException("The selected Campaign Instance was not found."),
+    );
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "instance-1",
+        campaignDefinitionId: "campaign-definition-other",
+        ownerUserId: "gm-1",
+      },
+      select: { id: true, campaignDefinitionId: true },
+    });
+  });
+
   it("makes no writes when the explicitly selected snapshot is absent", async () => {
     const write = jest.fn();
     const tx = {
@@ -512,7 +570,7 @@ describe("CampaignInstancesService", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("rejects reuse of a creation key for different Instance details before writing", async () => {
+  it("rejects reuse of a creation key beneath a different Definition before writing", async () => {
     const write = jest.fn();
     const tx = {
       campaignDefinitionSnapshot: { findUnique: jest.fn() },
@@ -543,10 +601,12 @@ describe("CampaignInstancesService", () => {
       new CampaignInstancesService(prisma).create(
         {
           idempotencyKey: "same-create-command-key",
-          name: "Different table",
-          campaignDefinitionSnapshotId: "campaign-snapshot-2",
+          name: "Original table",
+          campaignDefinitionSnapshotId: "campaign-snapshot-1",
         },
         "gm-1",
+        "Game Master",
+        "campaign-definition-other",
       ),
     ).rejects.toEqual(
       new ConflictException(
