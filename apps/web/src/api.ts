@@ -1792,17 +1792,17 @@ export function getCampaignInstanceContinuation(
   );
 }
 
-export function getGmResumableSession() {
+export function getGmActiveSession() {
   return request<{
     session: {
       campaignInstanceId: string;
       campaignInstanceName: string;
       sessionId: string;
       sessionName: string;
-      status: "active" | "paused";
-      label: "Continue" | "Resume";
+      status: "active";
+      label: "Continue";
     } | null;
-  }>("/me/resumable-session");
+  }>("/me/active-session");
 }
 
 export function getCampaignInstanceVersions(

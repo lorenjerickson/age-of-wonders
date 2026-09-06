@@ -709,9 +709,11 @@ directory, membership lifecycle, and Character association/import APIs now opera
 Database checks enforce the role discriminants, provider/invitation/Session lifecycle chronology,
 namespaced Agent capability arrays, protected JSON shapes, exactly-one participant, join/leave
 chronology, append-only Session history, and complete one-way Character import provenance. A
-PostgreSQL partial unique index permits many active Campaign Instances but no more than one
-`ACTIVE` or `PAUSED` relational Session across the installation. Runtime code must not infer an
-active or resumable Session from legacy `campaignId` data or record recency.
+PostgreSQL partial unique index permits many active Campaign Instances and many `PAUSED` Sessions,
+but no more than one `ACTIVE` relational Session across the installation. Runtime code must not
+infer an active or resumable Session from legacy `campaignId` data or record recency. A global
+live-Session projection may expose the unique active Session; paused Sessions are selected only
+within their owning Campaign Instance so the system never chooses among them by recency.
 
 ### Canonical Campaign Session lifecycle and journal
 

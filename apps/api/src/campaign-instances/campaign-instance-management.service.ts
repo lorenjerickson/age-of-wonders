@@ -1200,7 +1200,7 @@ export class CampaignInstanceManagementService {
         const openSession = await client.campaignInstanceSession.findFirst({
           where: {
             campaignInstanceId: instance.id,
-            status: { in: ["ACTIVE", "PAUSED"] },
+            status: "ACTIVE",
           },
           select: { name: true },
         });

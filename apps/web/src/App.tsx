@@ -17,7 +17,7 @@ import {
 import {
   checkHealth,
   getCampaignInstanceContinuation,
-  getGmResumableSession,
+  getGmActiveSession,
   getMyAuthenticationProviders,
   type CampaignInstanceContinuation,
   type CampaignInstanceList,
@@ -102,8 +102,8 @@ export function AppShell({
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [resumableSession, setResumableSession] =
-    useState<Awaited<ReturnType<typeof getGmResumableSession>>["session"]>();
+  const [activeSession, setActiveSession] =
+    useState<Awaited<ReturnType<typeof getGmActiveSession>>["session"]>();
   const [auth0, setAuth0] =
     useState<
       Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
@@ -116,9 +116,9 @@ export function AppShell({
   useEffect(() => {
     if (!gmAccess) return;
     let cancelled = false;
-    void getGmResumableSession().then(
+    void getGmActiveSession().then(
       (result) => {
-        if (!cancelled) setResumableSession(result.session);
+        if (!cancelled) setActiveSession(result.session);
       },
       () => undefined,
     );
@@ -230,20 +230,20 @@ export function AppShell({
           }
         >
           <div className="min-w-0">
-            {resumableSession && !pathname.includes("/run/") && (
+            {activeSession && !pathname.includes("/run/") && (
               <div className="border-b border-warning/25 bg-warning/10 px-6 py-3 lg:px-10">
                 <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
                   <p className="text-sm">
-                    <strong>{resumableSession.sessionName}</strong> in{" "}
-                    {resumableSession.campaignInstanceName} is{" "}
-                    {resumableSession.status}.
+                    <strong>{activeSession.sessionName}</strong> in{" "}
+                    {activeSession.campaignInstanceName} is{" "}
+                    {activeSession.status}.
                   </p>
                   <RouterButtonLink
-                    href={`/campaigns/instances/${encodeURIComponent(resumableSession.campaignInstanceId)}/run/${encodeURIComponent(resumableSession.sessionId)}`}
+                    href={`/campaigns/instances/${encodeURIComponent(activeSession.campaignInstanceId)}/run/${encodeURIComponent(activeSession.sessionId)}`}
                     tone="primary"
                     size="sm"
                   >
-                    {resumableSession.label} Session
+                    {activeSession.label} Session
                   </RouterButtonLink>
                 </div>
               </div>

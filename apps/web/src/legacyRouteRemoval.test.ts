@@ -26,8 +26,10 @@ describe("legacy web surface removal", () => {
       "/ai/worlds",
       "/ai/locations",
       '"/character-drafts',
+      '"/me/resumable-session"',
     ]) {
       expect(api).not.toContain(path);
     }
+    expect(api).toContain('"/me/active-session"');
   });
 });

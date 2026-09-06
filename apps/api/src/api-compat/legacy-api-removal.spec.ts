@@ -36,6 +36,7 @@ describe("legacy HTTP API removal", () => {
     '@Post("locations/:parentId")',
     '@Post("generate")',
     '@Post("pipelines/content")',
+    '@Get("resumable-session")',
   ])("does not register %s", (legacyRoute) => {
     expect(source).not.toContain(legacyRoute);
   });

@@ -9,6 +9,10 @@ Depends on: Campaign Instance vertical slice through `bc6aacd`
 > The route inventory in section 7 is **deprecated and excluded from future API analysis and
 > generation**. It records the compatibility API delivered by this historical slice. Use
 > `docs/api-information-architecture-realignment.md` for current and target routes.
+>
+> The original single-resumable-Session decision in this completed plan is also **superseded and
+> excluded from future analysis and generation**. The authoritative architecture permits multiple
+> paused Sessions while enforcing no more than one active Session installation-wide.
 
 ## 1. Outcome
 
@@ -44,9 +48,9 @@ and Campaign Instance Management.
 - No more than eight participants, including the GM, may be selected for the MVP Session.
 - Multiple Sessions may be planned or waiting in lobbies. At most one Session across the
   installation may be in the `active` state.
-- At most one Session across the installation may be resumable (`active` or `paused`). This stricter
-  open-journal invariant prevents ambiguous Resume behavior and overlapping runtime revision
-  segments. Multiple historical or planned Sessions remain valid.
+- Multiple paused Sessions may remain resumable in their respective Campaign Instances. Global
+  navigation exposes only the unique active Session; Instance-scoped Continue/Resume controls never
+  choose among paused Sessions by recency.
 - A paused Session is not actively accepting play commands. Instance migration is therefore
   allowed while it is paused, as previously decided. Resuming after migration records an explicit
   snapshot/runtime-boundary event before accepting another command.
@@ -100,7 +104,8 @@ includes:
    cancellation.
 5. Lobby presence and readiness for GM, Players, Spectators, and authorized Agents.
 6. Server-enforced start, pause, resume, conclude, and cancellation transitions.
-7. A single installation-wide open/resumable Session and a single active Session.
+7. A single installation-wide active Session, with paused Sessions resumed from their owning
+   Campaign Instance.
 8. Append-only ordered Session events and immutable start/pause/resume/conclusion runtime
    boundaries.
 9. Draft and GM-approved Session summaries based on a sealed event segment.
@@ -218,7 +223,7 @@ Every transition is a named server command. Generic status replacement is forbid
 - `planned → lobby` freezes the selected required-player set for the current invitation round and
   issues/reuses Session invitations.
 - `lobby → planned` closes presence leases but preserves responses and delivery history.
-- `lobby → active` atomically checks readiness, claims the installation-wide active/open Session
+- `lobby → active` atomically checks readiness, claims the installation-wide active Session
   constraint, records the Instance snapshot and runtime revision, appends the start event, and
   activates the Instance if it was ready but not yet active.
 - `active → paused` closes command admission, appends a pause event, and records a runtime boundary.
@@ -295,7 +300,7 @@ The authoritative readiness projection contains human-readable checks and blocki
 
 - Session is in `lobby` and its metadata revision is current;
 - Campaign Instance is active or ready to activate and is not concluded/archived;
-- no different Session is active or paused anywhere in the installation;
+- no different Session is active anywhere in the installation;
 - Instance runtime and current snapshot are valid and not being migrated;
 - no client-declared preparation save is outstanding, and the submitted expected runtime revision
   still matches;
@@ -369,8 +374,8 @@ Use an additive Prisma migration. Do not repurpose legacy generic domain records
    boundary references, event segment bounds, summary status, cancellation reason, idempotency key,
    and audit metadata.
 2. Strengthen lifecycle check constraints so timestamps and status cannot contradict each other.
-3. Add a partial unique installation-wide index for `ACTIVE` or `PAUSED`, while retaining a separate
-   active-only invariant if operational queries require it.
+3. Add a partial unique installation-wide index for `ACTIVE`. Paused Sessions remain resumable
+   within their owning Campaign Instances and do not consume live Session capacity.
 4. Extend `SessionParticipation` with role-at-session, required flag, response message/time,
    attendance totals, and capability snapshot. Preserve exact-one human/Agent foreign keys.
 5. Add Session invitation, delivery-attempt, presence-lease/interval, event, runtime-boundary,
@@ -386,7 +391,7 @@ Use an additive Prisma migration. Do not repurpose legacy generic domain records
    - retain legacy `eventLog` and `summary` as read-only import evidence;
    - materialize normalized events/summaries only when conversion is lossless; otherwise attach an
      explicit legacy-history marker; and
-   - reject deployment if existing data violates the single resumable-Session invariant unless a
+   - reject deployment if existing data contains more than one active Session unless a
      deterministic, documented reconciliation can preserve every row.
 
 Database deployment must assess row counts and run during low traffic because enum/table changes,
@@ -465,7 +470,7 @@ migration:
 1. acquire the installation Session lifecycle lock before the first read;
 2. lock the Session and Campaign Instance/runtime rows;
 3. recompute readiness and verify the readiness token;
-4. verify no different active or paused Session;
+4. verify no different active Session;
 5. create the immutable runtime boundary;
 6. append the lifecycle event;
 7. transition Session and, when appropriate, Instance lifecycle using CAS; and
@@ -715,9 +720,10 @@ not own duplicate Session state.
 - A Session can be planned, edited, invited, opened as a lobby, started, paused, resumed, concluded,
   and cancelled only through valid server-enforced transitions.
 - Creation and every retryable lifecycle command are idempotent and concurrency-safe.
-- The database prevents more than one active or paused Session across the installation.
+- The database prevents more than one active Session across the installation while permitting
+  multiple paused Sessions.
 - Start cannot pass with an absent required Player, an unready required Player Character, stale
-  Instance runtime, invalid membership, or another open Session.
+  Instance runtime, invalid membership, or another active Session.
 - Spectator absence never blocks start, and a valid invited Spectator may join an active Session's
   safe projection.
 - Session records never duplicate Campaign Instance runtime state.

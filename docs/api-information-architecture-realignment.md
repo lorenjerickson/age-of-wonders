@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-writable-hosted-settings-complete
+status: active-implementation-plan-session-concurrency-corrected
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,7 +21,8 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, Campaign/World authoring, identity/participation, Auth0 adapter,
+The Session—including active-only installation concurrency—Campaign Instance, Campaign/World
+authoring, identity/participation, Auth0 adapter,
 writable hosted-Settings slice, system-boundary, legacy-removal, Instance-native Character-sheet,
 Character completion/review, and first-party one-way Character import waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
@@ -126,7 +127,7 @@ commands remain separate follow-up work.
 /api/invitations/instance/accept
 /api/invitations/session/resolve
 /api/invitations/session/respond
-/api/me/resumable-session
+/api/me/active-session
 /api/me/campaign-instances/:campaignInstanceId/characters
 /api/me/campaign-instances/:campaignInstanceId/characters/options
 /api/me/campaign-instances/:campaignInstanceId/characters/:characterId
@@ -228,7 +229,7 @@ it from the selected snapshot revision.
 Participant token entry remains un-nested. After authentication, participant access moves to:
 
 ```text
-GET  /api/me/resumable-session
+GET  /api/me/active-session
 GET  /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId
 POST /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/presence/join
 POST /api/me/campaign-instances/:campaignInstanceId/sessions/:sessionId/presence/heartbeat

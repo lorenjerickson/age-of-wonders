@@ -244,35 +244,50 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
     ).resolves.toBe(1);
   }, 40_000);
 
-  it("rejects an upgrade when more than one resumable Session exists", async () => {
+  it("allows multiple paused Sessions while rejecting a second active Session", async () => {
     const fixture = await seedFixture(prisma);
     const now = new Date();
-    const preflight = campaignSessionResumablePreflightSql();
-
+    const secondPausedId = `${fixture.sessionId}-second-paused`;
+    await prisma.campaignInstanceSession.update({
+      where: { id: fixture.sessionId },
+      data: { status: "PAUSED", startedAt: now, pausedAt: now },
+    });
+    await prisma.campaignInstanceSession.create({
+      data: {
+        id: secondPausedId,
+        campaignInstanceId: fixture.campaignInstanceId,
+        name: "Second paused Session",
+        status: "PAUSED",
+        startedAt: now,
+        pausedAt: now,
+      },
+    });
     await expect(
-      prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(
-          'DROP INDEX "CampaignInstanceSession_single_resumable_installation_key"',
-        );
-        await tx.campaignInstanceSession.update({
-          where: { id: fixture.sessionId },
-          data: { status: "PAUSED", startedAt: now, pausedAt: now },
-        });
-        await tx.campaignInstanceSession.create({
-          data: {
-            id: `${fixture.sessionId}-second-paused`,
-            campaignInstanceId: fixture.campaignInstanceId,
-            name: "Second legacy paused Session",
-            status: "PAUSED",
-            startedAt: now,
-            pausedAt: now,
-          },
-        });
-        await tx.$executeRawUnsafe(preflight);
+      prisma.campaignInstanceSession.count({
+        where: {
+          id: { in: [fixture.sessionId, secondPausedId] },
+          status: "PAUSED",
+        },
       }),
-    ).rejects.toThrow(
-      "Campaign Session migration blocked: found 0 ACTIVE and 2 PAUSED Sessions",
-    );
+    ).resolves.toBe(2);
+
+    try {
+      await prisma.campaignInstanceSession.update({
+        where: { id: fixture.sessionId },
+        data: { status: "ACTIVE", pausedAt: null },
+      });
+      await expect(
+        prisma.campaignInstanceSession.update({
+          where: { id: secondPausedId },
+          data: { status: "ACTIVE", pausedAt: null },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+    } finally {
+      await prisma.campaignInstanceSession.update({
+        where: { id: fixture.sessionId },
+        data: { status: "PAUSED", pausedAt: now },
+      });
+    }
   }, 40_000);
 
   it("rejects ambiguous Player contact hashes before creating unique indexes", async () => {
@@ -1158,10 +1173,6 @@ function assertDisposableDatabase(value: string) {
       "CAMPAIGN_INSTANCE_TEST_DATABASE_URL must name an explicit test, verify, or disposable database.",
     );
   }
-}
-
-function campaignSessionResumablePreflightSql() {
-  return migrationBlockSql("campaign_session_resumable_preflight");
 }
 
 function playerProfileContactPreflightSql() {

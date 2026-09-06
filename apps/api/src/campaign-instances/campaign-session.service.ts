@@ -74,10 +74,10 @@ export class CampaignSessionService {
     }
   }
 
-  async resumableForGm(userId: string) {
+  async activeForGm(userId: string) {
     const session = await this.prisma.campaignInstanceSession.findFirst({
       where: {
-        status: { in: ["ACTIVE", "PAUSED"] },
+        status: "ACTIVE",
         campaignInstance: { ownerUserId: userId },
       },
       select: {
@@ -95,7 +95,7 @@ export class CampaignSessionService {
             sessionId: session.id,
             sessionName: session.name,
             status: session.status.toLowerCase(),
-            label: session.status === "ACTIVE" ? "Continue" : "Resume",
+            label: "Continue",
           }
         : null,
     };
@@ -1200,7 +1200,7 @@ export class CampaignSessionService {
       this.prisma.campaignInstanceSession.findFirst({
         where: {
           id: { not: sessionId },
-          status: { in: ["ACTIVE", "PAUSED"] },
+          status: "ACTIVE",
         },
         select: { name: true },
       }),
@@ -1282,7 +1282,7 @@ export class CampaignSessionService {
             await client.campaignInstanceSession.findFirst({
               where: {
                 id: { not: sessionId },
-                status: { in: ["ACTIVE", "PAUSED"] },
+                status: "ACTIVE",
               },
               select: { name: true },
             });
@@ -2198,8 +2198,8 @@ function readinessChecks(
     label: "Hosted Session capacity",
     status: conflictingSessionName ? "blocked" : "ready",
     detail: conflictingSessionName
-      ? `${conflictingSessionName} must conclude before this Session can start or resume.`
-      : "No other Session is active or paused on this server.",
+      ? `${conflictingSessionName} must pause or conclude before this Session can start or resume.`
+      : "No other Session is active on this server.",
   });
   for (const participant of session.participations) {
     if (!participant.required) continue;

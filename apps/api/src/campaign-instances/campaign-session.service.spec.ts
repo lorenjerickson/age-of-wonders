@@ -47,6 +47,31 @@ describe("Campaign Session contracts", () => {
     });
   });
 
+  it("uses only the unique active Session for the global return projection", async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const service = new CampaignSessionService(
+      { campaignInstanceSession: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.activeForGm("gm-1")).resolves.toEqual({
+      session: null,
+    });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: "ACTIVE",
+          campaignInstance: { ownerUserId: "gm-1" },
+        },
+      }),
+    );
+  });
+
   it("keeps required Player readiness separate from optional Spectator presence", async () => {
     const prisma = {
       campaignInstance: {
@@ -129,6 +154,11 @@ describe("Campaign Session contracts", () => {
       ]),
     );
     expect(result.token).toMatch(/^[a-f0-9]{64}$/);
+    expect(prisma.campaignInstanceSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { not: "session-1" }, status: "ACTIVE" },
+      }),
+    );
   });
 
   it("rejects forbidden lifecycle transitions before writing history", async () => {

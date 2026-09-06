@@ -17,6 +17,14 @@ const characterCompletionMigration = readFileSync(
   "utf8",
 );
 
+const pausedSessionCorrectionMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260914000000_allow_multiple_paused_sessions/migration.sql",
+  ),
+  "utf8",
+);
+
 describe("Campaign Instance participation migration", () => {
   it("enforces same-Instance relationships with composite foreign keys", () => {
     expect(migration).toContain(
@@ -41,6 +49,21 @@ describe("Campaign Instance participation migration", () => {
       'CREATE UNIQUE INDEX "CampaignInstanceSession_single_active_installation_key"',
     );
     expect(migration).toContain("WHERE \"status\" = 'ACTIVE'");
+  });
+
+  it("restores the active-only Session invariant after the Session vertical slice", () => {
+    expect(pausedSessionCorrectionMigration).toContain(
+      'DROP INDEX "CampaignInstanceSession_single_resumable_installation_key"',
+    );
+    expect(pausedSessionCorrectionMigration).toContain(
+      'CREATE UNIQUE INDEX "CampaignInstanceSession_single_active_installation_key"',
+    );
+    expect(pausedSessionCorrectionMigration).toContain(
+      "WHERE \"status\" = 'ACTIVE'",
+    );
+    expect(pausedSessionCorrectionMigration).not.toContain(
+      "WHERE \"status\" IN ('ACTIVE', 'PAUSED')",
+    );
   });
 
   it("enforces lifecycle-consistent provider associations, invitations, and Sessions", () => {

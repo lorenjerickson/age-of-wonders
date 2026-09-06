@@ -84,9 +84,9 @@ export class CampaignInvitationEntryController {
 export class CampaignSessionMeOverviewController {
   constructor(private readonly sessions: CampaignSessionService) {}
 
-  @Get("resumable-session")
-  resumableSession(@Req() request: Request & AuthenticatedRequest) {
-    return this.sessions.resumableForGm(request.user!.id);
+  @Get("active-session")
+  activeSession(@Req() request: Request & AuthenticatedRequest) {
+    return this.sessions.activeForGm(request.user!.id);
   }
 }
 
