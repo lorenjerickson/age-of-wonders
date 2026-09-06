@@ -16,6 +16,9 @@ describe("Quick Start context", () => {
     expect(quickStartSuffix("?quickStart=choose-world&ignored=yes")).toBe(
       "?quickStart=choose-world",
     );
+    expect(quickStartKeyFromSearch("?quickStart=plan-session")).toBe(
+      "plan-session",
+    );
   });
 
   it("scopes local progress by GM and ignores malformed values", () => {

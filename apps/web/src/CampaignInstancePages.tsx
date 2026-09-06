@@ -12,8 +12,10 @@ import {
   Badge,
   Button,
   Checkbox,
+  Fieldset,
   Input,
   Label,
+  Legend,
   Select,
   Textarea,
 } from "@aow/ui";
@@ -22,9 +24,12 @@ import {
   applyCampaignInstanceMigration,
   applyCampaignInstanceRestore,
   configureCampaignInstanceAgent,
+  commandCampaignSession,
+  createCampaignSession,
   createCampaignInstance,
   createCampaignInstanceInvitation,
   decideCampaignInstancePlacement,
+  ejectCampaignSessionParticipant,
   getCampaignDefinition,
   getCampaignInstancePlacements,
   getCampaignInstanceEmbodiments,
@@ -33,14 +38,21 @@ import {
   getCampaignInstancePreparation,
   getCampaignInstanceRoster,
   getCampaignInstanceSessions,
+  getCampaignSession,
+  getCampaignSessionEvents,
+  getCampaignSessionReadiness,
+  getCampaignSessionSummary,
   getCampaignInstanceVersions,
   listCampaignDefinitions,
   previewCampaignInstanceMigration,
   previewCampaignInstanceRestore,
+  issueCampaignSessionInvitations,
+  joinCampaignSession,
   saveCampaignInstancePreparation,
   updateCampaignInstanceAgent,
   updateCampaignInstanceInvitation,
   updateCampaignInstancePlot,
+  updateCampaignSessionSummary,
   type CampaignDefinitionDetail,
   type CampaignDefinitionSummary,
   type CampaignInstanceMigrationPreview,
@@ -51,6 +63,9 @@ import {
   type CampaignInstanceRoster,
   type CampaignInstanceSessions,
   type CampaignInstanceVersions,
+  type CampaignSessionDetail,
+  type CampaignSessionEvents,
+  type CampaignSessionReadiness,
 } from "./api";
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
 import {
@@ -429,7 +444,11 @@ export function CampaignInstanceOverviewPage() {
             {continuation && (
               <RouterButtonLink
                 className="mt-4"
-                href={`${base}/sessions${suffix}`}
+                href={
+                  continuation.session
+                    ? `${base}/${continuation.kind === "continue" || continuation.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuation.session.id)}${suffix}`
+                    : `${base}/sessions${suffix}`
+                }
                 tone="primary"
               >
                 {continuation.kind === "plan-session"
@@ -613,7 +632,10 @@ export function CampaignInstancePlotsPage() {
   }, [instance.id]);
   async function update(
     plotId: string,
-    input: Omit<import("@aow/common").UpdateCampaignInstancePlotRequest, "expectedRuntimeRevision">,
+    input: Omit<
+      import("@aow/common").UpdateCampaignInstancePlotRequest,
+      "expectedRuntimeRevision"
+    >,
     busyKey = plotId,
   ) {
     if (!data) return;
@@ -635,7 +657,9 @@ export function CampaignInstancePlotsPage() {
       setBusy("");
     }
   }
-  const renderPlots = (plots: CampaignInstancePlotProjection["roots"]): ReactNode => (
+  const renderPlots = (
+    plots: CampaignInstancePlotProjection["roots"],
+  ): ReactNode => (
     <ul className="mt-8 space-y-4">
       {plots.map((plot) => (
         <li
@@ -656,12 +680,10 @@ export function CampaignInstancePlotsPage() {
                 value={plot.status}
                 disabled={busy === plot.plotDefinitionId}
                 onChange={(event) =>
-                  void update(
-                    plot.plotDefinitionId,
-                    {
-                      status: event.currentTarget.value as import("@aow/common").CampaignInstancePlotProgressStatus,
-                    },
-                  )
+                  void update(plot.plotDefinitionId, {
+                    status: event.currentTarget
+                      .value as import("@aow/common").CampaignInstancePlotProgressStatus,
+                  })
                 }
               >
                 {[
@@ -679,7 +701,10 @@ export function CampaignInstancePlotsPage() {
             </Label>
           </div>
           {plot.objectiveProgress.length > 0 && (
-            <ul className="mt-4 space-y-2" aria-label={`${plot.name} objectives`}>
+            <ul
+              className="mt-4 space-y-2"
+              aria-label={`${plot.name} objectives`}
+            >
               {plot.objectiveProgress.map((objective) => {
                 const objectiveBusyKey = `${plot.plotDefinitionId}:${objective.objectiveId}`;
                 return (
@@ -703,7 +728,8 @@ export function CampaignInstancePlotsPage() {
                               objectiveProgress: [
                                 {
                                   objectiveId: objective.objectiveId,
-                                  status: event.currentTarget.value as import("@aow/common").PlotObjectiveProgressStatus,
+                                  status: event.currentTarget
+                                    .value as import("@aow/common").PlotObjectiveProgressStatus,
                                   notes: objective.notes,
                                 },
                               ],
@@ -760,9 +786,8 @@ export function CampaignInstancePlotsPage() {
 export function CampaignInstancePlacementsPage() {
   const { instance } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstancePlacementProjection>();
-  const [embodiments, setEmbodiments] = useState<
-    Awaited<ReturnType<typeof getCampaignInstanceEmbodiments>>
-  >();
+  const [embodiments, setEmbodiments] =
+    useState<Awaited<ReturnType<typeof getCampaignInstanceEmbodiments>>>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -773,7 +798,9 @@ export function CampaignInstancePlacementsPage() {
   useBlocker({
     shouldBlockFn: () =>
       replacementDirty &&
-      !window.confirm("Leave without using or clearing the replacement selection?"),
+      !window.confirm(
+        "Leave without using or clearing the replacement selection?",
+      ),
     enableBeforeUnload: replacementDirty,
   });
   useEffect(() => {
@@ -781,10 +808,13 @@ export function CampaignInstancePlacementsPage() {
       getCampaignInstancePlacements(instance.id),
       getCampaignInstanceEmbodiments(instance.id),
     ])
-      .then(([placements, creatures]) => {
-        setData(placements);
-        setEmbodiments(creatures);
-      }, () => setError("Instance placements could not be loaded."))
+      .then(
+        ([placements, creatures]) => {
+          setData(placements);
+          setEmbodiments(creatures);
+        },
+        () => setError("Instance placements could not be loaded."),
+      )
       .finally(() => setLoading(false));
   }, [instance.id]);
   async function decide(
@@ -845,7 +875,8 @@ export function CampaignInstancePlacementsPage() {
                         : ""}
                     </p>
                     <p className="mt-1 text-xs">
-                      {placement.sourceTypeLabel} → {statusLabel(placement.status)}
+                      {placement.sourceTypeLabel} →{" "}
+                      {statusLabel(placement.status)}
                     </p>
                   </div>
                   <Badge outline>{statusLabel(placement.status)}</Badge>
@@ -857,7 +888,9 @@ export function CampaignInstancePlacementsPage() {
                       size="sm"
                       tone={action === "remove" ? "outline" : "ghost"}
                       disabled={busy === placement.realizationId}
-                      onClick={() => void decide(placement.realizationId, action)}
+                      onClick={() =>
+                        void decide(placement.realizationId, action)
+                      }
                     >
                       {statusLabel(action)}
                     </Button>
@@ -868,7 +901,9 @@ export function CampaignInstancePlacementsPage() {
                     Replacement
                     <Select
                       className="mt-2 w-full"
-                      value={replacementSelections[placement.realizationId] ?? ""}
+                      value={
+                        replacementSelections[placement.realizationId] ?? ""
+                      }
                       onChange={(event) =>
                         setReplacementSelections((current) => ({
                           ...current,
@@ -1147,8 +1182,8 @@ export function CampaignInstanceRosterPage() {
                             key={delivery.channel}
                             className="mt-1 text-xs text-base-content/55"
                           >
-                            {statusLabel(delivery.channel)}{" "}
-                            destination protected · {statusLabel(delivery.status)}
+                            {statusLabel(delivery.channel)} destination
+                            protected · {statusLabel(delivery.status)}
                           </p>
                         ))}
                       </div>
@@ -1384,7 +1419,7 @@ export function CampaignInstanceAgentsPage() {
                 className="mt-2 min-h-28 w-full"
                 value={observe}
                 onChange={(event) => setObserve(event.currentTarget.value)}
-                placeholder="narrative:events.read"
+                placeholder="aow:event-stream"
               />
             </Label>
             <Label>
@@ -1393,15 +1428,20 @@ export function CampaignInstanceAgentsPage() {
                 className="mt-2 min-h-28 w-full"
                 value={act}
                 onChange={(event) => setAct(event.currentTarget.value)}
-                placeholder="narrative:suggestions.create"
+                placeholder="aow:suggest-plot-twist"
                 aria-describedby="agent-capability-help"
               />
             </Label>
-            <p id="agent-capability-help" className="text-xs text-base-content/55">
+            <p
+              id="agent-capability-help"
+              className="text-xs text-base-content/55"
+            >
               Capability keys use the form namespace:capability.
             </p>
             {!capabilitiesValid && (
-              <Alert tone="warning">Every capability needs a namespace and name.</Alert>
+              <Alert tone="warning">
+                Every capability needs a namespace and name.
+              </Alert>
             )}
             <Button
               tone="primary"
@@ -1477,10 +1517,7 @@ export function CampaignInstanceAgentsPage() {
                         void action(
                           agent.participationId,
                           agent.status as
-                            | "configured"
-                            | "authorized"
-                            | "active"
-                            | "paused",
+                            "configured" | "authorized" | "active" | "paused",
                           "revoked",
                         )
                       }
@@ -1501,15 +1538,71 @@ export function CampaignInstanceAgentsPage() {
 export function CampaignInstanceSessionsPage() {
   const { instance, continuation } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstanceSessions>();
+  const [roster, setRoster] = useState<CampaignInstanceRoster>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const navigate = useInternalNavigate();
+  const suffix = quickStartSuffix(useLocation().searchStr);
   useEffect(() => {
-    void getCampaignInstanceSessions(instance.id)
-      .then(setData, () =>
-        setError("Sessions could not be loaded for this Campaign Instance."),
+    void Promise.all([
+      getCampaignInstanceSessions(instance.id),
+      getCampaignInstanceRoster(instance.id),
+    ])
+      .then(
+        ([sessions, nextRoster]) => {
+          setData(sessions);
+          setRoster(nextRoster);
+        },
+        () =>
+          setError("Sessions could not be loaded for this Campaign Instance."),
       )
       .finally(() => setLoading(false));
   }, [instance.id]);
+  async function plan(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const players =
+        roster?.memberships
+          .filter(
+            (entry) =>
+              entry.role === "player" && selected.has(entry.membershipId),
+          )
+          .map((entry) => entry.membershipId) ?? [];
+      const spectators =
+        roster?.memberships
+          .filter(
+            (entry) =>
+              entry.role === "spectator" && selected.has(entry.membershipId),
+          )
+          .map((entry) => entry.membershipId) ?? [];
+      const session = await createCampaignSession(instance.id, {
+        idempotencyKey: crypto.randomUUID(),
+        name,
+        scheduledFor: scheduledFor
+          ? new Date(scheduledFor).toISOString()
+          : undefined,
+        playerMembershipIds: players,
+        spectatorMembershipIds: spectators,
+      });
+      await navigate(
+        `/campaigns/instances/${encodeURIComponent(instance.id)}/sessions/${encodeURIComponent(session.id)}${suffix}`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The Session could not be planned.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   const section = (
     title: string,
     sessions: readonly CampaignInstanceSessionProjection[],
@@ -1538,12 +1631,30 @@ export function CampaignInstanceSessionsPage() {
                 <Badge outline>{statusLabel(session.status)}</Badge>
               </div>
               {session.scheduledFor && (
-                <p className="mt-2 text-sm">{dateLabel(session.scheduledFor)}</p>
+                <p className="mt-2 text-sm">
+                  {dateLabel(session.scheduledFor)}
+                </p>
               )}
               <p className="mt-1 text-xs text-base-content/55">
                 {session.participantCount ?? 0} participants · Session
                 attendance is separate from Instance membership.
               </p>
+              <RouterButtonLink
+                className="mt-4"
+                size="sm"
+                tone={
+                  session.status === "active" || session.status === "paused"
+                    ? "primary"
+                    : "outline"
+                }
+                href={`/campaigns/instances/${encodeURIComponent(instance.id)}/${session.status === "active" || session.status === "paused" ? "run" : "sessions"}/${encodeURIComponent(session.id)}${suffix}`}
+              >
+                {session.status === "active"
+                  ? "Continue"
+                  : session.status === "paused"
+                    ? "Resume"
+                    : "Open Session"}
+              </RouterButtonLink>
             </li>
           ))}
         </ul>
@@ -1558,8 +1669,8 @@ export function CampaignInstanceSessionsPage() {
     <main className={pageClass}>
       <PageIntro eyebrow="Campaign Instance · History" title="Sessions">
         <p>
-          Sessions belong only to this Instance. Planning and active Play
-          controls arrive in the Session slice.
+          Plan this Instance’s next gathering, open its lobby, and Continue or
+          Resume play without crossing into Campaign or World authoring.
         </p>
       </PageIntro>
       {continuation?.detail && (
@@ -1570,10 +1681,582 @@ export function CampaignInstanceSessionsPage() {
       <LoadState loading={loading} error={error} />
       {data && (
         <>
+          <section
+            className="mt-9 rounded-box border border-base-300 bg-base-200 p-6"
+            aria-labelledby="plan-session-heading"
+          >
+            <h2 id="plan-session-heading" className="text-2xl font-semibold">
+              Plan a Session
+            </h2>
+            <form
+              className="mt-5 grid gap-5"
+              onSubmit={(event) => void plan(event)}
+            >
+              <Label>
+                Session name
+                <Input
+                  className="mt-2 w-full"
+                  value={name}
+                  maxLength={120}
+                  required
+                  onChange={(event) => setName(event.currentTarget.value)}
+                />
+              </Label>
+              <Label>
+                Scheduled date and time
+                <Input
+                  className="mt-2 w-full"
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(event) =>
+                    setScheduledFor(event.currentTarget.value)
+                  }
+                />
+              </Label>
+              {roster &&
+                roster.memberships.some(
+                  (entry) => entry.role !== "gm" && entry.status === "active",
+                ) && (
+                  <Fieldset className="grid gap-3">
+                    <Legend className="font-semibold">
+                      Invite existing Instance participants
+                    </Legend>
+                    {roster.memberships
+                      .filter(
+                        (entry) =>
+                          entry.role !== "gm" && entry.status === "active",
+                      )
+                      .map((entry) => (
+                        <Checkbox
+                          key={entry.membershipId}
+                          label={`${entry.displayName} · ${statusLabel(entry.role)}`}
+                          checked={selected.has(entry.membershipId)}
+                          onChange={(event) =>
+                            setSelected((current) => {
+                              const next = new Set(current);
+                              if (event.currentTarget.checked)
+                                next.add(entry.membershipId);
+                              else next.delete(entry.membershipId);
+                              return next;
+                            })
+                          }
+                        />
+                      ))}
+                  </Fieldset>
+                )}
+              <Button
+                type="submit"
+                tone="primary"
+                loading={busy}
+                disabled={!name.trim()}
+              >
+                Plan Session
+              </Button>
+            </form>
+          </section>
           {section("Current", data.current)}
           {section("Planned", data.planned)}
           {section("History", data.history)}
         </>
+      )}
+    </main>
+  );
+}
+
+export function CampaignSessionPage({
+  sessionId,
+  operational = false,
+}: {
+  sessionId: string;
+  operational?: boolean;
+}) {
+  const { instance, refresh: refreshInstance } = useCampaignInstance();
+  const [session, setSession] = useState<CampaignSessionDetail>();
+  const [readiness, setReadiness] = useState<CampaignSessionReadiness>();
+  const [events, setEvents] = useState<CampaignSessionEvents>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [summaryNarrative, setSummaryNarrative] = useState("");
+  const [privateGmNotes, setPrivateGmNotes] = useState("");
+  const suffix = quickStartSuffix(useLocation().searchStr);
+
+  async function load() {
+    const [nextSession, nextReadiness, nextEvents] = await Promise.all([
+      getCampaignSession(instance.id, sessionId),
+      getCampaignSessionReadiness(instance.id, sessionId),
+      getCampaignSessionEvents(instance.id, sessionId),
+    ]);
+    setSession(nextSession);
+    setReadiness(nextReadiness);
+    setEvents(nextEvents);
+    if (nextSession.status === "concluded") {
+      const summary = await getCampaignSessionSummary(instance.id, sessionId);
+      setSummaryNarrative(summary.narrative);
+      setPrivateGmNotes(summary.privateGmNotes ?? "");
+    }
+  }
+  useEffect(() => {
+    void load()
+      .catch(() => setError("The Session could not be loaded."))
+      .finally(() => setLoading(false));
+  }, [instance.id, sessionId]);
+
+  async function act(
+    command:
+      | "open-lobby"
+      | "close-lobby"
+      | "start"
+      | "pause"
+      | "resume"
+      | "conclude"
+      | "cancel",
+  ) {
+    if (!session || !readiness) return;
+    let reason: string | undefined;
+    if (command === "cancel") {
+      reason = window.prompt("Why is this Session being cancelled?")?.trim();
+      if (!reason) return;
+    }
+    setBusy(command);
+    setError("");
+    try {
+      await commandCampaignSession(instance.id, session.id, command, {
+        expectedMetadataRevision: session.metadataRevision,
+        expectedRuntimeRevision: readiness.runtimeRevision,
+        readinessToken: readiness.token,
+        reason,
+      });
+      await Promise.all([load(), refreshInstance()]);
+      setNotice(
+        `${session.name} ${command === "start" ? "started" : command === "resume" ? "resumed" : command.replace("-", " ")}.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The Session action could not be completed.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function joinLobby() {
+    if (!session) return;
+    setBusy("join");
+    setError("");
+    try {
+      const keyName = `aow.session.${session.id}.presence`;
+      let connectionKey = sessionStorage.getItem(keyName);
+      if (!connectionKey) {
+        connectionKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+        sessionStorage.setItem(keyName, connectionKey);
+      }
+      await joinCampaignSession(instance.id, session.id, connectionKey);
+      await load();
+      setNotice("You are present in the Session lobby.");
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The lobby could not be joined.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function invite() {
+    if (!session) return;
+    setBusy("invite");
+    setError("");
+    try {
+      const result = await issueCampaignSessionInvitations(
+        instance.id,
+        session.id,
+      );
+      setNotice(
+        result.invitations.length
+          ? `Session invitations were issued for ${result.invitations.length} participants.`
+          : "There are no Player or Spectator invitations to issue.",
+      );
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "Session invitations could not be issued.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function ejectParticipant(
+    participant: CampaignSessionDetail["participants"][number],
+  ) {
+    if (!session) return;
+    setBusy(`eject-${participant.participationId}`);
+    setError("");
+    try {
+      await ejectCampaignSessionParticipant(
+        instance.id,
+        session.id,
+        participant.participationId,
+        session.metadataRevision,
+      );
+      setNotice(`${participant.name} was removed from Session presence.`);
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The participant could not be removed from Session presence.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function saveSummary(event: FormEvent) {
+    event.preventDefault();
+    if (!session) return;
+    setBusy("summary");
+    setError("");
+    try {
+      const result = await updateCampaignSessionSummary(
+        instance.id,
+        session.id,
+        {
+          expectedSessionRevision: session.metadataRevision,
+          narrative: summaryNarrative,
+          privateGmNotes,
+        },
+      );
+      setNotice(
+        result.status === "approved"
+          ? "The Session summary was approved and its backup request was recorded."
+          : "A new immutable Session summary amendment was recorded.",
+      );
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The Session summary could not be saved.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <main
+      className={
+        operational
+          ? "min-h-screen bg-neutral px-6 py-10 text-neutral-content lg:px-10"
+          : pageClass
+      }
+    >
+      <PageIntro
+        eyebrow={operational ? "Active play" : "Campaign Instance · Session"}
+        title={session?.name ?? "Session"}
+      >
+        <p>
+          {operational
+            ? "A discrete operational workspace for this Session’s live boundary and participants."
+            : "Manage planning, lobby readiness, lifecycle, and durable Session history."}
+        </p>
+      </PageIntro>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <RouterButtonLink
+          tone="outline"
+          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions${suffix}`}
+        >
+          Back to Sessions
+        </RouterButtonLink>
+        {operational && session && (
+          <RouterButtonLink
+            tone="outline"
+            href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions/${encodeURIComponent(session.id)}${suffix}`}
+          >
+            Session management
+          </RouterButtonLink>
+        )}
+      </div>
+      <LoadState loading={loading} error={error} />
+      <p className="mt-4 text-sm" aria-live="polite">
+        {notice}
+      </p>
+      {session && readiness && (
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <section
+            className="rounded-box border border-base-300 bg-base-200 p-6 text-base-content"
+            aria-labelledby="session-state-heading"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="session-state-heading" className="text-2xl font-semibold">
+                Session state
+              </h2>
+              <Badge outline>{statusLabel(session.status)}</Badge>
+            </div>
+            {session.scheduledFor && (
+              <p className="mt-3 text-sm">
+                Scheduled {dateLabel(session.scheduledFor)}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap gap-3">
+              {session.status === "planned" && (
+                <Button
+                  tone="primary"
+                  loading={busy === "open-lobby"}
+                  onClick={() => void act("open-lobby")}
+                >
+                  Open lobby
+                </Button>
+              )}
+              {session.status === "lobby" && (
+                <>
+                  <Button
+                    tone="outline"
+                    loading={busy === "join"}
+                    onClick={() => void joinLobby()}
+                  >
+                    Join lobby
+                  </Button>
+                  <Button
+                    tone="outline"
+                    loading={busy === "invite"}
+                    onClick={() => void invite()}
+                  >
+                    Issue invitations
+                  </Button>
+                  <Button
+                    tone="primary"
+                    loading={busy === "start"}
+                    disabled={!readiness.ready}
+                    onClick={() => void act("start")}
+                  >
+                    Start Session
+                  </Button>
+                  <Button
+                    tone="ghost"
+                    loading={busy === "close-lobby"}
+                    onClick={() => void act("close-lobby")}
+                  >
+                    Close lobby
+                  </Button>
+                </>
+              )}
+              {session.status === "active" && (
+                <>
+                  <Button
+                    tone="primary"
+                    loading={busy === "pause"}
+                    onClick={() => void act("pause")}
+                  >
+                    Pause Session
+                  </Button>
+                  <Button
+                    tone="outline"
+                    loading={busy === "conclude"}
+                    onClick={() => void act("conclude")}
+                  >
+                    Conclude Session
+                  </Button>
+                </>
+              )}
+              {session.status === "paused" && (
+                <>
+                  <Button
+                    tone="outline"
+                    loading={busy === "join"}
+                    onClick={() => void joinLobby()}
+                  >
+                    Rejoin
+                  </Button>
+                  <Button
+                    tone="primary"
+                    loading={busy === "resume"}
+                    disabled={!readiness.ready}
+                    onClick={() => void act("resume")}
+                  >
+                    Resume Session
+                  </Button>
+                  <Button
+                    tone="outline"
+                    loading={busy === "conclude"}
+                    onClick={() => void act("conclude")}
+                  >
+                    Conclude Session
+                  </Button>
+                </>
+              )}
+              {(session.status === "planned" || session.status === "lobby") && (
+                <Button
+                  tone="danger"
+                  loading={busy === "cancel"}
+                  onClick={() => void act("cancel")}
+                >
+                  Cancel Session
+                </Button>
+              )}
+              {(session.status === "active" || session.status === "paused") &&
+                !operational && (
+                  <RouterButtonLink
+                    tone="primary"
+                    href={`/campaigns/instances/${encodeURIComponent(instance.id)}/run/${encodeURIComponent(session.id)}${suffix}`}
+                  >
+                    {session.status === "active" ? "Continue" : "Resume"}
+                  </RouterButtonLink>
+                )}
+            </div>
+          </section>
+          <section
+            className="rounded-box border border-base-300 bg-base-200 p-6 text-base-content"
+            aria-labelledby="readiness-heading"
+          >
+            <h2 id="readiness-heading" className="text-2xl font-semibold">
+              Readiness
+            </h2>
+            <ul className="mt-4 grid gap-3">
+              {readiness.checks.map((check) => (
+                <li key={check.key} className="flex gap-3">
+                  <Badge outline>{statusLabel(check.status)}</Badge>
+                  <span>
+                    <span className="block font-medium">{check.label}</span>
+                    <span className="block text-sm text-base-content/60">
+                      {check.detail}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section
+            className="rounded-box border border-base-300 bg-base-200 p-6 text-base-content lg:col-span-2"
+            aria-labelledby="participants-heading"
+          >
+            <h2 id="participants-heading" className="text-2xl font-semibold">
+              Participants
+            </h2>
+            <ul className="mt-4 grid gap-3 md:grid-cols-2">
+              {session.participants.map((participant) => (
+                <li
+                  key={participant.participationId}
+                  className="rounded-box border border-base-300 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold">{participant.name}</span>
+                    <Badge outline>{statusLabel(participant.role)}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm">
+                    {participant.required ? "Required" : "Optional"} ·{" "}
+                    {statusLabel(participant.response)} ·{" "}
+                    {participant.present ? "Present" : "Not present"}
+                  </p>
+                  <p className="mt-1 text-xs text-base-content/60">
+                    {participant.readinessDetail}
+                  </p>
+                  {participant.present && participant.role !== "gm" && (
+                    <Button
+                      className="mt-3"
+                      tone="outline"
+                      size="sm"
+                      loading={busy === `eject-${participant.participationId}`}
+                      onClick={() => void ejectParticipant(participant)}
+                    >
+                      Remove from lobby
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section
+            className="rounded-box border border-base-300 bg-base-200 p-6 text-base-content lg:col-span-2"
+            aria-labelledby="session-events-heading"
+          >
+            <h2 id="session-events-heading" className="text-2xl font-semibold">
+              Session history
+            </h2>
+            <p className="mt-2 text-sm text-base-content/60">
+              An ordered, append-only account of planning and play activity.
+            </p>
+            {events?.items.length ? (
+              <ol className="mt-5 space-y-3">
+                {events.items.map((item) => (
+                  <li
+                    key={item.sequence}
+                    className="rounded-box border border-base-300 p-4"
+                  >
+                    <p className="font-medium">{item.summary}</p>
+                    <p className="mt-1 text-xs text-base-content/60">
+                      {dateLabel(item.occurredAt)} · {item.actorName}
+                      {item.campaignTime ? ` · ${item.campaignTime}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-4 text-sm text-base-content/60">
+                No Session history has been recorded yet.
+              </p>
+            )}
+          </section>
+          {session.status === "concluded" && (
+            <section
+              className="rounded-box border border-base-300 bg-base-200 p-6 text-base-content lg:col-span-2"
+              aria-labelledby="summary-heading"
+            >
+              <h2 id="summary-heading" className="text-2xl font-semibold">
+                Session summary
+              </h2>
+              <p className="mt-2 text-sm text-base-content/60">
+                Approved summaries are immutable. Saving again creates an
+                amendment instead of overwriting history.
+              </p>
+              <form
+                className="mt-5 grid gap-5"
+                onSubmit={(event) => void saveSummary(event)}
+              >
+                <Label>
+                  Narrative summary
+                  <Textarea
+                    className="mt-2 w-full"
+                    maxLength={20000}
+                    value={summaryNarrative}
+                    onChange={(event) =>
+                      setSummaryNarrative(event.currentTarget.value)
+                    }
+                  />
+                </Label>
+                <Label>
+                  Private GM notes
+                  <Textarea
+                    className="mt-2 w-full"
+                    maxLength={10000}
+                    value={privateGmNotes}
+                    onChange={(event) =>
+                      setPrivateGmNotes(event.currentTarget.value)
+                    }
+                  />
+                </Label>
+                <Button
+                  type="submit"
+                  tone="primary"
+                  loading={busy === "summary"}
+                >
+                  {session.summaryStatus === "draft"
+                    ? "Approve summary"
+                    : "Record amendment"}
+                </Button>
+              </form>
+            </section>
+          )}
+        </div>
       )}
     </main>
   );
@@ -1633,9 +2316,7 @@ export function CampaignInstanceVersionsPage() {
                     <p className="font-semibold">
                       Instance snapshot {snapshot.snapshotNumber}
                     </p>
-                    {snapshot.current && (
-                      <Badge tone="success">Current</Badge>
-                    )}
+                    {snapshot.current && <Badge tone="success">Current</Badge>}
                   </div>
                   <p className="mt-2 text-sm">
                     {snapshot.campaignDefinition.name} revision{" "}
@@ -1658,11 +2339,13 @@ export function CampaignInstanceVersionsPage() {
           )}
           {data.restoreTarget && (
             <section className="mt-8 rounded-box border border-base-300 bg-base-200 p-5">
-              <h2 className="text-xl font-semibold">Restore direct predecessor</h2>
+              <h2 className="text-xl font-semibold">
+                Restore direct predecessor
+              </h2>
               <p className="mt-2 text-sm">
                 Review restoring {data.restoreTarget.campaignDefinition.name}{" "}
-                revision {data.restoreTarget.campaignDefinition.revisionNumber}
-                {" "}with {data.restoreTarget.worldDefinition.name} revision{" "}
+                revision {data.restoreTarget.campaignDefinition.revisionNumber}{" "}
+                with {data.restoreTarget.worldDefinition.name} revision{" "}
                 {data.restoreTarget.worldDefinition.revisionNumber}.
               </p>
               <RouterButtonLink
@@ -1693,9 +2376,9 @@ export function CampaignInstanceMigrationPage() {
   >([]);
   const [mappingDirty, setMappingDirty] = useState(false);
   const router = useRouter();
-  const restoreSnapshotId = new URLSearchParams(
-    useLocation().searchStr,
-  ).get("restoreSnapshot");
+  const restoreSnapshotId = new URLSearchParams(useLocation().searchStr).get(
+    "restoreSnapshot",
+  );
   const restoring = Boolean(restoreSnapshotId);
   useEffect(() => {
     void getCampaignInstanceVersions(instance.id).then(setVersions, () =>
@@ -1705,7 +2388,9 @@ export function CampaignInstanceMigrationPage() {
   async function previewMigration(
     requestedMappings: readonly CampaignInstanceMigrationMappingRequest[] = mappings,
   ) {
-    const sourceSnapshotId = versions?.items.find(({ current }) => current)?.snapshotId;
+    const sourceSnapshotId = versions?.items.find(
+      ({ current }) => current,
+    )?.snapshotId;
     if (!instance.runtime || !sourceSnapshotId) return;
     if (!restoring && !targetId) return;
     if (restoring && !restoreSnapshotId) return;
@@ -1745,15 +2430,16 @@ export function CampaignInstanceMigrationPage() {
               ...paging,
             }));
         if (pages[0] && pages[0].planHash !== nextPreview.planHash) {
-          throw new Error("Migration plan changed while its pages were loading.");
+          throw new Error(
+            "Migration plan changed while its pages were loading.",
+          );
         }
         pages.push(nextPreview);
         candidateTotal = nextPreview.totalMappingCandidates;
         hasMore =
           nextPreview.nextChangeOffset !== undefined ||
           nextPreview.nextConflictOffset !== undefined;
-        changeOffset =
-          nextPreview.nextChangeOffset ?? nextPreview.totalChanges;
+        changeOffset = nextPreview.nextChangeOffset ?? nextPreview.totalChanges;
         conflictOffset =
           nextPreview.nextConflictOffset ?? nextPreview.totalConflicts;
         // Candidate choices are intentionally loaded one bounded page at a
@@ -1784,7 +2470,9 @@ export function CampaignInstanceMigrationPage() {
     }
   }
   async function loadMoreCandidates() {
-    const sourceSnapshotId = versions?.items.find(({ current }) => current)?.snapshotId;
+    const sourceSnapshotId = versions?.items.find(
+      ({ current }) => current,
+    )?.snapshotId;
     if (!preview || !instance.runtime || !sourceSnapshotId) return;
     setBusy(true);
     setError("");
@@ -1815,7 +2503,9 @@ export function CampaignInstanceMigrationPage() {
             ...paging,
           }));
       if (next.planHash !== preview.planHash) {
-        throw new Error("Migration plan changed while candidates were loading.");
+        throw new Error(
+          "Migration plan changed while candidates were loading.",
+        );
       }
       const accumulated = mergeMigrationPreviewPages([preview, next]);
       if (!accumulated) throw new Error("Candidate page could not be merged.");
@@ -1830,7 +2520,9 @@ export function CampaignInstanceMigrationPage() {
     }
   }
   async function apply() {
-    const sourceSnapshotId = versions?.items.find(({ current }) => current)?.snapshotId;
+    const sourceSnapshotId = versions?.items.find(
+      ({ current }) => current,
+    )?.snapshotId;
     if (!preview || !reviewed || !instance.runtime || !sourceSnapshotId) return;
     setBusy(true);
     try {
@@ -1871,7 +2563,11 @@ export function CampaignInstanceMigrationPage() {
     <main className={pageClass}>
       <PageIntro
         eyebrow="Campaign Instance · Migration"
-        title={restoring ? "Review complete restore" : "Review complete revision adoption"}
+        title={
+          restoring
+            ? "Review complete restore"
+            : "Review complete revision adoption"
+        }
       >
         <p>
           {restoring
@@ -1887,9 +2583,15 @@ export function CampaignInstanceMigrationPage() {
       ) : restoring ? (
         <section className="mt-8 rounded-box border border-base-300 bg-base-200 p-5">
           <p className="text-sm">
-            The selected direct predecessor will be restored only after a full preview.
+            The selected direct predecessor will be restored only after a full
+            preview.
           </p>
-          <Button className="mt-4" tone="primary" loading={busy} onClick={() => void previewMigration()}>
+          <Button
+            className="mt-4"
+            tone="primary"
+            loading={busy}
+            onClick={() => void previewMigration()}
+          >
             Preview complete restore
           </Button>
         </section>
@@ -1909,12 +2611,16 @@ export function CampaignInstanceMigrationPage() {
             >
               <option value="">Choose a Campaign revision</option>
               {versions?.migrationTargets.map((target) => (
-                  <option key={target.campaignDefinitionSnapshotId} value={target.campaignDefinitionSnapshotId}>
-                    {target.campaignDefinition.name} revision{" "}
-                    {target.campaignDefinition.revisionNumber} · {target.worldDefinition.name}{" "}
-                    revision {target.worldDefinition.revisionNumber}
-                  </option>
-                ))}
+                <option
+                  key={target.campaignDefinitionSnapshotId}
+                  value={target.campaignDefinitionSnapshotId}
+                >
+                  {target.campaignDefinition.name} revision{" "}
+                  {target.campaignDefinition.revisionNumber} ·{" "}
+                  {target.worldDefinition.name} revision{" "}
+                  {target.worldDefinition.revisionNumber}
+                </option>
+              ))}
             </Select>
           </Label>
           <Button
@@ -1958,8 +2664,7 @@ export function CampaignInstanceMigrationPage() {
                 >
                   <p className="font-medium">{change.subjectName}</p>
                   <p className="mt-1 text-sm">
-                    {change.typeLabel} ·{" "}
-                    {statusLabel(change.change)}
+                    {change.typeLabel} · {statusLabel(change.change)}
                   </p>
                   {change.context && (
                     <p className="mt-1 text-sm text-base-content/55">
@@ -1989,7 +2694,10 @@ export function CampaignInstanceMigrationPage() {
                         )
                       : undefined;
                     return (
-                      <li key={conflict.key} className="rounded-box bg-base-100 p-4">
+                      <li
+                        key={conflict.key}
+                        className="rounded-box bg-base-100 p-4"
+                      >
                         <p className="font-medium">{conflict.subjectName}</p>
                         <p className="mt-1 text-sm">{conflict.detail}</p>
                         {conflict.mappingRequired && conflict.sourceId && (
@@ -2026,7 +2734,9 @@ export function CampaignInstanceMigrationPage() {
                                 setReviewed(false);
                               }}
                             >
-                              <option value="">Choose a compatible successor</option>
+                              <option value="">
+                                Choose a compatible successor
+                              </option>
                               {candidates.map((candidate) => (
                                 <option
                                   key={`${candidate.conflictKey}:${candidate.targetId}`}
@@ -2041,8 +2751,11 @@ export function CampaignInstanceMigrationPage() {
                                       ),
                                   )}
                                 >
-                                  {candidate.targetName} · {candidate.targetTypeLabel}
-                                  {candidate.context ? ` · ${candidate.context}` : ""}
+                                  {candidate.targetName} ·{" "}
+                                  {candidate.targetTypeLabel}
+                                  {candidate.context
+                                    ? ` · ${candidate.context}`
+                                    : ""}
                                 </option>
                               ))}
                             </Select>
@@ -2078,7 +2791,10 @@ export function CampaignInstanceMigrationPage() {
               className="rounded-box border border-base-300 bg-base-200 p-5"
               aria-labelledby="migration-candidate-heading"
             >
-              <h2 id="migration-candidate-heading" className="text-xl font-semibold">
+              <h2
+                id="migration-candidate-heading"
+                className="text-xl font-semibold"
+              >
                 Compatible successors
               </h2>
               <p

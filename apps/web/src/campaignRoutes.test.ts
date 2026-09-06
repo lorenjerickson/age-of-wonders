@@ -77,6 +77,14 @@ describe("Campaign route precedence", () => {
       "/_gm/campaigns/instances/$campaignInstanceId/sessions/",
     ],
     [
+      "/campaigns/instances/instance-opaque-id/sessions/session-opaque-id",
+      "/_gm/campaigns/instances/$campaignInstanceId/sessions/$sessionId",
+    ],
+    [
+      "/campaigns/instances/instance-opaque-id/run/session-opaque-id",
+      "/_gm/campaigns/instances/$campaignInstanceId/run/$sessionId",
+    ],
+    [
       "/campaigns/instances/instance-opaque-id/versions",
       "/_gm/campaigns/instances/$campaignInstanceId/versions/",
     ],
@@ -90,4 +98,16 @@ describe("Campaign route precedence", () => {
       expect(getRouter().matchRoutes(pathname).at(-1)?.routeId).toBe(routeId);
     },
   );
+
+  it("matches the participant Session lobby route", () => {
+    expect(
+      getRouter()
+        .matchRoutes(
+          "/play/instances/instance-opaque-id/sessions/session-opaque-id",
+        )
+        .at(-1)?.routeId,
+    ).toBe(
+      "/_participant/play/instances/$campaignInstanceId/sessions/$sessionId",
+    );
+  });
 });

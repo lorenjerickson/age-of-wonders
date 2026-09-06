@@ -91,7 +91,7 @@ export function CampaignInstanceContextBar() {
       <Badge outline>{statusLabel(instance.status)}</Badge>
       {continuation?.enabled && continuation.session ? (
         <RouterButtonLink
-          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions${suffix}`}
+          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/${continuation.kind === "continue" || continuation.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuation.session.id)}${suffix}`}
           tone="primary"
           size="sm"
         >
@@ -290,7 +290,11 @@ export function CampaignInstanceLifecycleActions() {
     setMessage("");
     try {
       await updateCampaignInstanceLifecycle(instance.id, {
-        targetStatus: (action === "activate" ? "active" : action === "restore" ? "concluded" : action) as CampaignInstanceDetail["status"],
+        targetStatus: (action === "activate"
+          ? "active"
+          : action === "restore"
+            ? "concluded"
+            : action) as CampaignInstanceDetail["status"],
         expectedMetadataRevision: instance.metadataRevision,
       });
       await router.invalidate();

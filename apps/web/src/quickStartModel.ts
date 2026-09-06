@@ -50,6 +50,20 @@ export const QUICK_START_ACTIVITIES = [
       "Note which invitations still need to be created.",
     ],
   },
+  {
+    key: "plan-session",
+    title: "Plan and open your first Session",
+    description:
+      "Choose a Campaign Instance, select its participants, and prepare the discrete Session lobby.",
+    href: "/campaigns/instances?quickStart=plan-session",
+    steps: [
+      "Choose the Campaign Instance you want to continue.",
+      "Open Sessions and plan a named Session.",
+      "Select existing Instance Players and optional Spectators.",
+      "Open the lobby and issue Session invitations.",
+      "Join the lobby and resolve every blocking readiness check.",
+    ],
+  },
 ] as const;
 
 export type QuickStartActivityKey =

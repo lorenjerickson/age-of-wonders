@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { Button, Checkbox } from "@aow/ui";
 import { InternalLink } from "./navigation";
+import { getCampaignSession, getCampaignSessionReadiness } from "./api";
 import {
   parseQuickStartProgress,
   quickStartActivityIsComplete,
@@ -58,8 +60,9 @@ export function QuickStartPage({ gmScope }: { gmScope: string }) {
         Players workspaces. Guidance travels with you and brings you back here.
       </p>
       <p className="mt-3 max-w-3xl text-sm text-base-content/50">
-        Progress is stored locally for this GM. These first activities are
-        self-confirmed until server-backed completion records are available.
+        Progress is scoped locally to this GM. The Session tutorial derives its
+        steps from saved Campaign Instance state; earlier authoring activities
+        remain self-confirmed until their completion records are available.
       </p>
       <ol className="mt-10 space-y-4">
         {QUICK_START_ACTIVITIES.map((activity, index) => {
@@ -110,12 +113,14 @@ export function QuickStartGuide({
   gmScope: string;
 }) {
   const activity = quickStartActivity(activityKey)!;
+  const location = useLocation();
   const { completed, ready, setComplete } = useQuickStartProgress(gmScope);
   const done = ready && completed.has(activityKey);
   const stepStorageKey = `${quickStartStorageKey(gmScope)}.steps.${activityKey}`;
   const [completedSteps, setCompletedSteps] = useState<ReadonlySet<number>>(
     new Set(),
   );
+  const authoritative = activityKey === "plan-session";
   useEffect(() => {
     try {
       const parsed: unknown = JSON.parse(
@@ -137,6 +142,60 @@ export function QuickStartGuide({
       setCompletedSteps(new Set());
     }
   }, [activity.steps.length, stepStorageKey]);
+  useEffect(() => {
+    if (!authoritative) return;
+    let cancelled = false;
+    const match = location.pathname.match(
+      /^\/campaigns\/instances\/([^/]+)(?:\/sessions\/([^/]+))?/,
+    );
+    const instanceId = match?.[1] ? decodeURIComponent(match[1]) : undefined;
+    const sessionId = match?.[2] ? decodeURIComponent(match[2]) : undefined;
+    if (!instanceId) {
+      setCompletedSteps(new Set());
+      return;
+    }
+    if (!sessionId) {
+      setCompletedSteps(new Set([0]));
+      return;
+    }
+    void Promise.all([
+      getCampaignSession(instanceId, sessionId),
+      getCampaignSessionReadiness(instanceId, sessionId),
+    ]).then(
+      ([session, readiness]) => {
+        if (cancelled) return;
+        const invitees = session.participants.filter(
+          ({ role }) => role === "player" || role === "spectator",
+        );
+        const next = new Set<number>([0, 1]);
+        if (session.participants.some(({ role }) => role === "player")) {
+          next.add(2);
+        }
+        if (
+          session.status !== "planned" &&
+          invitees.length > 0 &&
+          invitees.every(({ response }) => response !== "not-requested")
+        ) {
+          next.add(3);
+        }
+        if (
+          readiness.ready ||
+          ["active", "paused", "concluded"].includes(session.status)
+        ) {
+          next.add(4);
+        }
+        setCompletedSteps(next);
+        setComplete(
+          activityKey,
+          quickStartActivityIsComplete(next, activity.steps.length),
+        );
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activity.steps.length, activityKey, authoritative, location.pathname]);
   function setStep(index: number, checked: boolean) {
     setCompletedSteps((current) => {
       const next = new Set(current);
@@ -170,7 +229,10 @@ export function QuickStartGuide({
           <li key={step}>
             <Checkbox
               checked={completedSteps.has(index)}
-              onChange={(event) => setStep(index, event.target.checked)}
+              disabled={authoritative}
+              onChange={(event) =>
+                !authoritative && setStep(index, event.target.checked)
+              }
               label={
                 <span>
                   <span className="sr-only">Step {index + 1}: </span>
@@ -178,7 +240,7 @@ export function QuickStartGuide({
                 </span>
               }
               className="mt-1"
-              wrapperClassName="min-h-11 cursor-pointer items-start gap-3"
+              wrapperClassName={`min-h-11 items-start gap-3 ${authoritative ? "cursor-default" : "cursor-pointer"}`}
             />
           </li>
         ))}
@@ -190,6 +252,11 @@ export function QuickStartGuide({
             ? "All steps complete."
             : `${completedSteps.size} of ${activity.steps.length} steps complete.`}
         </p>
+        {authoritative && (
+          <p className="mt-2 text-xs text-base-content/55">
+            Session steps update from the saved Campaign Instance and Session.
+          </p>
+        )}
       </div>
       <InternalLink className="btn btn-outline mt-6 w-full" href="/quick-start">
         Back to Quick Start

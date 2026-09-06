@@ -19,6 +19,7 @@ import {
 import {
   checkHealth,
   getCampaignInstanceContinuation,
+  getGmResumableSession,
   type CampaignInstanceContinuation,
   type CampaignInstanceList,
   type DomainList,
@@ -101,10 +102,25 @@ export function AppShell({
   const primaryNavigation = primaryNavigationForPath(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [resumableSession, setResumableSession] =
+    useState<Awaited<ReturnType<typeof getGmResumableSession>>["session"]>();
   const drawerTrigger = useRef<HTMLLabelElement>(null);
   const drawerPanel = useRef<HTMLElement>(null);
   const guideTrigger = useRef<HTMLButtonElement>(null);
   const guidePanel = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getGmResumableSession().then(
+      (result) => {
+        if (!cancelled) setResumableSession(result.session);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -195,7 +211,27 @@ export function AppShell({
               : "min-h-full"
           }
         >
-          <div className="min-w-0">{children}</div>
+          <div className="min-w-0">
+            {resumableSession && !pathname.includes("/run/") && (
+              <div className="border-b border-warning/25 bg-warning/10 px-6 py-3 lg:px-10">
+                <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm">
+                    <strong>{resumableSession.sessionName}</strong> in{" "}
+                    {resumableSession.campaignInstanceName} is{" "}
+                    {resumableSession.status}.
+                  </p>
+                  <RouterButtonLink
+                    href={`/campaigns/instances/${encodeURIComponent(resumableSession.campaignInstanceId)}/run/${encodeURIComponent(resumableSession.sessionId)}`}
+                    tone="primary"
+                    size="sm"
+                  >
+                    {resumableSession.label} Session
+                  </RouterButtonLink>
+                </div>
+              </div>
+            )}
+            {children}
+          </div>
           {guide && (
             <div className="hidden xl:block">
               <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
@@ -356,10 +392,13 @@ export function LandingPage({
   useEffect(() => {
     let cancelled = false;
     void Promise.all(
-      activeInstances.map(async (instance) => [
-        instance.id,
-        await getCampaignInstanceContinuation(instance.id),
-      ] as const),
+      activeInstances.map(
+        async (instance) =>
+          [
+            instance.id,
+            await getCampaignInstanceContinuation(instance.id),
+          ] as const,
+      ),
     ).then(
       (entries) => {
         if (!cancelled) setContinuations(Object.fromEntries(entries));
@@ -473,7 +512,11 @@ export function LandingPage({
                       </RouterButtonLink>
                       {continuations[instance.id]?.enabled ? (
                         <RouterButtonLink
-                          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions`}
+                          href={
+                            continuations[instance.id]?.session
+                              ? `/campaigns/instances/${encodeURIComponent(instance.id)}/${continuations[instance.id]?.kind === "continue" || continuations[instance.id]?.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuations[instance.id]!.session!.id)}`
+                              : `/campaigns/instances/${encodeURIComponent(instance.id)}/sessions`
+                          }
                           tone="primary"
                           size="sm"
                           aria-describedby={`continue-campaign-${index}`}
