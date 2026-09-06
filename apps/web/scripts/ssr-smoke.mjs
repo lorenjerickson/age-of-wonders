@@ -45,50 +45,20 @@ async function reservePort() {
   return port;
 }
 
-function domainRecord({ id, resource, kind, name, data = {} }) {
-  return {
-    id,
-    resource,
-    kind,
-    name,
-    revision: 1,
-    data,
-    createdAt: "2026-09-04T00:00:00.000Z",
-    updatedAt: "2026-09-04T00:00:00.000Z",
-  };
-}
-
 function list(items) {
   return { items, total: items.length, limit: 200, offset: 0 };
 }
 
 function createApiStub(expectedOrigin) {
-  const world = domainRecord({
+  const world = {
     id: "world-1",
-    resource: "locations",
-    kind: "world",
     name: "Evershade",
-    data: { description: "A realm of long shadows." },
-  });
-  const location = domainRecord({
-    id: "location-1",
-    resource: "locations",
-    kind: "settlement",
-    name: "Lantern Harbor",
-  });
-  const campaign = domainRecord({
-    id: "campaign-1",
-    resource: "campaigns",
-    kind: "campaign",
-    name: "The Glass Crown",
-  });
-  const session = domainRecord({
-    id: "session-1",
-    resource: "sessions",
-    kind: "session",
-    name: "Arrival at the Harbor",
-    data: { campaignId: campaign.id, status: "complete" },
-  });
+    description: "A realm of long shadows.",
+    status: "active",
+    metadataRevision: 1,
+    createdAt: "2026-09-04T00:00:00.000Z",
+    updatedAt: "2026-09-04T00:00:00.000Z",
+  };
 
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://api.local");
@@ -96,14 +66,24 @@ function createApiStub(expectedOrigin) {
       sendJson(response, 200, { status: "ok", database: "stubbed" });
       return;
     }
-    if (request.method === "POST" && url.pathname === "/api/auth/gm-session") {
+    if (request.method === "GET" && url.pathname === "/api/auth/bootstrap") {
+      sendJson(response, 200, { setupRequired: false });
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/auth/session") {
       assert.equal(request.headers.origin, expectedOrigin);
       const body = JSON.parse((await readBody(request)).toString("utf8"));
       assert.equal(body.token, "development-gm-session-change-me");
       sendJson(
         response,
         201,
-        { user: { displayName: "Migration GM", role: "gm" } },
+        {
+          user: {
+            displayName: "Migration GM",
+            role: "gm",
+            systemAdministrator: false,
+          },
+        },
         { "set-cookie": `${sessionCookie}; HttpOnly; SameSite=Strict; Path=/` },
       );
       return;
@@ -114,38 +94,34 @@ function createApiStub(expectedOrigin) {
     }
     if (request.method === "GET" && url.pathname === "/api/auth/me") {
       sendJson(response, 200, {
-        user: { displayName: "Migration GM", role: "gm" },
+        user: {
+          displayName: "Migration GM",
+          role: "gm",
+          systemAdministrator: false,
+        },
       });
       return;
     }
-    if (request.method === "GET" && url.pathname === "/api/domain/locations") {
-      sendJson(
-        response,
-        200,
-        list(url.searchParams.get("kind") === "world" ? [world] : [location]),
-      );
+    if (request.method === "GET" && url.pathname === "/api/worlds") {
+      sendJson(response, 200, list([world]));
       return;
     }
-    if (request.method === "GET" && url.pathname === "/api/domain/campaigns") {
-      sendJson(response, 200, list([campaign]));
-      return;
-    }
-    if (request.method === "GET" && url.pathname === "/api/domain/sessions") {
-      sendJson(response, 200, list([session]));
+    if (request.method === "GET" && url.pathname === "/api/campaigns") {
+      sendJson(response, 200, list([]));
       return;
     }
     if (
       request.method === "GET" &&
-      url.pathname === "/api/domain/locations/location-1"
+      url.pathname === "/api/me/campaign-instances"
     ) {
-      sendJson(response, 200, location);
+      sendJson(response, 200, list([]));
       return;
     }
     if (
       request.method === "GET" &&
-      url.pathname.startsWith("/api/domain/locations/")
+      url.pathname === "/api/me/resumable-session"
     ) {
-      sendJson(response, 404, { message: "Location was not found." });
+      sendJson(response, 200, { session: null });
       return;
     }
     sendJson(response, 404, { message: "Stub endpoint was not found." });
@@ -209,7 +185,8 @@ async function run() {
     for (const path of [
       "login/index.html",
       "join/index.html",
-      "join/campaign/index.html",
+      "join/instance/index.html",
+      "join/session/index.html",
     ]) {
       const html = await readFile(
         resolve(appDirectory, ".output/public", path),
@@ -223,7 +200,7 @@ async function run() {
     assert.match(anonymous.headers.get("location") ?? "", /^\/login/);
     assert.doesNotMatch(await anonymous.text(), /Evershade/);
 
-    const login = await fetch(`${origin}/api/auth/gm-session`, {
+    const login = await fetch(`${origin}/api/auth/session`, {
       method: "POST",
       headers: { "content-type": "application/json", origin },
       body: JSON.stringify({ token: "development-gm-session-change-me" }),
@@ -238,13 +215,7 @@ async function run() {
     assert.equal(home.headers.get("cache-control"), "private, no-store");
     assert.match(await home.text(), /Evershade/);
 
-    const location = await fetch(`${origin}/locations/location-1`, {
-      headers: { cookie },
-    });
-    assert.equal(location.status, 200);
-    assert.match(await location.text(), /Lantern Harbor/);
-
-    const missing = await fetch(`${origin}/locations/missing`, {
+    const missing = await fetch(`${origin}/not-a-real-route`, {
       headers: { cookie },
     });
     assert.equal(missing.status, 404);
@@ -279,15 +250,17 @@ async function run() {
     });
     await page.goto(`${origin}/login`);
     await page
-      .getByLabel("GM access token")
+      .getByLabel("Administrator access token")
       .fill("development-gm-session-change-me");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByText("Evershade", { exact: true }).first().waitFor();
+    await page
+      .getByText("1 World Definition available.", { exact: true })
+      .waitFor();
     await page.evaluate(() => {
       window.__aowNavigationMarker = "preserved";
     });
-    await page.getByRole("link", { name: "Sessions" }).click();
-    await page.getByRole("heading", { name: "Sessions" }).waitFor();
+    await page.getByRole("link", { name: "Campaigns" }).click();
+    await page.getByRole("heading", { name: "Campaigns" }).waitFor();
     assert.equal(
       await page.evaluate(() => window.__aowNavigationMarker),
       "preserved",
@@ -309,11 +282,11 @@ async function run() {
         {
           status: "pass",
           checks: [
-            "three prerendered public routes",
+            "four prerendered public routes",
             "pre-render authentication redirect",
             "same-origin login and cookie relay",
             "protected SSR read models",
-            "route-level 404",
+            "canonical route-level 404",
             "typed client navigation without reload",
             "client-only session canvas",
             "private cache policy and structured logs",

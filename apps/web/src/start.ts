@@ -27,7 +27,8 @@ const requestMiddleware = createMiddleware().server(
         const publicStaticRoute =
           pathname === "/login" ||
           pathname === "/join" ||
-          pathname === "/join/campaign";
+          pathname === "/join/instance" ||
+          pathname === "/join/session";
         result.response.headers.set(
           "cache-control",
           publicStaticRoute

@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -88,17 +87,6 @@ export class AuthController {
 
   @Post("session")
   async createSession(
-    @Body() dto: BootstrapGmSessionDto,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    return this.exchangeBootstrapSession(dto, request, response);
-  }
-
-  @Post("gm-session")
-  @Header("Deprecation", "true")
-  @Header("Link", '</api/auth/session>; rel="successor-version"')
-  async createGmSession(
     @Body() dto: BootstrapGmSessionDto,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,

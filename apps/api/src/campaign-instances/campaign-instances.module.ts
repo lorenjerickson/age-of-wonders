@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { CampaignInstancesController } from "./campaign-instances.controller";
 import { CampaignInstancesService } from "./campaign-instances.service";
 import { CampaignInstanceManagementService } from "./campaign-instance-management.service";
 import { CampaignInstanceInvitationsService } from "./campaign-instance-invitations.service";
@@ -10,13 +9,11 @@ import {
 } from "../invitations/invitation-security";
 import { CampaignInstanceMigrationsService } from "./campaign-instance-migrations.service";
 import { CampaignSessionService } from "./campaign-session.service";
-import { CampaignInstanceParticipationController } from "./campaign-instance-participation.controller";
 import {
   CampaignInstanceHierarchyController,
   CampaignInstanceMeController,
 } from "./campaign-instance-hierarchy.controller";
 import { CampaignSessionsController } from "./campaign-sessions.controller";
-import { LegacyApiDeprecationInterceptor } from "../api-compat/legacy-api-deprecation.interceptor";
 import {
   CampaignInvitationEntryController,
   CampaignSessionMeController,
@@ -27,8 +24,6 @@ import { CampaignInstanceCharactersService } from "./campaign-instance-character
 @Module({
   imports: [NotificationsModule],
   controllers: [
-    CampaignInstancesController,
-    CampaignInstanceParticipationController,
     CampaignInstanceHierarchyController,
     CampaignInstanceMeController,
     CampaignSessionsController,
@@ -45,7 +40,6 @@ import { CampaignInstanceCharactersService } from "./campaign-instance-character
     CampaignInstanceCharactersService,
     InvitationTokenService,
     ContactProtector,
-    LegacyApiDeprecationInterceptor,
   ],
   exports: [CampaignInstancesService],
 })

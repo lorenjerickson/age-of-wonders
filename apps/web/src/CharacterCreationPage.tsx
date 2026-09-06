@@ -359,9 +359,7 @@ export function CharacterCreationPage({
             tone="ghost"
             size="sm"
             onClick={() =>
-              void logout().finally(() =>
-                navigate("/join/campaign", { replace: true }),
-              )
+              void logout().finally(() => navigate("/join", { replace: true }))
             }
           >
             Sign out

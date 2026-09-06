@@ -38,14 +38,6 @@ export class CharacterDraftsController {
     return this.drafts.create(request.user!.id, undefined, dto.name);
   }
 
-  @Post("campaigns/:campaignId/character-drafts")
-  create(
-    @Param("campaignId") campaignId: string,
-    @Req() request: Request & AuthenticatedRequest,
-  ) {
-    return this.drafts.create(request.user!.id, campaignId);
-  }
-
   @Get("character-drafts/:id")
   get(@Param("id") id: string, @Req() request: Request & AuthenticatedRequest) {
     return this.drafts.get(id, request.user!.id);

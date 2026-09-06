@@ -6,12 +6,12 @@ authorization boundary.
 
 ## Rendering policy
 
-- `/login`, `/join`, and `/join/campaign` are prerendered. Invitation token exchange remains a
-  browser-only effect because URL fragments are not sent to the server.
+- `/login`, `/join`, `/join/instance`, and `/join/session` are prerendered. Invitation token
+  exchange remains a browser-only effect because URL fragments are not sent to the server.
 - GM home, resource lists, sessions, and simple resource details load their initial read models on
   the server. Their responses are `private, no-store`.
-- World, Campaign, Creature, Item, character-creation, and session-canvas editors are route-split
-  client islands below server-side audience gates.
+- World, Campaign, character-creation, and session-canvas editors are route-split client islands
+  below server-side audience gates. Creature and Item editing lives inside the World workspace.
 - The browser calls relative `/api` URLs. The Start server streams those requests to Nest and
   forwards only the incoming cookie and request ID for server-side reads.
 

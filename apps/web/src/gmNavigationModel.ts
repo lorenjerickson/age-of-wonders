@@ -55,9 +55,9 @@ export function worldNavigationForPath(
   const activeKey =
     nestedSection === "atlas"
       ? "atlas"
-      : nestedSection === "bestiary" || nestedSection === "creatures"
+      : nestedSection === "bestiary"
         ? "bestiary"
-        : nestedSection === "item-compendium" || nestedSection === "items"
+        : nestedSection === "item-compendium"
           ? "items"
           : nestedSection === "characters"
             ? "characters"

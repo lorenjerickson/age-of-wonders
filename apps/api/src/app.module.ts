@@ -11,7 +11,6 @@ import { ServiceFailureInterceptor } from "./logging/service-failure.interceptor
 import { TransferModule } from "./transfer/transfer.module";
 import { AuthModule } from "./auth/auth.module";
 import { CharactersModule } from "./characters/characters.module";
-import { InvitationsModule } from "./invitations/invitations.module";
 import { WorldDefinitionsModule } from "./world-definitions/world-definitions.module";
 import { CampaignDefinitionsModule } from "./campaign-definitions/campaign-definitions.module";
 import { CampaignInstancesModule } from "./campaign-instances/campaign-instances.module";
@@ -33,7 +32,6 @@ import { SystemSettingsModule } from "./settings/system-settings.module";
     DomainModule,
     AiModule,
     TransferModule,
-    InvitationsModule,
     CharactersModule,
     WorldDefinitionsModule,
     CampaignDefinitionsModule,

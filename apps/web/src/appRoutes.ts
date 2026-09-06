@@ -7,7 +7,7 @@ export const ROUTE_POLICIES = [
   },
   {
     family: "campaign invitation",
-    pattern: "/join[/campaign]",
+    pattern: "/join|/join/instance|/join/session",
     audience: "public",
     rendering: "prerender-client-exchange",
   },
@@ -23,12 +23,6 @@ export const ROUTE_POLICIES = [
     pattern: "/worlds|campaigns|players|settings",
     audience: "gm",
     rendering: "ssr",
-  },
-  {
-    family: "simple resource detail",
-    pattern: "/locations|items|systems/:id",
-    audience: "gm",
-    rendering: "ssr-island",
   },
   {
     family: "authoring editor",

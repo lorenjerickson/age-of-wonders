@@ -6,9 +6,7 @@ import type {
   CampaignInstanceDetail,
   CampaignInstanceList,
   CurrentUser,
-  DomainResource,
   EffectiveWorldModelResponse,
-  JsonValue,
   WorldDefinitionDetail,
   WorldDefinitionDraft,
   WorldDefinitionList,
@@ -19,24 +17,6 @@ import { ServerApiError, serverApiRequest } from "./api";
 
 export type SessionResult =
   { authenticated: true; user: CurrentUser } | { authenticated: false };
-
-interface SerializableDomainRecord {
-  resource: DomainResource;
-  id: string;
-  kind: string | null;
-  name: string | null;
-  revision: number;
-  data: Record<string, JsonValue>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface SerializableDomainList {
-  items: SerializableDomainRecord[];
-  total: number;
-  limit: number;
-  offset: number;
-}
 
 export const readSession = createServerFn({ method: "GET" }).handler(
   async (): Promise<SessionResult> => {
@@ -51,17 +31,6 @@ export const readSession = createServerFn({ method: "GET" }).handler(
     }
   },
 );
-
-function listPath(
-  resource: DomainResource,
-  options: Record<string, string | number | undefined>,
-) {
-  const parameters = new URLSearchParams();
-  for (const [key, value] of Object.entries(options)) {
-    if (value !== undefined) parameters.set(key, String(value));
-  }
-  return `/domain/${resource}?${parameters}`;
-}
 
 export type ReadSection<T> =
   { ok: true; data: T } | { ok: false; message: string };
@@ -193,40 +162,6 @@ export const readWorldDraftImpact = createServerFn({ method: "GET" })
       "Draft impact could not be calculated.",
     ),
   );
-
-export const readResourceList = createServerFn({ method: "GET" })
-  .validator(
-    (data: { resource: DomainResource; kind?: string; limit?: number }) => data,
-  )
-  .handler(({ data }) =>
-    serverApiRequest<SerializableDomainList>(
-      listPath(data.resource, {
-        kind: data.kind,
-        limit: data.limit ?? 200,
-        sort: "updatedAt",
-        order: "desc",
-      }),
-    ),
-  );
-
-export const readResource = createServerFn({ method: "GET" })
-  .validator((data: { resource: DomainResource; id: string }) => ({
-    resource: data.resource,
-    id: data.id.trim(),
-  }))
-  .handler(async ({ data }) => {
-    try {
-      const record = await serverApiRequest<SerializableDomainRecord>(
-        `/domain/${data.resource}/${encodeURIComponent(data.id)}`,
-      );
-      return { found: true as const, record };
-    } catch (error) {
-      if (error instanceof ServerApiError && error.status === 404) {
-        return { found: false as const };
-      }
-      throw error;
-    }
-  });
 
 export const readCampaignLibrary = createServerFn({ method: "GET" }).handler(
   async () => {

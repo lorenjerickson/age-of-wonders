@@ -25,7 +25,7 @@ describe("GM primary navigation", () => {
 
   it("selects a stable destination without inferring a recent record", () => {
     expect(
-      primaryNavigationForPath("/worlds/world-internal/creatures")
+      primaryNavigationForPath("/worlds/world-internal/bestiary")
         .filter(({ active }) => active)
         .map(({ label }) => label),
     ).toEqual(["Worlds"]);
@@ -83,8 +83,8 @@ describe("World secondary navigation", () => {
     ["/worlds/world-internal/atlas", "Atlas"],
     ["/worlds/world-internal/bestiary", "Bestiary"],
     ["/worlds/world-internal/item-compendium", "Item Compendium"],
-    ["/worlds/world-internal/creatures", "Bestiary"],
-    ["/worlds/world-internal/items/new", "Item Compendium"],
+    ["/worlds/world-internal/bestiary", "Bestiary"],
+    ["/worlds/world-internal/item-compendium", "Item Compendium"],
     ["/worlds/world-internal/characters", "Characters"],
     ["/worlds/world-internal/rules", "Rules"],
   ])("expands the active group for %s", (pathname, label) => {

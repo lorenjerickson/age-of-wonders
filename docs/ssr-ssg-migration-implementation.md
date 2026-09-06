@@ -16,16 +16,15 @@ same-origin proxy; it has no database access.
 
 ## Rendering map
 
-| Route family                                                                           | Audience          | Initial rendering                  | Data behavior                                                                         |
-| -------------------------------------------------------------------------------------- | ----------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
-| `/login`                                                                               | Public            | SSG                                | Identity-independent form; login posts through `/api`.                                |
-| `/join`, `/join/campaign`                                                              | Public invitation | SSG shell plus client exchange     | The fragment token is read, removed, exchanged, and retained only in browser state.   |
-| `/`                                                                                    | GM                | SSR plus hydrated form             | Health and recent World/Campaign read models are present in initial HTML.             |
-| `/worlds`, `/campaigns`, `/locations`, `/creatures`, `/items`, `/systems`, `/sessions` | GM                | SSR                                | Lists and session history are loaded through server functions with cookie forwarding. |
-| `/locations/:id`, `/items/:id`, `/systems/:id`                                         | GM                | SSR plus editor island             | The initial record is server-rendered; mutation state hydrates in the browser.        |
-| World/Campaign and specialized Creature/Item editors                                   | GM                | Server-authenticated client island | Browser-heavy existing editors are code-split and excluded from server rendering.     |
-| `/session-canvas-lab`                                                                  | GM                | Server-authenticated client island | Canvas DOM, event, geometry, and focus code is never evaluated for server HTML.       |
-| `/play`, `/play/characters`, `/play/characters/:id`                                    | Player            | Server-authenticated client island | Character workflows retain their interactive client data model.                       |
+| Route family                                                  | Audience          | Initial rendering                  | Data behavior                                                                            |
+| ------------------------------------------------------------- | ----------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `/login`                                                      | Public            | SSG                                | Identity-independent form; login posts through `/api`.                                   |
+| `/join`, `/join/instance`, `/join/session`                    | Public invitation | SSG shell plus client exchange     | The fragment token is read, removed, exchanged, and retained only in browser state.      |
+| `/`                                                           | GM                | SSR plus hydrated form             | Health and recent World/Campaign read models are present in initial HTML.                |
+| `/worlds`, `/campaigns`, `/players`, `/settings`, `/sessions` | GM/operator       | SSR                                | Lists and status projections are loaded through server functions with cookie forwarding. |
+| World/Campaign and nested Atlas/Bestiary/Compendium editors   | GM                | Server-authenticated client island | Browser-heavy editors are code-split and excluded from server rendering.                 |
+| `/session-canvas-lab`                                         | GM                | Server-authenticated client island | Canvas DOM, event, geometry, and focus code is never evaluated for server HTML.          |
+| `/play`, `/play/characters`, `/play/characters/:id`           | Player            | Server-authenticated client island | Character workflows retain their interactive client data model.                          |
 
 Opaque identifiers remain confined to URL parameters and request state. Server-rendered labels use
 API-provided names or neutral human-readable fallbacks.
@@ -48,7 +47,7 @@ Server read-model functions use `API_INTERNAL_URL`, copy only the incoming sessi
 request ID, request `no-store`, and map 401/404 outcomes into route behavior. Cookie values are never
 logged.
 
-All non-public page responses default to `Cache-Control: private, no-store`. Only the three reviewed,
+All non-public page responses default to `Cache-Control: private, no-store`. Only the four reviewed,
 identity-independent entry routes are emitted as static HTML. Request middleware adds or preserves a
 request ID, emits `Server-Timing`, and writes structured completion/error events.
 

@@ -23,7 +23,8 @@ export default defineConfig({
       pages: [
         { path: "/login" },
         { path: "/join" },
-        { path: "/join/campaign" },
+        { path: "/join/instance" },
+        { path: "/join/session" },
       ],
       prerender: {
         enabled: true,

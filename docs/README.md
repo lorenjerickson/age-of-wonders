@@ -38,17 +38,16 @@ fill it with a conflicting statement from a deprecated document.
 These documents may be used only for their stated scope and may not override the canonical
 architecture or implemented domain source of truth.
 
-| Document                                                                  | Status and scope                                                                                                                     |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `campaign-session-gate-1-implementation-plan.md`                          | Completed Session delivery record; its compatibility route inventory is deprecated and excluded from current API analysis.           |
-| `api-information-architecture-realignment.md`                             | Active product-wide API inventory, target route policy, compatibility plan, and implementation waves.                                |
-| `campaign-instance-gate-1-implementation-plan.md`                         | Completed Campaign Instance delivery record; its compatibility route inventory is deprecated and excluded from current API analysis. |
-| `combat-system-requirements.md`                                           | Draft requirements for the intentionally deferred Rules/combat exploration.                                                          |
-| `science-and-technology-domain-refactor.md`                               | Implemented science/technology semantics and rollout record.                                                                         |
-| `database-migration-adoption.md`                                          | Operational database-migration runbook.                                                                                              |
-| `graph-index-reliability-design.md`                                       | Proposed graph-projection reliability work; not proof of implementation.                                                             |
-| `ssr-ssg-migration-implementation.md`                                     | Implemented web rendering/runtime record.                                                                                            |
-| `spa-to-ssr-ssg-migration-plan.md` and `ssr-ssg-phase-0-spike-results.md` | Historical design evidence for the implemented SSR migration; not current product requirements.                                      |
+| Document                                          | Status and scope                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `campaign-session-gate-1-implementation-plan.md`  | Completed Session delivery record; its compatibility route inventory is deprecated and excluded from current API analysis.           |
+| `api-information-architecture-realignment.md`     | Active product-wide API inventory, target route policy, compatibility plan, and implementation waves.                                |
+| `campaign-instance-gate-1-implementation-plan.md` | Completed Campaign Instance delivery record; its compatibility route inventory is deprecated and excluded from current API analysis. |
+| `combat-system-requirements.md`                   | Draft requirements for the intentionally deferred Rules/combat exploration.                                                          |
+| `science-and-technology-domain-refactor.md`       | Implemented science/technology semantics and rollout record.                                                                         |
+| `database-migration-adoption.md`                  | Operational database-migration runbook.                                                                                              |
+| `graph-index-reliability-design.md`               | Proposed graph-projection reliability work; not proof of implementation.                                                             |
+| `ssr-ssg-migration-implementation.md`             | Implemented web rendering/runtime record.                                                                                            |
 
 ## Explicit exclusion registry
 
@@ -62,6 +61,8 @@ historical analysis or migration archaeology.
 | `age-of-wonders-requirements.md`           | Requires a singleton World/Campaign and a blended authoring/play workspace.                              | `information-architecture-domain-model-realignment.md`                           |
 | `campaign-design.md`                       | Predates Definition/Instance separation, recursive Plots, captured World snapshots, and migration.       | `information-architecture-domain-model-realignment.md` plus current common types |
 | `project-state-gap-analysis-2026-08-31.md` | Point-in-time assessment predating the realignment vertical slices; its scores and priorities are stale. | This status index plus current code/tests/Git                                    |
+| `spa-to-ssr-ssg-migration-plan.md`         | Transitional proposal contains obsolete routes and API examples; the migration is complete.              | `ssr-ssg-migration-implementation.md`                                            |
+| `ssr-ssg-phase-0-spike-results.md`         | Describes a removed disposable workspace fixture and obsolete compatibility APIs.                        | `ssr-ssg-migration-implementation.md`                                            |
 
 The following sections are excluded on the same terms while the remainder of their documents stays
 available as completed implementation history:
@@ -89,8 +90,8 @@ direct reader cannot mistake historical content for current authority.
 | Players and identity                                                                               | Implemented vertical slice; first-admin identity, invitation-safe profiles, global directory, standing, memberships, Character ownership/lifecycle, and import API are present; Auth0 and Character sheet/import UX remain |
 | Hosted Setup and system Settings                                                                   | Implemented read-only vertical slice; first-admin capability, twelve-area taxonomy, safe readiness, and independent operator access are present; writable configuration/secret workflows remain                            |
 | Rules                                                                                              | Deliberately deferred                                                                                                                                                                                                      |
-| Product-wide API hierarchy and consistency                                                         | In progress; Session, Instance, authoring, identity, Model adoption, media provenance, AI audit, and system-operator boundaries are implemented                                                                            |
-| Legacy routes, generic resources, compatibility types, and ambiguous `campaignId` cutover          | Not complete                                                                                                                                                                                                               |
+| Product-wide API hierarchy and consistency                                                         | Implemented for Session, Instance, authoring, identity, Model adoption, media provenance, AI audit, and system-operator boundaries                                                                                         |
+| Legacy routes, generic resources, compatibility types, and ambiguous `campaignId` cutover          | First removal tranche complete; participant Character drafts and their legacy persistence remain pending an Instance-native Character-sheet replacement                                                                    |
 
 ## Update rules
 

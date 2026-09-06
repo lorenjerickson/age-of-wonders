@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-system-boundaries-wave-complete
+status: active-implementation-plan-legacy-removal-tranche-complete
 date: 2026-09-06
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,16 +21,16 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session, Campaign Instance, Campaign/World authoring, identity/participation, and initial
-system-boundary waves are implemented. Canonical GM routes enforce Campaign Definition, Campaign
+The Session, Campaign Instance, Campaign/World authoring, identity/participation, initial
+system-boundary, and first legacy-removal waves are implemented. Canonical GM routes enforce Campaign Definition, Campaign
 Instance, and World ancestry; public invitation entry points live beneath `/api/invitations`; and
 authenticated locator and participant projections live beneath `/api/me`. First-party web callers
 use the canonical authoring roots `/api/worlds` and `/api/campaigns`. The former
-`/api/world-definitions`, `/api/campaign-definitions`, top-level Campaign Instance, Session,
-participation, generic domain, and destructive root-Location World routes remain temporary
-compatibility aliases and emit `Deprecation: true`; no sunset date has been announced.
+`/api/world-definitions`, `/api/campaign-definitions`, top-level Campaign Instance and Session,
+implementation-named participation, generic domain, raw graph, ambiguous Campaign invitation, and
+destructive root-Location World routes are no longer registered.
 
-Route families not named in the five completed-wave sections remain target architecture, not
+Route families not named in the completed-wave sections remain target architecture, not
 claims of completed implementation. Character sheet authoring, the Auth0 adapter, writable secret
 and operational Settings, and fully contextual World/Campaign AI and media commands remain
 separate follow-up work.
@@ -142,20 +142,20 @@ integrity.
 
 | Current controller/root                       | Current responsibility                                                 | Finding                                                                                              | Target disposition                                                                                                                            |
 | --------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/world-definitions`                      | World lineage, draft, publication, archive, fork                       | Deprecated compatibility alias; product-vocabulary replacement is implemented                        | Remove after compatibility exit; canonical `/api/worlds` owns authoring, revisions, and World-library projections                             |
-| `DELETE /api/worlds/:id`                      | Destructive legacy root-Location World operation                       | Deprecated method colliding with the canonical first-class World root                                | Retire after archive/retention replacement; never reinterpret it as versioned World deletion                                                  |
-| `/api/campaign-definitions`                   | Definition draft/revision lifecycle and World migration                | Deprecated compatibility alias; product-vocabulary replacement is implemented                        | Remove after compatibility exit; canonical `/api/campaigns` retains captured World revision as explicit command input                         |
-| `/api/campaign-instances`                     | Instance creation, runtime, roster, migrations, restores, Sessions     | Definition→Instance parent is absent; one broad controller mixes several child aggregates            | Move beneath `/api/campaigns/:campaignDefinitionId/instances`; split controllers by child resource without splitting domain transactions      |
-| `/api/campaign-instance-invitations`          | Public Instance/Session token workflows and participant Session access | Mixes public tokens and authenticated `/me` operations under an implementation name                  | Move tokens to `/api/invitations/...`; move authenticated projections/presence to `/api/me/...`                                               |
-| `/api/campaigns/:campaignId/invitations`      | Legacy Campaign membership/invitation                                  | `campaignId` is definition/instance ambiguous                                                        | Quarantine and retire after Instance membership migration; do not alias into the canonical Campaign Definition route                          |
-| `/api/campaigns/:campaignId/character-drafts` | Legacy Campaign-scoped Character creation                              | Character ownership is ambiguous and incompatible with Instance binding                              | Replace with nested Instance Character workflows; retain only explicit compatibility reads during migration                                   |
+| `/api/world-definitions`                      | World lineage, draft, publication, archive, fork                       | Removed; canonical `/api/worlds` owns authoring, revisions, and World-library projections            | Do not restore or generate                                                                                                                    |
+| `DELETE /api/worlds/:id`                      | Destructive legacy root-Location World operation                       | Removed; versioned World lifecycle is archive-first                                                  | Do not reinterpret as versioned World deletion                                                                                                |
+| `/api/campaign-definitions`                   | Definition draft/revision lifecycle and World migration                | Removed; canonical `/api/campaigns` owns the complete Definition lifecycle                           | Do not restore or generate                                                                                                                    |
+| `/api/campaign-instances`                     | Instance creation, runtime, roster, migrations, restores, Sessions     | Removed after migration beneath stable Campaign Definition ancestry                                  | Use `/api/campaigns/:campaignDefinitionId/instances`                                                                                          |
+| `/api/campaign-instance-invitations`          | Public Instance/Session token workflows and participant Session access | Removed after token and participant operations moved to `/api/invitations` and `/api/me`             | Do not restore or generate                                                                                                                    |
+| `/api/campaigns/:campaignId/invitations`      | Legacy Campaign membership/invitation                                  | Removed; the ambiguous identity cannot be translated safely                                          | Use Instance-owned memberships and invitations                                                                                                |
+| `/api/campaigns/:campaignId/character-drafts` | Legacy Campaign-scoped Character creation                              | Removed; the ambiguous identity cannot be translated safely                                          | Instance-native Character sheets remain a required follow-up                                                                                  |
 | `/api/character-drafts`                       | User draft listing and edits                                           | Resumable user task can be top-level, but its target Instance must be explicit                       | Move listing to `/api/me/character-drafts`; create beneath an Instance or require an immutable Instance association                           |
 | `/api/model-registries`                       | GM-owned model registry and releases                                   | Legitimate top-level authored aggregate                                                              | Keep top-level; add explicit World adoption routes and stable release resources                                                               |
-| `/api/domain/:resource`                       | Generic CRUD for heterogeneous legacy resources                        | Bypasses aggregate ownership and encodes structure in payload/resource strings                       | Freeze new canonical writes, migrate by aggregate, then remove; never expose it as the extension mechanism                                    |
+| `/api/domain/:resource`                       | Generic CRUD for heterogeneous legacy resources                        | Removed from HTTP; internal `DomainRecord` persistence remains for migration and snapshot assembly   | Never expose it as the extension mechanism                                                                                                    |
 | `/api/ai/...`                                 | AI-assisted aggregate/content commands and generation history          | Several routes target legacy World/Location identities; generic generation can bypass owning context | Nest generation commands under canonical owners or require immutable snapshot provenance; keep `/api/ai/generations` as bounded audit history |
 | `/api/media`                                  | Media asset CRUD/download                                              | Asset identity is infrastructure-level, but attachment ownership/provenance is implicit              | Keep asset reads top-level; create/attach through owning aggregate context and enforce provenance                                             |
-| `/api/graph/tuples`                           | Derived graph query and direct mutation                                | Direct tuple writes can compete with authoritative aggregates                                        | Move operational controls under system administration; derive domain relationships through the indexing boundary                              |
-| `/api/auth`                                   | Development GM session, current user, logout                           | Correct top-level security boundary; development naming is not final provider architecture           | Keep top-level, replace `gm-session` with provider-neutral session/bootstrap flows                                                            |
+| `/api/graph/tuples`                           | Derived graph query and direct mutation                                | Removed from HTTP; graph state is a derived internal projection                                      | Surface only safe readiness/reconciliation operations through system administration                                                           |
+| `/api/auth`                                   | Bootstrap session, current user, logout                                | Correct top-level security boundary; `gm-session` has been removed                                   | Keep provider-neutral session/bootstrap flows                                                                                                 |
 | `/api/health`                                 | Process health                                                         | Correct deliberate top-level exception                                                               | Keep                                                                                                                                          |
 
 ## Relationship audit
@@ -331,11 +331,10 @@ boundaries. Writes continue through the complete optimistic draft replacement so
 lineage, placements, schemas, and cross-record references validate atomically. Dedicated child
 commands may be added later only as transactional transformations of that same draft.
 
-First-party web and server read-model callers now use `/api/worlds` and `/api/campaigns`. The old
-`/api/world-definitions` and `/api/campaign-definitions` controllers are compatibility aliases and
-emit `Deprecation: true`. The old `DELETE /api/worlds/:id` still deletes a legacy root Location
-hierarchy; it is explicitly deprecated and must not be interpreted as deletion of a versioned
-World Definition. Versioned Worlds remain archive-first and have no canonical delete operation.
+First-party web and server read-model callers use `/api/worlds` and `/api/campaigns`. This wave
+initially retained the old authoring roots and destructive root-Location World operation behind
+deprecation metadata; the legacy-removal wave subsequently removed them. Versioned Worlds remain
+archive-first and have no canonical delete operation.
 
 ## Identity and participation implementation wave
 
@@ -363,8 +362,8 @@ credential plus administrator name, email, and phone; creates exactly one protec
 `SystemAdministrator`; and may independently grant GM authority to the same User. The bootstrap
 credential authenticates the active administrator whether or not that User is also a GM. The
 internal `aow:bootstrap` provider association is an adapter-neutral durable link that can coexist
-with a later Auth0 association. `/api/auth/gm-session` remains a deprecated alias for
-`/api/auth/session`.
+with a later Auth0 association. The temporary `/api/auth/gm-session` alias introduced during this
+wave was subsequently removed; `/api/auth/session` is the only bootstrap-session command.
 
 Authentication-provider associations now belong to a User and only optionally link to that User's
 Player profile. This permits administrators and invited Spectators to have durable authenticated
@@ -414,13 +413,13 @@ GET  /api/settings/system/:systemArea
 Model Registry collections are bounded and deterministic. Effective Model adoption is now read
 beneath its owning World rather than selected by a top-level query parameter, and publishing a
 successor uses the registry's release collection. The former effective query and `/releases/extend`
-command remain deprecated compatibility aliases.
+command were subsequently removed.
 
 New AI generation audit records identify the authenticated GM and carry an explicit bounded
 context kind and context identity when one exists. History remains requester-scoped and exposes
 only bounded previews. The immutable World-snapshot Campaign proposal remains canonical; generic
-generation and legacy root-Location AI mutations are marked deprecated until equivalent
-World-draft transformations are implemented.
+generation and legacy root-Location AI mutations were removed. Equivalent aggregate-native
+World-draft transformations remain future work.
 
 Media metadata now carries nullable creator and aggregate-scope provenance for legacy-safe
 rollout. Canonical World uploads validate the World and GM together, remove an already-uploaded
@@ -443,6 +442,35 @@ This vertical slice does not claim complete hosted administration. Plugin lifecy
 rotation, writable integration/provider configuration, graph rebuild commands, Campaign/Instance
 media scopes, and aggregate-native AI transformations remain fast follows. Compatibility rows with
 missing creator/scope provenance remain intentionally readable and are not rewritten by inference.
+
+## Legacy removal implementation wave
+
+The first removal tranche deletes compatibility surfaces whose canonical replacements are already
+used by every first-party caller. Removed API routes are not redirects and do not guess ancestry:
+
+- `/api/world-definitions`, `/api/campaign-definitions`, and `/api/campaign-instances`;
+- `/api/campaign-instance-invitations` and ambiguous
+  `/api/campaigns/:campaignId/invitations` operations;
+- ambiguous `/api/campaigns/:campaignId/character-drafts` creation;
+- `/api/domain/:resource`, `DELETE /api/worlds/:id`, and `/api/graph/tuples`;
+- `/api/auth/gm-session`, `/api/model-registries/effective`, and
+  `/api/model-registries/:id/releases/extend`;
+- top-level media upload and unscoped/root-Location AI generation commands.
+
+The web application no longer ships the old top-level Location, Creature, Item, System, or
+ambiguous Campaign pages. It also removes the duplicate `/join/campaign` exchange and obsolete
+World `creatures`/`items` placeholders. `/join` is now a neutral invitation landing page, while
+Instance and Session credentials use `/join/instance` and `/join/session`.
+
+This tranche deliberately retains the authenticated `/api/character-drafts` workflow and its
+legacy persistence for existing Players. It is the only live HTTP compatibility surface identified
+by this inventory that lacks an Instance-native Character-sheet replacement. Its creation behavior
+still selects a legacy active Campaign membership and therefore cannot be called complete support
+for multiple Campaign Instances. The next Character realignment must introduce participant-scoped
+Instance Character sheets, migrate or archive existing drafts, move resumable tasks beneath
+`/api/me`, and only then remove these routes and legacy relational models. Migration/preflight and
+host-transfer code may continue reading internal `DomainRecord` and legacy tables; that internal
+data compatibility does not restore generic HTTP authority.
 
 ## Compatibility and rollout
 
@@ -476,8 +504,10 @@ missing creator/scope provenance remain intentionally readable and are not rewri
    adoption, creator/context provenance, System Administrator readiness surfaces, and derived-graph
    authority boundaries. Writable hosted configuration and fully contextual content operations
    remain fast follows.
-6. **Legacy removal:** ambiguous `campaignId`, singleton World operations, generic domain writes,
-   obsolete redirects, compatibility types, and migration-only code.
+6. **Legacy removal — first tranche complete:** fully replaced aliases, ambiguous `campaignId`
+   invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph
+   HTTP access, obsolete web routes, and unscoped AI commands are removed. Instance-native
+   participant Character sheets and retirement of their legacy draft persistence remain.
 
 ## Acceptance criteria
 

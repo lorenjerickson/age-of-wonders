@@ -1,6 +1,6 @@
 # Graph Index Reliability and Reconciliation Design
 
-**Status:** Proposed  
+**Status:** Proposed internal projection reliability work; raw HTTP API superseded
 **Last updated:** 2026-08-23  
 **Scope:** API graph persistence, domain-to-graph indexing, reconciliation, and operations
 
@@ -19,7 +19,8 @@ The implementation currently consists of:
 - `GraphEntry`, which stores LevelGraph's six index permutations for each logical triple in the same PostgreSQL database as application records.
 - `tuplesForDomainResource`, which adds resource, kind, and name metadata and discovers references by recursively inspecting fields ending in `Id` or `Ids`.
 - `DomainService` hooks that update graph tuples after domain records are created, replaced, or deleted.
-- `/api/graph/tuples` endpoints for querying and directly managing triples.
+- no raw graph HTTP endpoint; aggregate persistence owns projection updates and System Settings
+  exposes only safe readiness signals.
 
 A database audit on 2026-08-23 found 51 domain records, 51 corresponding `aow:resource` subjects, no missing resource subjects, and no orphaned resource subjects. The graph contained 379 logical triples represented by 2,274 hexastore rows. This confirms current record-level coverage, but it does not prove that every intended domain relationship is represented correctly.
 
@@ -41,7 +42,10 @@ The current recursive identity handling also creates self-referential `aow:conta
 
 ### 4. Derived and manually authored triples are not distinguished
 
-The graph API permits direct tuple insertion and deletion, while domain indexing writes into the same namespace. A destructive rebuild cannot safely tell which tuples should be regenerated and which manually authored assertions must be preserved.
+Historical graph APIs permitted direct tuple insertion and deletion into the same namespace as
+derived tuples. Those endpoints have been removed. A future rebuild can therefore treat the graph
+as derived state, but it must still prove which projections are authoritative before replacing
+stored tuples.
 
 ### 5. Graph health is not observable
 
@@ -273,4 +277,3 @@ This initiative is complete when:
 - Graph drift, backlog, and failures are visible through health signals and structured logs.
 - Recovery and reindex procedures are documented and tested.
 - Integration tests demonstrate convergence after partial failure and concurrent updates.
-

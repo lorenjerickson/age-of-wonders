@@ -303,14 +303,14 @@ All Model Registry HTTP endpoints require an authenticated GM:
 - `POST /model-registries/:id/releases` is the bounded release-publication workflow used by
   contextual World editors. It creates new elements, carries forward the predecessor release's
   exact selections, locks the installed core release dependency, validates the complete effective
-  closure, and publishes one successor transactionally. The former `/releases/extend` command is a
-  deprecated compatibility alias.
+  closure, and publishes one successor transactionally. The former `/releases/extend` command has
+  been removed.
 - `GET /worlds/:worldId/model-adoptions` reads the explicitly selected release roots from that GM's
   mutable World draft, compiles accessible exact releases and their locked dependencies, rejects
   overlapping stable keys, filters by global/World applicability, and returns human-readable
   Attribute, Equipment Slot, and general element projections. It does not infer a latest release
-  and does not read a Campaign Instance-local schema. The former top-level `effective` query is a
-  deprecated compatibility alias because World ownership must be route context.
+  and does not read a Campaign Instance-local schema. There is no top-level `effective` query;
+  World ownership is required route context.
 
 ### Hosted-system administration and infrastructure provenance
 
@@ -328,19 +328,19 @@ New `Generation` rows record the authenticated requester plus a bounded context 
 identity when the command has one. Generation history remains requester-scoped and returns only
 bounded output previews; provider response identities, prompts, complete outputs, and opaque
 context identities are not UI labels. Context-free generation and legacy root-Location AI routes
-are deprecated compatibility operations, not canonical aggregate authoring.
+have been removed; they are not canonical aggregate authoring operations.
 
 `MediaAsset` records may carry creator and aggregate-scope provenance. New canonical World uploads
 use `/worlds/:worldId/media`, validate World ownership before retaining metadata, and record the
-World Definition scope. Top-level asset reads remain infrastructure-level and creator-scoped; old
-unscoped assets remain readable during compatibility. Host transfer retains the aggregate scope
+World Definition scope. Top-level asset reads remain infrastructure-level and creator-scoped, but
+top-level asset creation is not available. Old unscoped assets remain readable during data
+compatibility. Host transfer retains the aggregate scope
 but intentionally unbinds creator attribution when Users are not part of the archive.
 
-Graph tuples are derived projections rather than domain authority. Direct tuple creation and
-deletion through HTTP are disabled. The legacy graph query is restricted to the System
-Administrator and marked deprecated; graph counts and readiness are observed through the Data &
-storage Settings area. Internal aggregate persistence and explicit repair workflows may still use
-the graph projection service.
+Graph tuples are derived projections rather than domain authority. No raw graph HTTP API is
+registered. Graph counts and readiness are observed through the Data & storage Settings area.
+Internal aggregate persistence and explicit repair workflows may still use the graph projection
+service.
 
 ### Relational World Definition API
 
@@ -492,8 +492,8 @@ conflicts rather than failing after an apparently ready preview.
 All Campaign Definition routes require GM authorization and constrain nested Campaign, World,
 snapshot, and migration lookups to the authenticated owner. Missing or foreign-owned records,
 stale revisions, and unavailable dependencies use neutral human-readable errors.
-The former `/world-definitions` and `/campaign-definitions` route roots are deprecated
-compatibility aliases. They emit deprecation metadata and must not be generated for new callers.
+The former `/world-definitions` and `/campaign-definitions` route roots have been removed and must
+not be generated.
 
 ### Campaign Instance creation
 
@@ -754,18 +754,17 @@ Campaign Instance list projections are deterministically ordered and expose boun
 
 ## Persisted API resources
 
-`/domain/:resource` is now an explicitly deprecated compatibility API. It is not an extension
-surface and must not be used for new aggregate authoring. Runtime Campaign/Session resources and
-legacy `systems` writes are blocked; aggregate-specific APIs replace remaining generic writes in
-bounded migration waves. Reads remain temporarily available for compatibility only.
+`/domain/:resource` is not an HTTP API or extension surface. Aggregate-specific APIs own all
+external reads and writes. `DomainRecord` remains an internal persistence and migration mechanism
+for legacy content, generated artifacts, and snapshot assembly while those records are absorbed by
+their owning aggregates.
 
-The generic domain API persists the legacy compatibility resources below. The identifier used by
-that API is derived as shown. During additive realignment, an existing installation may still have
+Internal generic persistence contains the legacy compatibility resources below. The identifier is
+derived as shown. During additive realignment, an existing installation may still have
 one legacy root `locations` World and one legacy `campaigns` record, but this is not the target
 cardinality: the relational Definition APIs support multiple World and Campaign Definition
-lineages. Legacy destructive World deletion is disabled while archive and dependency-safe
-retention replace the old cascade. Sessions and runtime ownership must move to Campaign Instances
-before the legacy singleton guards and ambiguous `campaignId` contracts are removed.
+lineages. Versioned World lifecycle is archive-first; the former destructive root-Location World
+endpoint and ambiguous `campaignId` HTTP contracts have been removed.
 
 | Resource               | Aggregate                                   | Stored ID              | Stored kind/name                                |
 | ---------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------- |
@@ -1086,16 +1085,16 @@ displayed map dimension. When a token intersects the trigger it moves to `destin
 the referenced location map. The editor resolves destination IDs to location names; never display
 opaque IDs to the GM.
 
-### AI location-generation output
+### Internal legacy location-generation contract
 
-The `POST /api/ai/worlds` workflow accepts exactly one JSON object, parses it as the root
+The retained, non-routed legacy World generator accepts exactly one JSON object, parses it as the root
 `LocationState`, forces `kind` to `world`, generates and stores its map, and persists it under the
 `locations` resource. Return the root world only: no Markdown fence, prose, array,
 `{ "world": ... }` wrapper, or full `LocationGraphState` wrapper. The API replaces generated
 identity and image-storage metadata with authoritative values before persistence. Include a
 two-sentence `description` suitable for the dashboard.
 
-The `POST /api/ai/locations/:parentId` workflow combines `create-location.md`, this document, the
+The retained, non-routed legacy Location generator combines `create-location.md`, this document, the
 complete parent location record, and user context. It accepts one child `LocationState`, forces a
 new identity and a `within-parent` placement referencing the route parent, generates and stores its
 map, and then persists it. When the GM supplies normalized map coordinates, the workflow stores them
@@ -1931,9 +1930,9 @@ contribution list. It must not invent armor contributions. The armor-generation 
 each `ItemDefinition`, creates its `ItemInstance` in the creature inventory, equips that instance,
 and only then copies its `defenseDice` into the runtime contribution list.
 
-### AI armor-generation output
+### Internal legacy armor-generation contract
 
-`POST /api/ai/worlds/:worldId/creatures/:creatureId/armor-set` runs `create-armor.md` once for each
+The retained, non-routed armor generator runs `create-armor.md` once for each
 of `head`, `chest`, `arms`, `hands`, `legs`, and `feet`. Each model response is exactly one armor
 `ItemDefinition`. The API supplies the authoritative world, creature, target slot, and user context;
 then assigns authoritative IDs and source metadata, renders and stores each definition's inventory
@@ -1941,9 +1940,9 @@ image, persists a definition and inventory instance, equips it in the requested 
 the creature's defense contribution from the persisted armor dice. Generated JSON must not contain
 an `ItemInstance`, equipment state, or creature defense contribution.
 
-### AI item-generation output
+### Internal legacy item-generation contract
 
-`POST /api/ai/worlds/:worldId/items` combines `create-item.md`, the complete domain guide, the
+The retained, non-routed item generator combines `create-item.md`, the complete domain guide, the
 authoritative root-world record, and user direction. It returns and persists exactly one
 `ItemDefinition` in the `definitions` resource with `kind: "item"` and authoritative
 `extensions["aow:worldId"]`. It also renders `extensions["aow:image-brief"]`, stores the result, and
@@ -1951,13 +1950,13 @@ sets the required authoritative `image` metadata. This catalog workflow does not
 `ItemInstance` or put a copy in an inventory. IDs, keys, source metadata, and world ownership are
 normalized by the API.
 
-`POST /api/ai/worlds/:worldId/items/:itemId/image` regenerates only the stored inventory image for
+Its internal image-regeneration operation replaces only the stored inventory image for
 an existing world-owned `ItemDefinition`. It uses the definition's description and saved
 `extensions["aow:image-brief"]`, atomically replaces the definition's `image` metadata, removes the
 previous media asset after a successful replacement, and removes the new asset if persistence
 fails. It does not change item mechanics or create an `ItemInstance`.
 
-`POST /api/ai/worlds/:worldId/weapons` combines `create-weapon.md`, this guide, the authoritative
+The retained, non-routed weapon generator combines `create-weapon.md`, this guide, the authoritative
 root-world record, and one weapon concept. It normalizes identity, source, world ownership, and
 hand-slot alternatives; renders and stores the required inventory image; then persists one
 world-owned weapon `ItemDefinition`. It does not create an inventory instance.

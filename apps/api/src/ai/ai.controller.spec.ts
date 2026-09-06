@@ -9,15 +9,11 @@ describe("AiController Campaign proposal security", () => {
       createDraftProposal?: jest.Mock;
       generationCreate?: jest.Mock;
       generationFindMany?: jest.Mock;
-      createWeapon?: jest.Mock;
     } = {},
   ) {
     const openAi = { model: "test-model" };
     const campaignGeneration = {
       createDraftProposal: overrides.createDraftProposal ?? jest.fn(),
-    };
-    const weaponGeneration = {
-      create: overrides.createWeapon ?? jest.fn(),
     };
     const prisma = {
       generation: {
@@ -25,17 +21,9 @@ describe("AiController Campaign proposal security", () => {
         findMany: overrides.generationFindMany ?? jest.fn(),
       },
     };
-    const ignored = {} as never;
     return {
       instance: new AiController(
         openAi as never,
-        ignored,
-        ignored,
-        ignored,
-        ignored,
-        ignored,
-        ignored,
-        weaponGeneration as never,
         campaignGeneration as never,
         new CampaignProposalRequestGate(),
         prisma as never,
@@ -113,41 +101,5 @@ describe("AiController Campaign proposal security", () => {
     expect(response[0]).toMatchObject({ outputTruncated: true });
     expect(response[0]?.outputPreview).toHaveLength(600);
     expect(response[0]).not.toHaveProperty("output");
-  });
-
-  it("attributes compatibility generation to its GM and explicit context", async () => {
-    const createWeapon = jest.fn().mockResolvedValue({
-      definition: { name: "Storm Pike" },
-      combinedPrompt: "prompt",
-      output: "output",
-      responseId: "response",
-    });
-    const generationCreate = jest
-      .fn()
-      .mockResolvedValue({ id: "generation-1" });
-    const { instance } = controller({ createWeapon, generationCreate });
-
-    await instance.createWeapon(
-      "legacy-world-1",
-      { prompt: "A storm weapon" },
-      request,
-    );
-
-    const createCalls = generationCreate.mock.calls as unknown as Array<
-      [
-        {
-          data: {
-            createdByUserId: string;
-            contextType: string;
-            contextId: string;
-          };
-        },
-      ]
-    >;
-    expect(createCalls[0]?.[0].data).toMatchObject({
-      createdByUserId: "gm-1",
-      contextType: "legacy-world",
-      contextId: "legacy-world-1",
-    });
   });
 });

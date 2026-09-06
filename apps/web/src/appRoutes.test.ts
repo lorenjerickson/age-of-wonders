@@ -3,7 +3,7 @@ import { ROUTE_POLICIES, invitationTokenFromHash } from "./appRoutes";
 
 describe("ROUTE_POLICIES", () => {
   it("keeps every route family explicit about audience and rendering", () => {
-    expect(ROUTE_POLICIES).toHaveLength(9);
+    expect(ROUTE_POLICIES).toHaveLength(8);
     expect(ROUTE_POLICIES.every((policy) => policy.audience)).toBe(true);
     expect(ROUTE_POLICIES.every((policy) => policy.rendering)).toBe(true);
     expect(

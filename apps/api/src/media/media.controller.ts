@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -37,28 +36,6 @@ import type { Request } from "express";
 @UseGuards(GmGuard)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
-
-  @Post()
-  @Header("Deprecation", "true")
-  @Header("Link", '</api/worlds/{worldId}/media>; rel="successor-version"')
-  @UseInterceptors(S3UploadInterceptor)
-  @ApiConsumes("multipart/form-data")
-  @ApiBody({ type: MediaUploadBodyDto })
-  @ApiCreatedResponse({
-    description: "The file was streamed to object storage.",
-  })
-  @ApiOperation({ summary: "Upload a file to S3-compatible storage" })
-  upload(
-    @Req() request: MediaUploadRequest & Request & AuthenticatedRequest,
-    @Query() query: UploadMediaQueryDto,
-  ) {
-    if (!request.storedUpload) {
-      throw new BadRequestException("multipart field 'file' is required");
-    }
-    return this.media.create(request.storedUpload, query.tags ?? [], {
-      userId: request.user!.id,
-    });
-  }
 
   @Get()
   @ApiOperation({ summary: "Search and filter uploaded files" })

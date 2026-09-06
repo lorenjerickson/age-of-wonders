@@ -1,4 +1,14 @@
+---
+name: ssr-ssg-phase-0-spike-results
+status: deprecated-excluded
+replacement: docs/ssr-ssg-migration-implementation.md
+---
+
 # SSR/SSG migration Phase 0 spike results
+
+> **Deprecated and excluded.** This records a disposable fixture that has been removed. Do not use
+> its routes, API calls, or package structure for current analysis or generation. Use
+> `ssr-ssg-migration-implementation.md` and the production application instead.
 
 **Date:** 2026-09-04  
 **Outcome:** Pass  
@@ -6,7 +16,7 @@
 
 ## Scope
 
-The disposable `apps/web-ssr-spike` workspace app implements the acceptance fixture defined in
+The now-removed disposable `apps/web-ssr-spike` workspace app implemented the acceptance fixture defined in
 Phase 0 of [`spa-to-ssr-ssg-migration-plan.md`](./spa-to-ssr-ssg-migration-plan.md). It does not
 replace or modify the current `apps/web` runtime.
 

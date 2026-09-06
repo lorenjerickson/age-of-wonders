@@ -1,11 +1,15 @@
 ---
 name: spa-to-ssr-ssg-migration-plan
 description: Proposed migration from the Vite SPA to path-based server and static rendering
-status: proposal-for-iteration
+status: deprecated-excluded
 date: 2026-09-03
 ---
 
 # SPA to SSR/SSG migration plan
+
+> **Deprecated and excluded.** The production migration is complete. Do not use this proposal or
+> its transitional route/API examples for current analysis or generation. Use
+> `ssr-ssg-migration-implementation.md`.
 
 ## Decision summary
 

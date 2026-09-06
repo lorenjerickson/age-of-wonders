@@ -1,5 +1,4 @@
 import {
-  FormEvent,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -14,7 +13,6 @@ import {
   Label,
   StatusIndicator,
   StructuralCheckbox,
-  Textarea,
 } from "@aow/ui";
 import {
   checkHealth,
@@ -22,15 +20,9 @@ import {
   getGmResumableSession,
   type CampaignInstanceContinuation,
   type CampaignInstanceList,
-  type DomainList,
-  type DomainRecord,
-  type DomainResource,
-  getDomainRecord,
-  listDomainRecords,
-  replaceDomainRecord,
   type WorldDefinitionList,
 } from "./api";
-import { InternalLink, RouterButtonLink } from "./navigation";
+import { RouterButtonLink } from "./navigation";
 import {
   primaryNavigationForPath,
   type PrimaryNavigationItem,
@@ -561,192 +553,6 @@ export function LandingPage({
             </p>
           )}
         </section>
-      </div>
-    </main>
-  );
-}
-
-export function ResourceListPage({
-  resource,
-  label,
-  basePath,
-  kind,
-  initialResult,
-}: {
-  resource: DomainResource;
-  label: string;
-  basePath: string;
-  kind?: string;
-  initialResult?: DomainList;
-}) {
-  const [result, setResult] = useState<DomainList | undefined>(initialResult);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (initialResult) return;
-    void listDomainRecords(resource, {
-      ...(kind ? { kind } : {}),
-      limit: 200,
-      sort: "updatedAt",
-      order: "desc",
-    }).then(setResult, (caught: unknown) =>
-      setError(
-        caught instanceof Error ? caught.message : `Could not load ${label}`,
-      ),
-    );
-  }, [initialResult, kind, label, resource]);
-
-  return (
-    <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
-        <Header />
-        <div className="flex flex-wrap items-end justify-between gap-5 py-12">
-          <div>
-            <p className="text-sm text-amber-300">Library</p>
-            <h1 className="mt-3 text-5xl font-semibold tracking-tight">
-              {label}
-            </h1>
-            <p className="mt-3 text-zinc-500">Most recently edited first.</p>
-          </div>
-          {resource === "campaigns" && (
-            <RouterButtonLink href="/campaigns/new" tone="primary">
-              Create campaign
-            </RouterButtonLink>
-          )}
-        </div>
-        {error && <Alert tone="error">{error}</Alert>}
-        <div className="grid gap-4">
-          {result?.items.map((record) => (
-            <InternalLink
-              key={record.id}
-              href={`/${basePath}/${encodeURIComponent(record.id)}`}
-              className="card card-side flex-row items-center justify-between border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/30"
-            >
-              <div>
-                <h2 className="text-xl font-semibold text-white">
-                  {record.name}
-                </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Updated{" "}
-                  {new Intl.DateTimeFormat("en-US", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                    timeZone: "UTC",
-                  }).format(new Date(record.updatedAt))}{" "}
-                  UTC
-                </p>
-              </div>
-              <span className="text-amber-300">Edit →</span>
-            </InternalLink>
-          ))}
-          {result && result.items.length === 0 && (
-            <div className="rounded-box border border-dashed border-base-300 bg-base-200/50 px-6 py-14 text-center text-base-content/60">
-              {resource === "campaigns"
-                ? "No campaigns yet. Create one from an existing world."
-                : `No ${label.toLowerCase()} yet.`}
-            </div>
-          )}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-export function ResourceEditorPage({
-  resource,
-  id,
-  label,
-  basePath,
-  initialRecord,
-}: {
-  resource: DomainResource;
-  id: string;
-  label: string;
-  basePath: string;
-  initialRecord?: DomainRecord;
-}) {
-  const [record, setRecord] = useState<DomainRecord | undefined>(initialRecord);
-  const [draft, setDraft] = useState(() =>
-    initialRecord ? JSON.stringify(initialRecord.data, null, 2) : "",
-  );
-  const [message, setMessage] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (initialRecord) return;
-    void getDomainRecord(resource, id).then(
-      (loaded) => {
-        setRecord(loaded);
-        setDraft(JSON.stringify(loaded.data, null, 2));
-      },
-      (caught: unknown) =>
-        setMessage(
-          caught instanceof Error ? caught.message : "Could not load record",
-        ),
-    );
-  }, [id, initialRecord, resource]);
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!record) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const data: unknown = JSON.parse(draft);
-      if (typeof data !== "object" || data === null || Array.isArray(data)) {
-        throw new Error("The aggregate must be a JSON object.");
-      }
-      const updated = await replaceDomainRecord(record, data);
-      setRecord(updated);
-      setDraft(JSON.stringify(updated.data, null, 2));
-      setMessage("Saved.");
-    } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
-        <Header />
-        <form onSubmit={save} className="py-12">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <InternalLink
-                href={`/${basePath}`}
-                className="text-sm text-amber-300"
-              >
-                ← Back to {label.toLowerCase()}
-              </InternalLink>
-              <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-                {record?.name ?? "Loading…"}
-              </h1>
-              {record && (
-                <p className="mt-2 text-sm text-zinc-500">
-                  Revision {record.revision}
-                </p>
-              )}
-            </div>
-            <Button
-              type="submit"
-              tone="primary"
-              loading={saving}
-              disabled={!record}
-            >
-              Save changes
-            </Button>
-          </div>
-          <Textarea
-            aria-label="Domain aggregate JSON"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            spellCheck={false}
-            className="mt-8 min-h-[60vh] p-5 font-mono text-sm leading-6"
-          />
-          {message && <Alert className="mt-4">{message}</Alert>}
-        </form>
       </div>
     </main>
   );

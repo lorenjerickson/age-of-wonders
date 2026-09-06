@@ -3,7 +3,6 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   Param,
   Post,
   Query,
@@ -37,18 +36,6 @@ export class ModelRegistryController {
   ) {
     return this.registries.create(dto, req.user!.id);
   }
-  @Get("effective")
-  @Header("Deprecation", "true")
-  @Header(
-    "Link",
-    '</api/worlds/{worldId}/model-adoptions>; rel="successor-version"',
-  )
-  effective(
-    @Query("worldDefinitionId") worldId: string,
-    @Req() req: Request & AuthenticatedRequest,
-  ) {
-    return this.registries.effective(worldId, req.user!.id);
-  }
   @Post(":id/releases")
   createRelease(
     @Param("id") id: string,
@@ -56,19 +43,6 @@ export class ModelRegistryController {
     @Body() dto: ExtendModelSchemaReleaseDto,
   ) {
     return this.registries.extendRelease(id, dto, req.user!.id);
-  }
-  @Post(":id/releases/extend")
-  @Header("Deprecation", "true")
-  @Header(
-    "Link",
-    '</api/model-registries/{registryId}/releases>; rel="successor-version"',
-  )
-  extendRelease(
-    @Param("id") id: string,
-    @Req() req: Request & AuthenticatedRequest,
-    @Body() dto: ExtendModelSchemaReleaseDto,
-  ) {
-    return this.createRelease(id, req, dto);
   }
   @Get(":id") get(
     @Param("id") id: string,
