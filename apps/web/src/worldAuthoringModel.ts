@@ -70,6 +70,7 @@ export function projectEffectiveModels(
       typeof presentation?.label === "string" ? presentation.label.trim() : "";
     return {
       key: element.key,
+      kind: element.kind,
       name: label || "Unnamed model option",
       description:
         typeof presentation?.description === "string"

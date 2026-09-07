@@ -134,6 +134,7 @@ export interface WorldDraftRecord {
 
 export interface WorldModelOption {
   key: string;
+  kind?: string;
   name: string;
   description?: string;
   sourceLabel?: string;
@@ -206,6 +207,7 @@ export interface ModelRegistryDetail extends ModelRegistrySummary {
     key: string;
     kind: string;
     semanticRole: string;
+    applicability: Record<string, JsonValue>;
     status: "active" | "archived";
     currentRevision?: ModelElementRevisionResponse;
     revisions: ModelElementRevisionResponse[];
@@ -687,7 +689,12 @@ export function extendModelRegistryRelease(
     predecessorRevisionId?: string;
     elements?: Array<{
       key: string;
-      kind: "vocabulary-option";
+      kind:
+        | "concept"
+        | "field"
+        | "relationship"
+        | "vocabulary"
+        | "vocabulary-option";
       semanticRole: string;
       applicability: Record<string, JsonValue>;
       payload: Record<string, JsonValue>;

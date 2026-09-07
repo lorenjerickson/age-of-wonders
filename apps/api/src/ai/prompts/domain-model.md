@@ -265,6 +265,13 @@ the lineage is marked archived and omitted from a direct successor. A dependency
 is valid when its last local element is archived because its exact dependency closure remains
 explicit.
 
+The GM-facing World editor exposes these same contracts through progressively disclosed schema
+controls. It can author nested Concepts; Fields with owners, storage keys, typed values, literal
+defaults, list uniqueness, and cardinality; and Relationships with source/target Concepts,
+cardinality, inverse labels, and reference policy. It preserves supported payload and presentation
+properties that the focused form does not change, publishes a direct successor, and adopts that
+exact release into the World draft. It never mutates system or plugin registries.
+
 Field payloads use a safe typed AST rather than executable JavaScript. Atomic values are string,
 integer, number, boolean, bounded JSON, vocabulary-option references, Definition references,
 Entity references, or concept values; fields may also be lists. Cardinality, literal or CEL value

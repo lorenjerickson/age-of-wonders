@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-character-definition-authoring-complete
+status: active-implementation-model-structure-authoring-complete
 date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -481,8 +481,12 @@ Skills, Professions, and Backgrounds. These are rich governed Definition records
 options: each records exact Model conformance, uses its captured concept, and is saved through the
 World draft. Skill default Attributes and Profession starting ranks resolve only from the World's
 effective Model releases. Profession Rank itself is an open editable vocabulary; editing a focused
-Profession form preserves progression details that the form does not expose. General-purpose
-concept, field, and relationship authoring remains the next Model Registry wave.
+Profession form preserves progression details that the form does not expose. The general Model
+Registry editor completes the open structural surface for GM-owned registries: Concepts may be
+nested, Fields declare owners, typed values, defaults, and cardinality, and Relationships declare
+endpoints, cardinality, inverse labels, and reference policy. Every change publishes an immutable
+direct successor and explicitly adopts that exact release into the World draft; system and plugin
+structure remains readable but not editable by a GM.
 
 New AI generation audit records identify the authenticated GM and carry an explicit bounded
 context kind and context identity when one exists. History remains requester-scoped and exposes
@@ -597,7 +601,8 @@ must be reconciled with its own captured schema and approved before activation.
    import selection, plus explicit Auth0 account linking and exact-subject sign-in.
 5. **Model, AI, media, graph, and Settings — complete vertical slice:** explicit World model
    adoption, creator/context provenance, System Administrator readiness surfaces, derived-graph
-   authority boundaries, and immediate application bindings for the first runtime settings.
+   authority boundaries, immediate application bindings for the first runtime settings, and
+   contextual open authoring for vocabularies, Concepts, Fields, and Relationships.
    Broader hosted administration and fully contextual content operations remain fast follows.
 6. **Legacy removal — Character tranche complete:** fully replaced aliases, ambiguous `campaignId`
    invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph

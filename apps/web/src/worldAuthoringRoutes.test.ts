@@ -35,6 +35,10 @@ describe("World authoring route architecture", () => {
       "/_gm/worlds/$worldId/characters/models",
     ],
     [
+      "/worlds/world-id/characters/model/structure/effective",
+      "/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId",
+    ],
+    [
       "/worlds/world-id/characters/model/profession-ranks/effective",
       "/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId",
     ],

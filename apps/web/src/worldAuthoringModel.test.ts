@@ -299,6 +299,7 @@ describe("World authoring projection", () => {
       attributes: [
         {
           key: "homebrew:likeable",
+          kind: "vocabulary-option",
           name: "Likeable",
           description: undefined,
           elementId: "opaque-element-id",
@@ -316,6 +317,7 @@ describe("World authoring projection", () => {
       elements: [
         {
           key: "aow:attributes",
+          kind: "vocabulary",
           name: "Likeable",
           description: undefined,
           elementId: "opaque-vocabulary-id",
@@ -328,6 +330,7 @@ describe("World authoring projection", () => {
         },
         {
           key: "homebrew:likeable",
+          kind: "vocabulary-option",
           name: "Likeable",
           description: undefined,
           elementId: "opaque-element-id",

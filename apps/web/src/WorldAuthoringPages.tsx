@@ -72,10 +72,7 @@ const objectValue = (value: unknown): Record<string, unknown> =>
     : {};
 
 type EmbodimentStrategy =
-  | ""
-  | "one-per-instance"
-  | "one-per-realization"
-  | "preserve-extension";
+  "" | "one-per-instance" | "one-per-realization" | "preserve-extension";
 
 export function CreatureEmbodimentPolicyFields({
   strategy,
@@ -118,7 +115,9 @@ export function CreatureEmbodimentPolicyFields({
           <option value="one-per-instance">
             One per Campaign Instance (recommended)
           </option>
-          <option value="one-per-realization">One per realized placement</option>
+          <option value="one-per-realization">
+            One per realized placement
+          </option>
           {strategy === "preserve-extension" && (
             <option value="preserve-extension">
               Preserve installed extension strategy
@@ -685,20 +684,19 @@ export function DraftRecordEditor({
         )
       : [],
   );
-  const initialEmbodimentPolicy = objectValue(
-    initial.instanceEmbodimentPolicy,
-  );
+  const initialEmbodimentPolicy = objectValue(initial.instanceEmbodimentPolicy);
   const initialEmbodimentStrategy = String(
     initialEmbodimentPolicy.strategy ?? "",
   );
-  const [embodimentStrategy, setEmbodimentStrategy] = useState<EmbodimentStrategy>(
-    initialEmbodimentStrategy === "one-per-instance" ||
-      initialEmbodimentStrategy === "one-per-realization"
-      ? initialEmbodimentStrategy
-      : initialEmbodimentStrategy.includes(":")
-        ? "preserve-extension"
-        : "",
-  );
+  const [embodimentStrategy, setEmbodimentStrategy] =
+    useState<EmbodimentStrategy>(
+      initialEmbodimentStrategy === "one-per-instance" ||
+        initialEmbodimentStrategy === "one-per-realization"
+        ? initialEmbodimentStrategy
+        : initialEmbodimentStrategy.includes(":")
+          ? "preserve-extension"
+          : "",
+    );
   const [embodimentMaximum, setEmbodimentMaximum] = useState(
     initialEmbodimentPolicy.maximumPerCampaignInstance === undefined
       ? ""
@@ -1767,11 +1765,20 @@ export function CharacterModelsPage() {
         Model &amp; Taxonomies
       </h1>
       <p className="mt-4 max-w-3xl text-base-content/65">
-        Edit open World vocabularies separately from record values. Changes
-        affect compatible editors in this working revision and are reviewed
-        before publication.
+        Edit open World schema and vocabularies separately from record values.
+        Changes affect compatible editors in this working revision and are
+        reviewed before publication.
       </p>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <ModelCard
+          title="Schema Structure"
+          values={[
+            `${models?.elements?.filter(({ kind }) => kind === "concept").length ?? 0} Concepts`,
+            `${models?.elements?.filter(({ kind }) => kind === "field").length ?? 0} Fields`,
+            `${models?.elements?.filter(({ kind }) => kind === "relationship").length ?? 0} Relationships`,
+          ]}
+          href={`${base}/structure/effective`}
+        />
         <ModelCard
           title="Attributes"
           values={models?.attributes.map(({ name }) => name) ?? []}
