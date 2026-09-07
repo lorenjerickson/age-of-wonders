@@ -26,7 +26,10 @@ describe("documentation authority", () => {
       "docs/information-architecture-realignment-closure-audit.md",
     );
     for (const path of excluded) expect(index).toContain(path.slice(5));
-    expect(closure).toContain("status: passed-core-scope-closed");
-    expect(closure).toContain("No additional implementation wave is required");
+    expect(closure).toContain("status: amended-by-post-realignment-recovery");
+    expect(closure).toContain(
+      "The original no-additional-wave decision is superseded",
+    );
+    expect(index).toContain("post-realignment-recovery-report.md");
   });
 });

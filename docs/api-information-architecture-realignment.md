@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: implemented-core-scope-closed
+status: implemented-after-corrective-recovery
 date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -21,8 +21,10 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The core realignment is closed. The evidence-backed closure decision and its explicitly separate
-work inventory live in `docs/information-architecture-realignment-closure-audit.md`.
+The core realignment is implemented after a corrective recovery and authoring repair. The original
+closure audit omitted live content cutover and domain-complete World content creation; its amended
+decision and the recovery evidence live in `docs/information-architecture-realignment-closure-audit.md`
+and `docs/post-realignment-recovery-report.md`.
 
 The Session—including active-only installation concurrency—open Attribute/Equipment Slot,
 Profession Rank, and Character Definition authoring, Campaign Instance, Campaign/World authoring,
@@ -39,9 +41,10 @@ implementation-named participation, generic domain, raw graph, ambiguous Campaig
 destructive root-Location World routes are no longer registered.
 
 Route families not named in the completed-wave sections remain target architecture, not claims of
-completed implementation. Plugin and broader operational administration, Auth0 provider
-administration beyond deployment configuration, and fully contextual World/Campaign AI and media
-commands remain separate follow-up work.
+completed implementation. Location, Creature, and Item text-proposal AI is now World- and
+draft-scoped; generated media and Campaign-native AI remain follow-up work. Plugin and broader
+operational administration and Auth0 provider administration beyond deployment configuration also
+remain separate work.
 
 ## Binding route principles
 
@@ -610,7 +613,9 @@ must be reconciled with its own captured schema and approved before activation.
    adoption, creator/context provenance, System Administrator readiness surfaces, derived-graph
    authority boundaries, immediate application bindings for the first runtime settings, and
    contextual open authoring for vocabularies, Concepts, Fields, and Relationships.
-   Broader hosted administration and fully contextual content operations remain fast follows.
+   World-owned Location, Creature, and Item text proposals now use bounded proposal-review-apply
+   commands. Generated media, Campaign-native AI, and broader hosted administration remain fast
+   follows.
 6. **Legacy removal — Character tranche complete:** fully replaced aliases, ambiguous `campaignId`
    invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph
    HTTP access, obsolete web routes, unscoped AI commands, and the unscoped Character-draft workflow

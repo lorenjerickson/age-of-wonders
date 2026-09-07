@@ -1,7 +1,7 @@
 ---
 name: information-architecture-realignment-closure-audit
-description: Evidence-backed closure record for the core information architecture and domain/API realignment
-status: passed-core-scope-closed
+description: Corrected closure record for the information architecture and domain/API realignment
+status: amended-by-post-realignment-recovery
 date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 implementation-record: docs/api-information-architecture-realignment.md
@@ -11,7 +11,15 @@ implementation-record: docs/api-information-architecture-realignment.md
 
 ## Result
 
-The core information architecture and domain/API realignment is complete. The implemented product
+> **Correction, 2026-09-07:** The original closure decision was premature. It did not verify live
+> content cutover, domain-complete Location/Creature/Item creation, or aggregate-native World AI
+> authoring. Do not use the original closure claim as evidence that those capabilities existed at
+> that point. The missing work and its additive recovery are documented in
+> `docs/post-realignment-recovery-and-authoring-repair-plan.md` and
+> `docs/post-realignment-recovery-report.md`.
+
+After the corrective repair, the core information architecture and domain/API realignment is
+complete. The implemented product
 now has discrete World authoring, Campaign Definition authoring, Campaign Instance management, and
 Session operation; explicit multi-World selection; captured and migratable immutable revisions;
 hierarchical parent-scoped APIs; open GM-authored Model structure; and authoritative Quick Start
@@ -53,12 +61,15 @@ The audit compared the adopted architecture against:
 | Identity and participation          | Pass                     | Installation administration, User/provider identity, Player server standing, durable Instance membership/invitations, Session attendance, Character lifecycle/import, and bounded Agent participation remain distinct.                                                                                                 |
 | Hosted Setup and Settings           | Pass for vertical slice  | Hosted-system readiness is separate from content onboarding. The system exposes the accepted configuration taxonomy, first-administrator bootstrap, safe secret handling, validation/history, and initial runtime bindings.                                                                                            |
 | Quick Start tutorial                | Pass                     | Versioned core activities and per-GM progress are server-backed. Canonical workspaces retain a collapsible responsive guide, selected records resolve to human names, and current completion is recomputed from authoritative domain state.                                                                            |
-| Legacy exclusion/removal            | Pass                     | Removed API/controller roots and obsolete web routes are guarded by tests. Historical plans are either file-wide excluded or have explicitly excluded compatibility sections.                                                                                                                                          |
+| Content preservation and cutover    | Pass after correction    | The retained Turn of the Century corpus was materialized additively into current World, Campaign Definition, Campaign Instance, and Session structures; original records and media remain retained.                                                                                                                    |
+| Canonical World content authoring   | Pass after correction    | Location, Creature Definition, and Item Definition use typed server-owned draft commands, complete validation, optimistic concurrency, focused editors, and protected generic-draft boundaries.                                                                                                                        |
+| Aggregate-native World AI           | Pass for text proposals  | Location, Creature, and Item proposal routes derive owner and World ancestry from the route, return an editable validated proposal, and persist no World change before explicit apply. Generated media remains separately deferred.                                                                                    |
+| Legacy exclusion/removal            | Pass after correction    | Removed API/controller roots and obsolete web routes are guarded by tests. Legacy source data is retained as recovery evidence while current reads use the materialized aggregates. Historical plans are either file-wide excluded or have explicitly excluded compatibility sections.                                 |
 | Rules                               | Deferred by architecture | Rules remains the fifth World grouping; its detailed information architecture and semantics are intentionally outside this closure.                                                                                                                                                                                    |
 
 ## Verification record
 
-On 2026-09-07 the closure candidate produced:
+The original closure candidate produced:
 
 - API: 397 passing tests, 13 skipped integration tests requiring an external PostgreSQL test
   environment;
@@ -78,6 +89,13 @@ if it persists. This closure audit introduced no further domain type or persiste
 AI-facing domain guide was already synchronized with the Quick Start contracts and remained
 accurate for the audit-only changes.
 
+That verification was insufficient because it did not include a live legacy-content reconciliation
+or complete authoring journeys. The corrective repair added focused recovery, authoring, AI,
+ownership, stale-revision, and definition-versus-instance coverage; rehearsed conversion and
+idempotency against restored copies; applied the additive live conversion from a fresh coordinated
+backup; and rechecked the running service. The detailed current evidence belongs to the recovery
+report rather than the superseded original counts above.
+
 ## Explicitly separate work
 
 The following work remains valid but is not part of the closed core realignment:
@@ -88,7 +106,7 @@ The following work remains valid but is not part of the closed core realignment:
   design;
 - broader hosted operations, provider administration, recovery automation, and additional runtime
   setting bindings;
-- aggregate-native World/Campaign AI transformations and broader Campaign/Instance media scope;
+- Campaign-native AI transformations and generated World/Campaign/Instance media;
 - derived-graph reliability/rebuild operations;
 - deeper cross-aggregate API refinements that preserve the ownership rules already established.
 
@@ -98,7 +116,7 @@ generic domain write API, or using deprecated documents as present-day requireme
 
 ## Closure decision
 
-No additional implementation wave is required to close the information architecture and core API
-realignment. Future work should start from the adopted architecture, implemented common types, and
-this closure record, and should be named for the capability being built rather than treated as an
-unbounded continuation of realignment.
+The original no-additional-wave decision is superseded. The corrective recovery and authoring
+repair supplies the missing core behavior and is awaiting its Gate 2 commit approval. Future work
+must start from the adopted architecture, implemented common types, this amended record, and the
+recovery report.
