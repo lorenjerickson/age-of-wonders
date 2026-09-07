@@ -4,6 +4,10 @@ const root = {
   resourceType: "locations",
   sourceId: "world-root",
   payload: {
+    identity: {
+      id: "world-root",
+      version: { revision: 1, updatedAt: "2026-09-07T00:00:00.000Z" },
+    },
     name: "The Glasswake",
     kind: "world",
     placement: { kind: "root" },
@@ -11,6 +15,29 @@ const root = {
 };
 
 describe("validateWorldDefinitionDraft", () => {
+  it("rejects a bounded scalar masquerading as a declared Location", () => {
+    const report = validateWorldDefinitionDraft(
+      {
+        rootLocationId: "world-root",
+        locationIds: ["world-root"],
+        definitionIds: [],
+        schemaDefinitionIds: [],
+        worldPlacementDefinitionIds: [],
+        modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
+      },
+      [
+        {
+          resourceType: "locations",
+          sourceId: "world-root",
+          payload: "not-a-location",
+        },
+      ],
+    );
+    expect(report.issues.map(({ code }) => code)).toContain(
+      "location-definition-invalid",
+    );
+  });
+
   it("accepts one complete resource-qualified World revision", () => {
     expect(
       validateWorldDefinitionDraft(
@@ -110,16 +137,54 @@ describe("validateWorldDefinitionDraft", () => {
         resourceType: "definitions",
         sourceId: "creature",
         payload: {
-          id: "creature",
+          identity: {
+            id: "creature",
+            key: "world:creature",
+            name: "Keeper",
+            source: { namespace: "world", edition: "1" },
+          },
           kind: "creature",
-          name: "Keeper",
+          conformance: {
+            conceptId: "concept-creature",
+            modelSchemaReleaseIds: ["core"],
+          },
+          components: {
+            attributes: {},
+            equipmentSlots: [],
+            art: {},
+            movement: [],
+            skillDefinitionIds: [],
+            professionDefinitionIds: [],
+            progressiveMechanics: {},
+          },
           instanceEmbodimentPolicy: { strategy: "one-per-instance" },
         },
       },
       {
         resourceType: "definitions",
         sourceId: "item",
-        payload: { id: "item", kind: "item", name: "Key" },
+        payload: {
+          identity: {
+            id: "item",
+            key: "world:item",
+            name: "Key",
+            source: { namespace: "world", edition: "1" },
+          },
+          kind: "item",
+          conformance: {
+            conceptId: "concept-item",
+            modelSchemaReleaseIds: ["core"],
+          },
+          modelValues: { "aow:item-family": "aow:item-family-tool" },
+          components: { category: "tool", quality: "standard" },
+          image: {
+            assetId: "asset-item",
+            altText: "A brass key",
+            width: 512,
+            height: 512,
+            mimeType: "image/png",
+          },
+        },
       },
       {
         resourceType: "definitions",
@@ -185,9 +250,26 @@ describe("validateWorldDefinitionDraft", () => {
         resourceType: "definitions",
         sourceId: "creature",
         payload: {
-          id: "creature",
+          identity: {
+            id: "creature",
+            key: "world:creature",
+            name: "Unique-looking name",
+            source: { namespace: "world", edition: "1" },
+          },
           kind: "creature",
-          name: "Unique-looking name",
+          conformance: {
+            conceptId: "concept-creature",
+            modelSchemaReleaseIds: ["core"],
+          },
+          components: {
+            attributes: {},
+            equipmentSlots: [],
+            art: {},
+            movement: [],
+            skillDefinitionIds: [],
+            professionDefinitionIds: [],
+            progressiveMechanics: {},
+          },
         },
       },
     ];
@@ -203,15 +285,66 @@ describe("validateWorldDefinitionDraft", () => {
       records,
     );
 
-    expect(report).toMatchObject({
-      valid: false,
-      issues: [
-        {
+    expect(report.valid).toBe(false);
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           code: "creature-embodiment-policy-invalid",
           subject: "Unique-looking name",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects Creature Skill and Profession references outside the declared World closure", () => {
+    const report = validateWorldDefinitionDraft(
+      {
+        rootLocationId: "world-root",
+        locationIds: ["world-root"],
+        definitionIds: ["creature"],
+        schemaDefinitionIds: [],
+        worldPlacementDefinitionIds: [],
+        modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
+      },
+      [
+        root,
+        {
+          resourceType: "definitions",
+          sourceId: "creature",
+          payload: {
+            identity: {
+              id: "creature",
+              key: "world:creature",
+              name: "Keeper",
+              source: { namespace: "world", edition: "1" },
+            },
+            kind: "creature",
+            conformance: {
+              conceptId: "concept-creature",
+              modelSchemaReleaseIds: ["core"],
+            },
+            components: {
+              attributes: {},
+              equipmentSlots: [],
+              art: {},
+              movement: [],
+              skillDefinitionIds: ["missing-skill"],
+              professionDefinitionIds: [],
+              progressiveMechanics: {},
+            },
+            instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+          },
         },
       ],
-    });
+    );
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "creature-definition-reference-invalid",
+          subject: "Keeper",
+        }),
+      ]),
+    );
   });
 
   it("rejects malformed, dangling, undeclared, and duplicate World placements with human issues", () => {

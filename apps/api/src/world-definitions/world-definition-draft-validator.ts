@@ -1,6 +1,7 @@
 import { isPublicationJson } from "../domain/snapshot-manifest";
 import { isCreatureInstanceEmbodimentPolicy } from "@aow/common";
 import type { WorldDraftRecordDto } from "./dto/world-definition-authoring.dto";
+import { canonicalWorldRecordIssue } from "./world-authored-record";
 
 export interface WorldDraftValidationIssue {
   readonly code: string;
@@ -89,9 +90,21 @@ export function validateWorldDefinitionDraft(
     );
   for (const id of locations)
     requireRecord(byId, "locations", id, "Location", add);
-  for (const id of definitions)
+  for (const id of locations) {
+    const record = byId.get(`locations\0${id}`);
+    if (!record) continue;
+    const detail = canonicalWorldRecordIssue("locations", id, record.payload);
+    if (detail) add("location-definition-invalid", recordName(record), detail);
+  }
+  for (const id of definitions) {
     requireRecord(byId, "definitions", id, "Definition", add);
+    const record = byId.get(`definitions\0${id}`);
+    if (!record) continue;
+    const detail = canonicalWorldRecordIssue("definitions", id, record.payload);
+    if (detail) add("authored-definition-invalid", recordName(record), detail);
+  }
   validateCreatureEmbodimentPolicies(definitions, byId, add);
+  validateCreatureDefinitionReferences(definitions, byId, add);
   for (const id of schemas) {
     if (
       !byId.has(`extension-schemas\0${id}`) &&
@@ -134,6 +147,51 @@ export function validateWorldDefinitionDraft(
       a.code.localeCompare(b.code) || a.subject.localeCompare(b.subject),
   );
   return { valid: issues.length === 0, issues };
+}
+
+function validateCreatureDefinitionReferences(
+  definitionIds: readonly string[],
+  byId: ReadonlyMap<string, WorldDraftRecordDto>,
+  add: (c: string, s: string, d: string) => void,
+): void {
+  for (const id of definitionIds) {
+    const creature = byId.get(`definitions\0${id}`);
+    if (
+      !creature ||
+      !isObject(creature.payload) ||
+      creature.payload.kind !== "creature"
+    )
+      continue;
+    const components = isObject(creature.payload.components)
+      ? creature.payload.components
+      : {};
+    for (const [field, expectedKind, label] of [
+      ["skillDefinitionIds", "skill", "Skill"],
+      ["professionDefinitionIds", "profession", "Profession"],
+    ] as const) {
+      const references = Array.isArray(components[field])
+        ? components[field]
+        : [];
+      for (const reference of references) {
+        const target =
+          typeof reference === "string"
+            ? byId.get(`definitions\0${reference}`)
+            : undefined;
+        if (
+          !target ||
+          !definitionIds.includes(String(reference)) ||
+          !isObject(target.payload) ||
+          target.payload.kind !== expectedKind
+        ) {
+          add(
+            "creature-definition-reference-invalid",
+            recordName(creature),
+            `Every referenced ${label} must be declared in this World draft.`,
+          );
+        }
+      }
+    }
+  }
 }
 
 function validateCreatureEmbodimentPolicies(

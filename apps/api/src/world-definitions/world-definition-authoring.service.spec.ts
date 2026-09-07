@@ -26,7 +26,15 @@ const draft = {
     {
       resourceType: "locations",
       sourceId: "root",
-      payload: { name: "Root", kind: "world", placement: { kind: "root" } },
+      payload: {
+        identity: {
+          id: "root",
+          version: { revision: 1, updatedAt: now.toISOString() },
+        },
+        name: "Root",
+        kind: "world",
+        placement: { kind: "root" },
+      },
     },
   ],
   storageRevision: 3,
@@ -49,7 +57,709 @@ function serviceWith(
   return new WorldDefinitionAuthoringService(prisma as never, models as never);
 }
 
+const itemImage = {
+  assetId: "asset-1",
+  altText: "A brass key",
+  width: 512,
+  height: 512,
+  mimeType: "image/png",
+};
+
+const itemRequest = {
+  expectedStorageRevision: 3,
+  name: "Bell Key",
+  itemFamilyKey: "aow:item-family-tool",
+  category: "tool",
+  quality: "standard" as const,
+  compatibleEquipmentSlotSets: [],
+  image: itemImage,
+};
+
+function itemAuthoringHarness(asset?: {
+  id: string;
+  createdByUserId: string;
+  scopeType: string;
+  scopeId: string;
+  mimeType: string;
+}) {
+  const compiled = compileModelSchemaRelease(createEditableCoreModelSeed());
+  const findFirst = jest.fn(
+    ({
+      where,
+    }: {
+      where: {
+        id: string;
+        createdByUserId: string;
+        scopeType: string;
+        scopeId: string;
+      };
+    }) =>
+      Promise.resolve(
+        asset &&
+          asset.id === where.id &&
+          asset.createdByUserId === where.createdByUserId &&
+          asset.scopeType === where.scopeType &&
+          asset.scopeId === where.scopeId
+          ? { id: asset.id, mimeType: asset.mimeType }
+          : null,
+      ),
+  );
+  const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const worldFindUnique = jest.fn().mockResolvedValue({
+    id: "world-1",
+    status: "ACTIVE",
+    metadataRevision: 1,
+    draft,
+  });
+  const prisma = {
+    worldDefinition: {
+      findUnique: worldFindUnique,
+    },
+    worldDefinitionDraft: { updateMany },
+    mediaAsset: { findFirst },
+  };
+  return {
+    service: serviceWith(prisma, {
+      resolveEffectiveRoots: jest.fn().mockResolvedValue({
+        elements: compiled.elements,
+        roots: [],
+      }),
+    }),
+    findFirst,
+    updateMany,
+    worldFindUnique,
+  };
+}
+
 describe("WorldDefinitionAuthoringService", () => {
+  it.each(["update", "remove", "add"])(
+    "rejects a generic whole-draft %s of protected authored records",
+    async (operation) => {
+      const protectedDraft = {
+        ...draft,
+        snapshotRecords: [
+          ...draft.snapshotRecords,
+          {
+            resourceType: "creatures",
+            sourceId: "legacy-creature",
+            payload: { name: "Bell Keeper", worldId: "world-1" },
+          },
+        ],
+      };
+      const updateMany = jest.fn();
+      const prisma = {
+        worldDefinition: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "world-1",
+            status: "ACTIVE",
+            metadataRevision: 1,
+            draft: protectedDraft,
+          }),
+        },
+        worldDefinitionDraft: { updateMany },
+      };
+      const next: Array<{
+        resourceType: string;
+        sourceId: string;
+        payload: unknown;
+      }> = [...protectedDraft.snapshotRecords];
+      if (operation === "update") {
+        next[1] = { ...next[1], payload: { name: "Changed Keeper" } };
+      } else if (operation === "remove") {
+        next.pop();
+      } else {
+        next.push({
+          resourceType: "definitions",
+          sourceId: "injected-item",
+          payload: { kind: "item", name: "Injected" },
+        });
+      }
+
+      await expect(
+        serviceWith(prisma).save(
+          "world-1",
+          {
+            expectedStorageRevision: 3,
+            revisionName: "Attempted generic mutation",
+            content: protectedDraft.content,
+            records: next,
+          },
+          "gm-1",
+        ),
+      ).rejects.toThrow("dedicated authoring actions");
+      expect(updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a generic change to the protected World root", async () => {
+    const updateMany = jest.fn();
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    };
+    await expect(
+      serviceWith(prisma).save(
+        "world-1",
+        {
+          expectedStorageRevision: 3,
+          revisionName: "Changed root",
+          content: { ...draft.content, rootLocationId: "other-location" },
+          records: draft.snapshotRecords,
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("World root");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects promoting a visible legacy Item definition through generic membership editing", async () => {
+    const legacyItemDraft = {
+      ...draft,
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "definitions",
+          sourceId: "legacy-item",
+          payload: { kind: "item", name: "Recovered brass key" },
+        },
+      ],
+    };
+    const updateMany = jest.fn();
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft: legacyItemDraft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    };
+
+    await expect(
+      serviceWith(prisma).save(
+        "world-1",
+        {
+          expectedStorageRevision: 3,
+          revisionName: "Attempted legacy promotion",
+          content: {
+            ...legacyItemDraft.content,
+            definitionIds: ["legacy-item"],
+          },
+          records: legacyItemDraft.snapshotRecords,
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("dedicated library actions");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthorized Item media during validation", async () => {
+    const compiled = compileModelSchemaRelease(createEditableCoreModelSeed());
+    const itemConcept = compiled.elements.find(
+      ({ lineage }) => lineage.semanticRole === "aow:item",
+    );
+    if (!itemConcept) throw new Error("Missing Item concept in test seed.");
+    const protectedDraft = {
+      ...draft,
+      content: { ...draft.content, definitionIds: ["item-1"] },
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "definitions",
+          sourceId: "item-1",
+          payload: {
+            identity: {
+              id: "item-1",
+              key: "world:item-1",
+              name: "Bell Key",
+              source: { namespace: "world", edition: "1" },
+            },
+            kind: "item",
+            components: { category: "tool", quality: "standard" },
+            image: itemImage,
+            conformance: {
+              conceptId: itemConcept.lineage.id,
+              modelSchemaReleaseIds: [compiled.releaseId],
+            },
+            modelValues: { "aow:item-family": "aow:item-family-tool" },
+          },
+        },
+      ],
+    };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft: protectedDraft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+      mediaAsset: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const service = serviceWith(prisma, {
+      resolveEffectiveRoots: jest.fn().mockResolvedValue({
+        elements: compiled.elements,
+        roots: [],
+      }),
+    });
+
+    await expect(
+      service.validate(
+        "world-1",
+        { expectedStorageRevision: 3 },
+        "gm-1",
+      ),
+    ).resolves.toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "item-media-unauthorized" })],
+    });
+  });
+
+  it("rechecks Item media authorization inside publication", async () => {
+    const compiled = compileModelSchemaRelease(createEditableCoreModelSeed());
+    const itemConcept = compiled.elements.find(
+      ({ lineage }) => lineage.semanticRole === "aow:item",
+    );
+    if (!itemConcept) throw new Error("Missing Item concept in test seed.");
+    const publishableDraft = {
+      ...draft,
+      validationStatus: "VALID",
+      validatedStorageRevision: 3,
+      content: { ...draft.content, definitionIds: ["item-1"] },
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "definitions",
+          sourceId: "item-1",
+          payload: {
+            identity: {
+              id: "item-1",
+              key: "world:item-1",
+              name: "Bell Key",
+              source: { namespace: "world", edition: "1" },
+            },
+            kind: "item",
+            components: { category: "tool", quality: "standard" },
+            image: itemImage,
+            conformance: {
+              conceptId: itemConcept.lineage.id,
+              modelSchemaReleaseIds: [compiled.releaseId],
+            },
+            modelValues: { "aow:item-family": "aow:item-family-tool" },
+          },
+        },
+      ],
+    };
+    const tx = {
+      worldDefinitionRevision: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          currentRevisionId: null,
+          currentRevision: null,
+          draft: publishableDraft,
+        }),
+      },
+      mediaAsset: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        (operation: (transaction: typeof tx) => Promise<unknown>) =>
+          operation(tx),
+      ),
+    };
+    const service = serviceWith(prisma, {
+      resolveEffectiveRoots: jest.fn().mockResolvedValue({
+        elements: compiled.elements,
+        roots: [],
+      }),
+    });
+
+    await expect(
+      service.publish("world-1", { expectedStorageRevision: 3 }, "gm-1"),
+    ).rejects.toThrow("unavailable for this World");
+    expect(tx.mediaAsset.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: { startsWith: "image/" },
+      },
+      select: { id: true },
+    });
+    expect(tx.worldDefinitionRevision.create).not.toHaveBeenCalled();
+  });
+
+  it("atomically upgrades one legacy Creature while preserving its source and references", async () => {
+    const compiled = compileModelSchemaRelease(createEditableCoreModelSeed());
+    const legacyDraft = {
+      ...draft,
+      content: {
+        ...draft.content,
+        creatureIds: ["legacy-creature"],
+      },
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "creatures",
+          sourceId: "legacy-creature",
+          sourceRevision: 7,
+          payload: {
+            name: "Bell Keeper",
+            worldId: "world-1",
+            relationships: [{ kind: "guards", targetId: "root" }],
+          },
+        },
+        {
+          resourceType: "legacy-links",
+          sourceId: "placement-1",
+          payload: { creatureId: "legacy-creature", locationId: "root" },
+        },
+      ],
+    };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft: legacyDraft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    };
+    const service = serviceWith(prisma, {
+      resolveEffectiveRoots: jest.fn().mockResolvedValue({
+        elements: compiled.elements,
+        roots: [],
+      }),
+    });
+
+    await service.upgradeLegacyCreature(
+      "world-1",
+      "legacy-creature",
+      {
+        expectedStorageRevision: 3,
+        name: "Bell Keeper",
+        attributes: {},
+        equipmentSlots: [],
+        instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+        movement: [],
+        skillDefinitionIds: [],
+        professionDefinitionIds: [],
+      },
+      "gm-1",
+    );
+
+    const updateCalls = updateMany.mock.calls as unknown[][];
+    const write = updateCalls[0]?.[0] as {
+      data: {
+        content: { definitionIds: string[]; creatureIds: string[] };
+        snapshotRecords: Array<{
+          resourceType: string;
+          sourceId: string;
+          payload: unknown;
+        }>;
+      };
+    };
+    expect(write.data.content).toMatchObject({
+      definitionIds: ["legacy-creature"],
+      creatureIds: [],
+    });
+    const upgraded = write.data.snapshotRecords.find(
+      (record) =>
+        record.resourceType === "definitions" &&
+        record.sourceId === "legacy-creature",
+    );
+    expect(upgraded).toBeDefined();
+    const upgradedPayload = upgraded?.payload as Record<string, unknown>;
+    expect(upgradedPayload.kind).toBe("creature");
+    const extensions = upgradedPayload.extensions as Record<string, unknown>;
+    expect(extensions["aow:legacy-creature"]).toEqual({
+      resourceType: "creatures",
+      sourceRevision: 7,
+      payload: legacyDraft.snapshotRecords[1]?.payload,
+    });
+    expect(write.data.snapshotRecords).toContainEqual(
+      legacyDraft.snapshotRecords[2],
+    );
+    expect(write.data.snapshotRecords).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          resourceType: "creatures",
+          sourceId: "legacy-creature",
+        }),
+      ]),
+    );
+
+    const upgradedDraft = {
+      ...legacyDraft,
+      content: write.data.content,
+      snapshotRecords: write.data.snapshotRecords,
+      storageRevision: 4,
+    };
+    const validationWrite = jest.fn().mockResolvedValue({ count: 1 });
+    const validationService = serviceWith(
+      {
+        worldDefinition: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "world-1",
+            status: "ACTIVE",
+            metadataRevision: 1,
+            draft: upgradedDraft,
+          }),
+        },
+        worldDefinitionDraft: { updateMany: validationWrite },
+        mediaAsset: { findFirst: jest.fn() },
+      },
+      {
+        resolveEffectiveRoots: jest.fn().mockResolvedValue({
+          elements: compiled.elements,
+          roots: [],
+        }),
+      },
+    );
+    await expect(
+      validationService.validate(
+        "world-1",
+        { expectedStorageRevision: 4 },
+        "gm-1",
+      ),
+    ).resolves.toEqual({ valid: true, issues: [] });
+  });
+
+  it("creates a canonical nested Location through one optimistic draft advance", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    };
+    const service = serviceWith(prisma);
+    await service.createLocation(
+      "world-1",
+      {
+        expectedStorageRevision: 3,
+        name: "Glass Harbor",
+        kind: "settlement",
+        parentLocationId: "root",
+      },
+      "gm-1",
+    );
+    const calls = updateMany.mock.calls as unknown[][];
+    const call = calls[0]?.[0] as {
+      data: {
+        snapshotRecords: Array<{
+          sourceId: string;
+          payload: Record<string, unknown>;
+        }>;
+      };
+    };
+    const created = call.data.snapshotRecords.find(
+      (record) => record.sourceId !== "root",
+    );
+    expect(created?.payload).toMatchObject({
+      name: "Glass Harbor",
+      kind: "settlement",
+      identity: { version: { revision: 1 } },
+      placement: { kind: "within-parent", parentLocationId: "root" },
+    });
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "draft-1", storageRevision: 3 } }),
+    );
+  });
+
+  it("accepts an Item image owned by the GM and scoped to the selected World", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+
+    await harness.service.createItem("world-1", itemRequest, "gm-1");
+
+    expect(harness.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+      },
+      select: { id: true, mimeType: true },
+    });
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "another owner",
+      {
+        id: "asset-1",
+        createdByUserId: "gm-2",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      },
+    ],
+    [
+      "another World",
+      {
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-2",
+        mimeType: "image/png",
+      },
+    ],
+    ["a missing asset", undefined],
+  ])("rejects an Item image belonging to %s", async (_label, asset) => {
+    const harness = itemAuthoringHarness(asset);
+
+    await expect(
+      harness.service.createItem("world-1", itemRequest, "gm-1"),
+    ).rejects.toThrow("unavailable for this World");
+    expect(harness.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("retains an existing captured Item image without requiring a live media row", async () => {
+    const existingDraft = {
+      ...draft,
+      content: { ...draft.content, definitionIds: ["item-1"] },
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "definitions",
+          sourceId: "item-1",
+          payload: {
+            identity: {
+              id: "item-1",
+              key: "world:item-1",
+              name: "Old Key",
+              source: { namespace: "world", edition: "1" },
+            },
+            kind: "item",
+            components: { category: "tool", quality: "standard" },
+            image: itemImage,
+            conformance: {
+              conceptId: "old-concept",
+              modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
+            },
+            modelValues: { "aow:item-family": "aow:item-family-tool" },
+          },
+        },
+      ],
+    };
+    const harness = itemAuthoringHarness();
+    harness.worldFindUnique.mockResolvedValue({
+      id: "world-1",
+      status: "ACTIVE",
+      metadataRevision: 1,
+      draft: existingDraft,
+    });
+
+    await harness.service.updateItem(
+      "world-1",
+      "item-1",
+      { ...itemRequest, name: "New Key" },
+      "gm-1",
+    );
+
+    expect(harness.findFirst).not.toHaveBeenCalled();
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("captures the exact legacy Item payload and source revision during canonical edit", async () => {
+    const legacyPayload = {
+      kind: "item",
+      name: "Recovered brass key",
+      description: "An exact legacy description.",
+      category: "loot",
+      image: itemImage,
+      relationships: [{ kind: "opens", targetId: "vault-door" }],
+      unknownLegacyField: { preserve: true },
+    };
+    const legacyDraft = {
+      ...draft,
+      content: { ...draft.content, definitionIds: ["item-1"] },
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        {
+          resourceType: "definitions",
+          sourceId: "item-1",
+          sourceRevision: 12,
+          payload: legacyPayload,
+        },
+      ],
+    };
+    const harness = itemAuthoringHarness();
+    harness.worldFindUnique.mockResolvedValue({
+      id: "world-1",
+      status: "ACTIVE",
+      metadataRevision: 1,
+      draft: legacyDraft,
+    });
+
+    await harness.service.updateItem(
+      "world-1",
+      "item-1",
+      { ...itemRequest, name: "Canonical brass key" },
+      "gm-1",
+    );
+
+    const calls = harness.updateMany.mock.calls as unknown[][];
+    const write = calls[0]?.[0] as {
+      data: {
+        snapshotRecords: Array<{
+          resourceType: string;
+          sourceId: string;
+          payload: Record<string, unknown>;
+        }>;
+      };
+    };
+    const upgraded = write.data.snapshotRecords.find(
+      (record) =>
+        record.resourceType === "definitions" && record.sourceId === "item-1",
+    );
+    expect(upgraded?.payload).toMatchObject({
+      kind: "item",
+      identity: { id: "item-1", name: "Canonical brass key" },
+      extensions: {
+        "aow:legacy-item": {
+          resourceType: "definitions",
+          sourceRevision: 12,
+          payload: legacyPayload,
+        },
+      },
+    });
+    expect(harness.findFirst).not.toHaveBeenCalled();
+  });
+
   it("validates Character Definitions against adopted concepts and vocabularies", () => {
     const seed = createEditableCoreModelSeed();
     const compiled = compileModelSchemaRelease(seed);
@@ -197,7 +907,20 @@ describe("WorldDefinitionAuthoringService", () => {
       ),
     };
     const service = serviceWith(prisma);
-    await service.create({ name: "Glasswake" }, "gm-1");
+    await service.create(
+      {
+        name: "Glasswake",
+        content: { definitionIds: ["caller-item"] },
+        records: [
+          {
+            resourceType: "definitions",
+            sourceId: "caller-item",
+            payload: { kind: "item" },
+          },
+        ],
+      } as never,
+      "gm-1",
+    );
     const createInput = captured as {
       content: {
         rootLocationId: string;
@@ -216,6 +939,14 @@ describe("WorldDefinitionAuthoringService", () => {
     expect(createInput.content.modelSchemaReleaseIds).toEqual([
       "aow:model-schema-release:core:1",
     ]);
+    expect(createInput.content).not.toHaveProperty("definitionIds", [
+      "caller-item",
+    ]);
+    expect(createInput.snapshotRecords).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: "caller-item" }),
+      ]),
+    );
   });
 
   it("rejects an optimistic save after its draft revision changes", async () => {

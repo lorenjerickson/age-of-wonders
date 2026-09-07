@@ -26,4 +26,5 @@ export * from "./quick-start";
 export * from "./rules";
 export * from "./session";
 export * from "./world";
+export * from "./world-authoring";
 export * from "./versioning";

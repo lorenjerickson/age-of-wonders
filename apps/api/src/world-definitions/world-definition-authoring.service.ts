@@ -25,9 +25,18 @@ import type {
   ForkWorldDefinitionDto,
   SaveWorldDraftDto,
   StartWorldDraftDto,
+  UpsertWorldCreatureDraftDto,
+  UpsertWorldItemDraftDto,
+  UpsertWorldLocationDraftDto,
   WorldDraftRecordDto,
 } from "./dto/world-definition-authoring.dto";
 import { validateWorldDefinitionDraft } from "./world-definition-draft-validator";
+import {
+  canonicalWorldRecordIssue,
+  worldCreaturePayload,
+  worldItemPayload,
+  worldLocationPayload,
+} from "./world-authored-record";
 
 const RESERVED_RECORD = "world-definition-revision";
 
@@ -41,8 +50,8 @@ export class WorldDefinitionAuthoringService {
   async create(dto: CreateWorldDraftDto, userId: string) {
     const name = visible(dto.name, "A World name is required.");
     const baseline = newWorldBaseline(name);
-    const content = dto.content ?? baseline.content;
-    const records = normalizeRecords(dto.records ?? baseline.records);
+    const content = baseline.content;
+    const records = normalizeRecords(baseline.records);
     assertBoundedDraftJson(content, records);
     try {
       return await this.prisma.$transaction(
@@ -87,6 +96,425 @@ export class WorldDefinitionAuthoringService {
   async getDraft(worldDefinitionId: string, userId: string) {
     const row = await this.ownedDraft(worldDefinitionId, userId);
     return draftResponse(row.draft);
+  }
+
+  async getActiveDraft(worldDefinitionId: string, userId: string) {
+    const row = await this.ownedDraft(worldDefinitionId, userId);
+    if (row.status !== "ACTIVE") throw archivedConflict();
+    return draftResponse(row.draft);
+  }
+
+  createLocation(
+    worldDefinitionId: string,
+    dto: UpsertWorldLocationDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "locations",
+      undefined,
+      dto,
+      userId,
+    );
+  }
+
+  updateLocation(
+    worldDefinitionId: string,
+    id: string,
+    dto: UpsertWorldLocationDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "locations",
+      id,
+      dto,
+      userId,
+    );
+  }
+
+  createCreature(
+    worldDefinitionId: string,
+    dto: UpsertWorldCreatureDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "creature",
+      undefined,
+      dto,
+      userId,
+    );
+  }
+
+  updateCreature(
+    worldDefinitionId: string,
+    id: string,
+    dto: UpsertWorldCreatureDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "creature",
+      id,
+      dto,
+      userId,
+    );
+  }
+
+  async upgradeLegacyCreature(
+    worldDefinitionId: string,
+    id: string,
+    dto: UpsertWorldCreatureDraftDto,
+    userId: string,
+  ) {
+    const owned = await this.ownedDraft(worldDefinitionId, userId);
+    if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (owned.draft.storageRevision !== dto.expectedStorageRevision)
+      throw staleDraft();
+    const records = readRecords(owned.draft.snapshotRecords);
+    const legacy = records.find(
+      (record) =>
+        record.resourceType === "creatures" && record.sourceId === id,
+    );
+    if (
+      !legacy ||
+      records.some(
+        (record) =>
+          record.resourceType === "definitions" && record.sourceId === id,
+      )
+    ) {
+      throw worldRecordNotFound();
+    }
+    const authoredModel = await this.authoredConformance(
+      worldDefinitionId,
+      userId,
+      owned.draft.content,
+      "creature",
+    );
+    const prior = isObject(legacy.payload) ? legacy.payload : {};
+    const payload = worldCreaturePayload(
+      id,
+      dto,
+      authoredModel.conformance,
+      {
+        ...prior,
+        extensions: {
+          ...objectValue(prior.extensions),
+          "aow:legacy-creature": {
+            resourceType: legacy.resourceType,
+            ...(legacy.sourceRevision === undefined
+              ? {}
+              : { sourceRevision: legacy.sourceRevision }),
+            payload: legacy.payload,
+          },
+        },
+      },
+    );
+    const issue = canonicalWorldRecordIssue("definitions", id, payload);
+    if (issue) throw new BadRequestException(issue);
+    assertGovernedRecordConformance(
+      [{ resourceType: "definitions", sourceId: id, payload }],
+      authoredModel.releaseIds,
+      authoredModel.elements,
+    );
+    const content = isObject(owned.draft.content)
+      ? { ...owned.draft.content }
+      : {};
+    content.definitionIds = [
+      ...new Set([...definitionIds(owned.draft.content), id]),
+    ];
+    if (Array.isArray(content.creatureIds)) {
+      content.creatureIds = content.creatureIds.filter(
+        (value) => value !== id,
+      );
+    }
+    return this.persistDraft(
+      worldDefinitionId,
+      owned.draft,
+      {
+        expectedStorageRevision: dto.expectedStorageRevision,
+        revisionName: owned.draft.revisionName,
+        content,
+        records: [
+          ...records.filter(
+            (record) =>
+              !(record.resourceType === "creatures" && record.sourceId === id),
+          ),
+          { resourceType: "definitions", sourceId: id, payload },
+        ],
+      },
+      userId,
+    );
+  }
+
+  createItem(
+    worldDefinitionId: string,
+    dto: UpsertWorldItemDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "item",
+      undefined,
+      dto,
+      userId,
+    );
+  }
+
+  updateItem(
+    worldDefinitionId: string,
+    id: string,
+    dto: UpsertWorldItemDraftDto,
+    userId: string,
+  ) {
+    return this.upsertAuthoredRecord(
+      worldDefinitionId,
+      "item",
+      id,
+      dto,
+      userId,
+    );
+  }
+
+  private async upsertAuthoredRecord(
+    worldDefinitionId: string,
+    kind: "locations" | "creature" | "item",
+    requestedId: string | undefined,
+    dto:
+      | UpsertWorldLocationDraftDto
+      | UpsertWorldCreatureDraftDto
+      | UpsertWorldItemDraftDto,
+    userId: string,
+  ) {
+    const owned = await this.ownedDraft(worldDefinitionId, userId);
+    if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (owned.draft.storageRevision !== dto.expectedStorageRevision)
+      throw staleDraft();
+    const records = readRecords(owned.draft.snapshotRecords);
+    const resourceType = kind === "locations" ? "locations" : "definitions";
+    const id = requestedId ?? randomUUID();
+    const existing = records.find(
+      (record) =>
+        record.resourceType === resourceType && record.sourceId === id,
+    );
+    if (requestedId && !existing) throw worldRecordNotFound();
+    if (!requestedId && existing) throw staleDraft();
+    if (
+      existing &&
+      kind !== "locations" &&
+      (!isObject(existing.payload) || existing.payload.kind !== kind)
+    )
+      throw worldRecordNotFound();
+    let payload: unknown;
+    let authoredModel:
+      | Awaited<
+          ReturnType<WorldDefinitionAuthoringService["authoredConformance"]>
+        >
+      | undefined;
+    if (kind === "locations") {
+      const location = dto as UpsertWorldLocationDraftDto;
+      const rootId = stringValue(owned.draft.content, "rootLocationId");
+      const isRoot = id === rootId;
+      if (!isRoot && !location.parentLocationId)
+        throw new BadRequestException("A parent Location is required.");
+      if (location.parentLocationId === id)
+        throw new BadRequestException("A Location cannot contain itself.");
+      if (
+        location.parentLocationId &&
+        !records.some(
+          (record) =>
+            record.resourceType === "locations" &&
+            record.sourceId === location.parentLocationId,
+        )
+      )
+        throw new BadRequestException(
+          "The parent Location is not in this World draft.",
+        );
+      if (
+        location.parentLocationId &&
+        locationAncestorIds(records, location.parentLocationId).has(id)
+      )
+        throw new BadRequestException(
+          "The Location hierarchy cannot contain a cycle.",
+        );
+      payload = worldLocationPayload(
+        id,
+        {
+          name: visible(location.name, "A Location name is required."),
+          description: location.description,
+          kind: isRoot ? "world" : location.kind,
+          ...(isRoot ? {} : { parentLocationId: location.parentLocationId }),
+          profileSummary: location.profileSummary,
+          profileTags: location.profileTags,
+          mapSceneNotes: location.mapSceneNotes,
+          mapOrientation: location.mapOrientation,
+        },
+        existing?.payload,
+      );
+    } else {
+      authoredModel = await this.authoredConformance(
+        worldDefinitionId,
+        userId,
+        owned.draft.content,
+        kind,
+      );
+      if (kind === "creature") {
+        payload = worldCreaturePayload(
+          id,
+          dto as UpsertWorldCreatureDraftDto,
+          authoredModel.conformance,
+          existing?.payload,
+        );
+      } else {
+        payload = worldItemPayload(
+          id,
+          await this.verifiedWorldItemInput(
+            worldDefinitionId,
+            userId,
+            dto as UpsertWorldItemDraftDto,
+            existing?.payload,
+          ),
+          authoredModel.conformance,
+          existing?.payload,
+        );
+        if (
+          existing &&
+          canonicalWorldRecordIssue(
+            existing.resourceType,
+            existing.sourceId,
+            existing.payload,
+          )
+        ) {
+          const built = objectValue(payload);
+          payload = {
+            ...built,
+            extensions: {
+              ...objectValue(built.extensions),
+              "aow:legacy-item": {
+                resourceType: existing.resourceType,
+                ...(existing.sourceRevision === undefined
+                  ? {}
+                  : { sourceRevision: existing.sourceRevision }),
+                payload: existing.payload,
+              },
+            },
+          };
+        }
+      }
+    }
+    const issue = canonicalWorldRecordIssue(resourceType, id, payload);
+    if (issue) throw new BadRequestException(issue);
+    if (authoredModel) {
+      assertGovernedRecordConformance(
+        [{ resourceType, sourceId: id, payload }],
+        authoredModel.releaseIds,
+        authoredModel.elements,
+      );
+    }
+    const nextRecords = [
+      ...records.filter(
+        (record) =>
+          !(record.resourceType === resourceType && record.sourceId === id),
+      ),
+      { resourceType, sourceId: id, payload },
+    ];
+    const content = isObject(owned.draft.content)
+      ? { ...owned.draft.content }
+      : {};
+    const membership = kind === "locations" ? "locationIds" : "definitionIds";
+    const current = Array.isArray(content[membership])
+      ? content[membership].filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
+    content[membership] = [...new Set([...current, id])];
+    return this.persistDraft(
+      worldDefinitionId,
+      owned.draft,
+      {
+        expectedStorageRevision: dto.expectedStorageRevision,
+        revisionName: owned.draft.revisionName,
+        content,
+        records: nextRecords,
+      },
+      userId,
+    );
+  }
+
+  private async authoredConformance(
+    worldDefinitionId: string,
+    userId: string,
+    content: Prisma.JsonValue,
+    kind: "creature" | "item",
+  ) {
+    const releaseIds = modelReleaseIds(content);
+    const effective = await this.models.resolveEffectiveRoots(
+      releaseIds,
+      userId,
+      worldDefinitionId,
+    );
+    const concept = effective.elements.find(
+      (element) =>
+        element.lineage.kind === "concept" &&
+        element.lineage.semanticRole === `aow:${kind}`,
+    );
+    if (!concept)
+      throw new BadRequestException(
+        `The effective ${kind === "creature" ? "Creature" : "Item"} concept is unavailable.`,
+      );
+    return {
+      releaseIds,
+      elements: effective.elements,
+      conformance: {
+        modelSchemaReleaseIds: releaseIds as never,
+        conceptId: concept.lineage.id as never,
+      },
+    };
+  }
+
+  private async verifiedWorldItemInput(
+    worldDefinitionId: string,
+    userId: string,
+    dto: UpsertWorldItemDraftDto,
+    previous: unknown,
+  ): Promise<UpsertWorldItemDraftDto> {
+    const submittedImage = isObject(dto.image) ? dto.image : {};
+    const priorPayload = isObject(previous) ? previous : {};
+    const priorImage = isObject(priorPayload.image) ? priorPayload.image : {};
+    const assetId = submittedImage.assetId;
+
+    if (
+      typeof assetId === "string" &&
+      assetId.length > 0 &&
+      priorImage.assetId === assetId
+    ) {
+      return {
+        ...dto,
+        image: {
+          ...priorImage,
+          altText: submittedImage.altText,
+        },
+      };
+    }
+
+    if (typeof assetId !== "string" || !assetId.trim())
+      throw invalidWorldItemImage();
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: {
+        id: assetId,
+        createdByUserId: userId,
+        scopeType: "world-definition",
+        scopeId: worldDefinitionId,
+      },
+      select: { id: true, mimeType: true },
+    });
+    if (!asset || !asset.mimeType.startsWith("image/"))
+      throw invalidWorldItemImage();
+    return {
+      ...dto,
+      image: { ...submittedImage, mimeType: asset.mimeType },
+    };
   }
 
   async startDraft(
@@ -206,11 +634,38 @@ export class WorldDefinitionAuthoringService {
   ) {
     const owned = await this.ownedDraft(worldDefinitionId, userId);
     if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (owned.draft.storageRevision !== dto.expectedStorageRevision)
+      throw staleDraft();
+    const records = normalizeRecords(dto.records);
+    assertBoundedDraftJson(dto.content, records);
+    assertProtectedRecordsUnchanged(
+      owned.draft.content,
+      readRecords(owned.draft.snapshotRecords),
+      dto.content,
+      records,
+    );
+    return this.persistDraft(
+      worldDefinitionId,
+      owned.draft,
+      { ...dto, records },
+      userId,
+    );
+  }
+
+  private async persistDraft(
+    worldDefinitionId: string,
+    draft: {
+      readonly id: string;
+      readonly storageRevision: number;
+    },
+    dto: SaveWorldDraftDto,
+    userId: string,
+  ) {
     const records = normalizeRecords(dto.records);
     assertBoundedDraftJson(dto.content, records);
     const result = await this.prisma.worldDefinitionDraft.updateMany({
       where: {
-        id: owned.draft.id,
+        id: draft.id,
         storageRevision: dto.expectedStorageRevision,
       },
       data: {
@@ -256,6 +711,7 @@ export class WorldDefinitionAuthoringService {
           records,
           modelSchemaReleaseIds,
           effectiveModel.elements,
+          new Set(definitionIds(owned.draft.content)),
         );
       } catch (error) {
         if (!(error instanceof BadRequestException)) throw unavailable();
@@ -267,6 +723,15 @@ export class WorldDefinitionAuthoringService {
         });
       }
     }
+    issues.push(
+      ...(await itemMediaAuthorizationIssues(
+        this.prisma,
+        records,
+        new Set(definitionIds(owned.draft.content)),
+        worldDefinitionId,
+        userId,
+      )),
+    );
     issues.sort(
       (left, right) =>
         left.code.localeCompare(right.code) ||
@@ -349,6 +814,14 @@ export class WorldDefinitionAuthoringService {
             throw new BadRequestException(
               "The World draft must pass complete-revision validation before publication.",
             );
+          const mediaIssues = await itemMediaAuthorizationIssues(
+            tx,
+            records,
+            new Set(definitionIds(draft.content)),
+            worldDefinitionId,
+            userId,
+          );
+          if (mediaIssues.length > 0) throw invalidWorldItemImage();
           const modelSchemaReleaseIds = modelReleaseIds(draft.content);
           const effectiveModel = await this.models.resolveEffectiveRoots(
             modelSchemaReleaseIds,
@@ -359,6 +832,7 @@ export class WorldDefinitionAuthoringService {
             records,
             modelSchemaReleaseIds,
             effectiveModel.elements,
+            new Set(definitionIds(draft.content)),
           );
           if (modelSchemaReleaseIds.length > 0) {
             const accessibleReleaseCount = await tx.modelSchemaRelease.count({
@@ -825,7 +1299,7 @@ function newWorldBaseline(name: string) {
       {
         resourceType: "locations",
         sourceId: rootLocationId,
-        payload: { name, kind: "world", placement: { kind: "root" } },
+        payload: worldLocationPayload(rootLocationId, { name, kind: "world" }),
       },
     ],
   };
@@ -898,10 +1372,227 @@ function modelReleaseIds(value: Prisma.JsonValue): string[] {
     (id): id is string => typeof id === "string",
   );
 }
+
+function definitionIds(value: Prisma.JsonValue): string[] {
+  if (!isObject(value) || !Array.isArray(value.definitionIds)) return [];
+  return value.definitionIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return isObject(value) ? value : {};
+}
+
+function assertProtectedRecordsUnchanged(
+  priorContent: Prisma.JsonValue,
+  priorRecords: readonly WorldDraftRecordDto[],
+  nextContent: unknown,
+  nextRecords: readonly WorldDraftRecordDto[],
+): void {
+  const protectedRows = (records: readonly WorldDraftRecordDto[]) =>
+    records
+      .filter(isProtectedAuthoredRecord)
+      .map((record) => ({
+        resourceType: record.resourceType,
+        sourceId: record.sourceId,
+        ...(record.sourceRevision === undefined
+          ? {}
+          : { sourceRevision: record.sourceRevision }),
+        payload: record.payload,
+      }))
+      .sort((left, right) =>
+        `${left.resourceType}\0${left.sourceId}`.localeCompare(
+          `${right.resourceType}\0${right.sourceId}`,
+        ),
+      );
+  if (
+    canonicalJsonHash(protectedRows(priorRecords)) !==
+    canonicalJsonHash(protectedRows(nextRecords))
+  ) {
+    throw new BadRequestException(
+      "Locations, Creatures, and Items must be changed through their dedicated authoring actions.",
+    );
+  }
+  const beforeLocations = new Set(stringArrayValue(priorContent, "locationIds"));
+  const afterLocations = new Set(stringArrayValue(nextContent, "locationIds"));
+  if (!equalStringSets(beforeLocations, afterLocations)) {
+    throw new BadRequestException(
+      "Location membership must be changed through dedicated Atlas actions.",
+    );
+  }
+  if (
+    stringValue(priorContent, "rootLocationId") !==
+    (isObject(nextContent) && typeof nextContent.rootLocationId === "string"
+      ? nextContent.rootLocationId
+      : undefined)
+  ) {
+    throw new BadRequestException(
+      "The World root must be changed through dedicated Atlas actions.",
+    );
+  }
+  const protectedDefinitionIds = new Set(
+    [...priorRecords, ...nextRecords]
+      .filter(
+        (record) =>
+          record.resourceType === "definitions" &&
+          isProtectedAuthoredRecord(record),
+      )
+      .map((record) => record.sourceId),
+  );
+  const beforeDefinitions = new Set(
+    stringArrayValue(priorContent, "definitionIds").filter((id) =>
+      protectedDefinitionIds.has(id),
+    ),
+  );
+  const afterDefinitions = new Set(
+    stringArrayValue(nextContent, "definitionIds").filter((id) =>
+      protectedDefinitionIds.has(id),
+    ),
+  );
+  if (!equalStringSets(beforeDefinitions, afterDefinitions)) {
+    throw new BadRequestException(
+      "Creature and Item membership must be changed through dedicated library actions.",
+    );
+  }
+}
+
+function isProtectedAuthoredRecord(record: WorldDraftRecordDto): boolean {
+  if (
+    record.resourceType === "locations" ||
+    record.resourceType === "creatures" ||
+    record.resourceType === "items"
+  ) {
+    return true;
+  }
+  if (record.resourceType !== "definitions" || !isObject(record.payload)) {
+    return false;
+  }
+  const kind = record.payload.kind ?? record.payload.definitionType;
+  return kind === "creature" || kind === "item";
+}
+
+function stringArrayValue(value: unknown, key: string): string[] {
+  if (!isObject(value) || !Array.isArray(value[key])) return [];
+  return value[key].filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+}
+
+function equalStringSets(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): boolean {
+  return (
+    left.size === right.size && [...left].every((value) => right.has(value))
+  );
+}
+
+async function itemMediaAuthorizationIssues(
+  client: Pick<PrismaService, "mediaAsset">,
+  records: readonly WorldDraftRecordDto[],
+  declaredDefinitionIds: ReadonlySet<string>,
+  worldDefinitionId: string,
+  userId: string,
+) {
+  const items = records.filter(
+    (record) =>
+      record.resourceType === "definitions" &&
+      declaredDefinitionIds.has(record.sourceId) &&
+      isObject(record.payload) &&
+      record.payload.kind === "item",
+  );
+  const issues = await Promise.all(
+    items.map(async (record) => {
+      const image = isObject(record.payload) && isObject(record.payload.image)
+        ? record.payload.image
+        : {};
+      const assetId = image.assetId;
+      const asset =
+        typeof assetId === "string" && assetId.trim()
+          ? await client.mediaAsset.findFirst({
+              where: {
+                id: assetId,
+                createdByUserId: userId,
+                scopeType: "world-definition",
+                scopeId: worldDefinitionId,
+                mimeType: { startsWith: "image/" },
+              },
+              select: { id: true },
+            })
+          : null;
+      return asset
+        ? undefined
+        : {
+            code: "item-media-unauthorized",
+            subject: authoredRecordName(record),
+            detail:
+              "The Item image is not an authorized image for this World.",
+          };
+    }),
+  );
+  return issues.filter((issue) => issue !== undefined);
+}
+
+function authoredRecordName(record: WorldDraftRecordDto): string {
+  if (isObject(record.payload)) {
+    if (typeof record.payload.name === "string" && record.payload.name.trim()) {
+      return record.payload.name.trim();
+    }
+    if (
+      isObject(record.payload.identity) &&
+      typeof record.payload.identity.name === "string" &&
+      record.payload.identity.name.trim()
+    ) {
+      return record.payload.identity.name.trim();
+    }
+  }
+  return "World draft record";
+}
+function stringValue(value: Prisma.JsonValue, key: string): string | undefined {
+  return isObject(value) && typeof value[key] === "string"
+    ? value[key]
+    : undefined;
+}
+function locationAncestorIds(
+  records: readonly WorldDraftRecordDto[],
+  startId: string,
+): Set<string> {
+  const parents = new Map<string, string>();
+  for (const record of records) {
+    if (record.resourceType !== "locations" || !isObject(record.payload))
+      continue;
+    const placement = record.payload.placement;
+    if (
+      isObject(placement) &&
+      placement.kind === "within-parent" &&
+      typeof placement.parentLocationId === "string"
+    )
+      parents.set(record.sourceId, placement.parentLocationId);
+  }
+  const ancestors = new Set<string>();
+  let cursor: string | undefined = startId;
+  while (cursor && !ancestors.has(cursor)) {
+    ancestors.add(cursor);
+    cursor = parents.get(cursor);
+  }
+  return ancestors;
+}
+function worldRecordNotFound(): NotFoundException {
+  return new NotFoundException(
+    "The selected World draft record was not found.",
+  );
+}
+function invalidWorldItemImage(): BadRequestException {
+  return new BadRequestException(
+    "The selected Item image is unavailable for this World.",
+  );
+}
 export function assertGovernedRecordConformance(
   records: readonly WorldDraftRecordDto[],
   rootReleaseIds: readonly string[],
   elements: readonly CompiledModelElement[],
+  declaredDefinitionIds?: ReadonlySet<string>,
 ): void {
   const byKey = new Map(
     elements.map((element) => [element.lineage.key as string, element]),
@@ -912,6 +1603,13 @@ export function assertGovernedRecordConformance(
       .map((element) => element.lineage.id as string),
   );
   for (const record of records) {
+    if (
+      declaredDefinitionIds &&
+      record.resourceType === "definitions" &&
+      !declaredDefinitionIds.has(record.sourceId)
+    ) {
+      continue;
+    }
     if (!isObject(record.payload)) continue;
     const conformance = record.payload.conformance;
     const hasGovernedValues = "modelValues" in record.payload;
@@ -969,27 +1667,33 @@ export function assertGovernedRecordConformance(
       }
     }
     if (definitionType === "creature") {
-      assertNumericModelValues(
-        record.payload.attributes,
-        byKey,
-        "aow:attribute",
-      );
-      assertModelKeys(
-        record.payload.equipmentSlots,
-        byKey,
-        "aow:equipment-slot",
-      );
+      const components = isObject(record.payload.components)
+        ? record.payload.components
+        : record.payload;
+      assertNumericModelValues(components.attributes, byKey, "aow:attribute");
+      assertModelKeys(components.equipmentSlots, byKey, "aow:equipment-slot");
     }
     if (definitionType === "item") {
-      assertModelKeys(
-        record.payload.compatibleEquipmentSlots,
-        byKey,
-        "aow:equipment-slot",
-      );
+      const components = isObject(record.payload.components)
+        ? record.payload.components
+        : record.payload;
+      const equippable = isObject(components.equippable)
+        ? components.equippable
+        : undefined;
+      const compatibleSlots = Array.isArray(equippable?.compatibleSlotSets)
+        ? flattenNestedValues(equippable.compatibleSlotSets)
+        : Array.isArray(record.payload.compatibleEquipmentSlots)
+          ? record.payload.compatibleEquipmentSlots
+          : [];
+      assertModelKeys(compatibleSlots, byKey, "aow:equipment-slot");
+      const modelValues = isObject(record.payload.modelValues)
+        ? record.payload.modelValues
+        : {};
+      const itemFamilyKey =
+        modelValues["aow:item-family"] ?? record.payload.itemFamilyKey;
       if (
-        typeof record.payload.itemFamilyKey !== "string" ||
-        byKey.get(record.payload.itemFamilyKey)?.lineage.semanticRole !==
-          "aow:item-family"
+        typeof itemFamilyKey !== "string" ||
+        byKey.get(itemFamilyKey)?.lineage.semanticRole !== "aow:item-family"
       ) {
         throw new BadRequestException(
           "An Item Definition must select an available Item family.",
@@ -1040,6 +1744,16 @@ export function assertGovernedRecordConformance(
         );
     }
   }
+}
+
+function flattenNestedValues(value: unknown): unknown[] {
+  if (!Array.isArray(value)) return [];
+  const result: unknown[] = [];
+  for (const group of value as readonly unknown[]) {
+    if (!Array.isArray(group)) continue;
+    for (const entry of group as readonly unknown[]) result.push(entry);
+  }
+  return result;
 }
 function arrayValue(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];

@@ -25,6 +25,9 @@ import {
   ForkWorldDefinitionDto,
   SaveWorldDraftDto,
   StartWorldDraftDto,
+  UpsertWorldCreatureDraftDto,
+  UpsertWorldItemDraftDto,
+  UpsertWorldLocationDraftDto,
 } from "./dto/world-definition-authoring.dto";
 import { WorldDefinitionAuthoringService } from "./world-definition-authoring.service";
 import { WorldDefinitionsService } from "./world-definitions.service";
@@ -206,6 +209,15 @@ export class WorldAuthoringController {
     return this.library(worldId, request.user!.id, "locations", limit, offset);
   }
 
+  @Post(":worldId/atlas/locations")
+  createLocation(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldLocationDraftDto,
+  ) {
+    return this.authoring.createLocation(worldId, dto, request.user!.id);
+  }
+
   @Get(":worldId/atlas/locations/:locationId")
   location(
     @Param("worldId") worldId: string,
@@ -220,6 +232,21 @@ export class WorldAuthoringController {
     );
   }
 
+  @Put(":worldId/atlas/locations/:locationId")
+  updateLocation(
+    @Param("worldId") worldId: string,
+    @Param("locationId") locationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldLocationDraftDto,
+  ) {
+    return this.authoring.updateLocation(
+      worldId,
+      locationId,
+      dto,
+      request.user!.id,
+    );
+  }
+
   @Get(":worldId/bestiary/creatures")
   creatures(
     @Param("worldId") worldId: string,
@@ -228,6 +255,15 @@ export class WorldAuthoringController {
     @Query("offset") offset?: string,
   ) {
     return this.library(worldId, request.user!.id, "creatures", limit, offset);
+  }
+
+  @Post(":worldId/bestiary/creatures")
+  createCreature(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldCreatureDraftDto,
+  ) {
+    return this.authoring.createCreature(worldId, dto, request.user!.id);
   }
 
   @Get(":worldId/bestiary/creatures/:creatureId")
@@ -244,6 +280,37 @@ export class WorldAuthoringController {
     );
   }
 
+  @Put(":worldId/bestiary/creatures/:creatureId")
+  updateCreature(
+    @Param("worldId") worldId: string,
+    @Param("creatureId") creatureId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldCreatureDraftDto,
+  ) {
+    return this.authoring.updateCreature(
+      worldId,
+      creatureId,
+      dto,
+      request.user!.id,
+    );
+  }
+
+  @Post(":worldId/bestiary/creatures/:creatureId/upgrade")
+  @HttpCode(HttpStatus.OK)
+  upgradeLegacyCreature(
+    @Param("worldId") worldId: string,
+    @Param("creatureId") creatureId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldCreatureDraftDto,
+  ) {
+    return this.authoring.upgradeLegacyCreature(
+      worldId,
+      creatureId,
+      dto,
+      request.user!.id,
+    );
+  }
+
   @Get(":worldId/item-compendium/items")
   items(
     @Param("worldId") worldId: string,
@@ -254,6 +321,15 @@ export class WorldAuthoringController {
     return this.library(worldId, request.user!.id, "items", limit, offset);
   }
 
+  @Post(":worldId/item-compendium/items")
+  createItem(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldItemDraftDto,
+  ) {
+    return this.authoring.createItem(worldId, dto, request.user!.id);
+  }
+
   @Get(":worldId/item-compendium/items/:itemId")
   item(
     @Param("worldId") worldId: string,
@@ -261,6 +337,16 @@ export class WorldAuthoringController {
     @Req() request: Request & AuthenticatedRequest,
   ) {
     return this.libraryRecord(worldId, request.user!.id, "items", itemId);
+  }
+
+  @Put(":worldId/item-compendium/items/:itemId")
+  updateItem(
+    @Param("worldId") worldId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpsertWorldItemDraftDto,
+  ) {
+    return this.authoring.updateItem(worldId, itemId, dto, request.user!.id);
   }
 
   @Get(":worldId/character-model/:definitionKind")
@@ -351,9 +437,10 @@ function inLibrary(
   record: DraftRecord,
   library: "locations" | "creatures" | "items",
 ): boolean {
-  if (record.resourceType === library) return true;
-  if (library === "locations" || record.resourceType !== "definitions")
-    return false;
+  if (library === "locations") return record.resourceType === "locations";
+  if (library === "creatures" && record.resourceType === "creatures")
+    return true;
+  if (record.resourceType !== "definitions") return false;
   return (
     definitionKindOf(record) === (library === "creatures" ? "creature" : "item")
   );

@@ -8,6 +8,96 @@ const request = {
 } as Request & AuthenticatedRequest;
 
 describe("WorldAuthoringController", () => {
+  it("delegates nested manual creation with authenticated ownership", async () => {
+    const authoring = {
+      createLocation: jest.fn().mockResolvedValue({ storageRevision: 2 }),
+      createCreature: jest.fn().mockResolvedValue({ storageRevision: 3 }),
+      createItem: jest.fn().mockResolvedValue({ storageRevision: 4 }),
+    };
+    const subject = new WorldAuthoringController(
+      {} as never,
+      authoring as never,
+      {} as never,
+    );
+    await subject.createLocation("world-1", request, {
+      expectedStorageRevision: 1,
+      name: "Harbor",
+      kind: "settlement",
+      parentLocationId: "root",
+    });
+    await subject.createCreature("world-1", request, {
+      expectedStorageRevision: 2,
+      name: "Keeper",
+      attributes: {},
+      equipmentSlots: [],
+      instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+    });
+    await subject.createItem("world-1", request, {
+      expectedStorageRevision: 3,
+      name: "Key",
+      itemFamilyKey: "aow:item-family-tool",
+      category: "tool",
+      quality: "standard",
+      compatibleEquipmentSlotSets: [],
+      image: {
+        assetId: "asset-1",
+        altText: "A brass key",
+        width: 512,
+        height: 512,
+        mimeType: "image/png",
+      },
+    });
+    expect(authoring.createLocation).toHaveBeenCalledWith(
+      "world-1",
+      expect.any(Object),
+      "gm-1",
+    );
+    expect(authoring.createCreature).toHaveBeenCalledWith(
+      "world-1",
+      expect.any(Object),
+      "gm-1",
+    );
+    expect(authoring.createItem).toHaveBeenCalledWith(
+      "world-1",
+      expect.any(Object),
+      "gm-1",
+    );
+  });
+
+  it("routes an explicit legacy Creature upgrade through authenticated World scope", async () => {
+    const authoring = {
+      upgradeLegacyCreature: jest
+        .fn()
+        .mockResolvedValue({ storageRevision: 4 }),
+    };
+    const subject = new WorldAuthoringController(
+      {} as never,
+      authoring as never,
+      {} as never,
+    );
+    const dto = {
+      expectedStorageRevision: 3,
+      name: "Bell Keeper",
+      attributes: {},
+      equipmentSlots: [],
+      instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+    };
+
+    await subject.upgradeLegacyCreature(
+      "world-1",
+      "legacy-creature",
+      request,
+      dto,
+    );
+
+    expect(authoring.upgradeLegacyCreature).toHaveBeenCalledWith(
+      "world-1",
+      "legacy-creature",
+      dto,
+      "gm-1",
+    );
+  });
+
   it("bounds the canonical World library and preserves its deterministic order", async () => {
     const worlds = {
       list: jest.fn().mockResolvedValue({
@@ -61,6 +151,44 @@ describe("WorldAuthoringController", () => {
     ).resolves.toEqual(expect.objectContaining({ sourceId: "creature-1" }));
     expect(worlds.get).toHaveBeenCalledWith("world-1", "gm-1");
     expect(authoring.getDraft).toHaveBeenCalledWith("world-1", "gm-1");
+  });
+
+  it("keeps runtime Item instances out of the Item Compendium and detail route", async () => {
+    const itemDefinition = (id: string) => ({
+      resourceType: "definitions",
+      sourceId: id,
+      payload: { kind: "item", identity: { name: `Definition ${id}` } },
+    });
+    const itemInstance = {
+      resourceType: "items",
+      sourceId: "instance-1",
+      payload: { name: "A carried instance" },
+    };
+    const authoring = {
+      getDraft: jest.fn().mockResolvedValue({
+        records: [
+          itemDefinition("definition-1"),
+          itemInstance,
+          itemDefinition("definition-2"),
+        ],
+      }),
+    };
+    const subject = new WorldAuthoringController(
+      {} as never,
+      authoring as never,
+      {} as never,
+    );
+
+    await expect(subject.items("world-1", request)).resolves.toMatchObject({
+      total: 2,
+      items: [
+        expect.objectContaining({ sourceId: "definition-1" }),
+        expect.objectContaining({ sourceId: "definition-2" }),
+      ],
+    });
+    await expect(
+      subject.item("world-1", "instance-1", request),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("returns a neutral miss when a real child is not in the selected World", async () => {
