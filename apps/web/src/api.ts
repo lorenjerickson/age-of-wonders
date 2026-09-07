@@ -64,6 +64,10 @@ import type {
   UpdateSystemSettingRequest,
   ReplaceSystemSecretRequest,
   ConfigurationHistoryProjection,
+  QuickStartActivityKey,
+  QuickStartActivityView,
+  QuickStartOverview,
+  UpdateQuickStartProgress,
 } from "@aow/common";
 
 const apiUrl = "/api";
@@ -2300,6 +2304,30 @@ export function createCampaignDefinitionDraftProposal(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
+    },
+  );
+}
+
+export function getQuickStartOverview() {
+  return request<QuickStartOverview>("/me/quick-start");
+}
+
+export function getQuickStartActivity(activityKey: QuickStartActivityKey) {
+  return request<QuickStartActivityView>(
+    `/me/quick-start/${encodeURIComponent(activityKey)}`,
+  );
+}
+
+export function updateQuickStartProgress(
+  activityKey: QuickStartActivityKey,
+  input: UpdateQuickStartProgress,
+) {
+  return request<QuickStartActivityView>(
+    `/me/quick-start/${encodeURIComponent(activityKey)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
     },
   );
 }

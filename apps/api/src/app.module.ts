@@ -16,6 +16,7 @@ import { CampaignInstancesModule } from "./campaign-instances/campaign-instances
 import { ModelRegistryModule } from "./model-registry/model-registry.module";
 import { PlayersModule } from "./players/players.module";
 import { SystemSettingsModule } from "./settings/system-settings.module";
+import { QuickStartModule } from "./quick-start/quick-start.module";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SystemSettingsModule } from "./settings/system-settings.module";
     CampaignInstancesModule,
     ModelRegistryModule,
     PlayersModule,
+    QuickStartModule,
   ],
   providers: [
     {

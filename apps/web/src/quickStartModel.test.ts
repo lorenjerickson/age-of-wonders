@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseQuickStartProgress,
-  quickStartActivityIsComplete,
+  QUICK_START_ACTIVITIES,
   quickStartKeyFromSearch,
   quickStartStorageKey,
   quickStartSuffix,
@@ -21,20 +20,19 @@ describe("Quick Start context", () => {
     );
   });
 
-  it("scopes local progress by GM and ignores malformed values", () => {
+  it("scopes local workspace preferences by GM", () => {
     expect(quickStartStorageKey("  Game Master ")).toBe(
       quickStartStorageKey("game master"),
     );
     expect(quickStartStorageKey("game master")).not.toContain("game");
-    expect([...parseQuickStartProgress("not json")]).toEqual([]);
-    expect([
-      ...parseQuickStartProgress('["choose-world","not-an-activity"]'),
-    ]).toEqual(["choose-world"]);
   });
 
-  it("derives activity completion from every individual step", () => {
-    expect(quickStartActivityIsComplete(new Set([0, 1]), 3)).toBe(false);
-    expect(quickStartActivityIsComplete(new Set([0, 1, 2]), 3)).toBe(true);
-    expect(quickStartActivityIsComplete(new Set(), 0)).toBe(false);
+  it("uses versioned server-compatible activity definitions", () => {
+    expect(QUICK_START_ACTIVITIES.every(({ revision }) => revision === 2)).toBe(
+      true,
+    );
+    expect(QUICK_START_ACTIVITIES.every(({ steps }) => steps.length > 0)).toBe(
+      true,
+    );
   });
 });

@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-model-structure-authoring-complete
+status: active-implementation-quick-start-complete
 date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -25,7 +25,8 @@ The Session—including active-only installation concurrency—open Attribute/Eq
 Profession Rank, and Character Definition authoring, Campaign Instance, Campaign/World authoring,
 identity/participation, Auth0 adapter,
 writable hosted-Settings slice, system-boundary, legacy-removal, Instance-native Character-sheet,
-Character completion/review, and first-party one-way Character import waves are implemented.
+Character completion/review, first-party one-way Character import, general Model structure, and
+authoritative Quick Start waves are implemented.
 Canonical GM routes enforce Campaign Definition, Campaign Instance, and World ancestry; public
 invitation entry points live beneath `/api/invitations`; and authenticated locator and participant
 projections live beneath `/api/me`. First-party web callers use the canonical authoring roots
@@ -460,6 +461,9 @@ PUT  /api/settings/system/:systemArea/settings/:settingKey
 POST /api/settings/system/:systemArea/settings/:settingKey/secret
 POST /api/settings/system/:systemArea/settings/:settingKey/actions/{revoke,reset,test}
 GET  /api/settings/system/:systemArea/settings/:settingKey/history
+GET  /api/me/quick-start
+GET  /api/me/quick-start/:activityKey
+PUT  /api/me/quick-start/:activityKey
 ```
 
 Model Registry collections are bounded and deterministic. Effective Model adoption is now read
@@ -608,6 +612,10 @@ must be reconciled with its own captured schema and approved before activation.
    invitation/creation routes, singleton World operations, generic domain HTTP authority, raw graph
    HTTP access, obsolete web routes, unscoped AI commands, and the unscoped Character-draft workflow
    are removed. Legacy Character draft rows remain only as explicitly archived migration input.
+7. **Quick Start — complete vertical slice:** current versioned core activities, strictly per-GM
+   navigation/progress, selected-target retention with human labels, responsive collapsible
+   guidance, and live predicates over authoritative World, Campaign, Instance, Player, and Session
+   state. Plugin-contributed activities remain deliberately deferred.
 
 ## Acceptance criteria
 

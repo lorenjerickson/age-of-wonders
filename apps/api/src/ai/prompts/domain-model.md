@@ -338,6 +338,29 @@ All Model Registry HTTP endpoints require an authenticated GM:
   and does not read a Campaign Instance-local schema. There is no top-level `effective` query;
   World ownership is required route context.
 
+### Quick Start guidance and authoritative progress
+
+`QuickStartActivityDefinition` is the versioned instructional contract for a core tutorial
+activity. It owns its stable activity key, current revision, canonical launch route, ordered stable
+step keys, human instructions, and whether each step is system-verified or self-confirmed. The
+currently installed revision is adopted immediately; older per-GM progress is remapped only where
+the current definition still permits it, and system predicates are always reevaluated.
+
+`QuickStartProgress` is dedicated per-GM persistence keyed by user and activity. It stores the
+activity revision, current step, sidebar collapse state, permitted qualitative confirmations, last
+canonical route, and selected-target references. It does not store a copied World, Campaign,
+Player, or Session, and it never grants access to a target. The server resolves retained targets
+through the authenticated GM's normal ownership boundary and returns human-readable labels rather
+than opaque identifiers.
+
+The three authenticated GM endpoints are `GET /me/quick-start`,
+`GET /me/quick-start/:activityKey`, and `PUT /me/quick-start/:activityKey`. Updates accept only
+bounded navigation/progress metadata. Completion for the current core activities is derived live
+from World publication and Atlas state, Campaign Definition content and publication, Campaign
+Instance captured snapshots/runtime, Player profiles and participation, and the existing Session
+readiness service. `QuickStartProgress` is dedicated relational persistence, not a generic
+`DomainRecord` resource.
+
 ### Hosted-system administration and infrastructure provenance
 
 `SystemSettingArea` is a closed navigation registry for the initial hosted-system administration

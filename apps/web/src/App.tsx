@@ -80,12 +80,10 @@ function PrimaryNavigationLink({
 
 export function AppShell({
   children,
-  gmScope,
   gmAccess = true,
   systemAdministrator = false,
 }: {
   children: ReactNode;
-  gmScope: string;
   gmAccess?: boolean;
   systemAdministrator?: boolean;
 }) {
@@ -252,7 +250,7 @@ export function AppShell({
           </div>
           {guide && (
             <div className="hidden xl:block">
-              <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+              <QuickStartGuide activityKey={guide.key} />
             </div>
           )}
         </div>
@@ -289,7 +287,7 @@ export function AppShell({
                   Close guide
                 </Button>
               </div>
-              <QuickStartGuide activityKey={guide.key} gmScope={gmScope} />
+              <QuickStartGuide activityKey={guide.key} />
             </section>
           </div>
         )}

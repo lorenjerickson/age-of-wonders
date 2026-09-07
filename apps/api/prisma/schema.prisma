@@ -374,6 +374,27 @@ model User {
   reviewedCampaignInstanceCharacterDrafts    CampaignInstanceCharacterDraft[]        @relation("CampaignInstanceCharacterDraftReviewer")
   updatedConfigurationBindings               ConfigurationBinding[]                  @relation("ConfigurationBindingUpdater")
   configurationRevisions                     ConfigurationRevision[]                 @relation("ConfigurationRevisionActor")
+  quickStartProgress                         QuickStartProgress[]
+}
+
+/// Per-GM tutorial navigation and qualitative confirmations. System-verified
+/// completion is always recomputed from the referenced authoritative records.
+model QuickStartProgress {
+  id                    String   @id @default(uuid())
+  userId                String
+  activityKey           String
+  activityRevision      Int
+  currentStepKey        String?
+  collapsed             Boolean  @default(false)
+  selfConfirmedStepKeys Json     @default("[]")
+  targetContext         Json     @default("{}")
+  lastCanonicalRoute    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activityKey])
+  @@index([userId, updatedAt])
 }
 
 /// Installation-level operator established during first launch. This role is

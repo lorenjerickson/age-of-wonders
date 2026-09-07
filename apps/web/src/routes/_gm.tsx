@@ -22,7 +22,6 @@ function GmShell() {
   const { session } = Route.useRouteContext();
   return (
     <AppShell
-      gmScope={session.authenticated ? session.user.displayName : "local-gm"}
       gmAccess={session.authenticated && session.user.role === "gm"}
       systemAdministrator={
         session.authenticated && session.user.systemAdministrator

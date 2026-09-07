@@ -6,12 +6,5 @@ export const Route = createFileRoute("/_gm/quick-start")({
 });
 
 function QuickStartRoute() {
-  const { session } = Route.useRouteContext();
-  return (
-    <QuickStartPage
-      gmScope={
-        session.authenticated ? session.user.displayName : "local-gm"
-      }
-    />
-  );
+  return <QuickStartPage />;
 }

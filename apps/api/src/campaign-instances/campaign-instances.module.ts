@@ -45,6 +45,6 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
     InvitationTokenService,
     ContactProtector,
   ],
-  exports: [CampaignInstancesService],
+  exports: [CampaignInstancesService, CampaignSessionService],
 })
 export class CampaignInstancesModule {}

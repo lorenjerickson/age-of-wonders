@@ -22,6 +22,7 @@ export * from "./disciplines";
 export * from "./skills";
 export * from "./primitives";
 export * from "./professions";
+export * from "./quick-start";
 export * from "./rules";
 export * from "./session";
 export * from "./world";
