@@ -15,10 +15,14 @@ import { ItemGenerationService } from "./item-generation.service";
 import { GeneratedItemImageService } from "./generated-item-image.service";
 import { WeaponGenerationService } from "./weapon-generation.service";
 import { CampaignGenerationService } from "./campaign-generation.service";
-import { CampaignProposalRequestGate } from "./campaign-proposal-request-gate";
+import { GenerationAuditService } from "./generation-audit.service";
+import { PaidAiRequestGate } from "./paid-ai-request-gate";
+import { WorldDefinitionsModule } from "../world-definitions/world-definitions.module";
+import { ModelRegistryModule } from "../model-registry/model-registry.module";
+import { WorldDraftProposalService } from "./world-draft-proposal.service";
 
 @Module({
-  imports: [DomainModule, MediaModule],
+  imports: [DomainModule, MediaModule, WorldDefinitionsModule, ModelRegistryModule],
   controllers: [AiController],
   providers: [
     AiPromptService,
@@ -34,7 +38,9 @@ import { CampaignProposalRequestGate } from "./campaign-proposal-request-gate";
     ContentPipeline,
     WorldGenerationService,
     CampaignGenerationService,
-    CampaignProposalRequestGate,
+    GenerationAuditService,
+    PaidAiRequestGate,
+    WorldDraftProposalService,
   ],
   exports: [OpenAiService],
 })

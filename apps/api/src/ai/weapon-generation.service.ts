@@ -61,7 +61,7 @@ export class WeaponGenerationService {
         this.logger,
         "create-weapon",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

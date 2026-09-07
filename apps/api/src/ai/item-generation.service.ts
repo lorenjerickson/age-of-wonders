@@ -61,7 +61,7 @@ export class ItemGenerationService {
         this.logger,
         "create-item",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

@@ -89,7 +89,7 @@ export class CreatureGenerationService {
         this.logger,
         "create-creature",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

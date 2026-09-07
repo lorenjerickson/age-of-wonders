@@ -50,7 +50,7 @@ export class WorldGenerationService {
         this.logger,
         "create-world",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

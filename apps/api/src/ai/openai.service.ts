@@ -1,4 +1,9 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  GatewayTimeoutException,
+  Injectable,
+  RequestTimeoutException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import OpenAI from "openai";
 import { HostedConfigurationService } from "../settings/hosted-configuration.service";
 
@@ -6,7 +11,12 @@ interface RespondInput {
   input: string;
   instructions?: string;
   maxOutputTokens?: number;
+  deadlineMs?: number;
+  signal?: AbortSignal;
 }
+
+const DEFAULT_PROVIDER_DEADLINE_MS = 60_000;
+const MAX_PROVIDER_DEADLINE_MS = 120_000;
 
 export interface GeneratedImage {
   buffer: Buffer;
@@ -25,7 +35,8 @@ export interface GenerateImageOptions {
 export class OpenAiService {
   constructor(private readonly configuration: HostedConfigurationService) {}
 
-  async respond({ input, instructions, maxOutputTokens }: RespondInput) {
+  async respond(request: RespondInput) {
+    const { input, instructions, maxOutputTokens, deadlineMs, signal } = request;
     const { client, model } = await this.connection();
     if (!client) {
       throw new ServiceUnavailableException(
@@ -33,14 +44,25 @@ export class OpenAiService {
       );
     }
 
-    const response = await client.responses.create({
-      model,
-      input,
-      instructions,
-      max_output_tokens: maxOutputTokens ?? 8_000,
-    });
-
-    return { output: response.output_text, responseId: response.id, model };
+    const boundary = providerBoundary(signal, deadlineMs);
+    try {
+      boundary.rethrowIfAborted();
+      const response = await client.responses.create(
+        {
+          model,
+          input,
+          instructions,
+          max_output_tokens: maxOutputTokens ?? 8_000,
+        },
+        { signal: boundary.signal },
+      );
+      return { output: response.output_text, responseId: response.id, model };
+    } catch (error) {
+      boundary.rethrowIfAborted();
+      throw error;
+    } finally {
+      boundary.dispose();
+    }
   }
 
   async generateImage(
@@ -94,6 +116,54 @@ export class OpenAiService {
       this.configuration.openAiApiKey(),
       this.configuration.openAiModel(),
     ]);
-    return { client: apiKey ? new OpenAI({ apiKey }) : null, model };
+    return {
+      client: apiKey
+        ? new OpenAI({
+            apiKey,
+            maxRetries: 0,
+            timeout: MAX_PROVIDER_DEADLINE_MS,
+          })
+        : null,
+      model,
+    };
   }
+}
+
+function providerBoundary(callerSignal?: AbortSignal, requestedDeadline?: number) {
+  const deadlineMs =
+    requestedDeadline === undefined
+      ? DEFAULT_PROVIDER_DEADLINE_MS
+      : requestedDeadline;
+  if (
+    !Number.isInteger(deadlineMs) ||
+    deadlineMs < 1 ||
+    deadlineMs > MAX_PROVIDER_DEADLINE_MS
+  ) {
+    throw new RangeError("AI provider deadline is outside the supported range.");
+  }
+  const controller = new AbortController();
+  let timedOut = false;
+  const cancel = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) cancel();
+  else callerSignal?.addEventListener("abort", cancel, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, deadlineMs);
+  return {
+    signal: controller.signal,
+    dispose() {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener("abort", cancel);
+    },
+    rethrowIfAborted() {
+      if (!controller.signal.aborted) return;
+      if (timedOut) {
+        throw new GatewayTimeoutException(
+          "The AI provider did not respond before the request deadline.",
+        );
+      }
+      throw new RequestTimeoutException("The AI request was cancelled.");
+    },
+  };
 }

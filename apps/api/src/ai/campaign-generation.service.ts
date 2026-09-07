@@ -157,7 +157,7 @@ export class CampaignGenerationService {
         this.logger,
         "create-campaign",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

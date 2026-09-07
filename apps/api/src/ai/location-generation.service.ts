@@ -63,7 +63,7 @@ export class LocationGenerationService {
         this.logger,
         "create-location",
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }

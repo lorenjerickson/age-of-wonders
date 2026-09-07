@@ -166,6 +166,56 @@ Plot and placement references, preparation defaults, extensions, and exact Campa
 Campaign releases layer over the exact releases in that World capture; neither revision resolves a
 mutable upstream authoring head.
 
+Manual World authoring uses canonical source records declared in
+`packages/common/src/types/world-authoring.ts`. `WorldLocationDefinition` is the immutable source
+Location captured by a World revision; it has server-owned versioned identity, human name and
+description, open Location kind, containment placement, a human profile with discovery tags, and
+optional map/scene notes and orientation. Unedited map, scene, weather, effect, and extension data
+is retained when the exposed fields are revised. It is not mutable Campaign Instance state.
+`WorldCreatureDefinition` is the reusable captured source for independent runtime Creature
+embodiments; it uses the common `Definition` identity/components envelope, exact Model conformance,
+model-governed Attribute values and Equipment Slots, optional art direction and captured image
+references, movement modes, references to World Skill and Profession Definitions, progressive
+mechanics notes, and an explicit Instance embodiment policy.
+`WorldItemDefinition` is the reusable captured source for Item Instances and placements. It composes
+the canonical `ItemDefinition` without defining a parallel Item shape: its identity, category,
+construction quality, Equipment Slot compatibility, and required catalog image use the existing
+`Definition`/`ItemComponents`/`ItemImage` contracts. World-specific governance adds exact Model
+conformance and records the selected Item family in `modelValues["aow:item-family"]`. These source
+definitions are distinct from mutable `CreatureState` and `ItemInstance` runtime aggregates. Item
+slot compatibility is stored as alternative complete slot sets, so a single alternative may require
+multiple slots; editing the exposed fields preserves all other canonical Item mechanics.
+When an ordinary Item edit canonicalizes a recovered noncanonical Item, the exact prior payload and
+captured source revision are retained as
+`extensions["aow:legacy-item"] = { resourceType: "definitions", sourceRevision?, payload }`, so
+creative legacy data remains available for audit and later refinement. `payload` is the unmodified
+pre-edit value; `sourceRevision` is omitted only when the captured record did not have one.
+
+New manual source records are created or updated through nested World draft Location, Creature,
+and Item commands. Each command requires the exact draft storage revision; the server owns record
+identity, preserves stable identity on update, binds Creature and Item records to the effective
+Model release/concept, transforms the complete draft, and advances it with optimistic concurrency.
+Initial World creation accepts only World metadata and always creates the canonical server-owned
+root draft; callers cannot inject draft content or records into that operation. The browser never
+supplies a record ID or Model conformance. Legacy snapshot records remain
+readable for migration and history. New manual commands emit canonical records, and editing a
+legacy Creature or Item through those commands upgrades that record to the canonical envelope;
+arbitrary bounded JSON is never accepted as a new Location, Creature, or Item.
+
+AI-assisted World authoring is proposal-only. Location, Creature, and Item proposal commands are
+nested beneath an owned working World draft and require its exact storage revision. The server
+derives the draft context, parent Location, effective Model releases, concepts, Attribute keys,
+Equipment Slot keys, and Item family keys; generated output cannot supply identity or conformance.
+The proposal is normalized into the corresponding manual command fields and validated against an
+in-memory candidate, but it does not mutate the draft. The GM edits and explicitly applies it via
+the existing manual command. Item proposals contain textual fields only: a real square catalog
+image and accessible description must be supplied by the GM before apply, and proposal creation
+does not render, upload, reserve, or claim a media asset. Item Equipment Slot compatibility uses
+alternative complete slot sets. Creature Skill and Profession reference fields remain absent from
+AI output so the GM chooses named definitions in the editor instead of accepting invented opaque IDs.
+Provider requests use the small, kind-specific `world-draft-proposal.md` contract plus bounded
+World summaries; they never append this complete architecture guide.
+
 Snapshots contain complete, content-addressed replicas rather than live pointers:
 
 ```ts
@@ -392,10 +442,12 @@ topology, contact-encryption root material, database/object-storage credentials,
 infrastructure-sensitive values remain deployment-managed in this slice.
 
 New `Generation` rows record the authenticated requester plus a bounded context kind and context
-identity when the command has one. Generation history remains requester-scoped and returns only
-bounded output previews; provider response identities, prompts, complete outputs, and opaque
-context identities are not UI labels. Context-free generation and legacy root-Location AI routes
-have been removed; they are not canonical aggregate authoring operations.
+identity when the command has one. Raw prompts and generated outputs are not passed to audit
+persistence or retained: legacy required content columns receive an explicit redaction marker. Generation history remains
+requester-scoped and returns metadata with `contentRetained: false`; prompts, outputs, provider
+response identities, Generation identities, and opaque context identities are not projected. Context-free generation and
+legacy root-Location AI routes have been removed; they are not canonical aggregate authoring
+operations.
 
 `MediaAsset` records may carry creator and aggregate-scope provenance. New canonical World uploads
 use `/worlds/:worldId/media`, validate World ownership before retaining metadata, and record the
@@ -644,6 +696,29 @@ dependents, and explicitly retains resources whose target aggregate is deferred;
 drops an unclassified record. Revision content hashes are computed from the exact JSON persisted in
 the revision row, while every proposed snapshot uses the same canonical `SnapshotManifest` hash
 contract as live publication.
+
+Recovery also creates one editable draft beside each recovered World and Campaign lineage. These
+drafts preserve the exact immutable legacy captures while projecting usable current authoring
+content. Legacy Campaign discoveries, objectives, pressures, and resistances are surfaced in a
+visible recovered root Plot; legacy Campaign placements become named placement records. A retained
+legacy Session is materialized as a relational `CampaignInstanceSession` with its human name,
+timestamps, lifecycle, and exact source payload preserved in a recovery extension. The legacy row
+remains unchanged, and its identity map targets the recovered Session rather than a deferred
+rebinding. Recovered editable Worlds select only the materialized core Model release and initially
+declare no unverified legacy Definitions; recovered Campaign drafts add no Campaign-specific Model
+release. Original legacy Definition membership and World/Campaign Model release selections remain
+losslessly available in the namespaced recovery metadata, and every raw legacy record remains in
+the draft capture for explicit later upgrade.
+
+The generic whole-World-draft save operation cannot add, update, remove, or change membership for
+Location, Creature, or Item records. Those protected resources use dedicated authoring operations,
+which retain optimistic draft revision checks and enforce Item media ownership and exact World
+scope. Validation and publication recheck declared canonical Item media, so a raw draft payload
+cannot bypass authorization and a previously authorized asset cannot be published after its scope
+changes. A legacy `creatures` record remains visible until the GM explicitly upgrades it; that
+single atomic operation retains its stable identity and references, preserves the exact legacy
+payload in an extension, replaces the legacy record with a canonical Creature `definitions` record,
+and adds canonical Definition membership.
 
 Shadow application is idempotent only when an existing deterministic row is field-equivalent to the
 plan. A duplicate identity with different content aborts the transaction instead of being hidden by

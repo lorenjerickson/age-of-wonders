@@ -294,7 +294,7 @@ export class ArmorGenerationService {
         this.logger,
         `create-armor:${slot}`,
         result.responseId,
-        result.output,
+        result.output.length,
       );
       throw error;
     }
