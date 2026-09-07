@@ -96,10 +96,10 @@ export function worldNavigationForPath(
       label: "Characters",
       href: `${base}/characters`,
       children: [
-        { label: "Skills", note: "Advanced models" },
-        { label: "Professions", note: "Advanced models" },
-        { label: "Backgrounds & heritages", note: "Advanced models" },
-        { label: "Models & taxonomies", href: `${base}/characters` },
+        { label: "Skills", href: `${base}/characters/skills` },
+        { label: "Professions", href: `${base}/characters/professions` },
+        { label: "Backgrounds", href: `${base}/characters/backgrounds` },
+        { label: "Models & taxonomies", href: `${base}/characters/models` },
       ],
     },
     {

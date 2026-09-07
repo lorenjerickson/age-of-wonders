@@ -1,10 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { CharacterModelsPage } from "../WorldAuthoringPages";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId/characters")({
   component: WorldCharactersLanding,
 });
 
 function WorldCharactersLanding() {
-  return <CharacterModelsPage />;
+  return <Outlet />;
 }

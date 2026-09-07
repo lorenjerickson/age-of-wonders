@@ -672,6 +672,9 @@ export class ModelRegistryService {
       equipmentSlots: elements.filter(
         (element) => element.semanticRole === "aow:equipment-slot",
       ),
+      professionRanks: elements.filter(
+        (element) => element.semanticRole === "aow:profession-rank",
+      ),
       elements,
     };
   }

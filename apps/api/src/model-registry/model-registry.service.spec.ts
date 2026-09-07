@@ -281,6 +281,11 @@ describe("ModelRegistryService", () => {
       (element) => element.currentRevision.presentation.label === "Pack",
     );
     expect(pack).toBeDefined();
+    expect(
+      result.professionRanks.map(
+        (element) => element.currentRevision.presentation.label,
+      ),
+    ).toContain("Novice");
   });
 
   it("resolves Campaign models across global, captured World, and exact Campaign scopes", () => {

@@ -1,5 +1,5 @@
-import type { NumericExpression } from './dice';
-import type { Predicate } from './expressions';
+import type { NumericExpression } from "./dice";
+import type { Predicate } from "./expressions";
 import type {
   Definition,
   DefinitionId,
@@ -7,26 +7,23 @@ import type {
   EventId,
   ExtensionData,
   JsonValue,
-} from './primitives';
-import type { ChoiceDefinition, RuleModifier, UsageLimit } from './rules';
+  NamespacedKey,
+} from "./primitives";
+import type { ChoiceDefinition, RuleModifier, UsageLimit } from "./rules";
 
-export type StandardProfessionExpertise =
-  | 'unskilled'
-  | 'novice'
-  | 'apprentice'
-  | 'journeyman'
-  | 'tradesman'
-  | 'master'
-  | 'grandmaster';
+/** Stable key of a Profession Rank option in the applicable captured Model Schema. */
+export type ProfessionExpertise = NamespacedKey;
 
-export type ProfessionAcquisitionRule<Tier extends string = StandardProfessionExpertise> =
+export type ProfessionAcquisitionRule<
+  Tier extends string = ProfessionExpertise,
+> =
   | {
-      readonly kind: 'character-creation';
+      readonly kind: "character-creation";
       readonly startingExpertise: Tier;
       readonly choices?: readonly ChoiceDefinition[];
     }
   | {
-      readonly kind: 'during-play';
+      readonly kind: "during-play";
       readonly prerequisites?: readonly Predicate[];
       readonly trainingDuration?: Duration;
       readonly trainingActionId?: DefinitionId;
@@ -35,17 +32,17 @@ export type ProfessionAcquisitionRule<Tier extends string = StandardProfessionEx
 
 /** Controls when points may be spent to enter an expertise tier. */
 export type ProfessionAdvancementWindow =
-  | { readonly kind: 'any-time' }
-  | { readonly kind: 'minimum-character-level'; readonly level: number }
-  | { readonly kind: 'character-levels'; readonly levels: readonly number[] }
+  | { readonly kind: "any-time" }
+  | { readonly kind: "minimum-character-level"; readonly level: number }
+  | { readonly kind: "character-levels"; readonly levels: readonly number[] }
   | {
-      readonly kind: 'character-level-interval';
+      readonly kind: "character-level-interval";
       readonly firstLevel: number;
       readonly everyLevels: number;
       readonly finalLevel?: number;
     }
-  | { readonly kind: 'milestone'; readonly milestone: string }
-  | { readonly kind: 'custom'; readonly predicate: Predicate };
+  | { readonly kind: "milestone"; readonly milestone: string }
+  | { readonly kind: "custom"; readonly predicate: Predicate };
 
 export interface ProfessionTierBenefits {
   /** Persistent attribute, statistic, proficiency, or other rule modifiers. */
@@ -54,7 +51,9 @@ export interface ProfessionTierBenefits {
   readonly resourceMaximums?: Readonly<Record<string, NumericExpression>>;
 }
 
-export interface ProfessionExpertiseLevel<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionExpertiseLevel<
+  Tier extends string = ProfessionExpertise,
+> {
   readonly tier: Tier;
   readonly rank: number;
   /** Omitted only for the initial tier. */
@@ -64,7 +63,9 @@ export interface ProfessionExpertiseLevel<Tier extends string = StandardProfessi
   readonly benefits: ProfessionTierBenefits;
 }
 
-export interface ProfessionActionImprovement<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionActionImprovement<
+  Tier extends string = ProfessionExpertise,
+> {
   readonly atExpertise: Tier;
   /** Modifiers target paths within the referenced action's compiled resolution. */
   readonly modifiers?: readonly RuleModifier[];
@@ -73,7 +74,9 @@ export interface ProfessionActionImprovement<Tier extends string = StandardProfe
   readonly description?: string;
 }
 
-export interface ProfessionActionProgression<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionActionProgression<
+  Tier extends string = ProfessionExpertise,
+> {
   readonly actionId: DefinitionId;
   readonly unlocksAt: Tier;
   readonly advancementPointsOnUse: NumericExpression;
@@ -82,7 +85,9 @@ export interface ProfessionActionProgression<Tier extends string = StandardProfe
   readonly improvements?: readonly ProfessionActionImprovement<Tier>[];
 }
 
-export interface ProfessionComponents<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionComponents<
+  Tier extends string = ProfessionExpertise,
+> {
   /** Lowest to highest; each tier must appear exactly once. */
   readonly expertiseOrder: readonly Tier[];
   readonly expertiseLevels: readonly ProfessionExpertiseLevel<Tier>[];
@@ -94,12 +99,12 @@ export interface ProfessionComponents<Tier extends string = StandardProfessionEx
 }
 
 export type ProfessionDefinition<
-  Tier extends string = StandardProfessionExpertise,
+  Tier extends string = ProfessionExpertise,
   Extensions extends ExtensionData = ExtensionData,
-> = Definition<'profession', ProfessionComponents<Tier>, Extensions>;
+> = Definition<"profession", ProfessionComponents<Tier>, Extensions>;
 
 export interface ProfessionAcquisitionState {
-  readonly kind: 'character-creation' | 'during-play';
+  readonly kind: "character-creation" | "during-play";
   readonly acquiredAtCharacterLevel: number;
   readonly acquiredAt?: string;
   readonly sourceDefinitionId?: DefinitionId;
@@ -113,7 +118,9 @@ export interface ProfessionAdvancementAward {
   readonly awardedAt: string;
 }
 
-export interface ProfessionAdvancementSpend<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionAdvancementSpend<
+  Tier extends string = ProfessionExpertise,
+> {
   readonly eventId: EventId;
   readonly fromExpertise: Tier;
   readonly toExpertise: Tier;
@@ -122,7 +129,9 @@ export interface ProfessionAdvancementSpend<Tier extends string = StandardProfes
   readonly spentAt: string;
 }
 
-export interface ProfessionAdvancementState<Tier extends string = StandardProfessionExpertise> {
+export interface ProfessionAdvancementState<
+  Tier extends string = ProfessionExpertise,
+> {
   readonly availablePoints: number;
   readonly lifetimePointsEarned: number;
   readonly lifetimePointsSpent: number;
@@ -131,8 +140,10 @@ export interface ProfessionAdvancementState<Tier extends string = StandardProfes
 }
 
 export interface CharacterProfessionState<
-  Tier extends string = StandardProfessionExpertise,
-  CustomState extends Readonly<Record<string, JsonValue>> = Readonly<Record<string, JsonValue>>,
+  Tier extends string = ProfessionExpertise,
+  CustomState extends Readonly<Record<string, JsonValue>> = Readonly<
+    Record<string, JsonValue>
+  >,
 > {
   readonly professionId: DefinitionId;
   readonly expertise: Tier;

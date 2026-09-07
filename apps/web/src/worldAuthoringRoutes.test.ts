@@ -23,6 +23,22 @@ describe("World authoring route architecture", () => {
       "/_gm/worlds/$worldId/item-compendium/items/$itemId",
     ],
     [
+      "/worlds/world-id/characters/skills",
+      "/_gm/worlds/$worldId/characters/$definitionKind/",
+    ],
+    [
+      "/worlds/world-id/characters/professions/new",
+      "/_gm/worlds/$worldId/characters/$definitionKind/$definitionId",
+    ],
+    [
+      "/worlds/world-id/characters/models",
+      "/_gm/worlds/$worldId/characters/models",
+    ],
+    [
+      "/worlds/world-id/characters/model/profession-ranks/effective",
+      "/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId",
+    ],
+    [
       "/worlds/world-id/versions/draft/review",
       "/_gm/worlds/$worldId/versions/draft/review",
     ],

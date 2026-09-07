@@ -919,17 +919,17 @@ export function assertGovernedRecordConformance(
       record.resourceType,
       record.payload,
     );
-    const expectedRole = definitionType === "creature"
-      ? "aow:creature"
-      : definitionType === "item"
-        ? "aow:item"
-        : record.resourceType === "world-placements"
-          ? "aow:world-placement"
-          : undefined;
+    const expectedRole = definitionType
+      ? `aow:${definitionType}`
+      : record.resourceType === "world-placements"
+        ? "aow:world-placement"
+        : undefined;
     const matchingConcepts = expectedRole
-      ? elements.filter((element) =>
-          element.lineage.kind === "concept" &&
-          element.lineage.semanticRole === expectedRole)
+      ? elements.filter(
+          (element) =>
+            element.lineage.kind === "concept" &&
+            element.lineage.semanticRole === expectedRole,
+        )
       : [];
     if (!isObject(conformance)) {
       if (hasGovernedValues || definitionType || matchingConcepts.length > 0)
@@ -959,8 +959,9 @@ export function assertGovernedRecordConformance(
     if (expectedRole) {
       if (
         matchingConcepts.length === 0 ||
-        !matchingConcepts.some(({ lineage }) =>
-          conformance.conceptId === lineage.id)
+        !matchingConcepts.some(
+          ({ lineage }) => conformance.conceptId === lineage.id,
+        )
       ) {
         throw new BadRequestException(
           "A governed authored resource uses the wrong Model concept.",
@@ -995,14 +996,66 @@ export function assertGovernedRecordConformance(
         );
       }
     }
+    if (definitionType === "skill") {
+      const components = isObject(record.payload.components)
+        ? record.payload.components
+        : {};
+      const defaultAttribute = components.defaultAttribute;
+      if (
+        defaultAttribute !== undefined &&
+        (typeof defaultAttribute !== "string" ||
+          byKey.get(defaultAttribute)?.lineage.semanticRole !== "aow:attribute")
+      )
+        throw new BadRequestException(
+          "A Skill Definition must select an available default Attribute.",
+        );
+    }
+    if (definitionType === "profession") {
+      const components = isObject(record.payload.components)
+        ? record.payload.components
+        : {};
+      const ranks = arrayValue(components.expertiseOrder);
+      const rankReferences = [...ranks];
+      for (const level of arrayValue(components.expertiseLevels))
+        if (isObject(level)) rankReferences.push(level.tier);
+      for (const rule of arrayValue(components.acquisition))
+        if (isObject(rule)) rankReferences.push(rule.startingExpertise);
+      for (const action of arrayValue(components.actions)) {
+        if (!isObject(action)) continue;
+        rankReferences.push(action.unlocksAt);
+        for (const improvement of arrayValue(action.improvements))
+          if (isObject(improvement))
+            rankReferences.push(improvement.atExpertise);
+      }
+      if (
+        ranks.length === 0 ||
+        rankReferences.some(
+          (rank) =>
+            typeof rank !== "string" ||
+            byKey.get(rank)?.lineage.semanticRole !== "aow:profession-rank",
+        )
+      )
+        throw new BadRequestException(
+          "A Profession Definition must select available Profession Ranks.",
+        );
+    }
   }
+}
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 function governedDefinitionKind(
   resourceType: string,
   payload: Record<string, unknown>,
-): "creature" | "item" | undefined {
+): "creature" | "item" | "skill" | "profession" | "background" | undefined {
   if (resourceType !== "definitions") return undefined;
-  if (payload.kind === "creature" || payload.kind === "item")
+  if (
+    payload.kind === "creature" ||
+    payload.kind === "item" ||
+    payload.kind === "skill" ||
+    payload.kind === "profession" ||
+    payload.kind === "background"
+  )
     return payload.kind;
   // Explicit compatibility for records written before Definition.kind became authoritative.
   if (

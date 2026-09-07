@@ -17,7 +17,9 @@ import {
   mergeSavedDraft,
   modelExtensionKey,
   projectEffectiveModels,
+  recordDescription,
   recordKey,
+  recordName,
   recordsForLibrary,
   recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
@@ -94,6 +96,18 @@ describe("World authoring projection", () => {
         record("creatures", "same", { name: "Dragon" }),
       ),
     ).toHaveLength(2);
+  });
+
+  it("uses nested Definition identity for human-facing labels", () => {
+    const skill = record("definitions", "opaque-skill-id", {
+      kind: "skill",
+      identity: {
+        name: "Courtly Grace",
+        description: "Navigating a formal court.",
+      },
+    });
+    expect(recordName(skill, "Unnamed Skill")).toBe("Courtly Grace");
+    expect(recordDescription(skill)).toBe("Navigating a formal court.");
   });
 
   it("lets the server seed a valid new World baseline", () => {
@@ -278,6 +292,7 @@ describe("World authoring projection", () => {
         ],
         attributes: [vocabulary, element],
         equipmentSlots: [],
+        professionRanks: [],
         elements: [vocabulary, element],
       }),
     ).toEqual({
@@ -296,6 +311,7 @@ describe("World authoring projection", () => {
         },
       ],
       equipmentSlots: [],
+      professionRanks: [],
       itemFamilies: [],
       elements: [
         {
@@ -362,16 +378,25 @@ describe("World authoring projection", () => {
       "Wings",
       "aow:equipment-slot",
     );
+    const initiate = make(
+      "custom:profession-rank-initiate",
+      "Initiate",
+      "aow:profession-rank",
+    );
     const projected = projectEffectiveModels({
       releases: [],
       attributes: [likeable],
       equipmentSlots: [wings],
-      elements: [likeable, wings],
+      professionRanks: [initiate],
+      elements: [likeable, wings, initiate],
     });
     expect(effectiveModelOptions(projected)).toEqual({
       attributes: ["Likeable"],
       equipmentSlots: ["Wings"],
     });
+    expect(projected.professionRanks?.map(({ name }) => name)).toEqual([
+      "Initiate",
+    ]);
   });
 
   it("replaces an exact selected release when adopting an immutable extension", () => {
@@ -433,6 +458,9 @@ describe("World authoring projection", () => {
     );
     expect(modelExtensionKey("equipment-slots", "Wings")).toBe(
       "custom:equipment-slot-wings",
+    );
+    expect(modelExtensionKey("profession-ranks", "Initiate")).toBe(
+      "custom:profession-rank-initiate",
     );
   });
 
@@ -505,7 +533,13 @@ describe("World authoring projection", () => {
           },
         }),
         record("locations", "root", { placement: { kind: "root" } }),
-        record("definitions", "skill", { definitionType: "skill" }),
+        record("definitions", "skill", {
+          kind: "skill",
+          conformance: {
+            modelSchemaReleaseIds: ["core"],
+            conceptId: "skill-concept",
+          },
+        }),
       ],
     } satisfies WorldDefinitionDraft;
     const adopted = draftAdoptingRegistryRelease(
@@ -529,8 +563,13 @@ describe("World authoring projection", () => {
       ),
     ).toEqual([["custom-1"], ["custom-1"]]);
     expect(adopted?.records[2]).toEqual(draft.records[2]);
-    expect(adopted?.records[3]).toEqual(draft.records[3]);
-    expect(adopted?.records[3].payload).not.toHaveProperty("conformance");
+    expect(
+      (
+        adopted?.records[3].payload as {
+          conformance: { modelSchemaReleaseIds: string[] };
+        }
+      ).conformance.modelSchemaReleaseIds,
+    ).toEqual(["custom-1"]);
   });
 
   it("recovers an unadopted direct successor without extending the Registry again", () => {
@@ -612,6 +651,12 @@ describe("World authoring projection", () => {
             semanticRole: "aow:creature",
             elementId: "creature-concept",
           },
+          {
+            key: "aow:profession",
+            name: "Profession",
+            semanticRole: "aow:profession",
+            elementId: "profession-concept",
+          },
         ],
       },
     } satisfies WorldDefinitionDraft;
@@ -620,6 +665,10 @@ describe("World authoring projection", () => {
       conceptId: "creature-concept",
     });
     expect(definitionConformance(draft, "item")).toBeUndefined();
+    expect(definitionConformance(draft, "profession")).toEqual({
+      modelSchemaReleaseIds: ["selected-release"],
+      conceptId: "profession-concept",
+    });
   });
 
   it("derives numeric Attribute controls from registered metadata", () => {

@@ -28,6 +28,7 @@ import {
   publishWorldDefinitionDraft,
   validateWorldDefinitionDraft,
   type ModelRegistrySummary,
+  type JsonValue,
   type WorldModelOption,
   type WorldDraftImpact,
   type WorldDraftRecord,
@@ -47,6 +48,7 @@ import {
   locationParentOptions,
   modelExtensionKey,
   recordName,
+  recordDescription,
   recordPayload,
   recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
@@ -58,6 +60,11 @@ import {
 } from "./worldAuthoringModel";
 import type { ReadSection } from "./server/readModels";
 import { safeDateLabel } from "./worldDefinitionModel";
+import {
+  characterOptionDefinition,
+  characterOptionKey,
+  type CharacterOptionKind,
+} from "./characterOptionModel";
 
 const objectValue = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -616,9 +623,7 @@ function CardGrid({
               {recordName(record, "Unnamed record")}
             </h2>
             <p className="line-clamp-2 text-sm text-base-content/55">
-              {String(
-                recordPayload(record).description ?? "No description yet.",
-              )}
+              {recordDescription(record) ?? "No description yet."}
             </p>
           </div>
         </InternalLink>
@@ -1459,6 +1464,296 @@ function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
   );
 }
 
+export function CharactersPage() {
+  const { definition, draft } = useWorldAuthoring();
+  const base = `/worlds/${encodeURIComponent(definition.id)}/characters`;
+  const names = (kind: Exclude<CharacterOptionKind, "heritage">) =>
+    (draft?.records ?? [])
+      .filter(
+        (record) =>
+          record.resourceType === "definitions" &&
+          recordPayload(record).kind === kind,
+      )
+      .map((record) => recordName(record, "Unnamed option"));
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
+      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+        World authoring
+      </p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Characters</h1>
+      <p className="mt-4 max-w-3xl text-base-content/65">
+        Author the choices that shape Characters. Open model structure only when
+        you need to change the vocabulary behind these editors.
+      </p>
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <ModelCard
+          title="Skills"
+          values={names("skill")}
+          emptyLabel="No Skills have been authored yet."
+          href={`${base}/skills`}
+        />
+        <ModelCard
+          title="Professions"
+          values={names("profession")}
+          emptyLabel="No Professions have been authored yet."
+          href={`${base}/professions`}
+        />
+        <ModelCard
+          title="Backgrounds"
+          values={names("background")}
+          emptyLabel="No Backgrounds have been authored yet."
+          href={`${base}/backgrounds`}
+        />
+        <ModelCard
+          title="Models & Taxonomies"
+          values={[]}
+          emptyLabel="Open the structural vocabularies behind Characters."
+          href={`${base}/models`}
+        />
+      </div>
+    </main>
+  );
+}
+
+export function CharacterDefinitionsPage({
+  kind,
+}: {
+  kind: Exclude<CharacterOptionKind, "heritage">;
+}) {
+  const { definition, draft } = useWorldAuthoring();
+  const segment = `${kind}s`;
+  const title =
+    kind === "skill"
+      ? "Skills"
+      : kind === "profession"
+        ? "Professions"
+        : "Backgrounds";
+  const records = (draft?.records ?? []).filter(
+    (record) =>
+      record.resourceType === "definitions" &&
+      recordPayload(record).kind === kind,
+  );
+  const base = `/worlds/${encodeURIComponent(definition.id)}/characters/${segment}`;
+  return (
+    <LibraryPage
+      eyebrow="Characters"
+      title={title}
+      description={`Create and revise ${title.toLocaleLowerCase()} within this World Definition.`}
+      createHref={`${base}/new`}
+    >
+      {records.length ? (
+        <CardGrid
+          records={records}
+          href={(record) => `${base}/${encodeURIComponent(record.sourceId)}`}
+        />
+      ) : (
+        <Empty
+          label={`No ${title.toLocaleLowerCase()} have been authored yet.`}
+        />
+      )}
+    </LibraryPage>
+  );
+}
+
+export function CharacterDefinitionEditor({
+  kind,
+  sourceId,
+}: {
+  kind: Exclude<CharacterOptionKind, "heritage">;
+  sourceId?: string;
+}) {
+  const { definition, draft, saveRecord, canEdit, markDirty } =
+    useWorldAuthoring();
+  const navigate = useInternalNavigate();
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
+  const existing = (draft?.records ?? []).find(
+    (record) =>
+      record.resourceType === "definitions" &&
+      record.sourceId === sourceId &&
+      recordPayload(record).kind === kind,
+  );
+  const initial = recordPayload(
+    existing ?? { resourceType: "definitions", sourceId: "new", payload: {} },
+  );
+  const identity = objectValue(initial.identity);
+  const components = objectValue(initial.components);
+  const [name, setName] = useState(String(identity.name ?? ""));
+  const [description, setDescription] = useState(
+    String(identity.description ?? ""),
+  );
+  const [defaultAttribute, setDefaultAttribute] = useState(
+    String(components.defaultAttribute ?? ""),
+  );
+  const initialRanks = Array.isArray(components.expertiseOrder)
+    ? components.expertiseOrder
+    : [];
+  const [startingProfessionRank, setStartingProfessionRank] = useState(
+    typeof initialRanks[0] === "string"
+      ? initialRanks[0]
+      : (draft?.effectiveModels?.professionRanks?.[0]?.key ?? ""),
+  );
+  const conformance = draft ? definitionConformance(draft, kind) : undefined;
+  const snapshot = JSON.stringify({
+    name,
+    description,
+    defaultAttribute,
+    startingProfessionRank,
+  });
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const dirty = snapshot !== savedSnapshot;
+  useBlocker({
+    shouldBlockFn: () =>
+      dirty && !window.confirm("Leave without saving this Character option?"),
+    enableBeforeUnload: dirty,
+  });
+  useEffect(() => {
+    if (dirty) markDirty();
+  }, [dirty, markDirty]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!draft || !name.trim() || !conformance) return;
+    const id = existing?.sourceId ?? crypto.randomUUID();
+    const generated = characterOptionDefinition({
+      kind,
+      id,
+      key:
+        typeof identity.key === "string"
+          ? identity.key
+          : characterOptionKey(kind, name),
+      worldId: definition.id,
+      name: name.trim(),
+      description: description.trim(),
+      defaultAttribute: defaultAttribute || undefined,
+      startingProfessionRank: startingProfessionRank || undefined,
+      existingComponents: components as Record<string, JsonValue>,
+    });
+    const didSave = await saveRecord({
+      resourceType: "definitions",
+      sourceId: id,
+      payload: {
+        ...initial,
+        ...generated,
+        identity: { ...identity, ...generated.identity },
+        components: generated.components,
+        conformance,
+      },
+    });
+    if (!didSave) return;
+    setSavedSnapshot(snapshot);
+    if (!existing) {
+      await navigate(
+        `/worlds/${encodeURIComponent(definition.id)}/characters/${kind}s/${encodeURIComponent(id)}${guideSuffix}`,
+        { replace: true },
+      );
+    }
+  }
+
+  const title =
+    kind === "skill"
+      ? "Skill"
+      : kind === "profession"
+        ? "Profession"
+        : "Background";
+  if (!canEdit)
+    return (
+      <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
+        <h1 className="text-4xl font-semibold">{name || title}</h1>
+        <Alert tone="warning" className="mt-8">
+          This World is read only. Restore it or refresh its draft before
+          editing Character options.
+        </Alert>
+      </main>
+    );
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
+      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+        Characters · {title}s
+      </p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight">
+        {existing ? `Edit ${title}` : `Create ${title}`}
+      </h1>
+      {!conformance && (
+        <Alert tone="warning" className="mt-6">
+          The effective {title} model is unavailable. Select a complete Model
+          release before saving.
+        </Alert>
+      )}
+      <DraftRequired>
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="mt-8 grid gap-5"
+        >
+          <Field label="Name" required>
+            <Input
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-2 w-full"
+            />
+          </Field>
+          <Field label="Description">
+            <Textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={5}
+              className="mt-2 w-full"
+            />
+          </Field>
+          {kind === "skill" && (
+            <Field label="Default Attribute">
+              <Select
+                value={defaultAttribute}
+                onChange={(event) => setDefaultAttribute(event.target.value)}
+                className="mt-2 w-full"
+              >
+                <option value="">No default Attribute</option>
+                {(draft?.effectiveModels?.attributes ?? []).map((attribute) => (
+                  <option key={attribute.key} value={attribute.key}>
+                    {attribute.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {kind === "profession" && (
+            <Field label="Starting Profession Rank" required>
+              <Select
+                required
+                value={startingProfessionRank}
+                onChange={(event) =>
+                  setStartingProfessionRank(event.target.value)
+                }
+                className="mt-2 w-full"
+              >
+                <option value="" disabled>
+                  Choose a Profession Rank
+                </option>
+                {(draft?.effectiveModels?.professionRanks ?? []).map((rank) => (
+                  <option key={rank.key} value={rank.key}>
+                    {rank.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Button
+            type="submit"
+            tone="primary"
+            disabled={
+              !conformance ||
+              !name.trim() ||
+              (kind === "profession" && !startingProfessionRank)
+            }
+          >
+            Save {title}
+          </Button>
+        </form>
+      </DraftRequired>
+    </main>
+  );
+}
+
 export function CharacterModelsPage() {
   const { definition, draft } = useWorldAuthoring();
   const models = draft?.effectiveModels;
@@ -1487,6 +1782,11 @@ export function CharacterModelsPage() {
           values={models?.equipmentSlots.map(({ name }) => name) ?? []}
           href={`${base}/equipment-slots/effective`}
         />
+        <ModelCard
+          title="Profession Ranks"
+          values={models?.professionRanks?.map(({ name }) => name) ?? []}
+          href={`${base}/profession-ranks/effective`}
+        />
       </div>
     </main>
   );
@@ -1495,10 +1795,12 @@ function ModelCard({
   title,
   values,
   href,
+  emptyLabel = "No effective release is available.",
 }: {
   title: string;
   values: string[];
   href: string;
+  emptyLabel?: string;
 }) {
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
@@ -1506,9 +1808,7 @@ function ModelCard({
       <div className="card-body">
         <h2 className="card-title">{title}</h2>
         <p className="text-sm text-base-content/55">
-          {values.length
-            ? values.join(", ")
-            : "No effective release is available."}
+          {values.length ? values.join(", ") : emptyLabel}
         </p>
         <InternalLink
           className="btn btn-outline btn-sm mt-3"
@@ -1524,7 +1824,7 @@ function ModelCard({
 export function WorldModelEditor({
   kind,
 }: {
-  kind: "attributes" | "equipment-slots";
+  kind: "attributes" | "equipment-slots" | "profession-ranks";
 }) {
   const { draft, saveDraft, refreshEffectiveModels, canEdit, markDirty } =
     useWorldAuthoring();
@@ -1550,7 +1850,15 @@ export function WorldModelEditor({
   const options =
     kind === "attributes"
       ? draft?.effectiveModels?.attributes
-      : draft?.effectiveModels?.equipmentSlots;
+      : kind === "equipment-slots"
+        ? draft?.effectiveModels?.equipmentSlots
+        : draft?.effectiveModels?.professionRanks;
+  const modelLabel =
+    kind === "attributes"
+      ? "Attribute"
+      : kind === "equipment-slots"
+        ? "Equipment Slot"
+        : "Profession Rank";
   const gmRegistries = registries.filter(
     (registry) => registry.provenance.kind === "gm",
   );
@@ -1629,9 +1937,7 @@ export function WorldModelEditor({
   if (!canEdit)
     return (
       <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
-        <h1 className="text-4xl font-semibold">
-          {kind === "attributes" ? "Attributes" : "Equipment Slots"}
-        </h1>
+        <h1 className="text-4xl font-semibold">{modelLabel}s</h1>
         <Alert tone="warning" className="mt-8">
           {draft?.status === "stale"
             ? "This World draft changed elsewhere. Reload it before publishing or adopting Model releases."
@@ -1691,9 +1997,15 @@ export function WorldModelEditor({
     const vocabularyRole =
       kind === "attributes"
         ? "aow:attribute-registry"
-        : "aow:equipment-slot-registry";
+        : kind === "equipment-slots"
+          ? "aow:equipment-slot-registry"
+          : "aow:profession-rank-registry";
     const semanticRole =
-      kind === "attributes" ? "aow:attribute" : "aow:equipment-slot";
+      kind === "attributes"
+        ? "aow:attribute"
+        : kind === "equipment-slots"
+          ? "aow:equipment-slot"
+          : "aow:profession-rank";
     const vocabulary = draft.effectiveModels?.elements?.find(
       (element) =>
         element.semanticRole === vocabularyRole &&
@@ -1701,7 +2013,7 @@ export function WorldModelEditor({
     );
     if (!vocabulary?.elementId) {
       setMessage(
-        `The effective ${kind === "attributes" ? "Attribute" : "Equipment Slot"} vocabulary could not be resolved. No release was changed.`,
+        `The effective ${modelLabel} vocabulary could not be resolved. No release was changed.`,
       );
       return;
     }
@@ -1926,7 +2238,7 @@ export function WorldModelEditor({
         Characters · Model &amp; Taxonomies
       </p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-        {kind === "attributes" ? "Attributes" : "Equipment Slots"}
+        {modelLabel}s
       </h1>
       <p className="mt-4 text-base-content/65">
         These values come from the exact immutable Model Schema release selected
@@ -1982,8 +2294,7 @@ export function WorldModelEditor({
           className="mt-8 rounded-box border border-base-300 p-5"
         >
           <h2 className="text-xl font-semibold">
-            {editing ? "Edit" : "Add"}{" "}
-            {kind === "attributes" ? "Attribute" : "Equipment Slot"}
+            {editing ? "Edit" : "Add"} {modelLabel}
           </h2>
           <p className="mt-2 text-sm text-base-content/60">
             This publishes a successor release, then explicitly adopts that
@@ -2020,7 +2331,13 @@ export function WorldModelEditor({
               maxLength={80}
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder={kind === "attributes" ? "Likeable" : "Wings"}
+              placeholder={
+                kind === "attributes"
+                  ? "Likeable"
+                  : kind === "equipment-slots"
+                    ? "Wings"
+                    : "Initiate"
+              }
               className="mt-2 w-full"
             />
           </Field>
@@ -2075,7 +2392,7 @@ export function WorldModelEditor({
               )}
             </Fieldset>
           )}
-          {kind === "equipment-slots" && (
+          {kind !== "attributes" && (
             <Field label="Display order" required className="mt-4">
               <Input
                 required

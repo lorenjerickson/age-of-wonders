@@ -1,8 +1,8 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-plan-editable-model-lifecycle-complete
-date: 2026-09-06
+status: active-implementation-plan-character-definition-authoring-complete
+date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
 
@@ -21,8 +21,8 @@ an isolated naming cleanup.
 
 ## Delivery status
 
-The Session—including active-only installation concurrency—open Attribute/Equipment Slot and
-Profession-only Character contract cutover, Campaign Instance, Campaign/World authoring,
+The Session—including active-only installation concurrency—open Attribute/Equipment Slot,
+Profession Rank, and Character Definition authoring, Campaign Instance, Campaign/World authoring,
 identity/participation, Auth0 adapter,
 writable hosted-Settings slice, system-boundary, legacy-removal, Instance-native Character-sheet,
 Character completion/review, and first-party one-way Character import waves are implemented.
@@ -469,11 +469,20 @@ command were subsequently removed.
 
 The editable lifecycle follow-up makes successor publication atomic across creation, immutable
 revision, presentation reorganization, archival-by-omission, dependency validation, and a required
-direct-lineage migration plan. Contextual Attribute and Equipment Slot editors can revise,
-reorder, or archive GM-owned options and explicitly adopt the exact result into the World draft.
+direct-lineage migration plan. Contextual Attribute, Equipment Slot, and Profession Rank editors
+can revise, reorder, or archive GM-owned options and explicitly adopt the exact result into the
+World draft.
 Registry reads expose immutable element history, while dedicated migration-plan routes support
 inspection and validated recovery/import of an existing direct successor pair. Historical World
 and Campaign snapshots remain pinned to their selected releases.
+
+The Character authoring follow-up adds separate, progressively disclosed World libraries for
+Skills, Professions, and Backgrounds. These are rich governed Definition records, not vocabulary
+options: each records exact Model conformance, uses its captured concept, and is saved through the
+World draft. Skill default Attributes and Profession starting ranks resolve only from the World's
+effective Model releases. Profession Rank itself is an open editable vocabulary; editing a focused
+Profession form preserves progression details that the form does not expose. General-purpose
+concept, field, and relationship authoring remains the next Model Registry wave.
 
 New AI generation audit records identify the authenticated GM and carry an explicit bounded
 context kind and context identity when one exists. History remains requester-scoped and exposes

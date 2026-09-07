@@ -172,12 +172,14 @@ export interface EffectiveWorldModelResponse {
   }>;
   attributes: EffectiveModelElementResponse[];
   equipmentSlots: EffectiveModelElementResponse[];
+  professionRanks: EffectiveModelElementResponse[];
   elements: EffectiveModelElementResponse[];
 }
 
 export interface EffectiveWorldModels {
   attributes: WorldModelOption[];
   equipmentSlots: WorldModelOption[];
+  professionRanks?: WorldModelOption[];
   itemFamilies: WorldModelOption[];
   selectedReleaseNames?: string[];
   elements?: WorldModelOption[];

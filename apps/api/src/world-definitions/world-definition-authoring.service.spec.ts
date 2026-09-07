@@ -1,6 +1,11 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
-import { WorldDefinitionAuthoringService } from "./world-definition-authoring.service";
+import { createEditableCoreModelSeed } from "../model-registry/editable-core-model-seed";
+import { compileModelSchemaRelease } from "../model-registry/model-registry-compiler";
+import {
+  assertGovernedRecordConformance,
+  WorldDefinitionAuthoringService,
+} from "./world-definition-authoring.service";
 
 const now = new Date("2026-09-05T12:00:00.000Z");
 const draft = {
@@ -45,6 +50,122 @@ function serviceWith(
 }
 
 describe("WorldDefinitionAuthoringService", () => {
+  it("validates Character Definitions against adopted concepts and vocabularies", () => {
+    const seed = createEditableCoreModelSeed();
+    const compiled = compileModelSchemaRelease(seed);
+    const conceptId = (semanticRole: string) => {
+      const id = compiled.elements.find(
+        ({ lineage }) => lineage.semanticRole === semanticRole,
+      )?.lineage.id;
+      if (!id) throw new Error(`Missing ${semanticRole} concept in test seed.`);
+      return id;
+    };
+    const conformance = (semanticRole: string) => ({
+      modelSchemaReleaseIds: [compiled.releaseId],
+      conceptId: conceptId(semanticRole),
+    });
+    const records: Parameters<typeof assertGovernedRecordConformance>[0] = [
+      {
+        resourceType: "definitions",
+        sourceId: "skill-1",
+        payload: {
+          kind: "skill",
+          conformance: conformance("aow:skill"),
+          components: { defaultAttribute: "aow:attribute-wisdom" },
+        },
+      },
+      {
+        resourceType: "definitions",
+        sourceId: "profession-1",
+        payload: {
+          kind: "profession",
+          conformance: conformance("aow:profession"),
+          components: {
+            expertiseOrder: ["aow:profession-rank-novice"],
+          },
+        },
+      },
+      {
+        resourceType: "definitions",
+        sourceId: "background-1",
+        payload: {
+          kind: "background",
+          conformance: conformance("aow:background"),
+          components: {},
+        },
+      },
+    ];
+
+    expect(() =>
+      assertGovernedRecordConformance(
+        records,
+        [compiled.releaseId],
+        compiled.elements,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertGovernedRecordConformance(
+        [
+          {
+            resourceType: "definitions",
+            sourceId: "skill-invalid",
+            payload: {
+              kind: "skill",
+              conformance: conformance("aow:skill"),
+              components: { defaultAttribute: "custom:missing-attribute" },
+            },
+          },
+        ],
+        [compiled.releaseId],
+        compiled.elements,
+      ),
+    ).toThrow("available default Attribute");
+    expect(() =>
+      assertGovernedRecordConformance(
+        [
+          {
+            resourceType: "definitions",
+            sourceId: "profession-invalid",
+            payload: {
+              kind: "profession",
+              conformance: conformance("aow:profession"),
+              components: {
+                expertiseOrder: ["custom:missing-profession-rank"],
+              },
+            },
+          },
+        ],
+        [compiled.releaseId],
+        compiled.elements,
+      ),
+    ).toThrow("available Profession Ranks");
+    expect(() =>
+      assertGovernedRecordConformance(
+        [
+          {
+            resourceType: "definitions",
+            sourceId: "profession-invalid-acquisition",
+            payload: {
+              kind: "profession",
+              conformance: conformance("aow:profession"),
+              components: {
+                expertiseOrder: ["aow:profession-rank-novice"],
+                acquisition: [
+                  {
+                    kind: "character-creation",
+                    startingExpertise: "custom:missing-profession-rank",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        [compiled.releaseId],
+        compiled.elements,
+      ),
+    ).toThrow("available Profession Ranks");
+  });
+
   it("creates a draft-first World with a valid root and explicit core model release", async () => {
     const worldCreate = jest.fn().mockResolvedValue({
       id: "world-1",

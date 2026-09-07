@@ -291,6 +291,14 @@ portrait/overhead-token/side-on-token art roles. These are seed data, not closed
 also publishes explicit mappings from legacy `attributes.standard.will` to Wisdom and from legacy
 `paperDollToken` imagery to the side-on-token art role.
 
+`ProfessionExpertise` is a `NamespacedKey`, not a fixed rank union. A Profession Definition's
+`expertiseOrder`, expertise-level `tier`, acquisition `startingExpertise`, and Character runtime
+expertise values must use Profession Rank option keys from the exact Model Schema releases captured
+by their governing World or Campaign snapshot. Novice, Apprentice, Journeyman, Master, and Grand
+Master are the editable core seed, not an exhaustive list. A newly authored Profession starts at
+the first selected available rank, while later ranks and full progression remain part of the rich
+Profession Definition.
+
 The Model Registry uses dedicated relational persistence and is not a generic `DomainRecord`
 resource. At application startup, the Model Registry module idempotently materializes the
 deterministically identified core registry, element lineages, immutable element revisions, and
@@ -2039,13 +2047,16 @@ families are:
   prerequisites, and discipline progression.
 - `subclass`: parent class and level-to-feature mapping.
 - `background`: attribute/language choices, proficiencies, equipment, feat/features, and
-  characteristics.
+  characteristics. A Background Definition is World-authored content governed by the captured
+  `aow:background` Model concept.
 - `feat`: category, prerequisites, repeatability, traits, and choices.
 - `heritage`: short description, paired beneficial/harmful modifiers, skill-proficiency and
   discipline-access grants, choices, and prerequisites. Heritage is any formative influence fixed
   at character creation, including regional industries, cohorts, families, clubs, and institutions.
-- `profession`: ordered expertise tiers, acquisition rules, action progressions, prerequisites,
-  choices, and mutual exclusions.
+- `profession`: ordered expertise tiers expressed as adopted Profession Rank option keys,
+  acquisition rules, action progressions, prerequisites, choices, and mutual exclusions. A
+  Profession Definition is World-authored content governed by the captured `aow:profession` Model
+  concept; its ranks must resolve through that same exact model release set.
 - `monster`: physical classification and aliases, creature statistics, defenses, senses,
   communication capabilities, actions, disciplines, gear, and encounter data.
 - `item`: category, physical/economic properties, equipment/container rules, rarity, primary
@@ -2055,8 +2066,10 @@ families are:
 - `discipline`: one shared band, function tags, one primary operating basis, understanding, observed
   phenomenon, activation time, range/targets, inputs, duration/sustained operation, prerequisites,
   outcomes, scaling, training/source compatibility, and related skill definition IDs.
-- `skill`: optional default attribute. Skill identity supplies its stable ID, key, name,
-  description, source, and tags; all other domain records reference the skill definition ID.
+- `skill`: optional default Attribute option key. Skill identity supplies its stable ID, key, name,
+  description, source, and tags; all other domain records reference the skill definition ID. A
+  Skill Definition is World-authored content governed by the captured `aow:skill` Model concept,
+  and any default Attribute must resolve through that same exact model release set.
 - `hazard`, `trap`, `disease`, `poison`, or `environmental-effect`: detection/disarm tests,
   predicate-triggered effects, reset duration, and severity.
 - `language`: script and rarity.

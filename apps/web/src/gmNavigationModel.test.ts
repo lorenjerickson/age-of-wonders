@@ -79,6 +79,31 @@ describe("World secondary navigation", () => {
     ).not.toContain("world-internal");
   });
 
+  it("reveals distinct Character libraries beneath the Characters group", () => {
+    const characters = worldNavigationForPath(
+      "world-internal",
+      "/worlds/world-internal/characters/skills",
+    ).find(({ label }) => label === "Characters");
+    expect(characters?.children).toEqual([
+      {
+        label: "Skills",
+        href: "/worlds/world-internal/characters/skills",
+      },
+      {
+        label: "Professions",
+        href: "/worlds/world-internal/characters/professions",
+      },
+      {
+        label: "Backgrounds",
+        href: "/worlds/world-internal/characters/backgrounds",
+      },
+      {
+        label: "Models & taxonomies",
+        href: "/worlds/world-internal/characters/models",
+      },
+    ]);
+  });
+
   it.each([
     ["/worlds/world-internal/atlas", "Atlas"],
     ["/worlds/world-internal/bestiary", "Bestiary"],

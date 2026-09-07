@@ -91,6 +91,9 @@ export function projectEffectiveModels(
     equipmentSlots: response.equipmentSlots
       .filter((element) => element.kind === "vocabulary-option")
       .map(project),
+    professionRanks: response.professionRanks
+      .filter((element) => element.kind === "vocabulary-option")
+      .map(project),
     itemFamilies: response.elements
       .filter(
         (element) =>
@@ -128,8 +131,25 @@ export function recordPayload(
 }
 
 export function recordName(record: WorldDraftRecord, fallback: string) {
-  const name = recordPayload(record).name;
+  const payload = recordPayload(record);
+  const identity = recordValue(payload.identity);
+  const name = payload.name ?? identity?.name;
   return typeof name === "string" && name.trim() ? name.trim() : fallback;
+}
+
+export function recordDescription(record: WorldDraftRecord) {
+  const payload = recordPayload(record);
+  const identity = recordValue(payload.identity);
+  const description = payload.description ?? identity?.description;
+  return typeof description === "string" && description.trim()
+    ? description.trim()
+    : undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 export function worldCreationInput(name: string, description: string) {
@@ -140,7 +160,7 @@ export function worldCreationInput(name: string, description: string) {
 }
 
 export function modelExtensionKey(
-  kind: "attributes" | "equipment-slots",
+  kind: "attributes" | "equipment-slots" | "profession-ranks",
   name: string,
 ) {
   const slug =
@@ -149,7 +169,13 @@ export function modelExtensionKey(
       .toLocaleLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "option";
-  return `custom:${kind === "attributes" ? "attribute" : "equipment-slot"}-${slug}`;
+  const role =
+    kind === "attributes"
+      ? "attribute"
+      : kind === "equipment-slots"
+        ? "equipment-slot"
+        : "profession-rank";
+  return `custom:${role}-${slug}`;
 }
 
 export function contentAdoptingModelRelease(
@@ -228,6 +254,9 @@ export function draftAdoptingRegistryRelease(
       const governedDefinition =
         payload.kind === "creature" ||
         payload.kind === "item" ||
+        payload.kind === "skill" ||
+        payload.kind === "profession" ||
+        payload.kind === "background" ||
         (payload.kind === undefined &&
           (payload.definitionType === "creature" ||
             payload.definitionType === "item"));
@@ -283,10 +312,9 @@ export function savedNavigationAllowanceForRoute(
 
 export function definitionConformance(
   draft: WorldDefinitionDraft,
-  definitionType: "creature" | "item",
+  definitionType: "creature" | "item" | "skill" | "profession" | "background",
 ) {
-  const semanticRole =
-    definitionType === "creature" ? "aow:creature" : "aow:item";
+  const semanticRole = `aow:${definitionType}`;
   const concept = draft.effectiveModels?.elements?.find(
     (element) => element.semanticRole === semanticRole,
   );
