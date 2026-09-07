@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Disclosure,
   Field,
   Fieldset,
   Input,
@@ -22,10 +23,17 @@ import {
 import {
   ApiRequestError,
   createModelRegistry,
+  deleteMedia,
   extendModelRegistryRelease,
   getModelRegistry,
   listModelRegistries,
   publishWorldDefinitionDraft,
+  proposeWorldDraftRecord,
+  saveWorldCreature,
+  saveWorldItem,
+  saveWorldLocation,
+  uploadWorldMedia,
+  upgradeLegacyWorldCreature,
   validateWorldDefinitionDraft,
   type ModelRegistrySummary,
   type JsonValue,
@@ -50,12 +58,16 @@ import {
   recordName,
   recordDescription,
   recordPayload,
+  requestedDraftRecordMissing,
   recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
+  savedWorldRecordEditorSnapshot,
+  squareItemImageIssue,
   recordsForLibrary,
   worldPlacementRecordsForLocation,
   worldPlacementSourceId,
   worldPlacementSourceIsEditable,
+  worldDraftMutationRevision,
   worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
 import type { ReadSection } from "./server/readModels";
@@ -71,8 +83,244 @@ const objectValue = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+function imageDimensions(
+  file: File,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("The selected Item image could not be read."));
+    };
+    image.src = url;
+  });
+}
+
+class ItemImageSelectionError extends Error {}
+
 type EmbodimentStrategy =
   "" | "one-per-instance" | "one-per-realization" | "preserve-extension";
+
+export function AiCreationChoice({
+  kind,
+  mode,
+  direction,
+  pending,
+  ready,
+  error,
+  disabled,
+  disabledReason,
+  onModeChange,
+  onDirectionChange,
+  onRequest,
+}: {
+  kind: "locations" | "creatures" | "items";
+  mode: "manual" | "ai";
+  direction: string;
+  pending: boolean;
+  ready: boolean;
+  error: string;
+  disabled: boolean;
+  disabledReason?: string;
+  onModeChange(mode: "manual" | "ai"): void;
+  onDirectionChange(value: string): void;
+  onRequest(): void;
+}) {
+  const label =
+    kind === "items" ? "Item" : kind === "locations" ? "Location" : "Creature";
+  return (
+    <section className="mt-8 rounded-box border border-base-300 bg-base-200 p-5">
+      <h2 className="font-semibold">Choose how to begin</h2>
+      <div
+        className="mt-3 flex flex-wrap gap-3"
+        role="group"
+        aria-label="Creation mode"
+      >
+        <Button
+          type="button"
+          tone={mode === "manual" ? "primary" : undefined}
+          aria-pressed={mode === "manual"}
+          onClick={() => onModeChange("manual")}
+          disabled={pending}
+        >
+          Create manually
+        </Button>
+        <Button
+          type="button"
+          tone={mode === "ai" ? "primary" : undefined}
+          aria-pressed={mode === "ai"}
+          onClick={() => onModeChange("ai")}
+          disabled={pending}
+        >
+          Create with AI
+        </Button>
+      </div>
+      {mode === "ai" && (
+        <div className="mt-5 grid gap-4">
+          <Field
+            label={`Describe the ${label}`}
+            required
+            help="Your direction and limited working-draft context are sent to the configured AI provider. The editable proposal will not change the draft until you apply it."
+          >
+            <Textarea
+              value={direction}
+              maxLength={4_000}
+              rows={4}
+              onChange={(event) => onDirectionChange(event.target.value)}
+              className="mt-2 w-full"
+              disabled={pending}
+              aria-describedby={
+                disabledReason ? `${kind}-ai-disabled-reason` : undefined
+              }
+            />
+          </Field>
+          {kind === "items" && (
+            <Alert>
+              AI proposes text only. You must choose a catalog image and write
+              its accessible description before applying.
+            </Alert>
+          )}
+          <div>
+            <Button
+              type="button"
+              disabled={pending || disabled}
+              aria-describedby={
+                disabledReason ? `${kind}-ai-disabled-reason` : undefined
+              }
+              onClick={onRequest}
+            >
+              {pending ? "Preparing proposal…" : "Prepare editable proposal"}
+            </Button>
+            {disabledReason && (
+              <p
+                id={`${kind}-ai-disabled-reason`}
+                className="mt-2 text-sm text-base-content/65"
+              >
+                {disabledReason}
+              </p>
+            )}
+          </div>
+          {ready && (
+            <Alert tone="success" aria-live="polite">
+              Proposal ready. Review and edit every field below, then apply it
+              to the working draft.
+            </Alert>
+          )}
+          {error && (
+            <Alert tone="error" aria-live="polite">
+              {error}
+            </Alert>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function editorFieldsFromProposal(
+  kind: "locations" | "creatures" | "items",
+  proposal: Record<string, unknown>,
+) {
+  const policy = objectValue(proposal.instanceEmbodimentPolicy);
+  const proposedSlots =
+    kind === "creatures"
+      ? proposal.equipmentSlots
+      : kind === "items"
+        ? (proposal.compatibleEquipmentSlotSets ??
+          proposal.compatibleEquipmentSlots)
+        : undefined;
+  const slotSets = Array.isArray(proposedSlots)
+    ? proposedSlots
+        .map((value) =>
+          Array.isArray(value)
+            ? value.filter((slot): slot is string => typeof slot === "string")
+            : typeof value === "string"
+              ? [value]
+              : [],
+        )
+        .filter((set) => set.length > 0)
+    : undefined;
+  return {
+    name: String(proposal.name ?? ""),
+    description: String(proposal.description ?? ""),
+    subtype:
+      kind === "locations"
+        ? String(proposal.kind ?? "region")
+        : kind === "items"
+          ? String(proposal.itemFamilyKey ?? "")
+          : undefined,
+    attributes:
+      kind === "creatures"
+        ? (objectValue(proposal.attributes) as Record<string, number>)
+        : undefined,
+    slots: slotSets?.flat(),
+    slotSets,
+    profileSummary:
+      kind === "locations" && proposal.profileSummary !== undefined
+        ? String(proposal.profileSummary)
+        : undefined,
+    profileTags:
+      kind === "locations" && Array.isArray(proposal.profileTags)
+        ? proposal.profileTags.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined,
+    mapSceneNotes:
+      kind === "locations" && proposal.mapSceneNotes !== undefined
+        ? String(proposal.mapSceneNotes)
+        : undefined,
+    mapOrientation:
+      kind === "locations" && proposal.mapOrientation !== undefined
+        ? String(proposal.mapOrientation)
+        : undefined,
+    artDirection:
+      kind === "creatures" && proposal.artDirection !== undefined
+        ? String(proposal.artDirection)
+        : undefined,
+    movement:
+      kind === "creatures" && Array.isArray(proposal.movement)
+        ? proposal.movement
+        : undefined,
+    skillDefinitionIds:
+      kind === "creatures" && Array.isArray(proposal.skillDefinitionIds)
+        ? proposal.skillDefinitionIds.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined,
+    professionDefinitionIds:
+      kind === "creatures" && Array.isArray(proposal.professionDefinitionIds)
+        ? proposal.professionDefinitionIds.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined,
+    progressiveMechanicsNotes:
+      kind === "creatures" && proposal.progressiveMechanicsNotes !== undefined
+        ? String(proposal.progressiveMechanicsNotes)
+        : undefined,
+    itemCategory:
+      kind === "items"
+        ? String(proposal.category ?? "adventuring-gear")
+        : undefined,
+    itemQuality:
+      kind === "items" ? String(proposal.quality ?? "standard") : undefined,
+    embodimentStrategy:
+      kind === "creatures"
+        ? policy.strategy === "one-per-realization"
+          ? ("one-per-realization" as const)
+          : ("one-per-instance" as const)
+        : undefined,
+    embodimentMaximum:
+      kind === "creatures" && policy.maximumPerCampaignInstance !== undefined
+        ? String(policy.maximumPerCampaignInstance)
+        : "",
+  };
+}
 
 export function CreatureEmbodimentPolicyFields({
   strategy,
@@ -576,7 +824,7 @@ function LibraryPage({
   children: ReactNode;
 }) {
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
-  const { canEdit } = useWorldAuthoring();
+  const { canEdit, draft } = useWorldAuthoring();
   return (
     <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
       <div className="flex flex-wrap items-end justify-between gap-5">
@@ -589,7 +837,7 @@ function LibraryPage({
           </h1>
           <p className="mt-3 max-w-2xl text-base-content/60">{description}</p>
         </div>
-        {canEdit ? (
+        {canEdit && draft ? (
           <RouterButtonLink href={`${createHref}${guideSuffix}`} tone="primary">
             Create
           </RouterButtonLink>
@@ -645,7 +893,7 @@ export function DraftRecordEditor({
   kind: "locations" | "creatures" | "items";
   sourceId?: string;
 }) {
-  const { definition, draft, saveRecord, canEdit, markDirty } =
+  const { definition, draft, adoptDraft, canEdit, markDirty } =
     useWorldAuthoring();
   const navigate = useInternalNavigate();
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
@@ -655,34 +903,131 @@ export function DraftRecordEditor({
   const initial = recordPayload(
     existing ?? { resourceType: kind, sourceId: "new", payload: {} },
   );
+  const initialIdentity = objectValue(initial.identity);
+  const initialComponents = objectValue(initial.components);
+  const initialEquippable = objectValue(initialComponents.equippable);
+  const initialModelValues = objectValue(initial.modelValues);
+  const initialImage = objectValue(initial.image);
   const models = draft?.effectiveModels;
-  const [name, setName] = useState(String(initial.name ?? ""));
+  const [name, setName] = useState(
+    String(initialIdentity.name ?? initial.name ?? ""),
+  );
   const [description, setDescription] = useState(
-    String(initial.description ?? ""),
+    String(initialIdentity.description ?? initial.description ?? ""),
   );
   const [subtype, setSubtype] = useState(
     String(
       kind === "items"
-        ? (initial.itemFamilyKey ?? models?.itemFamilies[0]?.key ?? "")
+        ? (initialModelValues["aow:item-family"] ??
+            initial.itemFamilyKey ??
+            models?.itemFamilies[0]?.key ??
+            "")
         : (initial.kind ?? (kind === "locations" ? "region" : "creature")),
     ),
   );
   const initialPlacement = objectValue(initial.placement);
+  const initialProfile = objectValue(initial.profile);
+  const initialMapScene = objectValue(initial.mapScene);
   const [parentId, setParentId] = useState(
     String(
       initialPlacement.parentLocationId ??
         (kind === "locations" ? (draft?.content.rootLocationId ?? "") : ""),
     ),
   );
-  const [attributes, setAttributes] = useState<Record<string, number>>(
-    () => objectValue(initial.attributes) as Record<string, number>,
+  const [profileSummary, setProfileSummary] = useState(
+    String(initialProfile.summary ?? ""),
   );
-  const [slots, setSlots] = useState<string[]>(() =>
-    Array.isArray(initial.equipmentSlots)
-      ? initial.equipmentSlots.filter(
+  const [profileTags, setProfileTags] = useState(
+    Array.isArray(initialProfile.tags)
+      ? initialProfile.tags
+          .filter((value): value is string => typeof value === "string")
+          .join(", ")
+      : "",
+  );
+  const [mapSceneNotes, setMapSceneNotes] = useState(
+    String(initialMapScene.notes ?? ""),
+  );
+  const [mapOrientation, setMapOrientation] = useState(
+    String(initialMapScene.orientation ?? ""),
+  );
+  const [attributes, setAttributes] = useState<Record<string, number>>(
+    () =>
+      objectValue(initialComponents.attributes ?? initial.attributes) as Record<
+        string,
+        number
+      >,
+  );
+  const [slotSets, setSlotSets] = useState<string[][]>(() => {
+    const canonicalSlots =
+      kind === "items"
+        ? initialEquippable.compatibleSlotSets
+        : initialComponents.equipmentSlots;
+    const candidates = Array.isArray(canonicalSlots)
+      ? canonicalSlots.map((entry) => (Array.isArray(entry) ? entry : [entry]))
+      : Array.isArray(initial.equipmentSlots)
+        ? initial.equipmentSlots.map((entry) => [entry])
+        : Array.isArray(initial.compatibleEquipmentSlots)
+          ? initial.compatibleEquipmentSlots.map((entry) => [entry])
+          : [];
+    return candidates
+      .map((entry) =>
+        entry.filter((value): value is string => typeof value === "string"),
+      )
+      .filter((entry) => entry.length > 0);
+  });
+  const slots = [...new Set(slotSets.flat())];
+  const initialArt = objectValue(initialComponents.art);
+  const initialMechanics = objectValue(initialComponents.progressiveMechanics);
+  const initialMovements = Array.isArray(initialComponents.movement)
+    ? initialComponents.movement
+    : [];
+  const preservedPrimaryMovement = objectValue(initialMovements[0]);
+  const preservedAdditionalMovements = initialMovements.slice(1);
+  const [artDirection, setArtDirection] = useState(
+    String(initialArt.direction ?? ""),
+  );
+  const [movementMode, setMovementMode] = useState(() => {
+    const movement = initialMovements[0];
+    return String(objectValue(movement).mode ?? "walk");
+  });
+  const [movementDistance, setMovementDistance] = useState(() => {
+    const movement = initialMovements[0];
+    return String(objectValue(objectValue(movement).distance).value ?? "");
+  });
+  const [movementUnit, setMovementUnit] = useState(() => {
+    const movement = initialMovements[0];
+    return String(objectValue(objectValue(movement).distance).unit ?? "foot");
+  });
+  const [skillDefinitionIds, setSkillDefinitionIds] = useState<string[]>(() =>
+    Array.isArray(initialComponents.skillDefinitionIds)
+      ? initialComponents.skillDefinitionIds.filter(
           (value): value is string => typeof value === "string",
         )
       : [],
+  );
+  const [professionDefinitionIds, setProfessionDefinitionIds] = useState<
+    string[]
+  >(() =>
+    Array.isArray(initialComponents.professionDefinitionIds)
+      ? initialComponents.professionDefinitionIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const [progressiveMechanicsNotes, setProgressiveMechanicsNotes] = useState(
+    String(initialMechanics.notes ?? ""),
+  );
+  const [itemCategory, setItemCategory] = useState(
+    String(
+      initialComponents.category ?? initial.category ?? "adventuring-gear",
+    ),
+  );
+  const [itemQuality, setItemQuality] = useState(
+    String(initialComponents.quality ?? initial.quality ?? "standard"),
+  );
+  const [itemImageFile, setItemImageFile] = useState<File>();
+  const [itemImageAltText, setItemImageAltText] = useState(
+    String(initialImage.altText ?? ""),
   );
   const initialEmbodimentPolicy = objectValue(initial.instanceEmbodimentPolicy);
   const initialEmbodimentStrategy = String(
@@ -703,20 +1048,44 @@ export function DraftRecordEditor({
       : String(initialEmbodimentPolicy.maximumPerCampaignInstance),
   );
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [entryMode, setEntryMode] = useState<"manual" | "ai">("manual");
+  const [aiDirection, setAiDirection] = useState("");
+  const [proposalPending, setProposalPending] = useState(false);
+  const [proposalError, setProposalError] = useState("");
+  const [proposalReady, setProposalReady] = useState(false);
+  const [proposalStorageRevision, setProposalStorageRevision] =
+    useState<number>();
   const conformance =
     draft && kind !== "locations"
       ? definitionConformance(draft, kind === "creatures" ? "creature" : "item")
       : undefined;
-  const snapshot = JSON.stringify({
+  const snapshotFields = {
     name,
     description,
     subtype,
     parentId,
     attributes,
-    slots,
+    slotSets,
+    profileSummary,
+    profileTags,
+    mapSceneNotes,
+    mapOrientation,
+    artDirection,
+    movementMode,
+    movementDistance,
+    movementUnit,
+    skillDefinitionIds,
+    professionDefinitionIds,
+    progressiveMechanicsNotes,
+    itemCategory,
+    itemQuality,
+    itemImageFileName: itemImageFile?.name ?? "",
+    itemImageAltText,
     embodimentStrategy,
     embodimentMaximum,
-  });
+  };
+  const snapshot = JSON.stringify(snapshotFields);
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
   const allowSavedNavigation = useRef(false);
@@ -745,71 +1114,184 @@ export function DraftRecordEditor({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!draft || !name.trim()) return;
-    const id = existing?.sourceId ?? crypto.randomUUID();
-    const isWorldRoot =
-      kind === "locations" &&
-      (!draft.content.rootLocationId || draft.content.rootLocationId === id);
+    setSaveError("");
     if (kind !== "locations" && !conformance) return;
-    const didSave = await saveRecord({
-      resourceType: kind === "locations" ? "locations" : "definitions",
-      sourceId: id,
-      payload: {
-        ...initial,
-        name: name.trim(),
-        description: description.trim(),
-        kind: isWorldRoot
-          ? "world"
-          : kind === "locations"
-            ? subtype
-            : kind === "creatures"
-              ? "creature"
-              : "item",
-        ...(kind !== "locations"
-          ? {
-              conformance,
-            }
-          : {}),
-        ...(kind === "locations"
-          ? {
-              placement: isWorldRoot
-                ? { kind: "root" }
-                : { kind: "within-parent", parentLocationId: parentId },
-            }
-          : {}),
-        ...(kind === "creatures"
-          ? {
-              attributes,
-              equipmentSlots: slots,
-              instanceEmbodimentPolicy: creatureEmbodimentPolicyForSave(
-                initial.instanceEmbodimentPolicy,
-                embodimentStrategy,
-                embodimentMaximum,
-              ),
-            }
-          : {}),
-        ...(kind === "items"
-          ? { itemFamilyKey: subtype, compatibleEquipmentSlots: slots }
-          : {}),
-      },
-    });
-    if (!didSave) return;
-    setSavedSnapshot(snapshot);
-    setSaved(true);
-    if (!existing) {
-      allowSavedNavigation.current = true;
-      const library =
+    let saved;
+    let uploadedItemImageAssetId: string | undefined;
+    try {
+      saved =
         kind === "locations"
-          ? "atlas/locations"
+          ? await saveWorldLocation(
+              definition.id,
+              {
+                expectedStorageRevision: worldDraftMutationRevision(
+                  draft.storageRevision,
+                  proposalReady,
+                  proposalStorageRevision,
+                ),
+                name: name.trim(),
+                ...(description.trim()
+                  ? { description: description.trim() }
+                  : {}),
+                kind: subtype,
+                ...(parentId ? { parentLocationId: parentId as never } : {}),
+                profileSummary,
+                profileTags: profileTags
+                  .split(",")
+                  .map((tag) => tag.trim())
+                  .filter(Boolean),
+                mapSceneNotes,
+                ...(mapOrientation
+                  ? {
+                      mapOrientation: mapOrientation as
+                        "scenic" | "overhead" | "side-on",
+                    }
+                  : {}),
+              },
+              existing?.sourceId,
+            )
           : kind === "creatures"
-            ? "bestiary/creatures"
-            : "item-compendium/items";
-      try {
-        await navigate(
-          `/worlds/${encodeURIComponent(definition.id)}/${library}/${encodeURIComponent(id)}${guideSuffix}`,
-          { replace: true },
-        );
-      } finally {
-        allowSavedNavigation.current = false;
+            ? await (async () => {
+                const input = {
+                  expectedStorageRevision: worldDraftMutationRevision(
+                    draft.storageRevision,
+                    proposalReady,
+                    proposalStorageRevision,
+                  ),
+                  name: name.trim(),
+                  ...(description.trim()
+                    ? { description: description.trim() }
+                    : {}),
+                  attributes: attributes as never,
+                  equipmentSlots: slots as never,
+                  artDirection,
+                  movement: movementDistance
+                    ? [
+                        {
+                          ...preservedPrimaryMovement,
+                          mode: movementMode,
+                          distance: {
+                            ...objectValue(preservedPrimaryMovement.distance),
+                            value: Number(movementDistance),
+                            unit: movementUnit as never,
+                          },
+                        },
+                        ...preservedAdditionalMovements,
+                      ]
+                    : preservedAdditionalMovements,
+                  skillDefinitionIds: skillDefinitionIds as never,
+                  professionDefinitionIds: professionDefinitionIds as never,
+                  progressiveMechanicsNotes,
+                  instanceEmbodimentPolicy: creatureEmbodimentPolicyForSave(
+                    initial.instanceEmbodimentPolicy,
+                    embodimentStrategy,
+                    embodimentMaximum,
+                  ) as never,
+                };
+                return existing?.resourceType === "creatures"
+                  ? upgradeLegacyWorldCreature(
+                      definition.id,
+                      existing.sourceId,
+                      input,
+                    )
+                  : saveWorldCreature(definition.id, input, existing?.sourceId);
+              })()
+            : await (async () => {
+                const image = itemImageFile
+                  ? await (async () => {
+                      const dimensions = await imageDimensions(itemImageFile);
+                      const dimensionIssue = squareItemImageIssue(
+                        dimensions.width,
+                        dimensions.height,
+                      );
+                      if (dimensionIssue)
+                        throw new ItemImageSelectionError(dimensionIssue);
+                      const asset = await uploadWorldMedia(
+                        definition.id,
+                        itemImageFile,
+                        "item-image",
+                        ["item"],
+                      );
+                      uploadedItemImageAssetId = asset.id;
+                      return {
+                        assetId: asset.id as never,
+                        altText: itemImageAltText.trim(),
+                        width: dimensions.width,
+                        height: dimensions.height,
+                        mimeType: asset.mimeType as `image/${string}`,
+                      };
+                    })()
+                  : (initial.image as never);
+                return saveWorldItem(
+                  definition.id,
+                  {
+                    expectedStorageRevision: worldDraftMutationRevision(
+                      draft.storageRevision,
+                      proposalReady,
+                      proposalStorageRevision,
+                    ),
+                    name: name.trim(),
+                    ...(description.trim()
+                      ? { description: description.trim() }
+                      : {}),
+                    itemFamilyKey: subtype as never,
+                    category: itemCategory,
+                    quality: itemQuality as
+                      "ramshackle" | "standard" | "fine" | "exquisite",
+                    compatibleEquipmentSlotSets: slotSets as never,
+                    image,
+                  },
+                  existing?.sourceId,
+                );
+              })();
+    } catch (error) {
+      if (uploadedItemImageAssetId) {
+        await deleteMedia(uploadedItemImageAssetId).catch(() => undefined);
+      }
+      setSaveError(
+        error instanceof ItemImageSelectionError
+          ? error.message
+          : error instanceof ApiRequestError && error.status === 409
+            ? "This World draft changed elsewhere. Reload before saving."
+            : "This record could not be saved. No World draft changes were accepted.",
+      );
+      return;
+    }
+    adoptDraft({
+      ...saved,
+      status: "current",
+      effectiveModels: draft.effectiveModels,
+    });
+    setSavedSnapshot(savedWorldRecordEditorSnapshot(snapshotFields, kind));
+    setSaved(true);
+    if (kind === "items") setItemImageFile(undefined);
+    if (!existing) {
+      const created = saved.records.find(
+        (record) =>
+          record.resourceType ===
+            (kind === "locations" ? "locations" : "definitions") &&
+          !draft.records.some(
+            (prior) =>
+              prior.resourceType === record.resourceType &&
+              prior.sourceId === record.sourceId,
+          ),
+      );
+      if (created) {
+        allowSavedNavigation.current = true;
+        const library =
+          kind === "locations"
+            ? "atlas/locations"
+            : kind === "creatures"
+              ? "bestiary/creatures"
+              : "item-compendium/items";
+        try {
+          await navigate(
+            `/worlds/${encodeURIComponent(definition.id)}/${library}/${encodeURIComponent(created.sourceId)}${guideSuffix}`,
+            { replace: true },
+          );
+        } finally {
+          allowSavedNavigation.current = false;
+        }
       }
     }
   }
@@ -824,6 +1306,134 @@ export function DraftRecordEditor({
     kind === "locations" &&
     Boolean(draft?.content.rootLocationId) &&
     !isRootLocation;
+  const characterDefinitions = (draft?.records ?? []).filter(
+    (record) => record.resourceType === "definitions",
+  );
+  const skillOptions = characterDefinitions.filter(
+    (record) => recordPayload(record).kind === "skill",
+  );
+  const professionOptions = characterDefinitions.filter(
+    (record) => recordPayload(record).kind === "profession",
+  );
+  const proposalDisabledReason = !aiDirection.trim()
+    ? "Describe what you want before preparing a proposal."
+    : needsParent && !parentId
+      ? "Choose the parent Location before preparing a proposal."
+      : kind !== "locations" && !conformance
+        ? `Select a complete ${kind === "creatures" ? "Creature" : "Item"} Model release before preparing a proposal.`
+        : undefined;
+  const proposalIsStale =
+    proposalReady && proposalStorageRevision !== draft?.storageRevision;
+  async function requestProposal() {
+    if (!draft || !aiDirection.trim() || (needsParent && !parentId)) return;
+    setProposalPending(true);
+    setProposalError("");
+    setProposalReady(false);
+    try {
+      const result = await proposeWorldDraftRecord(
+        definition.id,
+        kind === "locations"
+          ? "location"
+          : kind === "creatures"
+            ? "creature"
+            : "item",
+        {
+          expectedStorageRevision: draft.storageRevision,
+          direction: aiDirection.trim(),
+          ...(kind === "locations" && parentId
+            ? { parentLocationId: parentId }
+            : {}),
+        },
+        crypto.randomUUID(),
+      );
+      const proposal = result.proposal;
+      const fields = editorFieldsFromProposal(kind, proposal);
+      setName(fields.name);
+      setDescription(fields.description);
+      if (fields.subtype !== undefined) setSubtype(fields.subtype);
+      if (kind === "locations") {
+        if (fields.profileSummary !== undefined)
+          setProfileSummary(fields.profileSummary);
+        if (fields.profileTags !== undefined)
+          setProfileTags(fields.profileTags.join(", "));
+        if (fields.mapSceneNotes !== undefined)
+          setMapSceneNotes(fields.mapSceneNotes);
+        if (fields.mapOrientation !== undefined)
+          setMapOrientation(fields.mapOrientation);
+      }
+      if (kind === "creatures") {
+        setAttributes(fields.attributes ?? {});
+        setSlotSets(fields.slotSets ?? []);
+        setEmbodimentStrategy(fields.embodimentStrategy ?? "one-per-instance");
+        setEmbodimentMaximum(fields.embodimentMaximum);
+        if (fields.artDirection !== undefined)
+          setArtDirection(fields.artDirection);
+        if (fields.movement !== undefined) {
+          const movement = objectValue(fields.movement[0]);
+          const distance = objectValue(movement.distance);
+          setMovementMode(String(movement.mode ?? "walk"));
+          setMovementDistance(
+            distance.value === undefined ? "" : String(distance.value),
+          );
+          setMovementUnit(String(distance.unit ?? "foot"));
+        }
+        if (fields.skillDefinitionIds !== undefined)
+          setSkillDefinitionIds(fields.skillDefinitionIds);
+        if (fields.professionDefinitionIds !== undefined)
+          setProfessionDefinitionIds(fields.professionDefinitionIds);
+        if (fields.progressiveMechanicsNotes !== undefined)
+          setProgressiveMechanicsNotes(fields.progressiveMechanicsNotes);
+      }
+      if (kind === "items") {
+        setItemCategory(fields.itemCategory ?? "adventuring-gear");
+        setItemQuality(fields.itemQuality ?? "standard");
+        setSlotSets(fields.slotSets ?? []);
+      }
+      setProposalStorageRevision(proposal.expectedStorageRevision);
+      setProposalReady(true);
+    } catch (error) {
+      setProposalError(
+        error instanceof ApiRequestError && error.status === 409
+          ? "This World draft changed elsewhere. Reload before requesting another proposal."
+          : "No proposal could be prepared. Your working draft was not changed.",
+      );
+    } finally {
+      setProposalPending(false);
+    }
+  }
+  if (requestedDraftRecordMissing(Boolean(draft), sourceId, existing)) {
+    const library =
+      kind === "locations"
+        ? "atlas/locations"
+        : kind === "creatures"
+          ? "bestiary/creatures"
+          : "item-compendium/items";
+    return (
+      <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
+        <h1 className="text-4xl font-semibold">Record not found</h1>
+        <Alert tone="warning" className="mt-8">
+          This{" "}
+          {kind === "locations"
+            ? "Location"
+            : kind === "creatures"
+              ? "Creature"
+              : "Item"}{" "}
+          is not in the current World draft. Nothing was changed.
+        </Alert>
+        <RouterButtonLink
+          href={`/worlds/${encodeURIComponent(definition.id)}/${library}${guideSuffix}`}
+          className="mt-6"
+        >
+          Back to{" "}
+          {kind === "locations"
+            ? "Atlas"
+            : kind === "creatures"
+              ? "Bestiary"
+              : "Item Compendium"}
+        </RouterButtonLink>
+      </main>
+    );
+  }
   if (!canEdit)
     return (
       <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
@@ -865,6 +1475,27 @@ export function DraftRecordEditor({
           : `Create ${kind === "items" ? "Item" : kind === "locations" ? "Location" : "Creature"}`}
       </h1>
       <DraftRequired>
+        {!existing && (
+          <AiCreationChoice
+            kind={kind}
+            mode={entryMode}
+            direction={aiDirection}
+            pending={proposalPending}
+            ready={proposalReady}
+            error={proposalError}
+            disabled={Boolean(proposalDisabledReason)}
+            disabledReason={proposalDisabledReason}
+            onModeChange={(mode) => {
+              setEntryMode(mode);
+              if (mode === "manual") {
+                setProposalReady(false);
+                setProposalStorageRevision(undefined);
+              }
+            }}
+            onDirectionChange={setAiDirection}
+            onRequest={() => void requestProposal()}
+          />
+        )}
         <form
           onSubmit={(event) => void submit(event)}
           className="mt-8 grid gap-5"
@@ -885,6 +1516,58 @@ export function DraftRecordEditor({
               className="mt-2 w-full"
             />
           </Field>
+          {proposalPending && (
+            <Alert aria-live="polite">
+              Proposal context is locked until the request finishes.
+            </Alert>
+          )}
+          {proposalIsStale && (
+            <Alert tone="warning" aria-live="polite">
+              This proposal belongs to an earlier working-draft revision.
+              Prepare a new proposal before applying it.
+            </Alert>
+          )}
+          {kind === "locations" && (
+            <Disclosure summary="Profile and map scene" className="p-4">
+              <div className="mt-4 grid gap-5">
+                <Field label="Profile summary">
+                  <Textarea
+                    value={profileSummary}
+                    onChange={(event) => setProfileSummary(event.target.value)}
+                    rows={3}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+                <Field label="Discovery tags" help="Separate tags with commas.">
+                  <Input
+                    value={profileTags}
+                    onChange={(event) => setProfileTags(event.target.value)}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+                <Field label="Map or scene notes">
+                  <Textarea
+                    value={mapSceneNotes}
+                    onChange={(event) => setMapSceneNotes(event.target.value)}
+                    rows={3}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+                <Field label="Map orientation">
+                  <Select
+                    value={mapOrientation}
+                    onChange={(event) => setMapOrientation(event.target.value)}
+                    className="mt-2 w-full"
+                  >
+                    <option value="">Not specified</option>
+                    <option value="scenic">Scenic</option>
+                    <option value="overhead">Overhead</option>
+                    <option value="side-on">Side-on</option>
+                  </Select>
+                </Field>
+              </div>
+            </Disclosure>
+          )}
           {kind === "locations" && !isRootLocation && (
             <Field label="Location kind">
               <Input
@@ -913,6 +1596,57 @@ export function DraftRecordEditor({
               </Select>
             </Field>
           )}
+          {kind === "items" && (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Category" required>
+                <Input
+                  required
+                  value={itemCategory}
+                  onChange={(event) => setItemCategory(event.target.value)}
+                  className="mt-2 w-full"
+                />
+              </Field>
+              <Field label="Quality" required>
+                <Select
+                  value={itemQuality}
+                  onChange={(event) => setItemQuality(event.target.value)}
+                  className="mt-2 w-full"
+                >
+                  <option value="ramshackle">Ramshackle</option>
+                  <option value="standard">Standard</option>
+                  <option value="fine">Fine</option>
+                  <option value="exquisite">Exquisite</option>
+                </Select>
+              </Field>
+            </div>
+          )}
+          {kind === "items" && (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label={initialImage.assetId ? "Replace image" : "Image"}
+                required={!initialImage.assetId}
+                help="Item Definitions require a square catalog image."
+              >
+                <Input
+                  type="file"
+                  accept="image/*"
+                  required={!initialImage.assetId}
+                  onChange={(event) =>
+                    setItemImageFile(event.target.files?.[0])
+                  }
+                  className="mt-2 w-full"
+                />
+              </Field>
+              <Field label="Image description" required>
+                <Input
+                  required
+                  value={itemImageAltText}
+                  onChange={(event) => setItemImageAltText(event.target.value)}
+                  className="mt-2 w-full"
+                />
+              </Field>
+            </div>
+          )}
           {kind === "creatures" && (
             <Alert>
               Creature kinds do not yet have an approved Model vocabulary. This
@@ -928,6 +1662,113 @@ export function DraftRecordEditor({
               onStrategyChange={setEmbodimentStrategy}
               onMaximumChange={setEmbodimentMaximum}
             />
+          )}
+          {kind === "creatures" && (
+            <Disclosure
+              summary="Art, movement, and progression"
+              className="p-4"
+            >
+              <div className="mt-4 grid gap-5">
+                <Field
+                  label="Art direction"
+                  help="Describe the portrait and token treatment. Existing image references are preserved."
+                >
+                  <Textarea
+                    value={artDirection}
+                    onChange={(event) => setArtDirection(event.target.value)}
+                    rows={3}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="Movement mode">
+                    <Input
+                      value={movementMode}
+                      onChange={(event) => setMovementMode(event.target.value)}
+                      className="mt-2 w-full"
+                    />
+                  </Field>
+                  <Field label="Distance">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={movementDistance}
+                      onChange={(event) =>
+                        setMovementDistance(event.target.value)
+                      }
+                      className="mt-2 w-full"
+                    />
+                  </Field>
+                  <Field label="Unit">
+                    <Input
+                      value={movementUnit}
+                      onChange={(event) => setMovementUnit(event.target.value)}
+                      className="mt-2 w-full"
+                    />
+                  </Field>
+                </div>
+                <Fieldset>
+                  <Legend className="font-semibold">Skills</Legend>
+                  {skillOptions.length ? (
+                    skillOptions.map((record) => (
+                      <Checkbox
+                        key={record.sourceId}
+                        label={recordName(record, "Unnamed Skill")}
+                        checked={skillDefinitionIds.includes(record.sourceId)}
+                        onChange={(event) =>
+                          setSkillDefinitionIds((current) =>
+                            event.target.checked
+                              ? [...new Set([...current, record.sourceId])]
+                              : current.filter((id) => id !== record.sourceId),
+                          )
+                        }
+                        wrapperClassName="min-h-11 items-center gap-3"
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-base-content/55">
+                      No Skills have been authored yet.
+                    </p>
+                  )}
+                </Fieldset>
+                <Fieldset>
+                  <Legend className="font-semibold">Professions</Legend>
+                  {professionOptions.length ? (
+                    professionOptions.map((record) => (
+                      <Checkbox
+                        key={record.sourceId}
+                        label={recordName(record, "Unnamed Profession")}
+                        checked={professionDefinitionIds.includes(
+                          record.sourceId,
+                        )}
+                        onChange={(event) =>
+                          setProfessionDefinitionIds((current) =>
+                            event.target.checked
+                              ? [...new Set([...current, record.sourceId])]
+                              : current.filter((id) => id !== record.sourceId),
+                          )
+                        }
+                        wrapperClassName="min-h-11 items-center gap-3"
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-base-content/55">
+                      No Professions have been authored yet.
+                    </p>
+                  )}
+                </Fieldset>
+                <Field label="Progressive mechanics notes">
+                  <Textarea
+                    value={progressiveMechanicsNotes}
+                    onChange={(event) =>
+                      setProgressiveMechanicsNotes(event.target.value)
+                    }
+                    rows={3}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+              </div>
+            </Disclosure>
           )}
           {kind !== "locations" && !conformance && (
             <Alert tone="warning">
@@ -945,6 +1786,7 @@ export function DraftRecordEditor({
               <Select
                 required
                 value={parentId}
+                disabled={proposalPending}
                 onChange={(event) => setParentId(event.target.value)}
                 className="mt-2 w-full"
               >
@@ -1018,11 +1860,17 @@ export function DraftRecordEditor({
                       label={slot.name}
                       checked={slots.includes(slot.key)}
                       onChange={(event) =>
-                        setSlots((current) =>
-                          event.target.checked
-                            ? [...new Set([...current, slot.key])]
-                            : current.filter((key) => key !== slot.key),
-                        )
+                        setSlotSets((current) => {
+                          const compound = current.filter(
+                            (set) => set.length > 1,
+                          );
+                          const singleton = current.filter(
+                            (set) => set.length === 1 && set[0] !== slot.key,
+                          );
+                          return event.target.checked
+                            ? [...compound, ...singleton, [slot.key]]
+                            : [...compound, ...singleton];
+                        })
                       }
                       wrapperClassName="min-h-11 items-center gap-3"
                     />
@@ -1042,13 +1890,24 @@ export function DraftRecordEditor({
               disabled={
                 !draft ||
                 draft.status === "stale" ||
+                proposalPending ||
+                proposalIsStale ||
                 (needsParent && !parentId) ||
                 (kind !== "locations" && !conformance) ||
-                (kind === "items" && !subtype) ||
+                (kind === "items" &&
+                  (!subtype ||
+                    !itemImageAltText.trim() ||
+                    (!initialImage.assetId && !itemImageFile))) ||
                 (kind === "creatures" && !embodimentStrategy)
               }
             >
-              Save to working draft
+              {kind === "creatures" && existing?.resourceType === "creatures"
+                ? "Upgrade legacy Creature"
+                : proposalReady
+                  ? "Apply to working draft"
+                  : existing
+                    ? "Save changes"
+                    : "Create in working draft"}
             </Button>
             {saved && (
               <span aria-live="polite" className="text-sm text-success">
@@ -1056,6 +1915,11 @@ export function DraftRecordEditor({
               </span>
             )}
           </div>
+          {saveError && (
+            <Alert tone="error" aria-live="polite">
+              {saveError}
+            </Alert>
+          )}
         </form>
       </DraftRequired>
       {kind === "locations" && existing && (

@@ -68,6 +68,9 @@ import type {
   QuickStartActivityView,
   QuickStartOverview,
   UpdateQuickStartProgress,
+  CreateWorldLocationDraftRequest,
+  CreateWorldCreatureDraftRequest,
+  CreateWorldItemDraftRequest,
 } from "@aow/common";
 
 const apiUrl = "/api";
@@ -623,8 +626,6 @@ export function getWorldDefinition(worldDefinitionId: string) {
 export function createWorldDefinitionDraft(input: {
   name: string;
   description?: string;
-  content?: Record<string, JsonValue>;
-  records?: WorldDraftRecord[];
 }) {
   return request<WorldDefinitionSummary & { draft: WorldDefinitionDraft }>(
     "/worlds",
@@ -794,6 +795,106 @@ export function saveWorldDefinitionDraft(
         content: draft.content,
         records: draft.records,
       }),
+    },
+  );
+}
+
+function mutateWorldDraftRecord<T>(
+  path: string,
+  input: T,
+  existingId?: string,
+) {
+  return request<WorldDefinitionDraft>(
+    existingId ? `${path}/${encodeURIComponent(existingId)}` : path,
+    {
+      method: existingId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function saveWorldLocation(
+  worldDefinitionId: string,
+  input: CreateWorldLocationDraftRequest,
+  existingId?: string,
+) {
+  return mutateWorldDraftRecord(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/atlas/locations`,
+    input,
+    existingId,
+  );
+}
+
+export function saveWorldCreature(
+  worldDefinitionId: string,
+  input: CreateWorldCreatureDraftRequest,
+  existingId?: string,
+) {
+  return mutateWorldDraftRecord(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/bestiary/creatures`,
+    input,
+    existingId,
+  );
+}
+
+export function upgradeLegacyWorldCreature(
+  worldDefinitionId: string,
+  creatureId: string,
+  input: CreateWorldCreatureDraftRequest,
+) {
+  return request<WorldDefinitionDraft>(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/bestiary/creatures/${encodeURIComponent(creatureId)}/upgrade`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function saveWorldItem(
+  worldDefinitionId: string,
+  input: CreateWorldItemDraftRequest,
+  existingId?: string,
+) {
+  return mutateWorldDraftRecord(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/item-compendium/items`,
+    input,
+    existingId,
+  );
+}
+
+export type WorldDraftProposalKind = "location" | "creature" | "item";
+
+export interface WorldDraftProposalResponse {
+  proposal: Record<string, JsonValue> & {
+    expectedStorageRevision: number;
+    name: string;
+    description?: string;
+  };
+  model: string;
+}
+
+export function proposeWorldDraftRecord(
+  worldDefinitionId: string,
+  kind: WorldDraftProposalKind,
+  input: {
+    expectedStorageRevision: number;
+    direction: string;
+    parentLocationId?: string;
+  },
+  idempotencyKey: string,
+) {
+  return request<WorldDraftProposalResponse>(
+    `/ai/worlds/${encodeURIComponent(worldDefinitionId)}/draft/${kind}-proposals`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(input),
     },
   );
 }

@@ -147,6 +147,35 @@ export function recordDescription(record: WorldDraftRecord) {
     : undefined;
 }
 
+/** A detail URL is authoritative: an unknown requested record never degrades into create mode. */
+export function requestedDraftRecordMissing(
+  draftLoaded: boolean,
+  sourceId: string | undefined,
+  record: WorldDraftRecord | undefined,
+) {
+  return draftLoaded && sourceId !== undefined && record === undefined;
+}
+
+/** Applying an AI proposal remains bound to the storage revision that produced it. */
+export function worldDraftMutationRevision(
+  currentRevision: number,
+  proposalReady: boolean,
+  proposalRevision: number | undefined,
+) {
+  return proposalReady && proposalRevision !== undefined
+    ? proposalRevision
+    : currentRevision;
+}
+
+export function savedWorldRecordEditorSnapshot(
+  fields: Readonly<Record<string, unknown>>,
+  kind: "locations" | "creatures" | "items",
+) {
+  return JSON.stringify(
+    kind === "items" ? { ...fields, itemImageFileName: "" } : fields,
+  );
+}
+
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -381,7 +410,8 @@ export function recordsForLibrary(
   }
   const definitionType = library === "creatures" ? "creature" : "item";
   return records.filter((record) => {
-    if (record.resourceType === library) return true;
+    if (library === "creatures" && record.resourceType === "creatures")
+      return true;
     if (record.resourceType !== "definitions") return false;
     const payload = recordPayload(record);
     return (
@@ -633,6 +663,15 @@ export function attributeNumberConfig(option: WorldModelOption) {
     Math.max(minimum, number("aow:default", minimum)),
   );
   return { minimum, maximum, defaultValue };
+}
+
+export function squareItemImageIssue(
+  width: number,
+  height: number,
+): string | undefined {
+  return width === height
+    ? undefined
+    : "Choose a square Item image with equal width and height. No image was uploaded.";
 }
 
 export function draftContextLabel(draft: WorldDefinitionDraft) {

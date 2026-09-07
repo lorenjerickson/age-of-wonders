@@ -23,13 +23,17 @@ describe("legacy web surface removal", () => {
     for (const path of [
       "/domain/",
       "/campaign-invitations/",
-      "/ai/worlds",
       "/ai/locations",
+      "/ai/creatures",
+      "/ai/items",
       '"/character-drafts',
       '"/me/resumable-session"',
     ]) {
       expect(api).not.toContain(path);
     }
+    expect(api).toContain(
+      "/ai/worlds/${encodeURIComponent(worldDefinitionId)}/draft/${kind}-proposals",
+    );
     expect(api).toContain('"/me/active-session"');
   });
 });

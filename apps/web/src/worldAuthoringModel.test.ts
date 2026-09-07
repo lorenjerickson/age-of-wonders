@@ -20,11 +20,14 @@ import {
   recordDescription,
   recordKey,
   recordName,
+  requestedDraftRecordMissing,
   recordsForLibrary,
   recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
+  savedWorldRecordEditorSnapshot,
   upsertDraftRecord,
   worldCreationInput,
+  worldDraftMutationRevision,
   worldDraftLabel,
   worldDraftStartLabel,
   worldPlacementRecordsForLocation,
@@ -42,6 +45,33 @@ const record = (
 ): WorldDraftRecord => ({ resourceType, sourceId, payload });
 
 describe("World authoring projection", () => {
+  it("treats an unknown requested detail as not found instead of create", () => {
+    expect(requestedDraftRecordMissing(true, "missing", undefined)).toBe(true);
+    expect(requestedDraftRecordMissing(true, undefined, undefined)).toBe(false);
+    expect(
+      requestedDraftRecordMissing(
+        true,
+        "known",
+        record("locations", "known", {}),
+      ),
+    ).toBe(false);
+  });
+
+  it("binds proposal apply to its originating draft revision", () => {
+    expect(worldDraftMutationRevision(9, true, 7)).toBe(7);
+    expect(worldDraftMutationRevision(9, false, 7)).toBe(9);
+  });
+
+  it("clears the selected Item file from the saved editor baseline", () => {
+    expect(
+      JSON.parse(
+        savedWorldRecordEditorSnapshot(
+          { name: "Key", itemImageFileName: "key.png" },
+          "items",
+        ),
+      ),
+    ).toEqual({ name: "Key", itemImageFileName: "" });
+  });
   it("requires an explicit new Creature embodiment policy", () => {
     expect(creatureEmbodimentPolicyForSave(undefined, "", "")).toBeUndefined();
     expect(
@@ -195,6 +225,38 @@ describe("World authoring projection", () => {
     const removed = draftWithoutWorldPlacement(indexed, "placement-a");
     expect(removed.content.worldPlacementDefinitionIds).toEqual([]);
     expect(removed.records).toEqual([]);
+  });
+
+  it("projects only Item Definitions into the Item Compendium", () => {
+    const records = [
+      record("definitions", "definition-1", {
+        kind: "item",
+        name: "Key Definition",
+      }),
+      record("items", "instance-1", { name: "Carried Key" }),
+      record("definitions", "definition-2", {
+        kind: "item",
+        name: "Lens Definition",
+      }),
+    ];
+    expect(
+      recordsForLibrary(records, "items").map(({ sourceId }) => sourceId),
+    ).toEqual(["definition-1", "definition-2"]);
+    expect(
+      requestedDraftRecordMissing(
+        true,
+        "instance-1",
+        recordsForLibrary(records, "items").find(
+          ({ sourceId }) => sourceId === "instance-1",
+        ),
+      ),
+    ).toBe(true);
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        resourceType: "items",
+        sourceId: "instance-1",
+      }),
+    );
   });
 
   it("identifies registered World placement sources without coercing them", () => {

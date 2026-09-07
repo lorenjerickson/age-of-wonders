@@ -4,14 +4,12 @@ export const Route = createFileRoute(
   "/_gm/worlds/$worldId/bestiary/creatures/$creatureId",
 )({ component: CreatureRoute });
 function CreatureRoute() {
+  const creatureId = Route.useParams().creatureId;
   return (
     <DraftRecordEditor
+      key={creatureId}
       kind="creatures"
-      sourceId={
-        Route.useParams().creatureId === "new"
-          ? undefined
-          : Route.useParams().creatureId
-      }
+      sourceId={creatureId === "new" ? undefined : creatureId}
     />
   );
 }
