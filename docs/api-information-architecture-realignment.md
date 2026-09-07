@@ -1,7 +1,7 @@
 ---
 name: api-information-architecture-realignment
 description: Product-wide API ownership inventory, target route policy, and staged compatibility plan
-status: active-implementation-quick-start-complete
+status: implemented-core-scope-closed
 date: 2026-09-07
 architecture: docs/information-architecture-domain-model-realignment.md
 ---
@@ -20,6 +20,9 @@ This is a product-wide policy. The Campaign Session hierarchy is the first imple
 an isolated naming cleanup.
 
 ## Delivery status
+
+The core realignment is closed. The evidence-backed closure decision and its explicitly separate
+work inventory live in `docs/information-architecture-realignment-closure-audit.md`.
 
 The Session—including active-only installation concurrency—open Attribute/Equipment Slot,
 Profession Rank, and Character Definition authoring, Campaign Instance, Campaign/World authoring,

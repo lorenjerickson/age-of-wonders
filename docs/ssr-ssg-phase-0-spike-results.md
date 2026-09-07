@@ -2,6 +2,7 @@
 name: ssr-ssg-phase-0-spike-results
 status: deprecated-excluded
 replacement: docs/ssr-ssg-migration-implementation.md
+exclude-from-analysis-and-generation: true
 ---
 
 # SSR/SSG migration Phase 0 spike results

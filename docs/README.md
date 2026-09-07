@@ -38,16 +38,17 @@ fill it with a conflicting statement from a deprecated document.
 These documents may be used only for their stated scope and may not override the canonical
 architecture or implemented domain source of truth.
 
-| Document                                          | Status and scope                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `campaign-session-gate-1-implementation-plan.md`  | Completed Session delivery record; its compatibility route inventory is deprecated and excluded from current API analysis.           |
-| `api-information-architecture-realignment.md`     | Active product-wide API inventory, target route policy, compatibility plan, and implementation waves.                                |
-| `campaign-instance-gate-1-implementation-plan.md` | Completed Campaign Instance delivery record; its compatibility route inventory is deprecated and excluded from current API analysis. |
-| `combat-system-requirements.md`                   | Draft requirements for the intentionally deferred Rules/combat exploration.                                                          |
-| `science-and-technology-domain-refactor.md`       | Implemented science/technology semantics and rollout record.                                                                         |
-| `database-migration-adoption.md`                  | Operational database-migration runbook.                                                                                              |
-| `graph-index-reliability-design.md`               | Proposed graph-projection reliability work; not proof of implementation.                                                             |
-| `ssr-ssg-migration-implementation.md`             | Implemented web rendering/runtime record.                                                                                            |
+| Document                                                | Status and scope                                                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `campaign-session-gate-1-implementation-plan.md`        | Completed Session delivery record; its compatibility route inventory is deprecated and excluded from current API analysis.           |
+| `api-information-architecture-realignment.md`           | Completed product-wide API ownership inventory, route policy, compatibility record, and implementation waves.                        |
+| `information-architecture-realignment-closure-audit.md` | Passed evidence-backed closure record for the core realignment; separates completed architecture from deferred and fast-follow work. |
+| `campaign-instance-gate-1-implementation-plan.md`       | Completed Campaign Instance delivery record; its compatibility route inventory is deprecated and excluded from current API analysis. |
+| `combat-system-requirements.md`                         | Draft requirements for the intentionally deferred Rules/combat exploration.                                                          |
+| `science-and-technology-domain-refactor.md`             | Implemented science/technology semantics and rollout record.                                                                         |
+| `database-migration-adoption.md`                        | Operational database-migration runbook.                                                                                              |
+| `graph-index-reliability-design.md`                     | Proposed graph-projection reliability work; not proof of implementation.                                                             |
+| `ssr-ssg-migration-implementation.md`                   | Implemented web rendering/runtime record.                                                                                            |
 
 ## Explicit exclusion registry
 
@@ -77,6 +78,10 @@ may ingest an excluded document. File-wide deprecation notices are intentionally
 direct reader cannot mistake historical content for current authority.
 
 ## Realignment implementation status
+
+Core realignment status: **closed on 2026-09-07**. See
+`information-architecture-realignment-closure-audit.md` for evidence, verification, and the
+explicitly separate work inventory.
 
 | Area                                                                                               | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
