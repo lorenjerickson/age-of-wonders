@@ -4,6 +4,7 @@ import {
   MAX_SNAPSHOT_RECORDS,
   type SnapshotRecordInput,
 } from "./snapshot-manifest";
+import { CORE_MODEL_SCHEMA_RELEASE_ID } from "../model-registry/editable-core-model-seed";
 
 export const LEGACY_REALIGNMENT_SHADOW_PLAN_VERSION =
   "aow:legacy-realignment-shadow-plan/v1" as const;
@@ -14,7 +15,10 @@ export interface LegacyShadowDomainRecord {
   readonly resource: string;
   readonly id: string;
   readonly kind: string | null;
+  readonly name?: string | null;
   readonly revision: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
   readonly data: JsonObject;
 }
 
@@ -49,7 +53,8 @@ export type RealignmentTargetType =
   | "campaign-definition-snapshot"
   | "campaign-instance"
   | "campaign-instance-snapshot"
-  | "campaign-instance-runtime";
+  | "campaign-instance-runtime"
+  | "campaign-instance-session";
 
 export interface ProposedShadowRow<Payload = JsonObject> {
   readonly id: string;
@@ -103,6 +108,15 @@ export interface ProposedWorldDefinitionSnapshotPayload {
   readonly manifest: ProposedSnapshotManifest;
 }
 
+export interface ProposedWorldDefinitionDraftPayload {
+  readonly worldDefinitionId: string;
+  readonly baseRevisionId: string;
+  readonly baseSnapshotId: string;
+  readonly revisionName: string;
+  readonly content: JsonObject;
+  readonly snapshotRecords: readonly ProposedSnapshotRecord[];
+}
+
 export interface ProposedCampaignDefinitionPayload {
   readonly name: string;
   readonly worldDefinitionId: string;
@@ -126,6 +140,17 @@ export interface ProposedCampaignDefinitionSnapshotPayload {
   readonly manifest: ProposedSnapshotManifest;
 }
 
+export interface ProposedCampaignDefinitionDraftPayload {
+  readonly campaignDefinitionId: string;
+  readonly worldDefinitionId: string;
+  readonly baseRevisionId: string;
+  readonly baseSnapshotId: string;
+  readonly capturedWorldSnapshotId: string;
+  readonly revisionName: string;
+  readonly content: JsonObject;
+  readonly snapshotRecords: readonly ProposedSnapshotRecord[];
+}
+
 export interface ProposedCampaignInstancePayload {
   readonly name: string;
   readonly campaignDefinitionId: string;
@@ -147,6 +172,28 @@ export interface ProposedCampaignInstanceRuntimePayload {
   readonly campaignInstanceId: string;
   readonly campaignInstanceSnapshotId: string;
   readonly legacyGamePayload: JsonObject | null;
+}
+
+export interface ProposedCampaignInstanceSessionPayload {
+  readonly campaignInstanceId: string;
+  readonly name: string;
+  readonly status:
+    | "planned"
+    | "lobby"
+    | "active"
+    | "paused"
+    | "concluded"
+    | "cancelled";
+  readonly metadataRevision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly startedAt?: string;
+  readonly lobbyOpenedAt?: string;
+  readonly pausedAt?: string;
+  readonly concludedAt?: string;
+  readonly cancelledAt?: string;
+  readonly cancellationReason?: string;
+  readonly legacyPayload: JsonObject;
 }
 
 export interface LegacyIdentityMapEntry {
@@ -189,12 +236,15 @@ export interface LegacyRealignmentShadowPlanRows {
   readonly worldDefinitions: readonly ProposedShadowRow<ProposedWorldDefinitionPayload>[];
   readonly worldDefinitionRevisions: readonly ProposedShadowRow<ProposedWorldDefinitionRevisionPayload>[];
   readonly worldDefinitionSnapshots: readonly ProposedShadowRow<ProposedWorldDefinitionSnapshotPayload>[];
+  readonly worldDefinitionDrafts: readonly ProposedShadowRow<ProposedWorldDefinitionDraftPayload>[];
   readonly campaignDefinitions: readonly ProposedShadowRow<ProposedCampaignDefinitionPayload>[];
   readonly campaignDefinitionRevisions: readonly ProposedShadowRow<ProposedCampaignDefinitionRevisionPayload>[];
   readonly campaignDefinitionSnapshots: readonly ProposedShadowRow<ProposedCampaignDefinitionSnapshotPayload>[];
+  readonly campaignDefinitionDrafts: readonly ProposedShadowRow<ProposedCampaignDefinitionDraftPayload>[];
   readonly campaignInstances: readonly ProposedShadowRow<ProposedCampaignInstancePayload>[];
   readonly campaignInstanceSnapshots: readonly ProposedShadowRow<ProposedCampaignInstanceSnapshotPayload>[];
   readonly campaignInstanceRuntimes: readonly ProposedShadowRow<ProposedCampaignInstanceRuntimePayload>[];
+  readonly campaignInstanceSessions: readonly ProposedShadowRow<ProposedCampaignInstanceSessionPayload>[];
 }
 
 export interface LegacyRealignmentShadowPlan {
@@ -235,6 +285,370 @@ const isObject = (value: unknown): value is JsonObject =>
 
 function contentHash(value: unknown): string {
   return canonicalJsonHash(value);
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.trim().length > 0,
+      )
+    : [];
+}
+
+function humanName(
+  record: LegacyShadowDomainRecord | undefined,
+  fallback: string,
+): string {
+  if (!record) return fallback;
+  if (typeof record.data.name === "string" && record.data.name.trim()) {
+    return record.data.name.trim();
+  }
+  const identity = objectOrEmpty(record.data.identity);
+  if (typeof identity.name === "string" && identity.name.trim()) {
+    return identity.name.trim();
+  }
+  return record.name?.trim() || fallback;
+}
+
+function validIso(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+}
+
+function atOrAfter(value: string, minimum: string): string {
+  return new Date(value).getTime() >= new Date(minimum).getTime()
+    ? value
+    : minimum;
+}
+
+function worldDraftContent(
+  root: LegacyShadowDomainRecord,
+  records: readonly ProposedSnapshotRecord[],
+): JsonObject {
+  const locations = records
+    .filter((record) => record.resourceType === "locations")
+    .map((record) => record.sourceId);
+  const legacyDefinitionIds = strings(root.data.definitionIds);
+  const legacyModelSchemaReleaseIds = strings(
+    root.data.modelSchemaReleaseIds,
+  );
+  return {
+    ...root.data,
+    formatVersion: 1,
+    rootLocationId: root.id,
+    locationIds: locations,
+    // Legacy Definition and Creature payloads remain lossless draft records.
+    // Wave 3 canonical authoring may promote them without misrepresenting them
+    // as already conforming to the newer Definition contract.
+    definitionIds: [],
+    schemaDefinitionIds: strings(root.data.schemaDefinitionIds),
+    worldPlacementDefinitionIds: strings(
+      root.data.worldPlacementDefinitionIds,
+    ),
+    modelSchemaReleaseIds: [CORE_MODEL_SCHEMA_RELEASE_ID],
+    extensions: {
+      ...objectOrEmpty(root.data.extensions),
+      "aow:legacy-recovery": {
+        sourceResource: root.resource,
+        sourceRevision: root.revision,
+        definitionIds: legacyDefinitionIds,
+        modelSchemaReleaseIds: legacyModelSchemaReleaseIds,
+      },
+    },
+  };
+}
+
+function campaignPlacementRecords(
+  campaign: LegacyShadowDomainRecord,
+  recordsByKey: ReadonlyMap<string, LegacyShadowDomainRecord>,
+): ProposedSnapshotRecord[] {
+  const result: ProposedSnapshotRecord[] = [];
+  const append = (
+    value: unknown,
+    source:
+      | { readonly kind: "world-creature"; readonly creatureId: string }
+      | { readonly kind: "world-item"; readonly itemDefinitionId: string },
+  ) => {
+    if (!isObject(value)) return;
+    const id = value.id;
+    const locationId = value.locationId;
+    if (
+      typeof id !== "string" ||
+      !id.trim() ||
+      typeof locationId !== "string" ||
+      !locationId.trim()
+    ) {
+      return;
+    }
+    const referenced =
+      source.kind === "world-creature"
+        ? recordsByKey.get(`creatures\0${source.creatureId}`)
+        : recordsByKey.get(`definitions\0${source.itemDefinitionId}`);
+    const payload = {
+      id,
+      kind: "independent",
+      name: humanName(referenced, "Imported Campaign placement"),
+      locationId,
+      plotDefinitionIds: strings(value.plotDefinitionIds),
+      source,
+      extensions: { "aow:legacy-placement": value },
+    };
+    result.push({
+      resourceType: "campaign-placements",
+      sourceId: id,
+      sourceRevision: campaign.revision,
+      contentHash: contentHash(payload),
+      payload,
+    });
+  };
+  for (const value of Array.isArray(campaign.data.creaturePlacements)
+    ? campaign.data.creaturePlacements
+    : []) {
+    if (!isObject(value) || typeof value.creatureId !== "string") continue;
+    append(value, { kind: "world-creature", creatureId: value.creatureId });
+  }
+  for (const value of Array.isArray(campaign.data.itemPlacements)
+    ? campaign.data.itemPlacements
+    : []) {
+    if (!isObject(value) || typeof value.itemDefinitionId !== "string") {
+      continue;
+    }
+    append(value, {
+      kind: "world-item",
+      itemDefinitionId: value.itemDefinitionId,
+    });
+  }
+  return result.sort((left, right) => left.sourceId.localeCompare(right.sourceId));
+}
+
+function campaignDraftContent(
+  campaign: LegacyShadowDomainRecord,
+  placements: readonly ProposedSnapshotRecord[],
+  recoveredPlotId?: string,
+): JsonObject {
+  const legacyModelSchemaReleaseIds = strings(
+    campaign.data.modelSchemaReleaseIds,
+  );
+  const startingLocationId =
+    typeof campaign.data.partyStartingLocationId === "string"
+      ? campaign.data.partyStartingLocationId
+      : undefined;
+  const locationCanvases = Array.isArray(campaign.data.locationCanvases)
+    ? campaign.data.locationCanvases
+    : [];
+  return {
+    formatVersion: 1,
+    gmPremise:
+      typeof campaign.data.gmPremise === "string"
+        ? campaign.data.gmPremise
+        : "",
+    playerIntroduction:
+      typeof campaign.data.playerIntroduction === "string"
+        ? campaign.data.playerIntroduction
+        : "",
+    plotDefinitionIds: recoveredPlotId ? [recoveredPlotId] : [],
+    placementDefinitionIds: placements.map((record) => record.sourceId),
+    // The recovered Campaign inherits the core selection from its captured
+    // World. Legacy Campaign-specific selections remain metadata until they
+    // can be independently materialized and validated.
+    modelSchemaReleaseIds: [],
+    ...((startingLocationId || locationCanvases.length > 0) && {
+      preparation: {
+        ...(startingLocationId ? { startingLocationId } : {}),
+        ...(locationCanvases.length > 0 ? { locationCanvases } : {}),
+      },
+    }),
+    extensions: {
+      ...objectOrEmpty(campaign.data.extensions),
+      "aow:legacy-recovery": {
+        sourceResource: campaign.resource,
+        sourceRevision: campaign.revision,
+        modelSchemaReleaseIds: legacyModelSchemaReleaseIds,
+        payload: campaign.data,
+      },
+    },
+  };
+}
+
+function recoveredPlotRecord(
+  campaign: LegacyShadowDomainRecord,
+  campaignDefinitionId: string,
+  placements: readonly ProposedSnapshotRecord[],
+): ProposedSnapshotRecord | undefined {
+  const discoveries = Array.isArray(campaign.data.discoveries)
+    ? campaign.data.discoveries.filter(isObject)
+    : [];
+  const objectives = Array.isArray(campaign.data.objectives)
+    ? campaign.data.objectives.filter(isObject)
+    : [];
+  const pressures = Array.isArray(campaign.data.pressures)
+    ? campaign.data.pressures.filter(isObject)
+    : [];
+  const resistances = Array.isArray(campaign.data.resistances)
+    ? campaign.data.resistances.filter(isObject)
+    : [];
+  if (
+    discoveries.length === 0 &&
+    objectives.length === 0 &&
+    pressures.length === 0 &&
+    resistances.length === 0
+  ) {
+    return undefined;
+  }
+  const plotId = `recovery:plot:${campaign.id}`;
+  const namedEntries = (entries: readonly JsonObject[], noun: string) =>
+    entries.map((entry, index) => ({
+      id:
+        typeof entry.id === "string" && entry.id.trim()
+          ? entry.id
+          : `${plotId}:${noun}:${index + 1}`,
+      name:
+        typeof entry.name === "string" && entry.name.trim()
+          ? entry.name
+          : `Recovered ${noun} ${index + 1}`,
+      ...(typeof entry.description === "string"
+        ? { description: entry.description }
+        : {}),
+      extensions: { "aow:legacy-recovery": entry },
+    }));
+  const projectedDiscoveries = discoveries.map((entry, index) => {
+    const discoveryId =
+      typeof entry.id === "string" && entry.id.trim()
+        ? entry.id
+        : `${plotId}:discovery:${index + 1}`;
+    const grants = Array.isArray(entry.grants)
+      ? entry.grants.filter(isObject)
+      : [];
+    const claims = grants.flatMap((grant, grantIndex) => {
+      if (typeof grant.text !== "string" || !grant.text.trim()) return [];
+      const legacyKind = typeof grant.kind === "string" ? grant.kind : "fact";
+      const kind = legacyKind === "rumor" ? "rumor" : "truth";
+      return [
+        {
+          id: `${discoveryId}:claim:${grantIndex + 1}`,
+          kind,
+          statement: grant.text,
+          provenance: "Recovered from legacy Campaign discovery grant.",
+          extensions: { "aow:legacy-recovery": grant },
+        },
+      ];
+    });
+    return {
+      id: discoveryId,
+      name:
+        typeof entry.name === "string" && entry.name.trim()
+          ? entry.name
+          : `Recovered discovery ${index + 1}`,
+      claims,
+      extensions: { "aow:legacy-recovery": entry },
+    };
+  });
+  const locations = [
+    ...new Set(
+      discoveries
+        .map((entry) => entry.locationId)
+        .filter(
+          (locationId): locationId is string =>
+            typeof locationId === "string" && locationId.trim().length > 0,
+        ),
+    ),
+  ];
+  const payload = {
+    id: plotId,
+    campaignDefinitionId,
+    parent: { kind: "root" },
+    name: `Recovered ${humanName(campaign, "Campaign")} plot`,
+    description:
+      "Recovered authoring content retained from the legacy Campaign.",
+    objectives: namedEntries(objectives, "objective"),
+    pressures: namedEntries(pressures, "pressure"),
+    resistances: namedEntries(resistances, "resistance"),
+    discoveries: projectedDiscoveries,
+    locationContexts: locations.map((locationId, index) => ({
+      id: `${plotId}:location:${index + 1}`,
+      locationId,
+      placementDefinitionIds: placements
+        .filter((placement) => placement.payload.locationId === locationId)
+        .map((placement) => placement.sourceId),
+    })),
+    extensions: {
+      "aow:legacy-recovery": {
+        objectives,
+        pressures,
+        resistances,
+        discoveries,
+      },
+    },
+  };
+  return {
+    resourceType: "plots",
+    sourceId: plotId,
+    sourceRevision: campaign.revision,
+    contentHash: contentHash(payload),
+    payload,
+  };
+}
+
+function historicalSessionPayload(
+  session: LegacyShadowDomainRecord,
+  campaignInstanceId: string,
+  capturedAt: string,
+): ProposedCampaignInstanceSessionPayload {
+  const createdAt =
+    validIso(session.createdAt) ??
+    validIso(
+      objectOrEmpty(objectOrEmpty(session.data.identity).version).updatedAt,
+    ) ??
+    capturedAt;
+  const updatedAt = validIso(session.updatedAt) ?? capturedAt;
+  const startedAt = validIso(session.data.startedAt);
+  const endedAt = validIso(session.data.endedAt);
+  const cancelledAt = validIso(session.data.cancelledAt);
+  const sourceStatus =
+    typeof session.data.status === "string"
+      ? session.data.status.toLowerCase()
+      : "planned";
+  const base = {
+    campaignInstanceId,
+    name: humanName(session, "Imported Session"),
+    metadataRevision: Math.max(1, session.revision),
+    createdAt,
+    updatedAt,
+    legacyPayload: session.data,
+  };
+  if (sourceStatus === "completed" || sourceStatus === "concluded") {
+    const started = startedAt ?? createdAt;
+    return {
+      ...base,
+      status: "concluded",
+      startedAt: started,
+      concludedAt: atOrAfter(endedAt ?? updatedAt, started),
+    };
+  }
+  if (sourceStatus === "cancelled" || sourceStatus === "canceled") {
+    return {
+      ...base,
+      status: "cancelled",
+      ...(startedAt ? { startedAt } : {}),
+      cancelledAt: atOrAfter(cancelledAt ?? updatedAt, startedAt ?? createdAt),
+      cancellationReason: "Imported from a cancelled legacy Session.",
+    };
+  }
+  if (sourceStatus === "active" || sourceStatus === "paused") {
+    const started = startedAt ?? createdAt;
+    return {
+      ...base,
+      status: "paused",
+      startedAt: started,
+      pausedAt: atOrAfter(updatedAt, started),
+    };
+  }
+  if (sourceStatus === "lobby") {
+    return { ...base, status: "lobby", lobbyOpenedAt: updatedAt };
+  }
+  return { ...base, status: "planned" };
 }
 
 function targetId(type: RealignmentTargetType, legacyId: string): string {
@@ -702,22 +1116,28 @@ export function planLegacyRealignmentShadowConversion(
     worldDefinitions: ProposedShadowRow<ProposedWorldDefinitionPayload>[];
     worldDefinitionRevisions: ProposedShadowRow<ProposedWorldDefinitionRevisionPayload>[];
     worldDefinitionSnapshots: ProposedShadowRow<ProposedWorldDefinitionSnapshotPayload>[];
+    worldDefinitionDrafts: ProposedShadowRow<ProposedWorldDefinitionDraftPayload>[];
     campaignDefinitions: ProposedShadowRow<ProposedCampaignDefinitionPayload>[];
     campaignDefinitionRevisions: ProposedShadowRow<ProposedCampaignDefinitionRevisionPayload>[];
     campaignDefinitionSnapshots: ProposedShadowRow<ProposedCampaignDefinitionSnapshotPayload>[];
+    campaignDefinitionDrafts: ProposedShadowRow<ProposedCampaignDefinitionDraftPayload>[];
     campaignInstances: ProposedShadowRow<ProposedCampaignInstancePayload>[];
     campaignInstanceSnapshots: ProposedShadowRow<ProposedCampaignInstanceSnapshotPayload>[];
     campaignInstanceRuntimes: ProposedShadowRow<ProposedCampaignInstanceRuntimePayload>[];
+    campaignInstanceSessions: ProposedShadowRow<ProposedCampaignInstanceSessionPayload>[];
   } = {
     worldDefinitions: [],
     worldDefinitionRevisions: [],
     worldDefinitionSnapshots: [],
+    worldDefinitionDrafts: [],
     campaignDefinitions: [],
     campaignDefinitionRevisions: [],
     campaignDefinitionSnapshots: [],
+    campaignDefinitionDrafts: [],
     campaignInstances: [],
     campaignInstanceSnapshots: [],
     campaignInstanceRuntimes: [],
+    campaignInstanceSessions: [],
   };
   const legacyIdentityMap: LegacyIdentityMapEntry[] = [];
   const dependentRebindings: LegacyDependentRebinding[] = [];
@@ -784,6 +1204,17 @@ export function planLegacyRealignmentShadowConversion(
         manifest,
       },
     });
+    rows.worldDefinitionDrafts.push({
+      id: `realignment:v1:world-definition-draft:${root.id}`,
+      payload: {
+        worldDefinitionId: definitionId,
+        baseRevisionId: revisionId,
+        baseSnapshotId: snapshotId,
+        revisionName: humanName(root, "Unnamed World"),
+        content: worldDraftContent(root, snapshotRecords),
+        snapshotRecords,
+      },
+    });
     mapIdentity(root, "world-definition", definitionId);
     mapIdentity(root, "world-definition-revision", revisionId);
     mapIdentity(root, "world-definition-snapshot", snapshotId);
@@ -802,6 +1233,31 @@ export function planLegacyRealignmentShadowConversion(
       "campaign-definition-snapshot",
       campaign.id,
     );
+    const initialPlacementRecords = campaignPlacementRecords(
+      campaign,
+      recordsByKey,
+    );
+    const plotRecord = recoveredPlotRecord(
+      campaign,
+      definitionId,
+      initialPlacementRecords,
+    );
+    const placementRecords = plotRecord
+      ? initialPlacementRecords.map((record) => {
+          const payload = {
+            ...record.payload,
+            plotDefinitionIds:
+              strings(record.payload.plotDefinitionIds).length > 0
+                ? strings(record.payload.plotDefinitionIds)
+                : [plotRecord.sourceId],
+          };
+          return { ...record, contentHash: contentHash(payload), payload };
+        })
+      : initialPlacementRecords;
+    const campaignDraftRecords = [
+      ...(plotRecord ? [plotRecord] : []),
+      ...placementRecords,
+    ];
     const definitionRecords = [
       {
         resourceType: "campaign-definition-revision",
@@ -841,6 +1297,23 @@ export function planLegacyRealignmentShadowConversion(
         capturedWorldSnapshotId: worldSnapshotId,
         capturedAt: source.capturedAt,
         manifest: definitionManifest,
+      },
+    });
+    rows.campaignDefinitionDrafts.push({
+      id: `realignment:v1:campaign-definition-draft:${campaign.id}`,
+      payload: {
+        campaignDefinitionId: definitionId,
+        worldDefinitionId,
+        baseRevisionId: revisionId,
+        baseSnapshotId: definitionSnapshotId,
+        capturedWorldSnapshotId: worldSnapshotId,
+        revisionName: humanName(campaign, "Unnamed Campaign"),
+        content: campaignDraftContent(
+          campaign,
+          placementRecords,
+          plotRecord?.sourceId,
+        ),
+        snapshotRecords: campaignDraftRecords,
       },
     });
     mapIdentity(campaign, "campaign-definition", definitionId);
@@ -926,6 +1399,19 @@ export function planLegacyRealignmentShadowConversion(
     mapIdentity(campaign, "campaign-instance-snapshot", instanceSnapshotId);
     if (game) mapIdentity(game, "campaign-instance-runtime", runtimeId);
 
+    for (const session of sessionsByCampaign.get(campaign.id) ?? []) {
+      const sessionId = targetId("campaign-instance-session", session.id);
+      rows.campaignInstanceSessions.push({
+        id: sessionId,
+        payload: historicalSessionPayload(
+          session,
+          instanceId,
+          source.capturedAt,
+        ),
+      });
+      mapIdentity(session, "campaign-instance-session", sessionId);
+    }
+
     const rebindDomainRecords = (
       resource: "sessions" | "characters",
       entries: readonly LegacyShadowDomainRecord[],
@@ -939,7 +1425,6 @@ export function planLegacyRealignmentShadowConversion(
         });
       }
     };
-    rebindDomainRecords("sessions", sessionsByCampaign.get(campaign.id) ?? []);
     rebindDomainRecords(
       "characters",
       charactersByCampaign.get(campaign.id) ?? [],

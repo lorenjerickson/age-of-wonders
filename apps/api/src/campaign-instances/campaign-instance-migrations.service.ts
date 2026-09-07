@@ -1728,7 +1728,9 @@ function recordObject(value: unknown): Record<string, unknown> {
 
 function humanName(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const name = (payload as Record<string, unknown>).name;
+    const object = payload as Record<string, unknown>;
+    const identity = recordObject(object.identity);
+    const name = object.name ?? identity.name;
     if (typeof name === "string" && name.trim()) return name.trim();
   }
   return fallback.replaceAll("-", " ");

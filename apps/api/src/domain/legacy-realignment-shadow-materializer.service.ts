@@ -7,6 +7,7 @@ import {
 import { createHash } from "node:crypto";
 import type { PrismaService } from "../prisma/prisma.service";
 import { DOMAIN_RESOURCES } from "./domain-resource";
+import { CORE_MODEL_SCHEMA_RELEASE_ID } from "../model-registry/editable-core-model-seed";
 import {
   LegacyRealignmentPreflightService,
   type LegacyRealignmentInventory,
@@ -45,12 +46,16 @@ export interface LegacyRealignmentMaterializationCounts {
   readonly worldDefinitions: number;
   readonly worldDefinitionRevisions: number;
   readonly worldDefinitionSnapshots: number;
+  readonly worldRevisionModelSchemaSelections: number;
+  readonly worldDefinitionDrafts: number;
   readonly campaignDefinitions: number;
   readonly campaignDefinitionRevisions: number;
   readonly campaignDefinitionSnapshots: number;
+  readonly campaignDefinitionDrafts: number;
   readonly campaignInstances: number;
   readonly campaignInstanceSnapshots: number;
   readonly campaignInstanceRuntimes: number;
+  readonly campaignInstanceSessions: number;
   readonly legacyIdentityMappings: number;
   readonly deferredDependentRebindings: number;
   readonly retainedLegacyRecords: number;
@@ -190,7 +195,10 @@ export class LegacyRealignmentShadowMaterializerService {
             resource: true,
             id: true,
             kind: true,
+            name: true,
             revision: true,
+            createdAt: true,
+            updatedAt: true,
             data: true,
           },
           orderBy: [{ resource: "asc" }, { id: "asc" }],
@@ -245,7 +253,10 @@ export class LegacyRealignmentShadowMaterializerService {
         resource: record.resource,
         id: record.id,
         kind: record.kind,
+        name: record.name,
         revision: record.revision,
+        createdAt: record.createdAt?.toISOString() ?? capturedAt,
+        updatedAt: record.updatedAt?.toISOString() ?? capturedAt,
         data: asObject(record.data),
       })),
       memberships: memberships.map(({ id, campaignId, ...data }) => ({
@@ -463,7 +474,6 @@ export class LegacyRealignmentShadowMaterializerService {
         status: "ACTIVE" as const,
         ownerUserId,
         createdAt: at,
-        updatedAt: at,
       })),
     );
     await createManyIfAny(
@@ -505,6 +515,49 @@ export class LegacyRealignmentShadowMaterializerService {
         };
       }),
     );
+    await createManyIfAny(
+      transaction.worldDefinitionRevisionModelSchemaRelease,
+      plan.rows.worldDefinitionRevisions.map((row) => ({
+        worldDefinitionRevisionId: row.id,
+        modelSchemaReleaseId: CORE_MODEL_SCHEMA_RELEASE_ID,
+        selectionOrder: 0,
+      })),
+      {
+        identityFields: [
+          "worldDefinitionRevisionId",
+          "modelSchemaReleaseId",
+        ],
+      },
+    );
+    await createManyIfAny(
+      transaction.worldDefinitionDraft,
+      plan.rows.worldDefinitionDrafts.map((row) => ({
+        id: row.id,
+        worldDefinitionId: stringField(row.payload, "worldDefinitionId"),
+        baseRevisionId: stringField(row.payload, "baseRevisionId"),
+        baseSnapshotId: stringField(row.payload, "baseSnapshotId"),
+        revisionName: stringField(row.payload, "revisionName"),
+        content: inputJson(row.payload.content),
+        snapshotRecords: inputJson(row.payload.snapshotRecords),
+        storageRevision: 1,
+        validationStatus: "NOT_VALIDATED" as const,
+        createdByUserId: ownerUserId,
+        updatedByUserId: ownerUserId,
+        createdAt: at,
+        updatedAt: at,
+      })),
+      {
+        ignoreExistingFields: [
+          "revisionName",
+          "content",
+          "snapshotRecords",
+          "storageRevision",
+          "validationStatus",
+          "updatedByUserId",
+          "updatedAt",
+        ],
+      },
+    );
     for (const row of plan.rows.worldDefinitions) {
       await requirePointerUpdate(
         transaction.worldDefinition,
@@ -537,7 +590,6 @@ export class LegacyRealignmentShadowMaterializerService {
         status: "ACTIVE" as const,
         ownerUserId,
         createdAt: at,
-        updatedAt: at,
       })),
     );
     await createManyIfAny(
@@ -595,6 +647,43 @@ export class LegacyRealignmentShadowMaterializerService {
         };
       }),
     );
+    await createManyIfAny(
+      transaction.campaignDefinitionDraft,
+      plan.rows.campaignDefinitionDrafts.map((row) => ({
+        id: row.id,
+        campaignDefinitionId: stringField(
+          row.payload,
+          "campaignDefinitionId",
+        ),
+        worldDefinitionId: stringField(row.payload, "worldDefinitionId"),
+        baseRevisionId: stringField(row.payload, "baseRevisionId"),
+        baseSnapshotId: stringField(row.payload, "baseSnapshotId"),
+        capturedWorldSnapshotId: stringField(
+          row.payload,
+          "capturedWorldSnapshotId",
+        ),
+        revisionName: stringField(row.payload, "revisionName"),
+        content: inputJson(row.payload.content),
+        snapshotRecords: inputJson(row.payload.snapshotRecords),
+        storageRevision: 1,
+        validationStatus: "NOT_VALIDATED" as const,
+        createdByUserId: ownerUserId,
+        updatedByUserId: ownerUserId,
+        createdAt: at,
+        updatedAt: at,
+      })),
+      {
+        ignoreExistingFields: [
+          "revisionName",
+          "content",
+          "snapshotRecords",
+          "storageRevision",
+          "validationStatus",
+          "updatedByUserId",
+          "updatedAt",
+        ],
+      },
+    );
     for (const row of plan.rows.campaignDefinitions) {
       await requirePointerUpdate(
         transaction.campaignDefinition,
@@ -620,6 +709,12 @@ export class LegacyRealignmentShadowMaterializerService {
       "createdByUserId",
       ownerUserId,
     );
+    await adoptNullableAttribution(
+      transaction.campaignInstance,
+      plan.rows.campaignInstances,
+      "ownerUserId",
+      ownerUserId,
+    );
     await createManyIfAny(
       transaction.campaignInstance,
       plan.rows.campaignInstances.map((row) => ({
@@ -628,8 +723,8 @@ export class LegacyRealignmentShadowMaterializerService {
         name: stringField(row.payload, "name"),
         status: instanceStatus(stringField(row.payload, "status")),
         createdByUserId: ownerUserId,
+        ownerUserId,
         createdAt: dateField(row.payload, "createdAt"),
-        updatedAt: at,
       })),
     );
     await createManyIfAny(
@@ -688,6 +783,36 @@ export class LegacyRealignmentShadowMaterializerService {
         updatedAt: at,
       })),
     );
+    await createManyIfAny(
+      transaction.campaignInstanceSession,
+      plan.rows.campaignInstanceSessions.map((row) => ({
+        id: row.id,
+        campaignInstanceId: stringField(
+          row.payload,
+          "campaignInstanceId",
+        ),
+        name: stringField(row.payload, "name"),
+        status: stringField(row.payload, "status").toUpperCase(),
+        metadataRevision: numberField(row.payload, "metadataRevision"),
+        createdByUserId: ownerUserId,
+        lobbyOpenedAt: optionalDateField(row.payload, "lobbyOpenedAt"),
+        startedAt: optionalDateField(row.payload, "startedAt"),
+        pausedAt: optionalDateField(row.payload, "pausedAt"),
+        concludedAt: optionalDateField(row.payload, "concludedAt"),
+        cancelledAt: optionalDateField(row.payload, "cancelledAt"),
+        cancellationReason:
+          optionalStringField(row.payload, "cancellationReason") ?? null,
+        eventLog: inputJson([]),
+        extensions: inputJson({
+          "aow:legacy-session-import": {
+            kind: "historical-session",
+            payload: row.payload.legacyPayload,
+          },
+        }),
+        createdAt: dateField(row.payload, "createdAt"),
+        updatedAt: dateField(row.payload, "updatedAt"),
+      })),
+    );
   }
 
   private report(
@@ -714,12 +839,17 @@ function countsFromPlan(
     worldDefinitions: plan.rows.worldDefinitions.length,
     worldDefinitionRevisions: plan.rows.worldDefinitionRevisions.length,
     worldDefinitionSnapshots: plan.rows.worldDefinitionSnapshots.length,
+    worldRevisionModelSchemaSelections:
+      plan.rows.worldDefinitionRevisions.length,
+    worldDefinitionDrafts: plan.rows.worldDefinitionDrafts.length,
     campaignDefinitions: plan.rows.campaignDefinitions.length,
     campaignDefinitionRevisions: plan.rows.campaignDefinitionRevisions.length,
     campaignDefinitionSnapshots: plan.rows.campaignDefinitionSnapshots.length,
+    campaignDefinitionDrafts: plan.rows.campaignDefinitionDrafts.length,
     campaignInstances: plan.rows.campaignInstances.length,
     campaignInstanceSnapshots: plan.rows.campaignInstanceSnapshots.length,
     campaignInstanceRuntimes: plan.rows.campaignInstanceRuntimes.length,
+    campaignInstanceSessions: plan.rows.campaignInstanceSessions.length,
     legacyIdentityMappings: plan.legacyIdentityMap.length,
     deferredDependentRebindings: plan.dependentRebindings.length,
     retainedLegacyRecords: plan.retainedLegacyRecords.length,
@@ -731,12 +861,16 @@ function emptyCounts(): LegacyRealignmentMaterializationCounts {
     worldDefinitions: 0,
     worldDefinitionRevisions: 0,
     worldDefinitionSnapshots: 0,
+    worldRevisionModelSchemaSelections: 0,
+    worldDefinitionDrafts: 0,
     campaignDefinitions: 0,
     campaignDefinitionRevisions: 0,
     campaignDefinitionSnapshots: 0,
+    campaignDefinitionDrafts: 0,
     campaignInstances: 0,
     campaignInstanceSnapshots: 0,
     campaignInstanceRuntimes: 0,
+    campaignInstanceSessions: 0,
     legacyIdentityMappings: 0,
     deferredDependentRebindings: 0,
     retainedLegacyRecords: 0,
@@ -770,31 +904,57 @@ export async function createManyIfAny(
   data: readonly unknown[],
   options: {
     readonly allowExistingNullFields?: readonly string[];
+    readonly ignoreExistingFields?: readonly string[];
+    readonly identityFields?: readonly string[];
   } = {},
 ): Promise<void> {
   if (data.length === 0) return;
   const created = await delegate.createMany({ data, skipDuplicates: true });
   if (created.count >= data.length) return;
   const desired = data.map(requireObject);
-  const ids = desired.map((row) => stringField(row, "id"));
+  const identityFields = options.identityFields ?? ["id"];
+  const identity = (row: Record<string, unknown>) =>
+    identityFields.map((field) => stringField(row, field)).join("\0");
   const existing = (await delegate.findMany({
-    where: { id: { in: ids } },
+    where:
+      identityFields.length === 1 && identityFields[0] === "id"
+        ? { id: { in: desired.map((row) => stringField(row, "id")) } }
+        : {
+            OR: desired.map((row) =>
+              Object.fromEntries(
+                identityFields.map((field) => [field, stringField(row, field)]),
+              ),
+            ),
+          },
   })).map(requireObject);
   const existingById = new Map(
-    existing.map((row) => [stringField(row, "id"), row]),
+    existing.map((row) => [identity(row), row]),
   );
   for (const row of desired) {
-    const persisted = existingById.get(stringField(row, "id"));
+    const persisted = existingById.get(identity(row));
     if (
       !persisted ||
       !containsEquivalentFields(
         persisted,
         row,
         new Set(options.allowExistingNullFields ?? []),
+        new Set(options.ignoreExistingFields ?? []),
       )
     ) {
+      const resource = optionalStringField(row, "legacyResource");
+      const targetType = optionalStringField(row, "targetType");
+      const context =
+        resource && targetType
+          ? ` for ${resource} to ${targetType}`
+          : "campaignInstanceId" in row && "metadataRevision" in row
+            ? " for a recovered Session"
+            : "campaignDefinitionId" in row && "revisionName" in row
+              ? " for a Campaign draft"
+              : "worldDefinitionId" in row && "revisionName" in row
+                ? " for a World draft"
+                : ` for fields ${Object.keys(row).sort().join(",")}`;
       throw new Error(
-        "Existing shadow data differs from the deterministic migration plan.",
+        `Existing shadow data differs from the deterministic migration plan${context}.`,
       );
     }
   }
@@ -834,8 +994,10 @@ function containsEquivalentFields(
   persisted: Record<string, unknown>,
   desired: Record<string, unknown>,
   allowExistingNullFields: ReadonlySet<string>,
+  ignoreExistingFields: ReadonlySet<string>,
 ): boolean {
   return Object.entries(desired).every(([key, value]) => {
+    if (ignoreExistingFields.has(key)) return true;
     if (allowExistingNullFields.has(key) && persisted[key] === null) return true;
     return equivalentValue(persisted[key], value);
   });
@@ -861,16 +1023,24 @@ function canonicalComparable(value: unknown): unknown {
 }
 
 async function requirePointerUpdate(
-  delegate: { updateMany(args: unknown): Promise<{ count: number }> },
+  delegate: {
+    updateMany(args: unknown): Promise<{ count: number }>;
+    findMany(args: unknown): Promise<readonly unknown[]>;
+  },
   id: string,
   field: "currentRevisionId" | "currentSnapshotId",
   value: string,
 ): Promise<void> {
   const result = await delegate.updateMany({
-    where: { id, OR: [{ [field]: null }, { [field]: value }] },
+    where: { id, [field]: null },
     data: { [field]: value },
   });
-  if (result.count !== 1) {
+  if (result.count === 1) return;
+  const matching = await delegate.findMany({
+    where: { id, [field]: value },
+    select: { id: true },
+  });
+  if (matching.length !== 1) {
     throw new Error(
       "Existing shadow lineage points at a different immutable capture.",
     );
@@ -943,4 +1113,19 @@ function dateField(value: object, field: string): Date {
     throw new Error(`The shadow plan has an invalid date field ${field}.`);
   }
   return result;
+}
+
+function optionalStringField(value: object, field: string): string | undefined {
+  const result = (value as Record<string, unknown>)[field];
+  return typeof result === "string" && result.length > 0 ? result : undefined;
+}
+
+function optionalDateField(value: object, field: string): Date | null {
+  const result = optionalStringField(value, field);
+  if (!result) return null;
+  const date = new Date(result);
+  if (Number.isNaN(date.valueOf())) {
+    throw new Error(`The shadow plan has an invalid date field ${field}.`);
+  }
+  return date;
 }

@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 dist
 coverage
+.recovery/
 .env
 .env.local
 *.log

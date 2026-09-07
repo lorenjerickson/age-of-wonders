@@ -937,7 +937,9 @@ function projectWorld(row: WorldSnapshotRow) {
 
 function humanWorldRecord(record: { sourceId: string; payload: unknown }, fallback: string) {
   const payload = isObject(record.payload) ? record.payload : {};
-  return { id: record.sourceId, name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : fallback, kind: typeof payload.kind === "string" ? payload.kind : undefined, parentLocationId: typeof payload.parentLocationId === "string" ? payload.parentLocationId : undefined, locationId: typeof payload.locationId === "string" ? payload.locationId : undefined };
+  const identity = isObject(payload.identity) ? payload.identity : {};
+  const placement = isObject(payload.placement) ? payload.placement : {};
+  return { id: record.sourceId, name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : typeof identity.name === "string" && identity.name.trim() ? identity.name.trim() : fallback, kind: typeof payload.kind === "string" ? payload.kind : undefined, parentLocationId: typeof placement.parentLocationId === "string" ? placement.parentLocationId : typeof payload.parentLocationId === "string" ? payload.parentLocationId : undefined, locationId: typeof payload.locationId === "string" ? payload.locationId : undefined };
 }
 
 export function buildCampaignWorldMigrationPlan(
@@ -1545,7 +1547,10 @@ function keyed(records: readonly ManifestRecord[]) {
   return new Map(records.map((r) => [`${r.resourceType}\0${r.sourceId}`, r]));
 }
 function label(record: ManifestRecord | undefined, fallback: string) {
-  return record && isObject(record.payload) && typeof record.payload.name === "string" && record.payload.name.trim() ? record.payload.name.trim().slice(0, 160) : fallback;
+  if (!record || !isObject(record.payload)) return fallback;
+  const identity = isObject(record.payload.identity) ? record.payload.identity : {};
+  const name = typeof record.payload.name === "string" ? record.payload.name : identity.name;
+  return typeof name === "string" && name.trim() ? name.trim().slice(0, 160) : fallback;
 }
 function changeItem(record: ManifestRecord) {
   return { id: record.sourceId, name: label(record, humanResourceType(record.resourceType)), resourceType: record.resourceType, typeLabel: humanResourceType(record.resourceType) };

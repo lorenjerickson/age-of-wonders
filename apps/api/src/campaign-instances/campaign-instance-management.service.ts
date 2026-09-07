@@ -1415,7 +1415,9 @@ function plotParentId(
 }
 
 function humanName(value: unknown, fallback: string): string {
-  const name = objectValue(value).name;
+  const object = objectValue(value);
+  const identity = objectValue(object.identity);
+  const name = object.name ?? identity.name;
   return typeof name === "string" && name.trim() ? name.trim() : fallback;
 }
 

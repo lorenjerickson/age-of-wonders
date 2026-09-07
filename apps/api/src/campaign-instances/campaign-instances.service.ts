@@ -1025,9 +1025,9 @@ function array(value: unknown): unknown[] {
 }
 
 function humanName(value: Record<string, unknown>, fallback: string) {
-  return typeof value.name === "string" && value.name.trim()
-    ? value.name.trim()
-    : fallback;
+  const identity = object(value.identity);
+  const name = value.name ?? identity.name;
+  return typeof name === "string" && name.trim() ? name.trim() : fallback;
 }
 
 function selectedDefinition(selected: SelectedCampaignDefinitionSnapshotRow) {

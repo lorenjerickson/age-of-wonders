@@ -44,6 +44,24 @@ function sourceRows(withRuntime = true) {
               events: [{ type: "arrival" }],
             },
           },
+          {
+            resource: "sessions",
+            id: "opaque-session",
+            kind: null,
+            name: "Session 1",
+            revision: 2,
+            createdAt: new Date("2026-09-04T10:00:00.000Z"),
+            updatedAt: new Date("2026-09-04T11:00:00.000Z"),
+            data: {
+              identity: { id: "opaque-session" },
+              name: "Session 1",
+              campaignId: "opaque-campaign",
+              worldId: "opaque-world",
+              status: "completed",
+              startedAt: "2026-09-04T10:15:00.000Z",
+              endedAt: "2026-09-04T10:55:00.000Z",
+            },
+          },
         ]
       : []),
   ];
@@ -85,6 +103,12 @@ function prismaMock(
     worldDefinitionSnapshot: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    worldDefinitionRevisionModelSchemaRelease: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    worldDefinitionDraft: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     campaignDefinition: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -94,6 +118,9 @@ function prismaMock(
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     campaignDefinitionSnapshot: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    campaignDefinitionDraft: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     campaignInstance: {
@@ -107,8 +134,11 @@ function prismaMock(
     campaignInstanceRuntime: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    campaignInstanceSession: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     legacyIdentityMap: {
-      createMany: jest.fn().mockResolvedValue({ count: 9 }),
+      createMany: jest.fn().mockResolvedValue({ count: 10 }),
       findMany: jest.fn().mockResolvedValue([]),
     },
     installationRolloutState: {
@@ -197,12 +227,29 @@ describe("LegacyRealignmentShadowMaterializerService", () => {
     expect(tx.worldDefinition.createMany).toHaveBeenCalledTimes(1);
     expect(tx.worldDefinitionRevision.createMany).toHaveBeenCalledTimes(1);
     expect(tx.worldDefinitionSnapshot.createMany).toHaveBeenCalledTimes(1);
+    expect(
+      tx.worldDefinitionRevisionModelSchemaRelease.createMany,
+    ).toHaveBeenCalledTimes(1);
+    expect(tx.worldDefinitionDraft.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignDefinition.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignDefinitionRevision.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignDefinitionSnapshot.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.campaignDefinitionDraft.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignInstance.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignInstanceSnapshot.createMany).toHaveBeenCalledTimes(1);
     expect(tx.campaignInstanceRuntime.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.campaignInstanceSession.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.campaignInstanceSession.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            name: "Session 1",
+            status: "CONCLUDED",
+            createdByUserId: "gm-owner",
+          }),
+        ],
+      }),
+    );
     expect(tx.legacyIdentityMap.createMany).toHaveBeenCalledTimes(1);
     expect(tx.installationRolloutAudit.create).toHaveBeenCalledTimes(2);
     expect(tx.worldDefinitionRevision.updateMany).not.toHaveBeenCalled();
@@ -230,7 +277,12 @@ describe("LegacyRealignmentShadowMaterializerService", () => {
     );
     expect(tx.campaignInstance.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: [expect.objectContaining({ createdByUserId: "gm-owner" })],
+        data: [
+          expect.objectContaining({
+            createdByUserId: "gm-owner",
+            ownerUserId: "gm-owner",
+          }),
+        ],
       }),
     );
     expect(tx.campaignInstanceSnapshot.createMany).toHaveBeenCalledWith(
@@ -282,7 +334,7 @@ describe("LegacyRealignmentShadowMaterializerService", () => {
         .mockResolvedValue([{ id: "shadow-row", contentHash: "stale" }]),
     };
     await expect(createManyIfAny(stale, desired)).rejects.toThrow(
-      "Existing shadow data differs from the deterministic migration plan.",
+      /^Existing shadow data differs from the deterministic migration plan/,
     );
 
     const earlierImmutable = {
@@ -329,7 +381,7 @@ describe("LegacyRealignmentShadowMaterializerService", () => {
         { allowExistingNullFields: ["createdByUserId"] },
       ),
     ).rejects.toThrow(
-      "Existing shadow data differs from the deterministic migration plan.",
+      /^Existing shadow data differs from the deterministic migration plan/,
     );
   });
 
