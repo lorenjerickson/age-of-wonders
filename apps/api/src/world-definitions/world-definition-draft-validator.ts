@@ -102,6 +102,14 @@ export function validateWorldDefinitionDraft(
     if (!record) continue;
     const detail = canonicalWorldRecordIssue("definitions", id, record.payload);
     if (detail) add("authored-definition-invalid", recordName(record), detail);
+    if (isObject(record.payload) && record.payload.kind === "skill" && isObject(record.payload.components)) {
+      const associated = record.payload.components.associatedProfessionIds;
+      if (Array.isArray(associated)) for (const professionId of associated) {
+        const profession = typeof professionId === "string" ? byId.get(`definitions\0${professionId}`) : undefined;
+        if (!profession || !definitions.includes(String(professionId)) || !isObject(profession.payload) || profession.payload.kind !== "profession")
+          add("skill-profession-missing", recordName(record), "An associated Profession is unavailable in this World.");
+      }
+    }
   }
   validateCreatureEmbodimentPolicies(definitions, byId, add);
   validateCreatureDefinitionReferences(definitions, byId, add);

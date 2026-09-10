@@ -1,3 +1,4 @@
+import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   BadRequestException,
   ConflictException,
@@ -174,8 +175,7 @@ export class WorldDefinitionAuthoringService {
       throw staleDraft();
     const records = readRecords(owned.draft.snapshotRecords);
     const legacy = records.find(
-      (record) =>
-        record.resourceType === "creatures" && record.sourceId === id,
+      (record) => record.resourceType === "creatures" && record.sourceId === id,
     );
     if (
       !legacy ||
@@ -193,24 +193,19 @@ export class WorldDefinitionAuthoringService {
       "creature",
     );
     const prior = isObject(legacy.payload) ? legacy.payload : {};
-    const payload = worldCreaturePayload(
-      id,
-      dto,
-      authoredModel.conformance,
-      {
-        ...prior,
-        extensions: {
-          ...objectValue(prior.extensions),
-          "aow:legacy-creature": {
-            resourceType: legacy.resourceType,
-            ...(legacy.sourceRevision === undefined
-              ? {}
-              : { sourceRevision: legacy.sourceRevision }),
-            payload: legacy.payload,
-          },
+    const payload = worldCreaturePayload(id, dto, authoredModel.conformance, {
+      ...prior,
+      extensions: {
+        ...objectValue(prior.extensions),
+        "aow:legacy-creature": {
+          resourceType: legacy.resourceType,
+          ...(legacy.sourceRevision === undefined
+            ? {}
+            : { sourceRevision: legacy.sourceRevision }),
+          payload: legacy.payload,
         },
       },
-    );
+    });
     const issue = canonicalWorldRecordIssue("definitions", id, payload);
     if (issue) throw new BadRequestException(issue);
     assertGovernedRecordConformance(
@@ -225,9 +220,7 @@ export class WorldDefinitionAuthoringService {
       ...new Set([...definitionIds(owned.draft.content), id]),
     ];
     if (Array.isArray(content.creatureIds)) {
-      content.creatureIds = content.creatureIds.filter(
-        (value) => value !== id,
-      );
+      content.creatureIds = content.creatureIds.filter((value) => value !== id);
     }
     return this.persistDraft(
       worldDefinitionId,
@@ -338,6 +331,31 @@ export class WorldDefinitionAuthoringService {
         throw new BadRequestException(
           "The Location hierarchy cannot contain a cycle.",
         );
+      if (location.image) {
+        const prior = objectValue(existing?.payload).image;
+        const previousAssetId = objectValue(prior).assetId;
+        if (location.image.assetId !== previousAssetId) {
+          const asset =
+            typeof location.image.assetId === "string"
+              ? await this.prisma.mediaAsset.findFirst({
+                  where: {
+                    id: location.image.assetId,
+                    OR: [
+                      { createdByUserId: userId },
+                      { createdByUserId: null },
+                    ],
+                    mimeType: { startsWith: "image/" },
+                  },
+                })
+              : null;
+          if (!asset)
+            throw new BadRequestException(
+              "The selected Location image is unavailable.",
+            );
+          location.image = { ...location.image, mimeType: asset.mimeType };
+          delete location.image.uri;
+        }
+      }
       payload = worldLocationPayload(
         id,
         {
@@ -345,6 +363,9 @@ export class WorldDefinitionAuthoringService {
           description: location.description,
           kind: isRoot ? "world" : location.kind,
           ...(isRoot ? {} : { parentLocationId: location.parentLocationId }),
+          gmDescription: location.gmDescription,
+          discoveries: location.discoveries,
+          image: location.image,
           profileSummary: location.profileSummary,
           profileTags: location.profileTags,
           mapSceneNotes: location.mapSceneNotes,
@@ -637,6 +658,11 @@ export class WorldDefinitionAuthoringService {
     if (owned.draft.storageRevision !== dto.expectedStorageRevision)
       throw staleDraft();
     const records = normalizeRecords(dto.records);
+    for (const record of records) {
+      if (record.resourceType !== "definitions" || !isObject(record.payload) || !["profession", "skill"].includes(String(record.payload.kind))) continue;
+      const issue = record.payload.kind === "skill" ? skillModifierGrantIssue(record.payload.components) : professionModifierGrantIssue(record.payload.components);
+      if (issue) throw new BadRequestException(issue);
+    }
     assertBoundedDraftJson(dto.content, records);
     assertProtectedRecordsUnchanged(
       owned.draft.content,
@@ -1205,7 +1231,7 @@ function draftResponse(
     baseSnapshotId: row.baseSnapshotId ?? undefined,
     revisionName: row.revisionName,
     content: row.content,
-    records: row.snapshotRecords,
+    records: readRecords(row.snapshotRecords),
     storageRevision: row.storageRevision,
     validationStatus: row.validationStatus.toLowerCase().replaceAll("_", "-"),
     validatedStorageRevision: row.validatedStorageRevision ?? undefined,
@@ -1414,7 +1440,9 @@ function assertProtectedRecordsUnchanged(
       "Locations, Creatures, and Items must be changed through their dedicated authoring actions.",
     );
   }
-  const beforeLocations = new Set(stringArrayValue(priorContent, "locationIds"));
+  const beforeLocations = new Set(
+    stringArrayValue(priorContent, "locationIds"),
+  );
   const afterLocations = new Set(stringArrayValue(nextContent, "locationIds"));
   if (!equalStringSets(beforeLocations, afterLocations)) {
     throw new BadRequestException(
@@ -1504,9 +1532,10 @@ async function itemMediaAuthorizationIssues(
   );
   const issues = await Promise.all(
     items.map(async (record) => {
-      const image = isObject(record.payload) && isObject(record.payload.image)
-        ? record.payload.image
-        : {};
+      const image =
+        isObject(record.payload) && isObject(record.payload.image)
+          ? record.payload.image
+          : {};
       const assetId = image.assetId;
       const asset =
         typeof assetId === "string" && assetId.trim()
@@ -1526,8 +1555,7 @@ async function itemMediaAuthorizationIssues(
         : {
             code: "item-media-unauthorized",
             subject: authoredRecordName(record),
-            detail:
-              "The Item image is not an authorized image for this World.",
+            detail: "The Item image is not an authorized image for this World.",
           };
     }),
   );

@@ -1,3 +1,6 @@
+import { ProfessionModifiersEditor, type ModifierEdit } from "./ProfessionModifiersEditor";
+import { professionModifierLevels, professionModifiersValid } from "./professionModifierModel";
+import { useEditorSave } from "./useEditorSave";
 import {
   useEffect,
   useMemo,
@@ -925,13 +928,18 @@ export function DraftRecordEditor({
         : (initial.kind ?? (kind === "locations" ? "region" : "creature")),
     ),
   );
+  const windowSearch = useLocation().searchStr;
   const initialPlacement = objectValue(initial.placement);
   const initialProfile = objectValue(initial.profile);
   const initialMapScene = objectValue(initial.mapScene);
   const [parentId, setParentId] = useState(
     String(
       initialPlacement.parentLocationId ??
-        (kind === "locations" ? (draft?.content.rootLocationId ?? "") : ""),
+        (kind === "locations"
+          ? (new URLSearchParams(windowSearch).get("parentLocationId") ??
+            draft?.content.rootLocationId ??
+            "")
+          : ""),
     ),
   );
   const [profileSummary, setProfileSummary] = useState(
@@ -1086,8 +1094,8 @@ export function DraftRecordEditor({
     embodimentMaximum,
   };
   const snapshot = JSON.stringify(snapshotFields);
-  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
-  const dirty = snapshot !== savedSnapshot;
+  const editorSave = useEditorSave(snapshot);
+  const { dirty } = editorSave;
   const allowSavedNavigation = useRef(false);
   const priorSourceId = useRef(sourceId);
   useEffect(() => {
@@ -1100,7 +1108,7 @@ export function DraftRecordEditor({
   }, [sourceId]);
   useBlocker({
     shouldBlockFn: () =>
-      dirty &&
+      editorSave.hasChanges() &&
       !allowSavedNavigation.current &&
       !window.confirm("Leave without saving your World draft changes?"),
     enableBeforeUnload: dirty,
@@ -1262,7 +1270,7 @@ export function DraftRecordEditor({
       status: "current",
       effectiveModels: draft.effectiveModels,
     });
-    setSavedSnapshot(savedWorldRecordEditorSnapshot(snapshotFields, kind));
+    editorSave.markSaved(savedWorldRecordEditorSnapshot(snapshotFields, kind));
     setSaved(true);
     if (kind === "items") setItemImageFile(undefined);
     if (!existing) {
@@ -1497,7 +1505,10 @@ export function DraftRecordEditor({
           />
         )}
         <form
-          onSubmit={(event) => void submit(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void editorSave.run(() => submit(event));
+          }}
           className="mt-8 grid gap-5"
         >
           <Field label="Name" required>
@@ -1528,7 +1539,7 @@ export function DraftRecordEditor({
             </Alert>
           )}
           {kind === "locations" && (
-            <Disclosure summary="Profile and map scene" className="p-4">
+            <Disclosure summary="Location profile" className="p-4">
               <div className="mt-4 grid gap-5">
                 <Field label="Profile summary">
                   <Textarea
@@ -1545,26 +1556,14 @@ export function DraftRecordEditor({
                     className="mt-2 w-full"
                   />
                 </Field>
-                <Field label="Map or scene notes">
-                  <Textarea
-                    value={mapSceneNotes}
-                    onChange={(event) => setMapSceneNotes(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Map orientation">
-                  <Select
-                    value={mapOrientation}
-                    onChange={(event) => setMapOrientation(event.target.value)}
-                    className="mt-2 w-full"
+                {existing && (
+                  <InternalLink
+                    className="link"
+                    href={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/${encodeURIComponent(existing.sourceId)}/map${guideSuffix}`}
                   >
-                    <option value="">Not specified</option>
-                    <option value="scenic">Scenic</option>
-                    <option value="overhead">Overhead</option>
-                    <option value="side-on">Side-on</option>
-                  </Select>
-                </Field>
+                    Edit Map &amp; scene
+                  </InternalLink>
+                )}
               </div>
             </Disclosure>
           )}
@@ -1888,6 +1887,7 @@ export function DraftRecordEditor({
               type="submit"
               tone="primary"
               disabled={
+                editorSave.saving ||
                 !draft ||
                 draft.status === "stale" ||
                 proposalPending ||
@@ -1929,15 +1929,32 @@ export function DraftRecordEditor({
   );
 }
 
-function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
+export function WorldLocationPlacements({
+  location,
+  filter,
+}: {
+  location: WorldDraftRecord;
+  filter?: "creatures" | "items";
+}) {
   const { draft, canEdit, saveRecord, removeWorldPlacement, markDirty } =
     useWorldAuthoring();
   const placements = worldPlacementRecordsForLocation(
     draft?.records ?? [],
     location.sourceId,
+  ).filter(
+    (record) =>
+      !filter ||
+      objectValue(recordPayload(record).source).kind ===
+        (filter === "items" ? "world-item" : "world-creature"),
   );
-  const creatures = recordsForLibrary(draft?.records ?? [], "creatures");
-  const items = recordsForLibrary(draft?.records ?? [], "items");
+  const creatures =
+    filter === "items"
+      ? []
+      : recordsForLibrary(draft?.records ?? [], "creatures");
+  const items =
+    filter === "creatures"
+      ? []
+      : recordsForLibrary(draft?.records ?? [], "items");
   const [editingId, setEditingId] = useState("");
   const [name, setName] = useState("");
   const [sourceKey, setSourceKey] = useState("");
@@ -2109,7 +2126,11 @@ function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
           id="world-placement-heading"
           className="mt-2 text-2xl font-semibold"
         >
-          World placements
+          {filter === "creatures"
+            ? "Creatures"
+            : filter === "items"
+              ? "Items"
+              : "World placements"}
         </h2>
         <p className="mt-2 text-sm text-base-content/60">
           Place a named World Creature or Item in{" "}
@@ -2183,7 +2204,13 @@ function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
             );
           })
         ) : (
-          <Alert>No World placements are authored at this Location.</Alert>
+          <Alert>
+            {filter === "creatures"
+              ? "No Creatures are placed at this Location."
+              : filter === "items"
+                ? "No Items are placed at this Location."
+                : "No World placements are authored at this Location."}
+          </Alert>
         )}
       </div>
       {canEdit && (
@@ -2215,7 +2242,17 @@ function WorldLocationPlacements({ location }: { location: WorldDraftRecord }) {
                 className="mt-2 w-full"
               />
             </Field>
-            <Field label="Creature or Item" required className="sm:col-span-2">
+            <Field
+              label={
+                filter === "creatures"
+                  ? "Creature"
+                  : filter === "items"
+                    ? "Item"
+                    : "Creature or Item"
+              }
+              required
+              className="sm:col-span-2"
+            >
               <Select
                 required
                 value={sourceKey}
@@ -2427,6 +2464,7 @@ export function CharacterDefinitionEditor({
   const { definition, draft, saveRecord, canEdit, markDirty } =
     useWorldAuthoring();
   const navigate = useInternalNavigate();
+  const newRecordId = useRef<string | undefined>(undefined);
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const existing = (draft?.records ?? []).find(
     (record) =>
@@ -2454,18 +2492,24 @@ export function CharacterDefinitionEditor({
       ? initialRanks[0]
       : (draft?.effectiveModels?.professionRanks?.[0]?.key ?? ""),
   );
+  const [modifierLevels, setModifierLevels] = useState(() => professionModifierLevels(components as Record<string, JsonValue>));
+  const [modifierEdit, setModifierEdit] = useState<ModifierEdit | null>(null);
+  const modifiersValid = kind !== "profession" || professionModifiersValid(modifierLevels);
   const conformance = draft ? definitionConformance(draft, kind) : undefined;
   const snapshot = JSON.stringify({
     name,
     description,
     defaultAttribute,
     startingProfessionRank,
+    modifierLevels,
+    modifierEdit,
   });
-  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
-  const dirty = snapshot !== savedSnapshot;
+  const editorSave = useEditorSave(snapshot);
+  const { dirty } = editorSave;
   useBlocker({
     shouldBlockFn: () =>
-      dirty && !window.confirm("Leave without saving this Character option?"),
+      editorSave.hasChanges() &&
+      !window.confirm("Leave without saving this Character option?"),
     enableBeforeUnload: dirty,
   });
   useEffect(() => {
@@ -2474,8 +2518,9 @@ export function CharacterDefinitionEditor({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !name.trim() || !conformance) return;
-    const id = existing?.sourceId ?? crypto.randomUUID();
+    if (!draft || !canEdit || !name.trim() || !conformance || !modifiersValid || modifierEdit) return;
+    const id =
+      existing?.sourceId ?? (newRecordId.current ??= crypto.randomUUID());
     const generated = characterOptionDefinition({
       kind,
       id,
@@ -2488,7 +2533,9 @@ export function CharacterDefinitionEditor({
       description: description.trim(),
       defaultAttribute: defaultAttribute || undefined,
       startingProfessionRank: startingProfessionRank || undefined,
-      existingComponents: components as Record<string, JsonValue>,
+      existingComponents: kind === "profession"
+        ? { ...components as Record<string, JsonValue>, expertiseLevels: modifierLevels }
+        : components as Record<string, JsonValue>,
     });
     const didSave = await saveRecord({
       resourceType: "definitions",
@@ -2502,7 +2549,7 @@ export function CharacterDefinitionEditor({
       },
     });
     if (!didSave) return;
-    setSavedSnapshot(snapshot);
+    editorSave.markSaved(snapshot);
     if (!existing) {
       await navigate(
         `/worlds/${encodeURIComponent(definition.id)}/characters/${kind}s/${encodeURIComponent(id)}${guideSuffix}`,
@@ -2543,7 +2590,10 @@ export function CharacterDefinitionEditor({
       )}
       <DraftRequired>
         <form
-          onSubmit={(event) => void submit(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void editorSave.run(() => submit(event));
+          }}
           className="mt-8 grid gap-5"
         >
           <Field label="Name" required>
@@ -2599,16 +2649,31 @@ export function CharacterDefinitionEditor({
               </Select>
             </Field>
           )}
+          {kind === "profession" && <ProfessionModifiersEditor
+            levels={modifierLevels} onChange={setModifierLevels}
+            editing={modifierEdit} onEditingChange={setModifierEdit}
+            startingRank={startingProfessionRank}
+            ranks={draft?.effectiveModels?.professionRanks ?? []}
+            attributes={draft?.effectiveModels?.attributes ?? []}
+            skills={(draft?.records ?? []).filter(r => r.resourceType === "definitions" && recordPayload(r).kind === "skill").map(r => ({ key: r.sourceId, name: recordName(r, "Unnamed Skill") }))}
+            statistics={(draft?.effectiveModels?.elements ?? []).filter(e => e.kind === "field" && ["integer", "number"].includes(String(objectValue(e.payload?.valueType).kind))).map(e => ({ key: String(e.payload?.storageKey ?? e.key), name: e.name }))}
+            disabled={editorSave.saving}
+          />}
+          {modifierEdit && <p className="text-sm text-base-content/65" role="status">Add or update the modifier in the list, or cancel its form, before saving the profession.</p>}
+          {!modifiersValid && <Alert tone="warning">Give each modifier a name, a valid target, and whole-number dice counts and sizes before saving.</Alert>}
           <Button
             type="submit"
             tone="primary"
             disabled={
+              editorSave.saving ||
+              !!modifierEdit ||
+              !modifiersValid ||
               !conformance ||
               !name.trim() ||
               (kind === "profession" && !startingProfessionRank)
             }
           >
-            Save {title}
+            {editorSave.saving ? "Saving…" : `Save ${title}`}
           </Button>
         </form>
       </DraftRequired>

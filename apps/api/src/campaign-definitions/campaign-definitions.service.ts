@@ -841,7 +841,7 @@ function draftResponse(row: DraftRow) {
     capturedWorldSnapshotId: row.capturedWorldSnapshotId,
     capturedWorld: worldSummary(row.capturedWorldSnapshot, true),
     capturedWorldContent: projectWorld(row.capturedWorldSnapshot),
-    revisionName: row.revisionName, content: row.content, records: row.snapshotRecords,
+    revisionName: row.revisionName, content: row.content, records: readRecords(row.snapshotRecords),
     storageRevision: row.storageRevision,
     validationStatus: row.validationStatus.toLowerCase().replaceAll("_", "-"),
     validatedStorageRevision: row.validatedStorageRevision ?? undefined,

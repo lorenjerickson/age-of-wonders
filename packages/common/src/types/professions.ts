@@ -1,3 +1,4 @@
+import type { ModifierGrantDefinition } from "./modifiers";
 import type { NumericExpression } from "./dice";
 import type { Predicate } from "./expressions";
 import type {
@@ -45,6 +46,8 @@ export type ProfessionAdvancementWindow =
   | { readonly kind: "custom"; readonly predicate: Predicate };
 
 export interface ProfessionTierBenefits {
+  /** Granted once on entering this tier; retained alongside earlier tier grants. */
+  readonly modifierGrants?: readonly ModifierGrantDefinition[];
   /** Persistent attribute, statistic, proficiency, or other rule modifiers. */
   readonly modifiers?: readonly RuleModifier[];
   readonly traitIds?: readonly DefinitionId[];

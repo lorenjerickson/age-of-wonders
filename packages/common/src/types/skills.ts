@@ -1,3 +1,4 @@
+import type { ModifierGrantDefinition } from "./modifiers";
 import type {
   Attribute,
   Definition,
@@ -7,6 +8,10 @@ import type {
 } from "./primitives";
 
 export interface SkillComponents {
+  /** Typical learning contexts, not prerequisites or automatic acquisition grants. */
+  readonly associatedProfessionIds?: readonly DefinitionId[];
+  /** Award once when the skill is acquired; use the shared source-tracked grant lifecycle. */
+  readonly modifierGrants?: readonly ModifierGrantDefinition[];
   /** Used when a test does not select a different governing attribute. */
   readonly defaultAttribute?: Attribute;
 }

@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import { SaveWorldDraftDto } from "./dto/world-definition-authoring.dto";
+import { BadRequestException, ConflictException, ValidationPipe } from "@nestjs/common";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import { createEditableCoreModelSeed } from "../model-registry/editable-core-model-seed";
 import { compileModelSchemaRelease } from "../model-registry/model-registry-compiler";
@@ -132,6 +133,54 @@ function itemAuthoringHarness(asset?: {
 }
 
 describe("WorldDefinitionAuthoringService", () => {
+  it.each(["world-creature", "world-item", "character-option"])(
+    "round-trips recovered snapshot records through strict validation when saving %s",
+    async (kind) => {
+      const recoveredDraft = {
+        ...draft,
+        snapshotRecords: draft.snapshotRecords.map((record) => ({
+          ...record, sourceRevision: 1, contentHash: "snapshot-only-hash",
+        })),
+      };
+      const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const service = serviceWith({
+        worldDefinition: { findUnique: jest.fn().mockResolvedValue({
+          id: "world-1", status: "ACTIVE", draft: recoveredDraft,
+        }) },
+        worldDefinitionDraft: { updateMany },
+      });
+      const response = await service.getDraft("world-1", "gm-1");
+      expect(response.records[0]).not.toHaveProperty("contentHash");
+      expect(response.records[0].sourceRevision).toBe(1);
+      expect(response.records[0].payload).toEqual(draft.snapshotRecords[0].payload);
+      const record = {
+        resourceType: kind === "character-option" ? "definitions" : "world-placements",
+        sourceId: "new-record",
+        payload: kind === "character-option"
+          ? { kind: "skill", name: "Tracking" }
+          : { name: "Harbor placement", locationId: "root", source: kind === "world-item"
+            ? { kind, itemDefinitionId: "item" } : { kind: "world-creature", creatureId: "guard" } },
+      };
+      const records = [...response.records, record];
+      const content = { ...response.content as object,
+        ...(kind === "character-option" ? { definitionIds: [record.sourceId] }
+          : { worldPlacementDefinitionIds: [record.sourceId] }),
+      };
+      const input = await new ValidationPipe({
+        whitelist: true, transform: true, forbidNonWhitelisted: true,
+      }).transform({
+        expectedStorageRevision: response.storageRevision,
+        revisionName: response.revisionName, content, records,
+      }, { type: "body", metatype: SaveWorldDraftDto }) as SaveWorldDraftDto;
+      await service.save("world-1", input, "gm-1");
+      expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: draft.id, storageRevision: 3 },
+        data: expect.objectContaining({ snapshotRecords: records, content }) as unknown,
+      }));
+      expect(recoveredDraft.snapshotRecords[0].contentHash).toBe("snapshot-only-hash");
+    },
+  );
+
   it.each(["update", "remove", "add"])(
     "rejects a generic whole-draft %s of protected authored records",
     async (operation) => {
@@ -316,11 +365,7 @@ describe("WorldDefinitionAuthoringService", () => {
     });
 
     await expect(
-      service.validate(
-        "world-1",
-        { expectedStorageRevision: 3 },
-        "gm-1",
-      ),
+      service.validate("world-1", { expectedStorageRevision: 3 }, "gm-1"),
     ).resolves.toMatchObject({
       valid: false,
       issues: [expect.objectContaining({ code: "item-media-unauthorized" })],
@@ -1323,5 +1368,93 @@ describe("WorldDefinitionAuthoringService", () => {
     await expect(
       service.validate("world-1", { expectedStorageRevision: 3 }, "gm-1"),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe("Location section persistence", () => {
+  it("saves public/private prose, discoveries, and an authorized map through the Location command", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findFirst = jest
+      .fn()
+      .mockResolvedValue({ id: "map", mimeType: "image/webp" });
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: "world-1", status: "ACTIVE", draft }),
+      },
+      worldDefinitionDraft: { updateMany },
+      mediaAsset: { findFirst },
+    });
+    const image = {
+      assetId: "map",
+      altText: "Map of Earth",
+      width: 1536,
+      height: 1024,
+      mimeType: "image/webp",
+      orientation: "scenic",
+    };
+    await service.updateLocation(
+      "world-1",
+      "root",
+      {
+        expectedStorageRevision: 3,
+        name: "Earth",
+        kind: "world",
+        description: "Public prose",
+        gmDescription: "Private prose",
+        discoveries: [
+          { id: "claim", kind: "truth", statement: "Hidden passage" },
+        ],
+        image,
+      },
+      "gm-1",
+    );
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "map",
+        OR: [{ createdByUserId: "gm-1" }, { createdByUserId: null }],
+        mimeType: { startsWith: "image/" },
+      },
+    });
+    expect(
+      (
+        (updateMany.mock.calls as unknown[][])[0][0] as {
+          data: { snapshotRecords: Array<{ payload: unknown }> };
+        }
+      ).data.snapshotRecords[0].payload,
+    ).toMatchObject({
+      description: "Public prose",
+      gmDescription: "Private prose",
+      discoveries: [{ kind: "truth", statement: "Hidden passage" }],
+      image,
+      identity: { version: { revision: 2 } },
+    });
+  });
+  it("rejects an unavailable map before advancing the draft", async () => {
+    const updateMany = jest.fn();
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: "world-1", status: "ACTIVE", draft }),
+      },
+      worldDefinitionDraft: { updateMany },
+      mediaAsset: { findFirst: jest.fn().mockResolvedValue(null) },
+    });
+    await expect(
+      service.updateLocation(
+        "world-1",
+        "root",
+        {
+          expectedStorageRevision: 3,
+          name: "Earth",
+          kind: "world",
+          image: { assetId: "foreign" },
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("selected Location image is unavailable");
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });

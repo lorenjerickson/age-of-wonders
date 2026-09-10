@@ -1,3 +1,4 @@
+import type { DiscoveryClaim } from "./plots";
 import type { MovementSpeed } from "./character";
 import type {
   CreatureImages,
@@ -11,6 +12,7 @@ import type {
 import type {
   LocationBorder,
   LocationKind,
+  LocationImage,
   LocationMapOrientation,
   NormalizedMapCoordinate,
 } from "./locations";
@@ -31,7 +33,13 @@ export interface WorldLocationDefinition<
 > {
   readonly identity: StateIdentity<LocationId>;
   readonly name: string;
+  /** Player-facing description, suitable for revealing during play. */
   readonly description?: string;
+  /** Private authoring notes; never include in player-facing projections. */
+  readonly gmDescription?: string;
+  readonly discoveries?: readonly DiscoveryClaim[];
+  /** Optional until an uploaded, selected, or generated image is attached. */
+  readonly image?: LocationImage;
   readonly kind: LocationKind;
   readonly placement:
     | { readonly kind: "root" }
@@ -109,6 +117,9 @@ export interface WorldDraftMutationRequest {
 }
 
 export interface CreateWorldLocationDraftRequest extends WorldDraftMutationRequest {
+  readonly gmDescription?: string;
+  readonly discoveries?: readonly DiscoveryClaim[];
+  readonly image?: LocationImage;
   readonly kind: LocationKind;
   readonly parentLocationId?: LocationId;
   readonly profileSummary?: string;

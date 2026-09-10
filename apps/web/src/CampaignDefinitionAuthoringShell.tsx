@@ -1,3 +1,4 @@
+import { ContextualBreadcrumbs } from "./ContextualNavigation";
 import {
   createContext,
   useContext,
@@ -227,7 +228,7 @@ export function CampaignDefinitionContextBar() {
   const worldName = world?.worldName ?? world?.name;
   return (
     <>
-      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 backdrop-blur lg:px-10">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold" title={name}>
             {name}
@@ -293,6 +294,7 @@ export function CampaignDefinitionContextBar() {
           </RouterButtonLink>
         )}
       </header>
+      <ContextualBreadcrumbs />
       {(message || actionError) && (
         <Alert tone="error" className="m-4" aria-live="polite">
           <div>

@@ -170,7 +170,19 @@ Manual World authoring uses canonical source records declared in
 `packages/common/src/types/world-authoring.ts`. `WorldLocationDefinition` is the immutable source
 Location captured by a World revision; it has server-owned versioned identity, human name and
 description, open Location kind, containment placement, a human profile with discovery tags, and
-optional map/scene notes and orientation. Unedited map, scene, weather, effect, and extension data
+optional map/scene notes and orientation. `description` is player-facing; optional `gmDescription`
+is private GM authoring text. `discoveries` is an optional array of the existing `DiscoveryClaim`
+contract (`id`, `kind: "truth" | "rumor" | "belief"`, `statement`, optional provenance and claim
+relationships). These authored discoveries are not automatically revealed to participants.
+Optional `image: LocationImage` references the attached media asset with alternative text, dimensions,
+MIME type, and scenic/overhead/side-on orientation; signed download URLs are resolved at read time.
+The Location remains stored as a `locations` snapshot record, with no separate persisted Map resource.
+The dedicated Location mutation accepts GM description, discoveries, and image metadata and verifies
+new image references against media accessible to the GM. Location sections must use this mutation;
+the generic draft save intentionally rejects changes to protected Location records.
+Legacy `extensions["aow:gm-secrets"].secrets` remains preserved and supplies GM notes until canonical
+`gmDescription` is authored. Generated Map proposals create owned World media and return an image
+preview; they do not attach it until the GM explicitly saves the Map. Unedited map, scene, weather, effect, and extension data
 is retained when the exposed fields are revised. It is not mutable Campaign Instance state.
 `WorldCreatureDefinition` is the reusable captured source for independent runtime Creature
 embodiments; it uses the common `Definition` identity/components envelope, exact Model conformance,
@@ -2236,6 +2248,84 @@ Rules are data, not prose:
   custom rules.
 - `RuleModifier` targets a rule path and performs add/subtract/multiply/divide/set/min/max,
   advantage/disadvantage, proficiency/expertise, allow, or prohibit operations.
+- `SkillComponents.modifierGrants` uses the same reusable grants as profession tier benefits.
+  Award them once on acquiring the Skill and record `source: {kind: "skill", definitionId}` in
+  `CreatureState.modifierGrants`. A Skill's own check-dice benefit does not reacquire the Skill or
+  recursively grant more modifiers; it contributes dice only to that Skill's checks.
+  Optional `associatedProfessionIds` are distinct World Profession Definition references describing
+  typical learning contexts. They do not grant the Skill automatically or impose prerequisites.
+  World publication verifies that these references resolve to member Profession Definitions.
+- `ModifierTarget` also supports `{kind: "speed", movementMode: MovementMode, unit: DistanceUnit}`
+  for rolled-flat grants. The stored total adds distance to an existing movement speed in the
+  declared unit; it does not grant a new movement mode. Units are foot, mile, square, hex, meter,
+  or kilometer. Consumers must normalize compatible units before summing and must not infer a
+  grid-to-distance conversion. Speed remains a flat value; per-check dice cannot target it.
+  `skillModifierGrantIssue` validates Skill modifier lists and association-list shape at save and
+  publication. Both Skill and Profession schemas remain compatible with older omitted grant lists.
+  These fields use existing Definition JSON storage; no resource mapping or SQL table is added.
+- `ModifierGrantDefinition` is the reusable additive grant contract, separate from legacy
+  `RuleModifier` expressions. `ProfessionTierBenefits.modifierGrants` holds grants awarded once
+  when a tier is entered; earlier tier grants remain active. Missing grants mean an empty set for
+  older content, not an automatic bonus. Grant IDs are unique across the source Definition's tiers.
+  `stacking: "add"` is mandatory: sum flat contributions and concatenate dice from all distinct
+  active grants, including multiple grants targeting the same attribute, Skill, or roll.
+- A `rolled-flat` grant has a target and dice recipe; roll it once at acquisition and persist its
+  result. Targets are `{kind: "attribute", attribute: NamespacedKey}`, `{kind: "health-maximum"}`,
+  `{kind: "statistic", key: NamespacedKey}`, `{kind: "skill-check", skillDefinitionId}`, or
+  `{kind: "roll", roll: "hit" | "defense" | "damage"}`. Health grants increase maximum health;
+  they do not implicitly heal. Attribute and statistic keys resolve against the captured Model.
+- `roll-dice` adds its dice to each hit, defense, damage, or Skill check. `skill-proficiency`
+  exclusively targets a Skill check and grants additional dice, not a boolean proficiency flag
+  or a fixed proficiency bonus. This does not define the base Skill check mechanic.
+- Each recipe uses `dice: [{count, sides}]`: 1–32 groups, 1–100 dice per group, and 2–10,000 sides,
+  all integer values. No rolls occur during authoring or preview. Flat authoring recipes specify
+  dice rather than a predetermined constant; a +4 flat benefit is an acquired roll result.
+- `CreatureState.modifierGrants` (also inherited by CharacterState) stores `GrantedModifier`
+  instances with a unique instance ID, `active`, `grantedByEventId`, source, and captured definition.
+  Sources are Skill (`definitionId`), profession (`definitionId`, `expertise`), equipment (`definitionId`, `itemInstanceId`),
+  or other (`definitionId`, `instanceId`). Flat resolution is `{kind: "flat", rolls: [[4]], value: 4}`;
+  faces must match the recipe and the total must equal their sum. Dice/proficiency resolution is
+  `{kind: "per-check"}`. Retry the same actor/source/grant/event using its existing instance;
+  never reroll on reload, recalculation, source edits, or reactivation. Different source instances
+  contribute independently. Deactivation removes a contribution without deleting its rolled result.
+- These are embedded JSON fields in existing Definition and Creature/Character state resources;
+  `domain-resource.ts` mappings and Prisma tables are unchanged. No published snapshot is rewritten.
+  Runtime validation is exposed through `isModifierGrantDefinition`, `isGrantedModifier`, and
+  `professionModifierGrantIssue`; World saves and publication validation reject malformed Skill and profession
+  grants. The Profession editor supports adding, editing, and removing grants at existing expertise
+  tiers, including multiple dice groups and named World Attribute/Skill targets. Modifiers appear in
+  a list; a separate inline Add/Edit form stages changes locally. Only Save Profession persists
+  the profession and its modifier list together. Cancel leaves the list unchanged. Grant execution,
+  roll aggregation, and profession balancing are separate work: authored grants do not by themselves
+  activate bonuses in gameplay.
+
+Blacksmith example (inside its Apprentice tier's `benefits`):
+
+```json
+{
+  "modifierGrants": [
+    {
+      "id": "forge-strength",
+      "label": "Forge strength",
+      "kind": "rolled-flat",
+      "target": { "kind": "attribute", "attribute": "aow:attribute-might" },
+      "stacking": "add",
+      "dice": [{ "count": 1, "sides": 10 }]
+    },
+    {
+      "id": "heavy-blow",
+      "label": "Heavy blow",
+      "kind": "roll-dice",
+      "target": { "kind": "roll", "roll": "damage" },
+      "stacking": "add",
+      "dice": [{ "count": 1, "sides": 4 }]
+    }
+  ]
+}
+```
+
+The example illustrates the contract, not an automatic change to the seeded Blacksmith's balance.
+
 - `RuleEffect` covers damage, healing, temporary hit points, resources, values, conditions,
   modifiers, movement/transit, actions, profession advancement, tests, choices, branches,
   iteration, deployment, object creation/destruction, events, narrative output, and custom effects.

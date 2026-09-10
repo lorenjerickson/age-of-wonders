@@ -1,3 +1,4 @@
+import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   isCreatureInstanceEmbodimentPolicy,
   type ModelConformance,
@@ -17,6 +18,9 @@ export function worldLocationPayload(
     parentLocationId?: string;
     profileSummary?: string;
     profileTags?: string[];
+    gmDescription?: string;
+    discoveries?: WorldLocationDefinition["discoveries"];
+    image?: Record<string, unknown>;
     mapSceneNotes?: string;
     mapOrientation?: "scenic" | "overhead" | "side-on";
   },
@@ -43,6 +47,19 @@ export function worldLocationPayload(
   };
   return {
     ...preserved,
+    ...(input.gmDescription !== undefined
+      ? { gmDescription: input.gmDescription }
+      : {}),
+    ...(input.discoveries !== undefined
+      ? { discoveries: input.discoveries }
+      : {}),
+    ...(input.image !== undefined
+      ? {
+          image: input.image as unknown as NonNullable<
+            WorldLocationDefinition["image"]
+          >,
+        }
+      : {}),
     identity: {
       id: id as WorldLocationDefinition["identity"]["id"],
       version: {
@@ -207,9 +224,49 @@ export function canonicalWorldRecordIssue(
       !validPlacement(payload.placement)
     )
       return "The Location name, kind, or containment placement is invalid.";
+    if (
+      payload.gmDescription !== undefined &&
+      typeof payload.gmDescription !== "string"
+    )
+      return "The GM description must be text.";
+    if (payload.discoveries !== undefined) {
+      if (
+        !Array.isArray(payload.discoveries) ||
+        payload.discoveries.some(
+          (claim) =>
+            !isObject(claim) ||
+            !nonEmpty(claim.id) ||
+            !["truth", "rumor", "belief"].includes(String(claim.kind)) ||
+            !nonEmpty(claim.statement),
+        )
+      )
+        return "Discoveries require a kind and a statement.";
+      const ids = payload.discoveries.map(
+        (claim) => (claim as Record<string, unknown>).id,
+      );
+      if (new Set(ids).size !== ids.length)
+        return "Each discovery must have its own identity.";
+    }
+    if (payload.image !== undefined) {
+      const image = object(payload.image);
+      if (
+        !nonEmpty(image.assetId) ||
+        !nonEmpty(image.altText) ||
+        typeof image.width !== "number" ||
+        image.width <= 0 ||
+        typeof image.height !== "number" ||
+        image.height <= 0 ||
+        typeof image.mimeType !== "string" ||
+        !image.mimeType.startsWith("image/") ||
+        !["scenic", "overhead", "side-on"].includes(String(image.orientation))
+      )
+        return "A Location image requires an image asset, alternative text, dimensions, and orientation.";
+    }
     return undefined;
   }
   if (resourceType !== "definitions" || !isObject(payload)) return undefined;
+  if (payload.kind === "skill") return skillModifierGrantIssue(payload.components);
+  if (payload.kind === "profession") return professionModifierGrantIssue(payload.components);
   if (payload.kind !== "creature" && payload.kind !== "item") return undefined;
   if (
     !validDefinitionIdentity(payload.identity, sourceId) ||

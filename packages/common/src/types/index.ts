@@ -28,3 +28,5 @@ export * from "./session";
 export * from "./world";
 export * from "./world-authoring";
 export * from "./versioning";
+
+export * from "./modifiers";

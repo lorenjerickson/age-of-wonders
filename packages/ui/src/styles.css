@@ -18,7 +18,7 @@
   --color-base-300: oklch(23% 0.01 285);
   --color-base-content: oklch(94% 0.01 90);
   --color-primary: oklch(83% 0.15 85);
-  --color-primary-content: oklch(18% 0.025 75);
+  --color-primary-content: oklch(25% 0 0);
   --color-secondary: oklch(64% 0.12 55);
   --color-secondary-content: oklch(98% 0.01 80);
   --color-accent: oklch(72% 0.12 165);
@@ -87,7 +87,10 @@ body {
 }
 
 button, input, select, textarea, a { font: inherit; }
-a { color: inherit; text-decoration: none; }
+/* Let button and utility colors override the default link appearance. */
+@layer base {
+  a { color: inherit; text-decoration: none; }
+}
 
 .btn.btn-xs, .btn.btn-sm { --fontsize: var(--text-xs); }
 .badge.badge-sm, .fieldset, .file-input.file-input-sm,

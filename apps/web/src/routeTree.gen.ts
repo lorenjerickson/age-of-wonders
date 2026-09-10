@@ -77,6 +77,11 @@ import { Route as ParticipantPlayInstancesCampaignInstanceIdSessionsSessionIdRou
 import { Route as PlayerPlayInstancesCampaignInstanceIdCharactersIndexRouteImport } from './routes/_player.play.instances.$campaignInstanceId.characters.index'
 import { Route as PlayerPlayInstancesCampaignInstanceIdCharactersCharacterIdRouteImport } from './routes/_player.play.instances.$campaignInstanceId.characters.$characterId'
 import { Route as GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.versions.draft.review'
+import { Route as GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.connections'
+import { Route as GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.creatures'
+import { Route as GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.discoveries'
+import { Route as GmWorldsWorldIdAtlasLocationsLocationIdItemsRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.items'
+import { Route as GmWorldsWorldIdAtlasLocationsLocationIdMapRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.map'
 import { Route as GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRouteImport } from './routes/_gm.worlds.$worldId.characters.model.$definitionKind.$definitionId'
 
 const GmRoute = GmRouteImport.update({
@@ -466,6 +471,36 @@ const GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute =
         GmCampaignsDefinitionsCampaignDefinitionIdVersionsRoute,
     } as any,
   )
+const GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute =
+  GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+  } as any)
+const GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute =
+  GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRouteImport.update({
+    id: '/creatures',
+    path: '/creatures',
+    getParentRoute: () => GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+  } as any)
+const GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute =
+  GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRouteImport.update({
+    id: '/discoveries',
+    path: '/discoveries',
+    getParentRoute: () => GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+  } as any)
+const GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute =
+  GmWorldsWorldIdAtlasLocationsLocationIdItemsRouteImport.update({
+    id: '/items',
+    path: '/items',
+    getParentRoute: () => GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+  } as any)
+const GmWorldsWorldIdAtlasLocationsLocationIdMapRoute =
+  GmWorldsWorldIdAtlasLocationsLocationIdMapRouteImport.update({
+    id: '/map',
+    path: '/map',
+    getParentRoute: () => GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+  } as any)
 const GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute =
   GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRouteImport.update({
     id: '/model/$definitionKind/$definitionId',
@@ -524,7 +559,7 @@ export interface FileRoutesByFullPath {
   '/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
   '/campaigns/instances/$campaignInstanceId/sessions/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdSessionsSessionIdRoute
   '/campaigns/instances/$campaignInstanceId/versions/migrate': typeof GmCampaignsInstancesCampaignInstanceIdVersionsMigrateRoute
-  '/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+  '/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren
   '/worlds/$worldId/bestiary/creatures/$creatureId': typeof GmWorldsWorldIdBestiaryCreaturesCreatureIdRoute
   '/worlds/$worldId/characters/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersDefinitionKindDefinitionIdRoute
   '/worlds/$worldId/item-compendium/items/$itemId': typeof GmWorldsWorldIdItemCompendiumItemsItemIdRoute
@@ -539,6 +574,11 @@ export interface FileRoutesByFullPath {
   '/worlds/$worldId/characters/$definitionKind/': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
+  '/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
+  '/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
+  '/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
+  '/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
 }
 export interface FileRoutesByTo {
@@ -580,7 +620,7 @@ export interface FileRoutesByTo {
   '/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
   '/campaigns/instances/$campaignInstanceId/sessions/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdSessionsSessionIdRoute
   '/campaigns/instances/$campaignInstanceId/versions/migrate': typeof GmCampaignsInstancesCampaignInstanceIdVersionsMigrateRoute
-  '/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+  '/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren
   '/worlds/$worldId/bestiary/creatures/$creatureId': typeof GmWorldsWorldIdBestiaryCreaturesCreatureIdRoute
   '/worlds/$worldId/characters/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersDefinitionKindDefinitionIdRoute
   '/worlds/$worldId/item-compendium/items/$itemId': typeof GmWorldsWorldIdItemCompendiumItemsItemIdRoute
@@ -595,6 +635,11 @@ export interface FileRoutesByTo {
   '/worlds/$worldId/characters/$definitionKind': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/play/instances/$campaignInstanceId/characters': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
+  '/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
+  '/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
+  '/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
+  '/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
 }
 export interface FileRoutesById {
@@ -652,7 +697,7 @@ export interface FileRoutesById {
   '/_gm/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
   '/_gm/campaigns/instances/$campaignInstanceId/sessions/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdSessionsSessionIdRoute
   '/_gm/campaigns/instances/$campaignInstanceId/versions/migrate': typeof GmCampaignsInstancesCampaignInstanceIdVersionsMigrateRoute
-  '/_gm/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId': typeof GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren
   '/_gm/worlds/$worldId/bestiary/creatures/$creatureId': typeof GmWorldsWorldIdBestiaryCreaturesCreatureIdRoute
   '/_gm/worlds/$worldId/characters/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersDefinitionKindDefinitionIdRoute
   '/_gm/worlds/$worldId/item-compendium/items/$itemId': typeof GmWorldsWorldIdItemCompendiumItemsItemIdRoute
@@ -667,6 +712,11 @@ export interface FileRoutesById {
   '/_gm/worlds/$worldId/characters/$definitionKind/': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/_player/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
+  '/_gm/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
 }
 export interface FileRouteTypes {
@@ -737,6 +787,11 @@ export interface FileRouteTypes {
     | '/worlds/$worldId/characters/$definitionKind/'
     | '/play/instances/$campaignInstanceId/characters/'
     | '/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/worlds/$worldId/atlas/locations/$locationId/connections'
+    | '/worlds/$worldId/atlas/locations/$locationId/creatures'
+    | '/worlds/$worldId/atlas/locations/$locationId/discoveries'
+    | '/worlds/$worldId/atlas/locations/$locationId/items'
+    | '/worlds/$worldId/atlas/locations/$locationId/map'
     | '/worlds/$worldId/characters/model/$definitionKind/$definitionId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -793,6 +848,11 @@ export interface FileRouteTypes {
     | '/worlds/$worldId/characters/$definitionKind'
     | '/play/instances/$campaignInstanceId/characters'
     | '/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/worlds/$worldId/atlas/locations/$locationId/connections'
+    | '/worlds/$worldId/atlas/locations/$locationId/creatures'
+    | '/worlds/$worldId/atlas/locations/$locationId/discoveries'
+    | '/worlds/$worldId/atlas/locations/$locationId/items'
+    | '/worlds/$worldId/atlas/locations/$locationId/map'
     | '/worlds/$worldId/characters/model/$definitionKind/$definitionId'
   id:
     | '__root__'
@@ -864,6 +924,11 @@ export interface FileRouteTypes {
     | '/_gm/worlds/$worldId/characters/$definitionKind/'
     | '/_player/play/instances/$campaignInstanceId/characters/'
     | '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/_gm/worlds/$worldId/atlas/locations/$locationId/connections'
+    | '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures'
+    | '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries'
+    | '/_gm/worlds/$worldId/atlas/locations/$locationId/items'
+    | '/_gm/worlds/$worldId/atlas/locations/$locationId/map'
     | '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId'
   fileRoutesById: FileRoutesById
 }
@@ -1355,6 +1420,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport
       parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsRoute
     }
+    '/_gm/worlds/$worldId/atlas/locations/$locationId/connections': {
+      id: '/_gm/worlds/$worldId/atlas/locations/$locationId/connections'
+      path: '/connections'
+      fullPath: '/worlds/$worldId/atlas/locations/$locationId/connections'
+      preLoaderRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport
+      parentRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+    }
+    '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures': {
+      id: '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures'
+      path: '/creatures'
+      fullPath: '/worlds/$worldId/atlas/locations/$locationId/creatures'
+      preLoaderRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRouteImport
+      parentRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+    }
+    '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries': {
+      id: '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries'
+      path: '/discoveries'
+      fullPath: '/worlds/$worldId/atlas/locations/$locationId/discoveries'
+      preLoaderRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRouteImport
+      parentRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+    }
+    '/_gm/worlds/$worldId/atlas/locations/$locationId/items': {
+      id: '/_gm/worlds/$worldId/atlas/locations/$locationId/items'
+      path: '/items'
+      fullPath: '/worlds/$worldId/atlas/locations/$locationId/items'
+      preLoaderRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRouteImport
+      parentRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+    }
+    '/_gm/worlds/$worldId/atlas/locations/$locationId/map': {
+      id: '/_gm/worlds/$worldId/atlas/locations/$locationId/map'
+      path: '/map'
+      fullPath: '/worlds/$worldId/atlas/locations/$locationId/map'
+      preLoaderRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRouteImport
+      parentRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+    }
     '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId': {
       id: '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId'
       path: '/model/$definitionKind/$definitionId'
@@ -1365,13 +1465,40 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface GmWorldsWorldIdAtlasLocationsLocationIdRouteChildren {
+  GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
+  GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
+  GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
+  GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
+  GmWorldsWorldIdAtlasLocationsLocationIdMapRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
+}
+
+const GmWorldsWorldIdAtlasLocationsLocationIdRouteChildren: GmWorldsWorldIdAtlasLocationsLocationIdRouteChildren =
+  {
+    GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute:
+      GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute,
+    GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute:
+      GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute,
+    GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute:
+      GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute,
+    GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute:
+      GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute,
+    GmWorldsWorldIdAtlasLocationsLocationIdMapRoute:
+      GmWorldsWorldIdAtlasLocationsLocationIdMapRoute,
+  }
+
+const GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren =
+  GmWorldsWorldIdAtlasLocationsLocationIdRoute._addFileChildren(
+    GmWorldsWorldIdAtlasLocationsLocationIdRouteChildren,
+  )
+
 interface GmWorldsWorldIdAtlasRouteChildren {
-  GmWorldsWorldIdAtlasLocationsLocationIdRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRoute
+  GmWorldsWorldIdAtlasLocationsLocationIdRoute: typeof GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren
 }
 
 const GmWorldsWorldIdAtlasRouteChildren: GmWorldsWorldIdAtlasRouteChildren = {
   GmWorldsWorldIdAtlasLocationsLocationIdRoute:
-    GmWorldsWorldIdAtlasLocationsLocationIdRoute,
+    GmWorldsWorldIdAtlasLocationsLocationIdRouteWithChildren,
 }
 
 const GmWorldsWorldIdAtlasRouteWithChildren =

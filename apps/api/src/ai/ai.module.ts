@@ -1,3 +1,4 @@
+import { WorldLocationMapController } from "./world-location-map.controller";
 import { Module } from "@nestjs/common";
 import { DomainModule } from "../domain/domain.module";
 import { MediaModule } from "../media/media.module";
@@ -22,8 +23,13 @@ import { ModelRegistryModule } from "../model-registry/model-registry.module";
 import { WorldDraftProposalService } from "./world-draft-proposal.service";
 
 @Module({
-  imports: [DomainModule, MediaModule, WorldDefinitionsModule, ModelRegistryModule],
-  controllers: [AiController],
+  imports: [
+    DomainModule,
+    MediaModule,
+    WorldDefinitionsModule,
+    ModelRegistryModule,
+  ],
+  controllers: [AiController, WorldLocationMapController],
   providers: [
     AiPromptService,
     OpenAiService,

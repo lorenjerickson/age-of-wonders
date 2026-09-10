@@ -777,6 +777,19 @@ export function createModelMigrationPlan(
   );
 }
 
+// Snapshot/read-model metadata is not part of the draft write contract.
+// Project explicitly, including for drafts already loaded before an API upgrade.
+function draftRecordInput(record: WorldDraftRecord): WorldDraftRecord {
+  return {
+    resourceType: record.resourceType,
+    sourceId: record.sourceId,
+    ...(record.sourceRevision === undefined
+      ? {}
+      : { sourceRevision: record.sourceRevision }),
+    payload: record.payload,
+  };
+}
+
 export function saveWorldDefinitionDraft(
   worldDefinitionId: string,
   draft: Pick<
@@ -793,7 +806,7 @@ export function saveWorldDefinitionDraft(
         expectedStorageRevision: draft.storageRevision,
         revisionName: draft.revisionName,
         content: draft.content,
-        records: draft.records,
+        records: draft.records.map(draftRecordInput),
       }),
     },
   );
@@ -1037,7 +1050,7 @@ export function saveCampaignDefinitionDraft(
         expectedStorageRevision: draft.storageRevision,
         revisionName: draft.revisionName,
         content: draft.content,
-        records: draft.records,
+        records: draft.records.map(draftRecordInput),
       }),
     },
   );
@@ -2428,6 +2441,38 @@ export function updateQuickStartProgress(
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function listMapMedia(search = "", offset = 0) {
+  return request<{ items: MediaAsset[]; total: number }>(
+    `/media?${new URLSearchParams({ mediaType: "images", search, offset: String(offset), limit: "24" })}`,
+  );
+}
+export function generateLocationMap(
+  worldId: string,
+  locationId: string,
+  input: {
+    expectedStorageRevision: number;
+    direction: string;
+    orientation: "scenic" | "overhead" | "side-on";
+  },
+  idempotencyKey: string,
+) {
+  return request<{
+    image: Record<string, JsonValue>;
+    asset: Pick<MediaAsset, "id" | "originalName" | "mimeType">;
+    storageRevision: number;
+  }>(
+    `/ai/worlds/${encodeURIComponent(worldId)}/atlas/locations/${encodeURIComponent(locationId)}/map-proposals`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
       body: JSON.stringify(input),
     },
   );

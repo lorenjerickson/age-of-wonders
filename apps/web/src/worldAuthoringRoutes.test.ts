@@ -3,6 +3,10 @@ import { getRouter } from "./router";
 
 describe("World authoring route architecture", () => {
   it.each([
+    [
+      "/worlds/world-id/atlas/locations/location-id/map",
+      "/_gm/worlds/$worldId/atlas/locations/$locationId/map",
+    ],
     ["/worlds/new", "/_gm/worlds/new"],
     ["/worlds/world-id/atlas", "/_gm/worlds/$worldId/atlas"],
     [

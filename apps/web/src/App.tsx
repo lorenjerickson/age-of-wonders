@@ -1,11 +1,15 @@
 import {
+  NavigationLiveData,
+  type LiveNavigationWorld,
+} from "./navigationLiveData";
+import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import {
   Alert,
   Badge,
@@ -25,58 +29,13 @@ import {
 } from "./api";
 import { RouterButtonLink } from "./navigation";
 import {
-  primaryNavigationForPath,
-  type PrimaryNavigationItem,
-} from "./gmNavigationModel";
+  ContextualSidebar,
+  ContextualBreadcrumbs,
+} from "./ContextualNavigation";
 import { QuickStartGuide } from "./QuickStart";
 import { quickStartActivity, quickStartKeyFromSearch } from "./quickStartModel";
 import type { ReadSection } from "./server/readModels";
 import { statusLabel } from "./campaignLibraryModel";
-
-function NavigationIcon({ item }: { item: PrimaryNavigationItem["key"] }) {
-  const glyphs: Record<PrimaryNavigationItem["key"], string> = {
-    home: "M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4v-8.5Z",
-    worlds:
-      "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c2.2 2.4 3.3 5.4 3.3 9S14.2 18.6 12 21m0-18C9.8 5.4 8.7 8.4 8.7 12s1.1 6.6 3.3 9M3.5 12h17",
-    campaigns: "M6 3.5h9l3 3V20.5H6v-17Zm9 0v3h3M9 11h6M9 15h6",
-    players:
-      "M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.5-1a3 3 0 1 0 0-6m-7.5 9c-3 0-5.5 1.8-5.5 4v2h11v-2c0-2.2-2.5-4-5.5-4Zm7.5-.5c2.8 0 5 1.6 5 3.5v2h-5",
-    settings:
-      "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1 2.2 2.4.7 2-1.3 1.8 1.8-1.3 2 .7 2.4 2.2 1-1 2.4.3 2.6-2.4.4-1.7 1.8.1 2.4-2.4 1-1.3-2-2.3-.8-2 1.3-1.8-1.8 1.3-2-.7-2.4-2.2-1 1-2.4-.3-2.6 2.4-.4 1.7-1.8-.1-2.4 2.4-1 1.3 2 2.3.8 2-1.3 1.8 1.8-1.3 2 .7 2.4Z",
-  };
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      className="h-5 w-5"
-    >
-      <path d={glyphs[item]} />
-    </svg>
-  );
-}
-
-function PrimaryNavigationLink({
-  item,
-  onNavigate,
-}: {
-  item: PrimaryNavigationItem;
-  onNavigate?: () => void;
-}) {
-  return (
-    <Link
-      to={item.href}
-      aria-current={item.active ? "page" : undefined}
-      className={item.active ? "menu-active font-semibold" : undefined}
-      onClick={onNavigate}
-    >
-      <NavigationIcon item={item.key} />
-      {item.label}
-    </Link>
-  );
-}
 
 export function AppShell({
   children,
@@ -87,6 +46,7 @@ export function AppShell({
   gmAccess?: boolean;
   systemAdministrator?: boolean;
 }) {
+  const [navigationWorld, setNavigationWorld] = useState<LiveNavigationWorld>();
   const location = useLocation();
   const pathname = location.pathname;
   const quickStartKey = quickStartKeyFromSearch(location.searchStr);
@@ -94,10 +54,6 @@ export function AppShell({
   const segments = pathname.split("/").filter(Boolean);
   const locationWorkspaceActive =
     segments[0] === "campaigns" && segments[2] === "locations";
-  const primaryNavigation = primaryNavigationForPath(pathname, {
-    gm: gmAccess,
-    systemAdministrator,
-  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [activeSession, setActiveSession] =
@@ -201,163 +157,169 @@ export function AppShell({
   }
 
   return (
-    <div className="drawer h-dvh overflow-hidden lg:drawer-open">
-      <StructuralCheckbox
-        id="app-drawer"
-        checked={drawerOpen}
-        onChange={(event) => setDrawerOpen(event.target.checked)}
-      />
-      <div
-        className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
-      >
-        <Label
-          ref={drawerTrigger}
-          htmlFor="app-drawer"
-          aria-label="Open navigation"
-          aria-expanded={drawerOpen}
-          aria-controls="app-navigation-panel"
-          className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
-        >
-          <span aria-hidden="true">☰</span>
-        </Label>
+    <NavigationLiveData.Provider
+      value={{ world: navigationWorld, setWorld: setNavigationWorld }}
+    >
+      <div className="drawer h-dvh overflow-hidden lg:drawer-open">
+        <StructuralCheckbox
+          id="app-drawer"
+          checked={drawerOpen}
+          onChange={(event) => setDrawerOpen(event.target.checked)}
+        />
         <div
-          className={
-            guide
-              ? "min-h-full xl:grid xl:grid-cols-[minmax(0,1fr)_20rem]"
-              : "min-h-full"
-          }
+          className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
         >
-          <div className="min-w-0">
-            {activeSession && !pathname.includes("/run/") && (
-              <div className="border-b border-warning/25 bg-warning/10 px-6 py-3 lg:px-10">
-                <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm">
-                    <strong>{activeSession.sessionName}</strong> in{" "}
-                    {activeSession.campaignInstanceName} is{" "}
-                    {activeSession.status}.
-                  </p>
-                  <RouterButtonLink
-                    href={`/campaigns/instances/${encodeURIComponent(activeSession.campaignInstanceId)}/run/${encodeURIComponent(activeSession.sessionId)}`}
-                    tone="primary"
-                    size="sm"
-                  >
-                    {activeSession.label} Session
-                  </RouterButtonLink>
+          <Label
+            ref={drawerTrigger}
+            htmlFor="app-drawer"
+            aria-label="Open navigation"
+            aria-expanded={drawerOpen}
+            aria-controls="app-navigation-panel"
+            className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
+          >
+            <span aria-hidden="true">☰</span>
+          </Label>
+          <div
+            className={
+              guide
+                ? "min-h-full xl:grid xl:grid-cols-[minmax(0,1fr)_20rem]"
+                : "min-h-full"
+            }
+          >
+            <div className="min-w-0">
+              {activeSession && !pathname.includes("/run/") && (
+                <div className="border-b border-warning/25 bg-warning/10 px-6 py-3 lg:px-10">
+                  <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm">
+                      <strong>{activeSession.sessionName}</strong> in{" "}
+                      {activeSession.campaignInstanceName} is{" "}
+                      {activeSession.status}.
+                    </p>
+                    <RouterButtonLink
+                      href={`/campaigns/instances/${encodeURIComponent(activeSession.campaignInstanceId)}/run/${encodeURIComponent(activeSession.sessionId)}`}
+                      tone="primary"
+                      size="sm"
+                    >
+                      {activeSession.label} Session
+                    </RouterButtonLink>
+                  </div>
                 </div>
+              )}
+              {pathname !== "/" &&
+                !(
+                  segments[0] === "worlds" &&
+                  segments[1] &&
+                  segments[1] !== "new"
+                ) &&
+                !(
+                  segments[0] === "campaigns" &&
+                  segments[2] &&
+                  segments[2] !== "new"
+                ) && (
+                  <>
+                    <header className="border-b border-base-300 px-6 py-4 pl-16 font-semibold lg:px-10">
+                      GM Workspace
+                    </header>
+                    <ContextualBreadcrumbs />
+                  </>
+                )}
+              {children}
+            </div>
+            {guide && (
+              <div className="hidden xl:block">
+                <QuickStartGuide activityKey={guide.key} />
               </div>
             )}
-            {children}
           </div>
           {guide && (
-            <div className="hidden xl:block">
-              <QuickStartGuide activityKey={guide.key} />
+            <Button
+              ref={guideTrigger}
+              tone="primary"
+              className="fixed right-4 bottom-4 z-30 min-h-11 shadow-xl xl:hidden"
+              aria-expanded={guideOpen}
+              aria-controls="quick-start-mobile-guide"
+              onClick={() => setGuideOpen(true)}
+            >
+              Quick Start guide
+            </Button>
+          )}
+          {guide && guideOpen && (
+            <div
+              className="fixed inset-0 z-50 flex justify-end bg-black/50 xl:hidden"
+              onMouseDown={(event) => {
+                if (event.currentTarget === event.target) closeGuide();
+              }}
+            >
+              <section
+                ref={guidePanel}
+                id="quick-start-mobile-guide"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Quick Start guide"
+                className="h-full w-full max-w-sm overflow-y-auto bg-base-100 shadow-2xl"
+                onKeyDown={handleGuideKeys}
+              >
+                <div className="sticky top-0 z-10 flex justify-end border-b border-base-300 bg-base-100 p-2">
+                  <Button autoFocus tone="ghost" onClick={closeGuide}>
+                    Close guide
+                  </Button>
+                </div>
+                <QuickStartGuide activityKey={guide.key} />
+              </section>
             </div>
           )}
         </div>
-        {guide && (
-          <Button
-            ref={guideTrigger}
-            tone="primary"
-            className="fixed right-4 bottom-4 z-30 min-h-11 shadow-xl xl:hidden"
-            aria-expanded={guideOpen}
-            aria-controls="quick-start-mobile-guide"
-            onClick={() => setGuideOpen(true)}
-          >
-            Quick Start guide
-          </Button>
-        )}
-        {guide && guideOpen && (
-          <div
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 xl:hidden"
-            onMouseDown={(event) => {
-              if (event.currentTarget === event.target) closeGuide();
-            }}
-          >
-            <section
-              ref={guidePanel}
-              id="quick-start-mobile-guide"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Quick Start guide"
-              className="h-full w-full max-w-sm overflow-y-auto bg-base-100 shadow-2xl"
-              onKeyDown={handleGuideKeys}
-            >
-              <div className="sticky top-0 z-10 flex justify-end border-b border-base-300 bg-base-100 p-2">
-                <Button autoFocus tone="ghost" onClick={closeGuide}>
-                  Close guide
-                </Button>
-              </div>
-              <QuickStartGuide activityKey={guide.key} />
-            </section>
-          </div>
-        )}
-      </div>
-      <div
-        id="app-navigation-panel"
-        className="drawer-side z-40"
-        role={drawerOpen ? "dialog" : undefined}
-        aria-modal={drawerOpen || undefined}
-        aria-label={drawerOpen ? "Application navigation" : undefined}
-      >
-        <Label
-          htmlFor="app-drawer"
-          aria-label="Close navigation"
-          className="drawer-overlay"
-          onClick={closeDrawer}
-        />
-        <aside
-          ref={drawerPanel}
-          onKeyDown={handleDrawerKeys}
-          className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl"
+        <div
+          id="app-navigation-panel"
+          className="drawer-side z-40"
+          role={drawerOpen ? "dialog" : undefined}
+          aria-modal={drawerOpen || undefined}
+          aria-label={drawerOpen ? "Application navigation" : undefined}
         >
-          <Button
-            tone="ghost"
-            size="sm"
-            className="mb-2 min-h-11 self-end lg:hidden"
+          <Label
+            htmlFor="app-drawer"
+            aria-label="Close navigation"
+            className="drawer-overlay"
             onClick={closeDrawer}
+          />
+          <aside
+            ref={drawerPanel}
+            onKeyDown={handleDrawerKeys}
+            className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl"
           >
-            Close navigation
-          </Button>
-          <div className="px-3 pt-3 pb-5">
-            <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
-              GM workspace
-            </p>
-            <p className="mt-2 font-semibold">Age of Wonders</p>
-            <p className="mt-1 text-sm text-base-content/50">
-              Choose a workspace to begin.
-            </p>
-          </div>
-          <nav aria-label="Primary navigation" className="min-h-0 flex-1">
-            <ul className="menu w-full gap-1 p-0">
-              {primaryNavigation.map((item) => (
-                <li key={item.key}>
-                  <PrimaryNavigationLink
-                    item={item}
-                    onNavigate={() => setDrawerOpen(false)}
-                  />
-                </li>
-              ))}
-            </ul>
-          </nav>
-          <div className="border-t border-base-300/70 px-3 py-3">
-            {auth0?.configured &&
-              (auth0.linked ? (
-                <p className="mb-2 text-xs text-success">Auth0 connected</p>
-              ) : (
-                <a
-                  className="btn btn-outline btn-sm mb-2 w-full"
-                  href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(pathname)}`}
-                >
-                  Connect Auth0
-                </a>
-              ))}
-            <p className="text-xs leading-5 text-base-content/35">
-              Author Worlds, prepare Campaigns, and continue play.
-            </p>
-          </div>
-        </aside>
+            <Button
+              tone="ghost"
+              size="sm"
+              className="mb-2 min-h-11 self-end lg:hidden"
+              onClick={closeDrawer}
+            >
+              Close navigation
+            </Button>
+            <ContextualSidebar
+              gmAccess={gmAccess}
+              systemAdministrator={systemAdministrator}
+              onNavigate={() => setDrawerOpen(false)}
+            />
+            <div className="border-t border-base-300/70 px-3 py-3">
+              {auth0?.configured &&
+                (auth0.linked ? (
+                  <p className="mb-2 text-xs text-success">Auth0 connected</p>
+                ) : (
+                  <a
+                    className="btn btn-outline btn-sm mb-2 w-full"
+                    href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(pathname)}`}
+                  >
+                    Connect Auth0
+                  </a>
+                ))}
+              <p className="text-xs leading-5 text-base-content/35">
+                Author Worlds, prepare Campaigns, and continue play.
+              </p>
+            </div>
+          </aside>
+        </div>
       </div>
-    </div>
+    </NavigationLiveData.Provider>
   );
 }
 
@@ -446,6 +408,7 @@ export function LandingPage({
     <main className="min-h-screen bg-base-100 text-base-content">
       <div className="mx-auto min-h-screen max-w-6xl px-6 py-10 lg:px-10">
         <Header healthy={healthy} />
+        <ContextualBreadcrumbs />
         <section className="grid gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
           <div>
             <p className="text-sm font-medium text-amber-300">

@@ -1,3 +1,4 @@
+import type { GrantedModifier } from "./modifiers";
 import type { DiceExpression, NumericExpression } from "./dice";
 import type {
   ArmorDefenseDice,
@@ -306,6 +307,8 @@ export interface CreatureState<
   readonly conditions: readonly ConditionType[];
   readonly resources: Readonly<Record<string, ResourcePool>>;
   readonly damageAdjustments: readonly DamageAdjustment[];
+  /** Independent source grants; sum active contributions without rerolling flat grants. */
+  readonly modifierGrants?: readonly GrantedModifier[];
   readonly modifiers?: readonly RuleModifier[];
   readonly triggers?: readonly TriggerDefinition[];
   readonly form?: {

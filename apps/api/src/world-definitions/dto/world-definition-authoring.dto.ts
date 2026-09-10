@@ -16,7 +16,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { MAX_SNAPSHOT_RECORDS } from "../../domain/snapshot-manifest";
-import type { MovementSpeed } from "@aow/common";
+import type { MovementSpeed, DiscoveryClaim } from "@aow/common";
 
 export class WorldDraftRecordDto {
   @IsString()
@@ -114,6 +114,20 @@ export class WorldDraftMutationDto {
 }
 
 export class UpsertWorldLocationDraftDto extends WorldDraftMutationDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  gmDescription?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  discoveries?: DiscoveryClaim[];
+
+  @IsOptional()
+  @IsObject()
+  image?: Record<string, unknown>;
+
   @IsString()
   @MinLength(1)
   @MaxLength(120)

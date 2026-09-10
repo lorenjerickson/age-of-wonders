@@ -1,3 +1,4 @@
+import { ContextualBreadcrumbs } from "./ContextualNavigation";
 import {
   createContext,
   useContext,
@@ -77,40 +78,43 @@ export function CampaignInstanceContextBar() {
   const snapshot = instance.currentSnapshot;
   const suffix = quickStartSuffix(useLocation().searchStr);
   return (
-    <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 backdrop-blur lg:px-10">
-      <div className="min-w-0 flex-1">
-        <p
-          className="truncate font-semibold"
-          title={instance.name || "Unnamed Campaign Instance"}
-        >
-          {instance.name.trim() || "Unnamed Campaign Instance"}
-        </p>
-        <p className="text-xs text-base-content/60">
-          {snapshot
-            ? `${snapshot.campaignDefinition.name || "Unnamed Campaign Definition"} revision ${snapshot.campaignDefinition.revisionNumber} · ${snapshot.worldDefinition.name || "Unnamed World"} revision ${snapshot.worldDefinition.revisionNumber}`
-            : "Captured Campaign and World unavailable"}
-        </p>
-      </div>
-      <Badge outline>{statusLabel(instance.status)}</Badge>
-      {continuation?.enabled && continuation.session ? (
-        <RouterButtonLink
-          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/${continuation.kind === "continue" || continuation.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuation.session.id)}${suffix}`}
-          tone="primary"
-          size="sm"
-        >
-          {continuation.label}
-        </RouterButtonLink>
-      ) : continuation?.kind === "plan-session" ||
-        continuation?.kind === "choose" ? (
-        <RouterButtonLink
-          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions${suffix}`}
-          tone="primary"
-          size="sm"
-        >
-          Plan Session
-        </RouterButtonLink>
-      ) : null}
-    </header>
+    <>
+      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate font-semibold"
+            title={instance.name || "Unnamed Campaign Instance"}
+          >
+            {instance.name.trim() || "Unnamed Campaign Instance"}
+          </p>
+          <p className="text-xs text-base-content/60">
+            {snapshot
+              ? `${snapshot.campaignDefinition.name || "Unnamed Campaign Definition"} revision ${snapshot.campaignDefinition.revisionNumber} · ${snapshot.worldDefinition.name || "Unnamed World"} revision ${snapshot.worldDefinition.revisionNumber}`
+              : "Captured Campaign and World unavailable"}
+          </p>
+        </div>
+        <Badge outline>{statusLabel(instance.status)}</Badge>
+        {continuation?.enabled && continuation.session ? (
+          <RouterButtonLink
+            href={`/campaigns/instances/${encodeURIComponent(instance.id)}/${continuation.kind === "continue" || continuation.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuation.session.id)}${suffix}`}
+            tone="primary"
+            size="sm"
+          >
+            {continuation.label}
+          </RouterButtonLink>
+        ) : continuation?.kind === "plan-session" ||
+          continuation?.kind === "choose" ? (
+          <RouterButtonLink
+            href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions${suffix}`}
+            tone="primary"
+            size="sm"
+          >
+            Plan Session
+          </RouterButtonLink>
+        ) : null}
+      </header>
+      <ContextualBreadcrumbs />
+    </>
   );
 }
 

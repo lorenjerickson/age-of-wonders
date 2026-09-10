@@ -1,7 +1,17 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { NavigationLiveData } from "./navigationLiveData";
+import { locationMutationInput } from "./locationWorkspaceModel";
+import { ContextualBreadcrumbs } from "./ContextualNavigation";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Alert, Badge, Button, StatusIndicator } from "@aow/ui";
 import {
   ApiRequestError,
+  saveWorldLocation,
   getEffectiveWorldModels,
   restoreWorldDefinition,
   saveWorldDefinitionDraft,
@@ -60,6 +70,15 @@ export function WorldAuthoringProvider({
   children: ReactNode;
 }) {
   const [draft, setDraft] = useState(initialDraft);
+  const navigation = useContext(NavigationLiveData);
+  const setNavigationWorld = navigation?.setWorld;
+  useEffect(() => {
+    setNavigationWorld?.({
+      worldId: definition.id,
+      records: draft?.records ?? [],
+    });
+    return () => setNavigationWorld?.(undefined);
+  }, [definition.id, draft?.records, setNavigationWorld]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
   const canEdit =
@@ -99,7 +118,32 @@ export function WorldAuthoringProvider({
 
   async function saveRecord(record: WorldDraftRecord) {
     if (!draft) return false;
-    return saveDraft(draftWithIndexedRecord(draft, record));
+    if (record.resourceType !== "locations")
+      return saveDraft(draftWithIndexedRecord(draft, record));
+    if (!canEdit || draft.status === "stale") return false;
+    setSaveState("saving");
+    setMessage("");
+    try {
+      const saved = await saveWorldLocation(
+        definition.id,
+        locationMutationInput(record, draft.storageRevision),
+        record.sourceId,
+      );
+      setDraft({ ...saved, effectiveModels: draft.effectiveModels });
+      setSaveState("saved");
+      return true;
+    } catch (error) {
+      const stale = error instanceof ApiRequestError && error.status === 409;
+      if (stale)
+        setDraft((current) => current && { ...current, status: "stale" });
+      setSaveState(stale ? "stale" : "error");
+      setMessage(
+        stale
+          ? "This draft changed elsewhere. Reload before saving again."
+          : "The Location could not be saved. Check the fields and try again.",
+      );
+      return false;
+    }
   }
 
   async function removeWorldPlacement(sourceId: string) {
@@ -206,7 +250,7 @@ export function WorldContextBar() {
   }
   return (
     <>
-      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 backdrop-blur lg:px-10">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">
             {definition.name.trim() || "Unnamed World Definition"}
@@ -284,6 +328,7 @@ export function WorldContextBar() {
           </RouterButtonLink>
         )}
       </header>
+      <ContextualBreadcrumbs />
       {message && (
         <Alert tone="error" className="m-4" aria-live="polite">
           <div>

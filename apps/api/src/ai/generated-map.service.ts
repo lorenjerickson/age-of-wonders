@@ -17,6 +17,7 @@ export class GeneratedMapService {
     location: Record<string, unknown>,
     tags: string[],
     additionalContext?: string,
+    ownership?: { worldId: string; userId: string },
   ) {
     const name =
       typeof location.name === "string" ? location.name : "Untitled location";
@@ -47,7 +48,14 @@ export class GeneratedMapService {
       "maps",
       tags,
     );
-    const asset = await this.media.create(upload, tags);
+    const asset = ownership
+      ? await this.media.createForWorld(
+          ownership.worldId,
+          ownership.userId,
+          upload,
+          tags,
+        )
+      : await this.media.create(upload, tags);
     const previous = isObject(location.image) ? location.image : {};
     const nextImage: Record<string, unknown> = {
       ...previous,

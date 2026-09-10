@@ -372,6 +372,25 @@ Players
 Settings
 ```
 
+The left navigation presents a stack of contextual sidebars, with only the current frame visible.
+GM Workspace owns the primary destinations above; Worlds and Campaigns have library frames, and
+selected Worlds, Campaign Definitions, Instances, and individual records have their own frames.
+A link at the top names the preceding context (for example, “Back to GM Workspace” or “Back to
+Worlds”) and navigates to it. Breadcrumbs beneath the page header expose the full ancestry and let
+the GM pop several levels at once. The URL reconstructs this hierarchy on direct entry, refresh,
+and browser history navigation; it does not depend on having visited the parent first. Mobile uses
+the same current frame in the navigation drawer.
+
+World Atlas is a section of the World frame. A selected Location has six sidebar sections:
+**Description**, **Map**, **Discoveries**, **Creatures**, **Items**, and **Connections**. Each section
+opens a distinct editing experience, while the Location remains the active sidebar. Breadcrumbs
+identify sidebar ancestry only, never the selected section. Location ancestry follows the captured
+containment relationships from the World root Location through each child, even on direct entry or
+after reparenting. Connections exposes the parent and child Locations; selecting a child advances
+the Location stack. Map edits existing Location-owned image and scene data, with a preview, an
+existing-media picker, upload, and explicit generation followed by Save Map. Description separates
+player-facing prose from private GM notes; Discoveries authors truths, rumors, and beliefs.
+
 Before minimum hosted-system readiness, the System Operator enters the separate Setup experience.
 After readiness, Home may offer Quick Start until the GM dismisses or completes it; Quick Start is
 not permanent primary navigation. Home also shows one **Continue** action for every active Campaign

@@ -1,8 +1,34 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { SaveCampaignDraftDto } from "./dto/campaign-definition-write.dto";
+import { ConflictException, NotFoundException, ValidationPipe } from "@nestjs/common";
 import { CampaignDefinitionsService } from "./campaign-definitions.service";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 
 describe("CampaignDefinitionsService", () => {
+  it("returns recovered records that pass the strict draft write contract", async () => {
+    const record = { resourceType: "plots", sourceId: "plot", sourceRevision: 1,
+      payload: { name: "Harbor mystery" }, contentHash: "snapshot-only-hash" };
+    const draft = {
+      id: "draft", campaignDefinitionId: "campaign", capturedWorldSnapshotId: "world-snapshot",
+      revisionName: "Working draft", content: {}, snapshotRecords: [record],
+      storageRevision: 2, validationStatus: "NOT_VALIDATED", createdAt: new Date(), updatedAt: new Date(),
+      capturedWorldSnapshot: worldSnapshot(minimalWorldManifest()),
+    };
+    const service = new CampaignDefinitionsService({ campaignDefinition: {
+      findUnique: jest.fn().mockResolvedValue({ status: "ACTIVE", draft }),
+    } } as never);
+    const response = await service.getDraft("campaign", "gm-1");
+    expect(response.records).toEqual([{
+      resourceType: record.resourceType, sourceId: record.sourceId,
+      sourceRevision: 1, payload: record.payload,
+    }]);
+    await expect(new ValidationPipe({
+      whitelist: true, transform: true, forbidNonWhitelisted: true,
+    }).transform({
+      expectedStorageRevision: response.storageRevision, revisionName: response.revisionName,
+      content: response.content, records: response.records,
+    }, { type: "body", metatype: SaveCampaignDraftDto })).resolves.toBeInstanceOf(SaveCampaignDraftDto);
+  });
+
   it("scopes reads to the owning GM and uses a neutral missing response", async () => {
     const prisma = { campaignDefinition: { findUnique: jest.fn().mockResolvedValue(null) } };
     await expect(new CampaignDefinitionsService(prisma as never).get("opaque", "gm-1")).rejects.toEqual(new NotFoundException("The selected Campaign Definition was not found."));

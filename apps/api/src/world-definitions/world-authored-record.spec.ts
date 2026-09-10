@@ -176,3 +176,52 @@ describe("canonical World authored records", () => {
     expect(item.extensions?.["aow:legacy-item"]).toEqual(legacyItemPayload);
   });
 });
+
+it("rejects malformed or duplicate discovery claims and preserves richer map fields", () => {
+  const initial = worldLocationPayload("location", {
+    name: "London",
+    kind: "settlement",
+    parentLocationId: "root",
+  });
+  const next = worldLocationPayload(
+    "location",
+    {
+      name: "London",
+      kind: "settlement",
+      parentLocationId: "root",
+      gmDescription: "Secrets",
+      discoveries: [{ id: "truth", kind: "truth", statement: "A secret" }],
+    },
+    {
+      ...initial,
+      image: {
+        assetId: "map",
+        altText: "Map",
+        width: 1024,
+        height: 512,
+        mimeType: "image/png",
+        orientation: "overhead",
+      },
+      walls: [{ id: "wall", vertices: [] }],
+    },
+  );
+  expect(next.image?.assetId).toBe("map");
+  expect((next as unknown as Record<string, unknown>).walls).toEqual([
+    { id: "wall", vertices: [] },
+  ]);
+  expect(
+    canonicalWorldRecordIssue("locations", "location", next),
+  ).toBeUndefined();
+  expect(
+    canonicalWorldRecordIssue("locations", "location", {
+      ...next,
+      discoveries: [{ id: "x", kind: "rumor", statement: "" }],
+    }),
+  ).toContain("statement");
+  expect(
+    canonicalWorldRecordIssue("locations", "location", {
+      ...next,
+      discoveries: [next.discoveries![0], next.discoveries![0]],
+    }),
+  ).toContain("own identity");
+});
