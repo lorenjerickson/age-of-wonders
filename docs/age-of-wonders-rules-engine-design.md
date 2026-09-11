@@ -1,421 +1,190 @@
 ---
 name: age-of-wonders-rules-engine-design
-description: requirements and technical direction for the minimal viable Age of Wonders rules engine
-status: draft
+description: event-driven rules architecture and initial delivery direction for Age of Wonders
+status: active
 ---
 
-# Age of Wonders rules engine MVP
-
-## Purpose
-
-Age of Wonders needs game mechanics that a GM can author and revise without application code. A
-player's declared action should be evaluated against the rules captured by that Campaign Instance,
-and the GM should be able to understand and approve the proposed outcome before it changes play
-state.
-
-The first release is deliberately smaller than a general-purpose RPG programming platform. It must
-prove one complete loop:
-
-1. A GM authors and tests a rule in a World.
-2. Publishing the World captures that rule in an immutable World revision.
-3. A Campaign Definition and Campaign Instance capture the rule through the existing snapshot and
-   migration chain.
-4. During an active Session, a player or GM declares a supported action.
-5. The engine finds applicable rules and produces an explained outcome proposal without mutating
-   authoritative state.
-6. The GM approves, rejects, or selects among conflicting outcomes.
-7. Approval applies the action atomically and records what happened in the Session event history.
-
-If that loop is understandable, reliable, and pleasant for a movement rule, the architecture will
-have earned expansion to attacks, reactions, state triggers, and richer effects.
-
-## Product outcome
-
-The MVP succeeds when a GM can create, publish, and use a simple movement rule without writing code
-or seeing internal identifiers, and can tell from the play UI:
-
-- which rule applied;
-- why it applied;
-- how it changed or blocked the declared action; and
-- what will change if the proposal is approved.
-
-A useful initial usability target is that a GM familiar with the product can create and test the
-example rule in under ten minutes. Correctness requires that no evaluated proposal changes
-authoritative Campaign Instance state before the GM approves it.
-
-## Product stance
-
-The goal is to make **game policy declarative**, not to remove all application logic. The host
-application continues to own capabilities and invariants such as path finding, geometry, identity,
-permissions, validation, persistence, atomic updates, and audit logging. Rules receive bounded,
-typed facts from those capabilities and decide whether or how a proposed action should change.
-
-For example, the movement service calculates a route and describes its terrain segments. A rule may
-increase the movement cost for difficult terrain, but the rule does not implement path finding or
-iterate an arbitrary map structure itself.
-
-The GM remains the final authority. The MVP is an explainable resolution assistant, not an
-autonomous game master or an unrestricted scripting environment.
-
-## Relationship to established architecture
-
-This document is the dedicated Rules exploration deferred by
-`information-architecture-domain-model-realignment.md`. It refines the reserved **Rules** World
-navigation group and **Rules execution** boundary without changing the established ownership model:
-
-- GM-authored rules in the MVP belong to a World draft and are published as part of an immutable
-  World revision.
-- A Campaign Definition revision captures its selected World revision, including that revision's
-  rules.
-- A Campaign Instance snapshot captures exactly one Campaign Definition revision and its required
-  World revision. Runtime evaluation uses those captured rules, never a World's current authoring
-  head.
-- Publishing or editing a World rule does not change an existing Campaign Definition or Campaign
-  Instance. The rule reaches each downstream scope only through the existing optional,
-  all-or-nothing, direct-lineage migration flow.
-- A Session owns proposals, GM decisions, and resulting event history; mutable outcomes belong to
-  Campaign Instance runtime.
-
-The system-level rules catalog, editions, plugin content, and reusable base definitions remain
-separate from World-authored rules. Plugin authoring and versioning remain outside any World or
-Campaign and are not part of this MVP.
-
-## MVP scope
-
-### Authoring
-
-Under **World → Rules**, a GM can:
-
-- list, create, edit, duplicate, enable or disable, and archive rules in the current World draft;
-- give a rule a human-readable name and description;
-- choose the supported trigger, conditions, and outcome modifiers through structured controls;
-- validate a rule and preview it against a supplied example context;
-- see plain-language validation and preview explanations; and
-- publish the rule with the rest of the World revision.
-
-Rule editing uses a sentence-like structured builder, for example:
-
-```text
-When [movement is declared]
-If [difficult terrain segments] [is greater than] [0]
-Then [add] [5 feet × difficult terrain segments] to [movement cost]
-```
-
-YAML, source code, and a free-form expression editor are not GM-facing MVP authoring surfaces. The
-builder produces a typed expression tree which can be validated before publication.
-
-### Runtime
-
-The first supported trigger is a movement declaration during an active Campaign Session. The host
-movement capability supplies a typed evaluation context containing at least:
-
-- the acting Creature's human-readable identity and relevant captured state;
-- origin, destination, and movement mode;
-- the host-calculated route and aggregate terrain facts needed by the rule;
-- base movement cost and available movement; and
-- the current Campaign Instance runtime revision.
-
-The MVP engine can:
-
-- allow the proposed movement unchanged;
-- adjust numeric fields of the proposed movement outcome; or
-- block the proposed movement with a human-readable reason.
-
-Rule effects modify only the **proposed action outcome**. They do not directly mutate arbitrary
-Creature, World, Campaign, or Session state. The normal movement command applies the approved
-outcome through the authoritative Campaign Instance runtime boundary.
-
-### GM review
-
-For the MVP, every rules-adjusted or rules-blocked action pauses at an outcome proposal for GM
-approval. An action for which no rule applies may follow the normal action path. This intentionally
-conservative policy keeps the first engine observable and makes incorrect rule behavior recoverable;
-automatic approval can be considered after real play validates the model.
-
-The GM review shows:
-
-- the declared action;
-- the unmodified outcome;
-- each matching rule, its source World revision, and why its conditions matched;
-- the proposed outcome and field-level changes; and
-- controls to approve or reject the proposal.
-
-When rules conflict, the review additionally shows side-by-side candidate outcomes. The GM can
-select one candidate, reject them all, or allow the original action. Free-form editing of a candidate
-outcome is deferred; the GM can instead reject it and use an existing GM action to establish the
-desired state.
-
-## Minimal rule model
-
-The following concepts describe relationships and responsibilities, not approved TypeScript field
-names.
-
-### World rule definition
-
-A World Rule Definition contains:
-
-- stable internal identity and revision provenance;
-- human-readable name and description;
-- lifecycle state: enabled, disabled, or archived;
-- one supported trigger;
-- zero or more conditions, combined with explicit `all`, `any`, and `not` groups;
-- one or more proposal modifiers;
-- an optional author-facing explanation; and
-- creation and modification audit metadata.
-
-Rule identity remains stable across World revisions so migrations and Session history can explain
-which lineage produced an outcome. Internal identities may be used in storage and URLs but must not
-be displayed to the GM.
-
-### Trigger
-
-An MVP trigger identifies one namespaced, versioned event contract. The initial contract is
-equivalent to `aow:movement.declared:v1`. Versioning the contract prevents a later payload change
-from silently changing the meaning of published rules.
-
-The MVP evaluates only the **before-action** phase. Replace/after phases, state-change triggers, and
-rules triggered by other rules are deferred.
-
-### Conditions and values
-
-The rule builder emits a restricted subset of the existing `Predicate`, `ScalarExpression`, and
-`NumericExpression` vocabulary:
-
-- literal values;
-- allowlisted event-context values;
-- allowlisted actor-state values;
-- numeric arithmetic: add, subtract, multiply, divide, minimum, and maximum;
-- comparisons: equal, not equal, less than, less than or equal, greater than, and greater than or
-  equal; and
-- boolean `all`, `any`, and `not` groups with bounded nesting.
-
-Paths are selected from human-readable schema-aware controls and stored as stable registered
-references where available. The engine rejects unknown, incompatible, or unauthorized paths at
-publication and evaluation. Pattern matching, arbitrary collection traversal, custom functions,
-dynamic code, I/O, wall-clock access, and unseeded randomness are outside the MVP.
-
-This typed tree is distinct from the restricted CEL profile reserved for model/schema expressions.
-The MVP does not require introducing a second executable language.
-
-### Proposal modifiers
-
-The MVP uses a small subset of the existing modifier vocabulary:
-
-- numeric `add`, `subtract`, `multiply`, `divide`, `minimum`, `maximum`, and `set` operations on an
-  allowlisted proposal field;
-- `allow`; and
-- `prohibit`, accompanied by a human-readable explanation.
-
-Damage, healing, conditions, resource mutation, choices, branching, loops, deployment, entity
-creation/destruction, emitted events, custom effects, and direct state mutation remain valid future
-vocabulary but are not executable by the MVP engine.
-
-### Action declaration and evaluation proposal
-
-An Action Declaration records the requested action, actor, targets or destination, parameters,
-captured rule and runtime revisions, and an idempotency key.
-
-Evaluating a declaration produces an immutable Rule Evaluation Proposal containing:
-
-- the declaration and baseline outcome;
-- every considered rule and whether it matched;
-- human-readable condition results;
-- compatible applied modifiers;
-- detected conflicts and isolated candidate outcomes;
-- final status: unchanged, adjusted, blocked, or conflicted;
-- the proposed state change, if any; and
-- the runtime revision against which it was evaluated.
-
-Evaluation never changes authoritative state. Approval succeeds only if the Session is still active,
-the actor remains authorized, and the Campaign Instance runtime revision still matches. Otherwise
-the proposal becomes stale and must be evaluated again.
-
-### Decision and audit
-
-A GM Decision records approval, rejection, the selected conflict candidate when applicable, the
-GM's human-readable identity, and time. Approval atomically applies the normal action command and
-appends the resulting Session events exactly once. Session history retains enough resolved labels,
-rule provenance, inputs, changes, and decision data to explain the outcome after definitions evolve.
-
-## Evaluation behavior
-
-For one declaration, the engine performs this bounded flow:
-
-1. Validate the declaration, permissions, active Session, captured definition snapshots, and
-   runtime revision.
-2. Select enabled rules from the Campaign Instance's captured World snapshot whose trigger contract
-   matches the declaration.
-3. Evaluate every selected rule against the same immutable baseline context.
-4. Discard nonmatching rules while retaining explanation data for GM inspection.
-5. Group matched modifiers by target proposal field.
-6. Compose clearly compatible modifiers and identify conflicts using the MVP rules below.
-7. Produce and persist an immutable proposal; do not mutate runtime state.
-8. On GM approval, recheck the runtime revision and apply the selected result atomically.
-9. Append a human-readable Session event and mark the proposal decided.
-
-### Minimal composition and conflict policy
-
-The MVP must not use processing order, database identifiers, or an undocumented heuristic to choose
-an outcome.
-
-- Modifiers to different proposal fields are compatible.
-- Add and subtract modifiers to the same numeric field are compatible and compose from the shared
-  baseline.
-- Any other combination that writes the same field is a conflict in the MVP.
-- `allow` and `prohibit` applied to the same capability are a conflict.
-- A modifier that produces an invalid value is a conflict rather than a partial result.
-
-For a compatible multi-rule result, the GM sees and approves the combined proposal. For a conflict,
-the engine evaluates each conflicting rule in isolation and displays those candidate outcomes side
-by side. More sophisticated precedence, stacking, and conflict reconciliation are deferred until
-observed play supplies concrete requirements.
-
-## Movement proof case
-
-The first end-to-end acceptance scenario is movement across difficult terrain:
-
-1. The GM creates a rule named **Difficult terrain costs extra movement**.
-2. Its trigger is movement declared.
-3. Its condition is that the host-calculated difficult-terrain segment count is greater than zero.
-4. Its modifier adds five feet multiplied by that count to the proposed movement cost.
-5. Previewing the rule with two difficult-terrain segments explains that a base cost of ten feet
-   becomes twenty feet.
-6. The GM publishes the World and explicitly migrates any downstream Campaign Definition and
-   Campaign Instance that should adopt the new revision.
-7. In an active Session, a matching movement declaration produces the same explained proposal.
-8. Approving it applies the movement and its cost once and appends a Session event.
-9. If the adjusted cost exceeds available movement, the proposal is blocked with a human-readable
-   explanation.
-
-Route calculation, terrain classification, collision detection, and movement application remain
-host capabilities. This rule consumes their typed outputs.
-
-## User experience boundaries
-
-Authoring and play remain discretely separate experiences:
-
-- **World → Rules** is the authoring library and editor.
-- **Campaign Definition** exposes captured World rule provenance read-only; it does not edit World
-  rules.
-- **Campaign Instance preparation** exposes the captured rule revision and migration status
-  read-only.
-- **Session play** shows only evaluation, explanation, conflict comparison, and GM decisions.
-
-Advanced implementation details stay behind progressive disclosure. The primary editor should read
-like a sentence, preview results beside the rule, and resolve internal references to names. A
-diagnostics panel may show expression-tree details for troubleshooting, but never opaque identifiers
-as visible labels or error text.
-
-## API and persistence boundaries
-
-The MVP API follows the established aggregate hierarchy rather than accepting parent relationships
-from mutable payloads:
-
-- World rule authoring is scoped beneath a specific World draft and is published through the World
-  revision workflow.
-- Action declarations, evaluation proposals, and decisions are scoped beneath the owning Campaign
-  Instance and Session.
-- The server derives the applicable Campaign Definition, World snapshot, and rules from the
-  Campaign Instance. Clients cannot select a different rules snapshot in an evaluation payload.
-
-Exact routes and storage tables belong in the implementation gate plan. At minimum, persistence must
-support World rules inside revision snapshots, pending/decided proposals, idempotent GM decisions,
-and Session events that preserve human-readable explanations and source provenance.
-
-## Safety and operational constraints
-
-- Evaluation is pure, deterministic, and side-effect free until approval.
-- The engine has explicit limits for matched rules, conditions, expression depth, arithmetic
-  operations, and output size.
-- Event and state paths are allowlisted by the versioned trigger contract and captured schema.
-- Rules cannot access the network, filesystem, environment variables, wall clock, or arbitrary
-  application services.
-- Invalid published or migrated rules prevent publication or migration; an unexpected runtime
-  failure produces a blocked proposal and a GM-readable diagnostic, never a partial mutation.
-- Proposal creation and decision are idempotent.
-- Approval uses optimistic concurrency against the Campaign Instance runtime revision.
-- Player and spectator projections omit GM-only facts and rule explanations that would reveal
-  hidden state.
-
-The MVP has no rule-generated events and therefore no recursive evaluation path. Recursion guards
-are required only when state-change triggers or event-emitting effects are introduced later.
-
-## Acceptance criteria
-
-The MVP is complete when all of the following are demonstrable:
-
-1. A GM can create the difficult-terrain rule with structured controls and no code.
-2. Invalid fields, types, or expressions cannot be published and produce useful diagnostics.
-3. Rule preview shows whether conditions matched and the exact before/after movement outcome.
-4. Publishing creates an immutable World revision; existing downstream snapshots remain unchanged.
-5. Explicit migration makes the rule available to a selected Campaign Instance while preserving its
-   captured Campaign/World consistency.
-6. A movement declaration in an active Session evaluates only the rules in that Instance's captured
-   snapshot.
-7. Evaluation does not mutate runtime state.
-8. A GM can approve or reject an adjusted or blocked proposal.
-9. Two compatible numeric modifiers produce one explained combined proposal for GM approval.
-10. Two conflicting modifiers produce side-by-side candidates and require an explicit GM decision.
-11. Approval is atomic and idempotent; stale proposals cannot overwrite newer runtime state.
-12. Session history explains the declaration, applicable rules, GM decision, and resulting change
-    using human-readable labels.
-
-## Explicit non-goals for the MVP
-
-- A complete implementation of every current `EventType`, `RuleEffect`, `ActivationType`, action,
-  trait, condition, or combat type.
-- Concurrent-round planning, reaction scheduling, action economy, attack/defense resolution, or the
-  general encounter resolver described in `combat-system-requirements.md`.
-- Rules triggered by state changes, dice results, other rules, Session lifecycle events, or emitted
-  custom events.
-- Chained rule outputs, loops, arbitrary collection traversal, reusable functions, or recursive
-  evaluation.
-- Arbitrary scripting, YAML execution, unrestricted CEL, or plugin-provided executable functions.
-- Campaign Definition-, Campaign Instance-, Character-, or Session-local rule authoring and
-  overrides.
-- Automatic conflict precedence, configurable stacking policy, or learned rulings.
-- Free-form candidate-outcome editing, undoing published history, or a general replay debugger.
-- AI-generated rules, rule packs, import/export, marketplace distribution, or collaborative editing.
-- Fully automatic rules execution without GM review.
-
-These capabilities may be valuable. They are excluded because none is needed to validate the first
-author-to-play loop.
-
-## Existing domain model impact
-
-`packages/common/src/types` remains the source of truth for implemented contracts. It currently
-contains a much broader prospective vocabulary in `rules.ts`, `expressions.ts`, `game.ts`, and
-related combat types. This document does not claim that the entire vocabulary is implemented or in
-MVP scope.
-
-Implementation should reuse compatible concepts—particularly predicates, numeric expressions,
-modifiers, game commands, and events—but expose an explicit supported-profile validator so an
-existing future-oriented union member cannot accidentally become executable. A later Gate 1 plan
-must compare the proposed World Rule, Action Declaration, Evaluation Proposal, and GM Decision
-contracts with those source types and identify the smallest additive or semantic changes required.
-Any implemented domain-model change must update `apps/api/src/ai/prompts/domain-model.md` in the same
-change, per repository policy.
-
-## Recommended delivery slices
-
-1. **Authoring slice:** World Rule list/editor, supported-profile validation, preview fixtures, and
-   World revision capture.
-2. **Single-rule runtime slice:** movement declaration, evaluation proposal, GM approve/reject,
-   optimistic concurrency, atomic application, and Session audit event.
-3. **Composition slice:** compatible numeric composition, minimal conflict detection, side-by-side
-   candidates, and explicit GM selection.
-
-Each slice should be independently demonstrable. Expanding the event or effect catalog should wait
-until all three slices have been exercised in an actual Session workflow.
-
-## Assumptions to validate during Gate 1
-
-The document recommends two deliberately conservative starting decisions:
-
-1. Movement is the only first-release trigger because it proves authoring, contextual evaluation,
-   outcome modification, blocking, approval, persistence, and explanation without depending on the
-   unfinished combat resolver.
-2. Every adjusted or blocked result requires GM approval during the MVP. Once real play establishes
-   trust and desired pacing, a later design can define narrowly scoped automatic approval.
-
-Neither assumption requires a broader engine design before implementation planning begins.
+# Age of Wonders rules engine
+
+## Architectural intent
+
+**All game-engine behavior is defined by event-triggered rules and their effects. A World without
+rules is inert.** Rules are the source of game mechanics, including the ordinary behavior of actions,
+movement, dice, combat, resources, time progression, and map interactions. They are not merely
+modifiers layered onto built-in mechanics. A declared action has no implicit successful outcome.
+If no applicable rule produces an effect, no gameplay state changes.
+
+The runtime model is:
+
+1. An event occurs, carrying typed context where appropriate.
+2. Rules subscribed to that event are triggered.
+3. Each rule evaluates its applicable conditions using game state and event context.
+4. If all applicable conditions are satisfied, the rule executes an ordered sequence of one or more
+   effects. A rule with no conditions is eligible whenever its trigger matches.
+5. Effects may change game state, request capabilities such as dice rolls, or emit events.
+6. Resulting events trigger further rules. The resulting chain defines the net runtime behavior.
+
+Explicit `all`, `any`, and `not` groups may express a condition; all top-level applicability gates
+must pass. Event context can be referenced both in conditions and when determining effect values,
+subjects, targets, locations, and scope.
+
+Movement is an initial proof case for this architecture, not the engine's permanent event or effect
+boundary. Event chaining and ordered effects are foundational requirements for the first executable
+runtime, even if it initially exposes only a small catalog.
+
+## Event sources and context
+
+Events may originate from game-state changes, declared player or GM actions, dice roll results,
+map triggers, rule effects, and other registered sources. Session lifecycle, time/timer sources, and
+external integrations can supply events through defined contracts as they are implemented.
+
+Event types are namespaced and versioned. Context describes the particular occurrence: for example,
+actor, requested action, origin/destination, changed field and before/after values, roll request and
+result, or map region and entering entity. The server establishes provenance and authority; a client
+cannot manufacture a trusted dice result, state-change event, or captured rules revision.
+
+The runtime must preserve root-event and causal-parent references so that every effect and subsequent
+event can be explained. A state-change event represents an actual effective change, not merely a
+request to write an unchanged value. Its exact emission granularity must be explicit in the event
+contract. Events without matching applicable rules cause no gameplay effects.
+
+## Conditions and state access
+
+Conditions can reference **all available game state** in the owning Campaign Instance's execution
+scope, together with captured World/Campaign definitions and the triggering event context. This
+includes entities other than the actor, relationships, locations, resources, conditions, encounters,
+and other modeled subsystems. The architecture must not limit conditions to a fixed set of movement
+aggregates or actor-only properties.
+
+State access is typed and schema-aware. Validate paths, types, relationships, and supported queries
+against captured schema and event contracts. Bounded query evaluation and registered references are
+execution safeguards, not a reason to permanently exclude a game subsystem. All available game state
+does not mean unrelated Campaign Instances, operator credentials, host environment, or arbitrary I/O.
+The trusted engine may evaluate hidden game facts; player/spectator projections must not reveal them.
+
+Conditions are read-only. Effects are the only rule execution step that changes gameplay state.
+The implementation plan must define which state version each condition observes, including how
+subsequent events observe changes made by preceding effects. Reading stale baseline state throughout
+an entire chain is not an acceptable implicit default.
+
+## Effects and host capabilities
+
+A satisfied rule executes an authored, ordered sequence of effects. Effect values and target scope
+may depend on event context and state. The effect vocabulary grows to cover gameplay state updates,
+movement, rolls, resources, damage/healing, conditions, creation/destruction, and explicit event
+emission. Unsupported effects are rejected at validation, not silently skipped.
+
+The host implements execution primitives: typed state access and writes, geometry and path queries,
+recorded randomness, event delivery, identity and authorization, persistence, concurrency, and audit.
+Rules decide when to invoke those primitives and what their gameplay consequences are. The host must
+not independently decide movement cost, whether terrain is traversable, what counts as a hit, damage,
+or resource consumption. For example, geometry can describe an intersected obstacle; rules determine
+whether it blocks a creature or causes some other effect.
+
+Security and structural integrity remain host obligations. A rule cannot bypass authorization,
+write a malformed record, cross Campaign ownership, or corrupt storage. A finite number requirement
+can be a numeric execution constraint; forbidding a negative resource balance or over-budget movement
+is game policy and must be expressed through rules and the game's authored model. If a primitive
+includes domain-specific semantics, those semantics must be explicit in its versioned contract and
+must not create an independent default gameplay path.
+
+Dice rolling is an invoked capability whose recorded result becomes an event. Rules determine why
+to roll and how to interpret the result. Re-evaluation or retry must not silently obtain new entropy.
+Map detection similarly emits a fact; a rule supplies the consequence.
+
+## Ownership and authoring
+
+- World drafts own GM-authored rules. Publish captures them in immutable World revisions.
+- Campaign Definition revisions capture their selected World revision and rules.
+- Campaign Instance snapshots capture exactly one Campaign Definition revision and its required
+  World revision. Execution uses these captured rules, never current authoring heads.
+- Downstream adoption uses the existing optional, all-or-nothing, direct-lineage migration flow.
+- Session owns play decisions and event history; Campaign Instance runtime owns mutable play state.
+- System catalogs and reusable plugin content remain separate from World authoring. Any adopted
+  default mechanics must be represented as captured rules, not hidden engine defaults.
+
+Under World → Rules, a GM lists, creates, edits, duplicates, enables/disables, archives, validates,
+and tests rules through structured controls. A rule has stable lineage identity, human-readable name
+and description, lifecycle, versioned trigger, optional conditions, ordered effects, and audit and
+revision provenance. No opaque identifier is displayed as a label or error message.
+
+The editor expresses trigger → conditions → effects, including explicit effect order and event-context
+bindings. YAML, arbitrary code, and a free-form expression language are not required authoring UI.
+Campaign Definition and Instance preparation show captured provenance read-only. Session play shows
+execution, causal explanations, proposals, and decisions rather than authoring World rules.
+
+## Execution, review, and reliability
+
+The target engine needs an event dispatcher, condition evaluator, ordered effect executor, typed
+capability registry, and causal execution record. Rule-generated and state-change-generated events
+are processed through the same dispatcher as other events.
+
+Before implementing the runtime, specify deterministic event queue ordering, rule scheduling, effect
+visibility, suspension/resumption for rolls and choices, competing state writes, and transaction
+boundaries. Authored effect order is meaningful; it is not an automatic precedence mechanism between
+separate rules. Database IDs and incidental iteration order must not settle competing rules.
+
+Bound total events, triggered rules, condition/query cost, effect steps, causal depth, and output per
+execution. Detect or safely terminate runaway chains with an explained failure. Recursion and cycle
+controls are required from the first runtime implementation. Do not expose a partially applied failed
+chain as successful play. Define rollback or resumable transaction semantics explicitly.
+
+The initial delivery retains GM review as an execution/commit boundary. Preview can simulate a chain
+against isolated state; approval commits the approved effects through the runtime transaction. Review
+must not create an alternative host-defined action outcome. Rejection does not apply effects.
+A no-rule execution is a no-op, not a fallback movement command. Approval must recheck Session state,
+authority, and expected runtime revision; stale previews require re-evaluation. Root-event submission
+and decisions must be idempotent, with causal events and state changes recorded exactly once at the
+application boundary.
+
+Whether review occurs for an entire root-event chain or selected suspension points, and whether
+particular execution paths may later proceed automatically, remain explicit product decisions. These
+choices must not remove rule causality or introduce mechanics outside the rule system.
+
+## Initial proof and acceptance criteria
+
+The first runtime should demonstrate a deliberately small **complete event/effect chain**:
+
+1. With no enabled applicable rules, a movement declaration produces no gameplay change.
+2. A captured movement rule defines the ordinary movement behavior as effects. There is no implicit
+   baseline movement supplied by the host.
+3. A difficult-terrain rule uses event context and state to determine movement cost. With an authored
+   base cost of ten feet and two segments charged five feet each, the result is twenty feet.
+4. A budget rule determines whether that cost is permitted. This check is not hard-coded into the
+   movement primitive. Interactions with other movement rules use explicitly defined scheduling and
+   conflict semantics, not accidental processing order.
+5. A movement effect changes position and generates the defined state-change/map event. A second
+   triggered rule uses that event's context to apply another observable effect.
+6. A roll request produces a recorded result event, and a rule reacts to that result. This may be a
+   separate engine fixture before the full dice authoring UI exists.
+7. A condition can reference state beyond the actor and movement context; an effect can use an
+   event-context binding to select its target.
+8. Effect sequence order and state visibility are tested and explained in the causal trace.
+9. Preview changes no authoritative state; approval applies the selected chain once. Rejection,
+   stale runtime, retry, and failed/runaway chains cannot produce unintended partial gameplay.
+10. Publication and explicit downstream migration preserve captured-rule consistency. The GM can
+    create and test the first example through structured controls and inspect human-readable history.
+
+## Delivery direction and existing implementation gap
+
+`packages/common/src/types` remains the implemented contract authority. Existing `Predicate`,
+`NumericExpression`, `RuleEffect`, `TriggerDefinition`, game commands, and events provide vocabulary
+to compare with the target. Reuse compatible concepts with explicit supported-profile validation;
+do not assume every member is executable. Update the AI-facing domain guide with implemented type
+or persisted mapping changes.
+
+The current `MovementRule`/`previewMovementRules` implementation is a limited modifier preview
+prototype. It has no generic event dispatcher, ordered gameplay effects, state queries, or causal
+chains. Its hard-coded baseline movement, available-movement enforcement, isolated candidate policy,
+and fixed paths are prototype behavior, not the target engine contract. Do not connect this prototype
+to authoritative runtime as the game's default movement path.
+
+The next implementation plan must establish the event envelope, rule/effect contracts, state view,
+capability invocation, queue semantics, execution budgets, and causal transaction model before wiring
+World authoring and Session execution. Movement fixtures can then test those general abstractions.
+Publication, migration, provenance, and GM review remain required delivery work.
+
+A full combat catalog, rich map/dice authoring surfaces, plugin marketplace, AI-generated rules,
+arbitrary scripts, and a general replay UI can be staged later. The event-driven execution model,
+state-aware conditions, ordered effects, effect-generated events, and inert rule-free World cannot
+be deferred behind a movement-only architectural boundary.

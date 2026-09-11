@@ -5,3 +5,4 @@ export function getPlatformMessage(name: string) {
 }
 
 export * from './types';
+export * from './rules/movement-rule-engine';

@@ -2394,3 +2394,61 @@ Before returning generated JSON:
 10. Include the owning root location as `worldId` for every creature state.
 11. Use fresh armor dice contributions—not a static armor class—for creature defense ratings.
 12. Return valid JSON only when the calling prompt requests JSON.
+
+### Movement rules: executable preview prototype
+
+Architectural target: all gameplay is defined by event-triggered rules, conditions over available
+game state and event context, and ordered effects which may trigger further rules. A rule-free World
+is inert. See the canonical architecture map and `docs/age-of-wonders-rules-engine-design.md`.
+The implemented preview below does not yet fulfill that target: its implicit baseline movement,
+fixed paths, and hard-coded budget checks are prototype behavior, not authoritative gameplay policy.
+Do not use it as a Session movement executor or assume generic event/effect chaining is implemented.
+
+`packages/common/src/types/movement-rules.ts` defines the initial executable subset of the broader
+prospective rule vocabulary. `MovementRule` is currently an **in-memory preview contract**, not a
+persisted Definition, World snapshot resource, Action Declaration, or Session proposal. There is
+no new mapping in `domain-resource.ts`. Do not generate these records into existing resource tables
+or claim that World publication or Session approval executes them.
+
+A rule contains `id`, `name`, optional `description`, lifecycle `state` (`enabled`, `disabled`, or
+`archived`), exact trigger `aow:movement.declared:v1`, optional `condition`, and 1–16 `modifiers`.
+IDs are internal references; display `name`. Names, identities, descriptions, and prohibition
+reasons are bounded to 500 characters. Descriptions may be empty; names and reasons may not.
+
+`MovementRuleValue` reuses the `constant`, `path`, and `arithmetic` shapes from NumericExpression.
+Only `baseMovementCost`, `availableMovement`, and `difficultTerrainSegments` paths are allowed.
+All distances are feet. The host supplies finite nonnegative costs and available movement, and a
+nonnegative safe-integer segment count. These are aggregate preview facts, not a route or trusted
+client authorization. Actor-state paths and schema field references are not implemented yet.
+Arithmetic is binary `add`, `subtract`, `multiply`, `divide`, `min`, or `max`. No fallback, dice,
+lookup, custom function, collection traversal, or other expression member is executable.
+
+`MovementRuleCondition` permits `always`, `never`, `all`, `any`, `not`, and numeric `compare` with
+`eq`, `ne`, `lt`, `lte`, `gt`, or `gte`. An omitted condition always matches. Boolean groups require
+1–32 children. Validation permits at most 256 expression/condition nodes per rule and depth 12
+(root depth zero); unknown fields are rejected as well as unsupported union members.
+
+Numeric modifiers target only `movementCost` and require `value`. Operations are `add`, `subtract`,
+`multiply`, `divide`, `set`, `minimum` (floor: max of baseline and value), and `maximum` (ceiling:
+min of baseline and value). Capability modifiers target `movement`: `allow` has no value;
+`prohibit` requires `reason`. Allow never bypasses available movement. Add/subtract compose from
+a shared baseline; other multiple numeric writes conflict. Allow/prohibit conflict. Invalid
+arithmetic or negative cost conflicts, with invalid isolated candidates explicitly marked
+`valid: false`. Each matched rule is isolated before composition so another rule cannot rescue an
+invalid rule. Runtime condition failures and invalid inputs fail closed with blocked diagnostics.
+
+`previewMovementRules` accepts unknown inputs and validates before execution, for at most 64 rules
+with distinct identities. It returns `MovementRulePreview`: `status` (`unchanged`, `adjusted`,
+`blocked`, `conflicted`), `baseline`, optional `outcome`, `considered` traces, isolated `candidates`,
+and `diagnostics`. Outcomes carry `movementCost`, `allowed`, and human-readable `reasons`.
+Conflicted previews have no combined outcome; every matched rule is shown as an isolated candidate,
+without combining other rules into it. Traces preserve internal rule references, names, match
+results, and numeric condition explanations. This is GM-only diagnostic material until explicit
+player projections exist. Returned values are readonly contracts, not persisted immutable history.
+
+The proof rule uses a comparison of `difficultTerrainSegments` greater than constant 0 and an `add`
+modifier whose arithmetic value multiplies constant 5 by that path. A base cost of 10 with 2 segments
+becomes 20, blocked if available movement is below 20. Preview is deterministic and performs no I/O,
+state mutation, authorization, snapshot selection, clock access, or persistence. World authoring,
+provenance, publication/migration validation, declaration/decision idempotency, runtime concurrency,
+and Session audit remain integration work.

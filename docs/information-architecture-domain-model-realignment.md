@@ -276,7 +276,7 @@ profile must provide typed variables, publish-time parsing/type-checking, determ
 bounded cost, versioned allowlisted functions, and human-readable diagnostics. It must prohibit
 network/filesystem access, state mutation, unseeded randomness, wall-clock dependence, dynamic code
 loading, and arbitrary plugin execution. This recommendation governs schema expressions only; the
-broader Rules model remains deferred for later exploration.
+Rules execution model is defined below and in `age-of-wonders-rules-engine-design.md`.
 
 ### Versioned replication and optional migration
 
@@ -1062,7 +1062,8 @@ explanation.
 - **IA-054:** Quick Start adopts a newly released Activity Definition immediately, reevaluates
   completion, maps compatible progress, and visibly reopens changed or newly required steps.
 - **IA-055:** Rules remains a visible fifth World secondary-navigation group, but its internal
-  information architecture and domain semantics are explicitly deferred to a dedicated design.
+  execution semantics follow the event-driven rules architecture below. Detailed authoring UI and
+  runtime contracts are developed in the dedicated Rules design.
 - **IA-056:** Plugin authoring and release versioning occur outside every Installation, World, and
   Campaign workspace. Setup manages installation and permissions; World and Campaign authoring
   surfaces manage only explicit adoption of plugin-provided content or capabilities.
@@ -1119,9 +1120,39 @@ back snapshot adoption are separately auditable GM/model-author capabilities.
 The derived graph remains a projection for relationship search; it is not authoritative ownership.
 Media and AI records retain provenance but do not become domain parents.
 
-The **Rules/system** and **Rules execution** rows above only reserve boundaries for current concepts
-that must survive migration analysis. They do not settle the deferred Rules taxonomy, ownership,
-inheritance model, or user experience.
+The **Rules/system** row preserves the separate shared catalog boundary. World drafts own authored
+rules; World revisions and downstream Campaign captures preserve exact rule provenance. Session owns
+execution decisions and history; mutable gameplay state remains Campaign Instance runtime.
+
+### Event-driven rules architecture
+
+All game-engine behavior is defined by triggered rules and their effects. A World without rules is
+inert: declarations and other incoming events have no implicit gameplay outcome. Default mechanics,
+when provided, must be represented as explicitly captured rules.
+
+Events originate from game-state changes, player/GM action declarations, dice results, map triggers,
+rule effects, and other registered sources. Event context is available to condition evaluation and
+to bind effect values, subjects, targets, and scope. Conditions may query all available game state
+within the owning execution scope, including captured definitions, through typed schema-aware access.
+They are not architecturally limited to actor state or movement facts. Hidden state remains available
+to trusted rule evaluation without becoming visible to players or spectators.
+
+A triggered rule whose applicable conditions all pass executes an ordered sequence of one or more
+effects. Effects can change state or invoke capabilities and thereby emit further events that trigger
+other rules. This causal chain defines net gameplay behavior. An event with no applicable effect is
+a gameplay no-op; no host action path supplies missing mechanics.
+
+The host provides execution primitives, geometry, recorded randomness, typed state access,
+authorization, structural validation, persistence, concurrency, and audit. Rules define gameplay
+policy, including movement permission/cost, resource consumption, and interpretation of rolls and
+map facts. Security and storage invariants remain host-enforced; gameplay defaults do not.
+
+The first executable runtime must support event dispatch, state-aware conditions, ordered effects,
+causal event chaining, and bounded execution with runaway-chain handling. Scheduling, state visibility,
+conflict handling, and transaction/review boundaries must be explicit. Movement can be the first
+proof case without narrowing these architectural commitments. See
+`age-of-wonders-rules-engine-design.md` for the active design and `rules-engine-implementation.md`
+for implementation gaps; the existing movement modifier preview is not yet this runtime.
 
 ### Relationship view
 
@@ -2070,9 +2101,10 @@ unspecified and must not be filled in by incidental implementation choices.
 18. **Resolved — Navigation chrome:** Home and Settings are stable primary destinations. Continue is
     dashboard/Instance-page content, not primary navigation. Home provides a Continue action for
     every active Campaign Instance.
-19. **Deferred — Rules:** retain Rules as the fifth World navigation grouping and preserve existing
-    concepts as migration constraints, but defer its internal model, inheritance, and information
-    architecture to a dedicated exploration.
+19. **Resolved — Rules execution intent:** all gameplay behavior arises from event-triggered rules,
+    state/context conditions, and ordered effects that may trigger further rules. A rule-free World
+    is inert. Rules remains the fifth World navigation group; concrete contracts, authoring UI, and
+    runtime scheduling/transaction semantics remain implementation work in the dedicated design.
 20. **Deferred — Closed core:** the final list of engine-critical closed vocabularies is unknown.
     The open-by-default rule remains, and no incidental implementation may close a vocabulary without
     an explicit integrity/security rationale.

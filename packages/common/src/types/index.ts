@@ -30,3 +30,4 @@ export * from "./world-authoring";
 export * from "./versioning";
 
 export * from "./modifiers";
+export * from "./movement-rules";
