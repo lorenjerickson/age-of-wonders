@@ -37,6 +37,15 @@ import type {
   UpdateCampaignInstanceAgentStatusRequest,
   CampaignSessionDetailProjection,
   CampaignSessionTableProjection,
+  SessionMovementContext,
+  SessionMovementRequest,
+  SessionMovementDecisionRequest,
+  SessionMovementProposal,
+  WorldRule,
+  WorldRuleEvent,
+  RuleStateView,
+  RecordedRuleRoll,
+  WorldRuleExecution,
   CampaignSessionReadinessProjection,
   CampaignSessionLifecycleRequest,
   CreateCampaignSessionRequest,
@@ -1605,6 +1614,22 @@ export function createCampaignSession(
   );
 }
 
+export function getSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string) {
+  return request<SessionMovementContext>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement`));
+}
+
+export function proposeSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string, input: SessionMovementRequest) {
+  return request<SessionMovementProposal>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement`), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+}
+
+export function decideSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string, proposalId: string, decision: "approve" | "reject", input: SessionMovementDecisionRequest) {
+  return request<SessionMovementProposal>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement/${encodeURIComponent(proposalId)}/${decision}`), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+}
+
 export function getCampaignSessionTable(
   campaignDefinitionId: string,
   campaignInstanceId: string,
@@ -2582,3 +2607,14 @@ export function generateWorldArtwork(
     { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(input) },
   );
 }
+
+export interface WorldRulesCollection { worldDefinitionId: string; draftId: string; storageRevision: number; rules: readonly WorldRule[] }
+export interface WorldRulesRevision { expectedDraftId: string; expectedStorageRevision: number }
+function worldRulesRequest<T>(worldId: string, suffix = '', input?: unknown, method = 'POST'): Promise<T> {
+  return request<T>('/worlds/' + encodeURIComponent(worldId) + '/rules' + suffix, input === undefined ? undefined : {method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(input)});
+}
+export const getWorldRules = (worldId: string) => worldRulesRequest<WorldRulesCollection>(worldId);
+export const saveWorldRule = (worldId: string, input: WorldRulesRevision & {rule: WorldRule}, id?: string) => worldRulesRequest<WorldRulesCollection>(worldId, id ? '/' + encodeURIComponent(id) : '', input, id ? 'PUT' : 'POST');
+export const duplicateWorldRule = (worldId: string, id: string, input: WorldRulesRevision) => worldRulesRequest<WorldRulesCollection>(worldId, '/' + encodeURIComponent(id) + '/duplicate', input);
+export const addStarterWorldMovementRules = (worldId: string, input: WorldRulesRevision & {budgetFeet?: number}) => worldRulesRequest<WorldRulesCollection>(worldId, '/starter-movement', input);
+export const previewWorldRules = (worldId: string, input: {event: WorldRuleEvent; state: RuleStateView; entropy?: readonly RecordedRuleRoll[]}) => worldRulesRequest<WorldRuleExecution>(worldId, '/preview', input);

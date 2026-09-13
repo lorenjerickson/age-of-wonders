@@ -1,3 +1,5 @@
+import { CampaignSessionMovementController } from "./campaign-session-movement.controller";
+import { CampaignSessionMovementService } from "./campaign-session-movement.service";
 import { CampaignSessionTableController } from "./campaign-session-table.controller";
 import { CampaignSessionTableService } from "./campaign-session-table.service";
 import { TerrainExplorationStore } from "./terrain-exploration-store.service";
@@ -29,6 +31,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
 @Module({
   imports: [NotificationsModule],
   controllers: [
+    CampaignSessionMovementController,
     CampaignSessionTableController,
     CampaignInstanceHierarchyController,
     CampaignInstanceMeController,
@@ -39,6 +42,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
     CampaignInstanceCharacterDraftsController,
   ],
   providers: [
+    CampaignSessionMovementService,
     CampaignSessionTableService,
     TerrainExplorationStore,
     CampaignInstancesService,

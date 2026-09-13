@@ -37,3 +37,7 @@ export * from "./isometric-terrain";
 export * from "./terrain-exploration";
 
 export * from "./session-table";
+
+export * from "./movement-execution-api";
+
+export * from "./world-rules";

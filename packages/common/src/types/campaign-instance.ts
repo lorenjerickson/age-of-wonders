@@ -106,8 +106,9 @@ export interface CampaignInstanceCreatureStateOverlay<
   readonly name: string;
   readonly definitionId?: DefinitionId;
   readonly currentLocationId?: LocationId;
-  /** Feet in grid units of the current captured isometric Location. Setup only; not a movement effect. */
+  /** Feet in grid units of the current captured isometric Location. Authored during setup or changed by an approved captured-rule effect. */
   readonly terrainPosition?: TerrainPoint;
+  /** The aow:rules namespace stores authored numeric aow:movementRemaining and aow:moves resources; absence grants no default allowance. */
   readonly extensions?: Extensions;
 }
 

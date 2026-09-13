@@ -266,6 +266,7 @@ await withFixture(async (url) => {
     if (request.method() !== "GET") writes.push(path);
     if (path.endsWith("/download"))
       return route.fulfill({ json: { url: image.uri } });
+    if (path.endsWith("/movement")) return route.fulfill({json:{runtimeRevision:1,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
     if (path.endsWith("/table")) {
       locationReads.push(parsed.searchParams.get("locationId"));
       if (holdTable) {

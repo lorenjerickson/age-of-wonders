@@ -1,4 +1,5 @@
 import { checkpointExplorationSeal, captureCheckpointExploration, recoverCheckpointExploration, restoreExplorationSource } from "./terrain-exploration-checkpoints";
+import { worldRuleSnapshotIssue } from "../world-definitions/world-rule-snapshot";
 import {
   BadRequestException,
   ConflictException,
@@ -1250,6 +1251,8 @@ export function validateTargetRuntime(
   }
   const campaignRecords = campaignManifestValue.records;
   const worldRecords = worldManifestValue.records;
+  const ruleIssue = worldRuleSnapshotIssue(worldRecords);
+  if (ruleIssue) return [{ code: "captured-rules-invalid", subject: "Captured World rules", detail: ruleIssue }];
   const objectives = new Map(
     campaignRecords
       .filter((record) => record.resourceType === "plots")

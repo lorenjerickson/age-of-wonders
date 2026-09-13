@@ -199,6 +199,7 @@ await withFixture(async (url) => {
           ],
         },
       });
+    if (path.endsWith("/movement")) return route.fulfill({json:{runtimeRevision:1,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
     if (path.endsWith("/table"))
       return route.fulfill({
         json: {

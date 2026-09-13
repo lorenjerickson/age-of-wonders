@@ -1,4 +1,5 @@
 import { terrainSnapshotIssue } from "./terrain-snapshot";
+import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
 import { isPublicationJson } from "../domain/snapshot-manifest";
 import { isCreatureInstanceEmbodimentPolicy } from "@aow/common";
 import type { WorldDraftRecordDto } from "./dto/world-definition-authoring.dto";
@@ -33,6 +34,8 @@ export function validateWorldDefinitionDraft(
     return { valid: false, issues };
   }
   const ids = new Set<string>();
+  const ruleIssue = worldRuleSnapshotIssue(records);
+  if (ruleIssue) add("world-rule-invalid", "World rules", ruleIssue);
   const recordIdentities = new Set<string>();
   const byId = new Map<string, WorldDraftRecordDto>();
   for (const record of records) {

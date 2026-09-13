@@ -2,6 +2,8 @@ import { BadRequestException } from "@nestjs/common";
 
 // location-terrain-chunks are immutable World snapshot components, not generic CRUD resources.
 // The Location map endpoints enforce ownership and capture these components atomically.
+// world-rules are immutable World snapshot components containing executable WorldRule wrappers.
+// Dedicated World draft APIs own authoring; they are distinct from generic rule-variants.
 export const DOMAIN_RESOURCES = [
   "definitions",
   "rule-variants",

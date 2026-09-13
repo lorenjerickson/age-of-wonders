@@ -56,6 +56,12 @@ export class CreateWorldDraftDto {
 }
 
 export class SaveWorldDraftDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  expectedDraftId?: string;
+
   @IsInt()
   @Min(1)
   expectedStorageRevision!: number;

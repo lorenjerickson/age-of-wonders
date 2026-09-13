@@ -18,3 +18,5 @@ export * from "./spatial/terrain-openings";
 export * from "./spatial/terrain-sight";
 
 export * from "./spatial/terrain-exploration";
+
+export * from "./rules/world-rule-engine";

@@ -1187,11 +1187,11 @@ model CampaignInstanceAgentParticipation {
 /// A scheduled or historical Session owned by one Campaign Instance. Database
 /// checks keep lifecycle timestamps consistent with the Session status.
 model CampaignInstanceSession {
-  id                     String                           @id @default(uuid())
+  id                     String                            @id @default(uuid())
   campaignInstanceId     String
   name                   String
-  status                 CampaignInstanceSessionStatus    @default(PLANNED)
-  metadataRevision       Int                              @default(1)
+  status                 CampaignInstanceSessionStatus     @default(PLANNED)
+  metadataRevision       Int                               @default(1)
   planningNotes          String?
   creationKeyHash        String?
   createdByUserId        String?
@@ -1212,15 +1212,15 @@ model CampaignInstanceSession {
   lastEventSequence      Int?
   currentSummaryRevision Int?
   summaryStatus          SessionSummaryStatus?
-  eventLog               Json                             @default("[]")
+  eventLog               Json                              @default("[]")
   summary                Json?
-  extensions             Json                             @default("{}")
-  createdAt              DateTime                         @default(now())
-  updatedAt              DateTime                         @updatedAt
-  campaignInstance       CampaignInstance                 @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
-  createdBy              User?                            @relation("CampaignSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  startSnapshot          CampaignInstanceSnapshot?        @relation("CampaignSessionStartSnapshot", fields: [campaignInstanceId, startSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
-  endSnapshot            CampaignInstanceSnapshot?        @relation("CampaignSessionEndSnapshot", fields: [campaignInstanceId, endSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  extensions             Json                              @default("{}")
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
+  campaignInstance       CampaignInstance                  @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict)
+  createdBy              User?                             @relation("CampaignSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  startSnapshot          CampaignInstanceSnapshot?         @relation("CampaignSessionStartSnapshot", fields: [campaignInstanceId, startSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
+  endSnapshot            CampaignInstanceSnapshot?         @relation("CampaignSessionEndSnapshot", fields: [campaignInstanceId, endSnapshotId], references: [campaignInstanceId, id], onDelete: Restrict)
   participations         SessionParticipation[]
   invitations            CampaignSessionInvitation[]
   presenceLeases         SessionPresenceLease[]
@@ -1228,6 +1228,7 @@ model CampaignInstanceSession {
   runtimeBoundaries      CampaignSessionRuntimeBoundary[]
   summaries              CampaignSessionSummary[]
   outboxEvents           CampaignSessionOutboxEvent[]
+  movementProposals      CampaignSessionMovementProposal[]
 
   @@unique([campaignInstanceId, id])
   @@unique([campaignInstanceId, creationKeyHash])
@@ -1511,6 +1512,7 @@ model CampaignInstanceSnapshot {
   sessionStartBoundaries       CampaignInstanceSession[]           @relation("CampaignSessionStartSnapshot")
   sessionEndBoundaries         CampaignInstanceSession[]           @relation("CampaignSessionEndSnapshot")
   sessionRuntimeBoundaries     CampaignSessionRuntimeBoundary[]
+  movementProposals            CampaignSessionMovementProposal[]
 
   @@unique([campaignInstanceId, snapshotNumber])
   @@unique([campaignInstanceId, id])
@@ -1694,7 +1696,6 @@ model WorldTerrainSave {
   @@id([draftId, operationId])
 }
 
-
 /// Latest validated last-known surfaces per observer and captured map. Never contains actors.
 /// Snapshot migration/restore retain historical rows and begin a separate scope.
 model CampaignTerrainExploration {
@@ -1705,15 +1706,14 @@ model CampaignTerrainExploration {
   runtimeRevision    Int
   payload            Json
   contentHash        String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  campaignInstance   CampaignInstance @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignTerrainExploration_instance_fkey")
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  campaignInstance   CampaignInstance         @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignTerrainExploration_instance_fkey")
   snapshot           CampaignInstanceSnapshot @relation(fields: [campaignInstanceId, snapshotId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignTerrainExploration_snapshot_fkey")
 
   @@id([campaignInstanceId, snapshotId, locationId, observerId], map: "CampaignTerrainExploration_pkey")
   @@index([campaignInstanceId, snapshotId])
 }
-
 
 /// Immutable exploration captured with one runtime checkpoint, sealed by its aggregate hash/count.
 model CampaignCheckpointExploration {
@@ -1724,7 +1724,32 @@ model CampaignCheckpointExploration {
   observerId         String
   payload            Json
   contentHash        String
-  checkpoint CampaignInstanceRuntimeCheckpoint @relation(fields: [campaignInstanceId, checkpointId, snapshotId], references: [campaignInstanceId, id, campaignInstanceSnapshotId], onDelete: Restrict, map: "CampaignCheckpointExploration_checkpoint_fkey")
+  checkpoint         CampaignInstanceRuntimeCheckpoint @relation(fields: [campaignInstanceId, checkpointId, snapshotId], references: [campaignInstanceId, id, campaignInstanceSnapshotId], onDelete: Restrict, map: "CampaignCheckpointExploration_checkpoint_fkey")
 
   @@id([checkpointId, locationId, observerId], map: "CampaignCheckpointExploration_pkey")
+}
+
+/// Immutable evaluated movement chain; decisions commit against its exact capture/revision.
+model CampaignSessionMovementProposal {
+  id                 String                  @id @default(uuid())
+  campaignInstanceId String
+  sessionId          String
+  snapshotId         String
+  runtimeRevision    Int
+  requestKey         String
+  requestHash        String
+  request            Json
+  result             Json
+  nextState          Json
+  projection         Json
+  status             String
+  decisionKey        String?
+  createdAt          DateTime                @default(now())
+  decidedAt          DateTime?
+  session            CampaignInstanceSession @relation(fields: [campaignInstanceId, sessionId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignSessionMovementProposal_session_fkey")
+
+  snapshot CampaignInstanceSnapshot @relation(fields: [campaignInstanceId, snapshotId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignSessionMovementProposal_snapshot_fkey")
+
+  @@unique([sessionId, requestKey])
+  @@index([sessionId, createdAt])
 }

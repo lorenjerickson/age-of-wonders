@@ -520,7 +520,9 @@ export class CampaignInstancesService {
             where: {
               id: selectedSnapshotId,
               ...(campaignDefinitionId ? { campaignDefinitionId } : {}),
-              campaignDefinition: { ownerUserId: createdByUserId },
+              campaignDefinitionRevision: {
+                campaignDefinition: { ownerUserId: createdByUserId },
+              },
             },
             select: selectedSnapshotSelect,
           });

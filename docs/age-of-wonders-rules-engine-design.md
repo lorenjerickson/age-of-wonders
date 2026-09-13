@@ -179,10 +179,11 @@ chains. Its hard-coded baseline movement, available-movement enforcement, isolat
 and fixed paths are prototype behavior, not the target engine contract. Do not connect this prototype
 to authoritative runtime as the game's default movement path.
 
-The next implementation plan must establish the event envelope, rule/effect contracts, state view,
-capability invocation, queue semantics, execution budgets, and causal transaction model before wiring
-World authoring and Session execution. Movement fixtures can then test those general abstractions.
-Publication, migration, provenance, and GM review remain required delivery work.
+The separate `WorldRule` implementation now establishes the event envelope, ordered effects, scoped
+state view, recorded dice, explicit priority stages, bounded FIFO causality, and whole-chain GM review.
+World draft authoring and captured GM movement proposals use these contracts; see
+`rules-engine-implementation.md` for the exact supported profile and remaining player-map work.
+The movement modifier prototype above remains outside authoritative execution.
 
 A full combat catalog, rich map/dice authoring surfaces, plugin marketplace, AI-generated rules,
 arbitrary scripts, and a general replay UI can be staged later. The event-driven execution model,

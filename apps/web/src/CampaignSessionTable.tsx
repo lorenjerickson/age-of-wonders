@@ -12,6 +12,7 @@ import {
 } from "./api";
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
 import { ZoomableImage } from "./ZoomableImage";
+import { SessionMovementPanel } from "./SessionMovementPanel";
 import { CampaignSessionTerrainOverview } from "./CampaignSessionTerrainOverview";
 
 function CapturedMapImage({
@@ -440,6 +441,12 @@ export function CampaignSessionTable({
               </div>
             </aside>
           </div>
+          <SessionMovementPanel
+            campaignDefinitionId={campaignDefinitionId}
+            campaignInstanceId={campaignInstanceId}
+            sessionId={sessionId}
+            onCommitted={() => void load()}
+          />
           <section className="mt-6" aria-labelledby="session-plot-cues-heading">
             <h3
               id="session-plot-cues-heading"

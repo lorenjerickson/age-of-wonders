@@ -1,4 +1,5 @@
 import { locationMapIssue } from "@aow/common";
+import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
 import type { UploadTerrainChunkDto, SaveLocationTerrainDto } from "./dto/location-terrain.dto";
 import { TERRAIN_CHUNK_RESOURCE, validateUploadedTerrainChunk, captureTerrainRecords, resolveTerrainManifest } from "./terrain-snapshot";
 import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
@@ -979,9 +980,12 @@ export class WorldDefinitionAuthoringService {
     worldDefinitionId: string,
     dto: SaveWorldDraftDto,
     userId: string,
+    authoredRules = false,
   ) {
     const owned = await this.ownedDraft(worldDefinitionId, userId);
     if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (dto.expectedDraftId && owned.draft.id !== dto.expectedDraftId)
+      throw staleDraft();
     if (owned.draft.storageRevision !== dto.expectedStorageRevision)
       throw staleDraft();
     if (
@@ -996,6 +1000,20 @@ export class WorldDefinitionAuthoringService {
         (r) => r.resourceType === TERRAIN_CHUNK_RESOURCE,
       ),
     ]);
+    const ruleIssue = worldRuleSnapshotIssue(records);
+    if (ruleIssue) throw new BadRequestException(ruleIssue);
+    if (
+      !authoredRules &&
+      canonicalJsonHash(records.filter((r) => r.resourceType === "world-rules")) !==
+        canonicalJsonHash(
+          readRecords(owned.draft.snapshotRecords).filter(
+            (r) => r.resourceType === "world-rules",
+          ),
+        )
+    )
+      throw new BadRequestException(
+        "Edit executable rules through the World Rules workspace.",
+      );
     for (const record of records) {
       if (
         record.resourceType !== "definitions" ||

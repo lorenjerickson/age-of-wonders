@@ -17,6 +17,7 @@
     "textures:prepare": "node scripts/prepare-terrain-textures.mjs",
     "smoke:actors": "node scripts/actor-binding-smoke.mjs",
     "smoke:session": "node scripts/session-shell-smoke.mjs",
+    "smoke:rules": "node scripts/rules-movement-smoke.mjs",
     "smoke:session-table": "node scripts/session-table-smoke.mjs"
   },
   "dependencies": {

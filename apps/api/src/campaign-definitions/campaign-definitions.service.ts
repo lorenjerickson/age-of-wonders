@@ -558,7 +558,9 @@ export class CampaignDefinitionsService {
             campaignDefinitionId: id, predecessorCampaignRevisionId: draft.baseRevisionId,
             sourceWorldSnapshotId: draft.capturedWorldSnapshotId,
             targetWorldSnapshotId: target.id, resultCampaignRevisionId: revision.id,
-            sourceDraftRevision: draft.storageRevision, resolutionPlan: jsonObject(plan),
+            sourceDraftRevision: draft.storageRevision,
+            // Optional presentation fields use undefined in memory; audit stores their JSON representation.
+            resolutionPlan: jsonObject(JSON.parse(JSON.stringify(plan))),
             planHash: plan.planHash, createdByUserId: userId,
           },
         });

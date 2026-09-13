@@ -2423,7 +2423,7 @@ game state and event context, and ordered effects which may trigger further rule
 is inert. See the canonical architecture map and `docs/age-of-wonders-rules-engine-design.md`.
 The implemented preview below does not yet fulfill that target: its implicit baseline movement,
 fixed paths, and hard-coded budget checks are prototype behavior, not authoritative gameplay policy.
-Do not use it as a Session movement executor or assume generic event/effect chaining is implemented.
+Do not use it as a Session movement executor. The separate captured `WorldRule` runtime is described below.
 
 `packages/common/src/types/movement-rules.ts` defines the initial executable subset of the broader
 prospective rule vocabulary. `MovementRule` is currently an **in-memory preview contract**, not a
@@ -2642,7 +2642,7 @@ runtime's captured Campaign/World pair determines the map; source draft terrain 
 Coordinates must be finite within 100-cell global bounds. A position requires a captured Location;
 API validation also resolves that Location's captured isometric manifest/chunks, checks exact map
 bounds, and requires a terrain support surface. Openings are not treated as support surfaces.
-Actor body clearance, occupancy, movement cost, and sight remain pending rule decisions.
+Actor body clearance, occupancy, and sight remain pending rule decisions. The reviewed GM movement path now evaluates authored cost and point-route geometry conditions.
 
 `PUT /campaigns/:campaignDefinitionId/instances/:campaignInstanceId/creature-embodiments/:actorId/position`
 accepts `PlaceCampaignInstanceActorRequest`: `expectedRuntimeRevision`, `locationId`, and `position`
@@ -2668,8 +2668,8 @@ The result is either `{ status: "unavailable", reason: "not-player" | "session-i
 actor: { name, position } }`. It sends no terrain chunks/materials, other actors, runtime extensions,
 source identities, or GM notes. The participant page displays the binding status and clears stale
 binding data on failed authorization or Session changes. Actual actor-centered gameplay rendering,
-GM random focus/switching, movement effects, fog/LOS projection, and camera terrain fading remain
-pending. Never infer player map access from a successful actor binding.
+GM random focus/switching, player-facing movement, fog/LOS projection, and camera terrain fading remain
+pending. GM-reviewed rule effects now change Instance positions through the separate movement endpoints. Never infer player map access from a successful actor binding.
 
 
 ### Internal sight geometry and surface projection
@@ -2850,3 +2850,70 @@ flag comes only from that Plot progress's `revealedClaimIds`; individual `creatu
 implies global revelation. Unrevealed claims are included solely because this endpoint is GM-only.
 Encounter adjudication, authoritative Rules execution, Player/Spectator map delivery, and runtime
 mutation remain unavailable; do not generate actions implying this read projection implements them.
+
+### Captured executable World rules and reviewed GM movement
+
+`WorldRule` in `packages/common/src/types/world-rules.ts` is the versioned executable wrapper,
+separate from the `MovementRule` modifier prototype and broader prospective `RuleEffect` vocabulary.
+`world-rules` is a World snapshot component resource, not generic `rule-variants` CRUD. A wrapper
+contains `formatVersion: 1`, stable `id`, human `name`, optional `description`, positive `revision`,
+`lifecycle` (`enabled`, `disabled`, `archived`), explicit integer `priority`, versioned namespaced
+`trigger`, optional `condition`, ordered `effects`, and server-assigned `audit`. Dedicated World Rules
+APIs assign lineage/revisions and creator/time metadata under expected draft identity and storage
+revision checks. Publication and migration validate the supported profile and preserve exact captures;
+old Worlds contain no implicit rule library. Generic draft saves cannot rewrite executable rules.
+
+The supported expression profile includes literals/constants, event context, per-event local values,
+scoped entity-field reads, arithmetic, and bounded equality-count queries over declared entity types.
+Conditions support always/never, all/any/not, and comparisons. The host supplies a `RuleStateView` of
+Instance and captured entities plus field types/writability; unknown references fail closed, absent
+declared fields read as null, and no host credentials or ambient I/O are available. These contracts
+do not imply that arbitrary legacy paths, predicates, effects, or scripts execute. The movement
+adapter exposes actor position and numeric resources through canonical fields, omits duplicate
+nested actor/progress aliases, and excludes bulk terrain chunks from scalar state; captured terrain
+instead supplies bounded geometry facts.
+
+Effects are typed runtime set/increment/point movement, local assignment, event emission, and recorded
+dice requests. Lower priority stages run first. Rules in one stage evaluate a shared baseline;
+effects within a rule observe preceding effects, and later stages observe merged earlier writes.
+Competing attempted writes in one stage fail the whole chain. Unique human rule names determine FIFO
+order for independent same-stage outputs; database IDs never resolve conflicts. Every effective field
+change emits `aow:state-changed` with before/after and causal rule/effect provenance. Unchanged writes
+emit no state-change event. Reserved host fact events cannot be forged by root declarations or emit
+effects. Dice requests suspend pure execution until replay supplies the same recorded entropy tape;
+retry never silently rerolls an already persisted proposal.
+
+The bounded engine is pure and isolated: no applicable effects means no gameplay change. Failures,
+conflicts, exceeded budgets, and missing entropy return the original state without committable writes.
+Default ceilings are 128 events, 512 effects, 20,000 operations, causal depth 24, and 2,048 trace entries;
+input/output budgets also apply. Emitted-event or recorded-dice chains remain reviewable even without
+state writes; local-only evaluation is a no-op. Approval covers an entire root-event chain, not partial effects.
+
+`starterMovementRules` is explicitly adopted through World → Rules, then published and migrated
+normally. Its six authored rules initialize missing allowance/count resources, charge geometric
+`distanceFeet` plus five feet per sloped support segment, check authored allowance and geometry
+conditions, move/debit in order, and react to the position-change event by incrementing the move count.
+The host provides bounded direct point-route geometry facts; it does not impose those costs or
+traversability policy. This initial profile is not a swept creature-body collision model. Allowance
+initialization is authored, not an implicit grant; no automatic turn or Session reset is implemented.
+Initializer effects can occur even when the movement rule does not pass: an applied chain alone does
+not prove that a position changed.
+
+The actor overlay's `terrainPosition` can now change through approved captured-rule effects as well
+as preparation. Authored numeric resource values `aow:movementRemaining` and `aow:moves` persist under
+`creature.extensions['aow:rules']`; missing values confer no automatic allowance. The Instance runtime
+remains the sole mutable owner. Location/position structure is validated against the captured map.
+
+`SessionMovementRequest`, `SessionMovementDecisionRequest`, `SessionMovementContext`, and
+`SessionMovementProposal` in `movement-execution-api.ts` define GM-only movement declarations,
+review, and receipts. The server selects captured rules and trusted actor/geometry context, records
+entropy and the isolated resulting state, and persists them in `CampaignSessionMovementProposal`.
+This relational table is scoped to the Instance, Session, and snapshot; it is not a generic domain
+resource. Status is pending/approved/rejected/no-op/failed. Request keys are unique per Session;
+conflicting reuse is rejected. Approval rechecks active Session, ownership, snapshot, and runtime
+revision, then updates runtime, proposal decision, and causal Session journal in one transaction.
+Rejection and no-rule outcomes never move an actor. A completed decision retry returns its receipt
+without applying effects again; stale pending proposals require a new preview. GM history exposes
+resolved names and explanations; raw causal payloads and runtime state remain GM-only. Player map
+visibility, actor-focused gameplay rendering, full combat, and automatic action execution are not
+provided by this first reviewed movement path.

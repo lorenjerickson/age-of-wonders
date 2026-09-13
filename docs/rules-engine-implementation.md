@@ -30,7 +30,7 @@ not establish the architecture. It must not be connected to authoritative Sessio
 - Feet, binary arithmetic, and minimum/maximum semantics are current prototype details. They do not
   constrain the general engine's domain contracts beyond this supported preview profile.
 
-## Implemented
+## Retained prototype
 
 - `packages/common/src/types/movement-rules.ts`: narrow numeric expression and predicate subsets,
   proposal modifiers, rule lifecycle, movement facts, outcomes, traces, and candidates.
@@ -40,13 +40,15 @@ not establish the architecture. It must not be connected to authoritative Sessio
 - `apps/api/src/rules/movement-rule-engine.spec.ts`: movement proof case and boundary coverage using
   the public common package exports.
 
-There are no new HTTP routes, database tables, persisted resource mappings, or GM screens yet.
-The AI-facing domain guide describes precisely this implemented scope.
+The prototype remains in-memory and has no authoritative Session execution route. The separate
+WorldRule runtime below does not call it.
 
-## Next implementation gate
+## Executable runtime contracts
 
-Before extending runtime integration, compare existing `TriggerDefinition`, `Predicate`,
-`NumericExpression`, `RuleEffect`, game event/command, and runtime types with these contracts:
+The first supported runtime now uses `WorldRule`, `WorldRuleEvent`, and `RuleStateView`, alongside
+`executeWorldRules`. Existing constant/arithmetic and grouped predicate concepts are reused as a
+closed supported profile. Legacy unscoped paths, unversioned triggers, and distance/direction effects
+do not imply support in this exact-position capability. The implemented contracts are:
 
 1. Versioned event envelope with typed context, trusted source, root event, causal parent, captured
    rule provenance, and idempotency identity.
@@ -63,29 +65,58 @@ Before extending runtime integration, compare existing `TriggerDefinition`, `Pre
 7. Preview and GM review boundary, causal audit, exactly-once application through idempotency,
    optimistic runtime revision checks, and authority revalidation.
 
-First fixtures must prove inert behavior with no rules, an action → effect → state-change event →
+Engine fixtures prove inert behavior with no rules, an action → effect → state-change event →
 second rule chain, ordered effects, a dice result triggering a rule, a condition reading non-actor
 state, context-bound effect targeting, retry, and bounded cyclic behavior. The movement proof should
 run on these general contracts with authored movement and budget rules.
 
-## Subsequent integration
+## World authoring and Session integration
 
-World draft services currently store `snapshotRecords`. Extend canonical draft/publication and
-migration validation to the new supported rule profile and capture its wrapper immutably. Existing
-snapshots without rules remain empty rule libraries and must not gain implicit mechanics. Any starter
-rules must be explicitly authored/adopted and reach downstream Instances through normal migration.
+World → Rules provides structured triggers, conditions, ordered effects, lifecycle controls,
+duplication, and isolated tests. Starter movement mechanics require explicit GM adoption; publication
+and normal downstream migration preserve exact wrapper identity/revision. The `world-rules` snapshot
+component is separate from generic `rule-variants`. Dedicated saves use expected draft identity and
+revision; general draft saves preserve executable rule records unchanged. Publication and target
+runtime validation reject unsupported rules.
 
-Build World → Rules structured trigger/condition/effect authoring, lifecycle, duplicate, and preview
-operations under existing draft ownership and optimistic revision checks. Display human names and
-resolved provenance, never internal IDs.
+Session movement is a GM-only declaration → isolated preview → reviewed approval/rejection path.
+Captured rules, source input, entropy, result, expected runtime revision, and exact resulting state
+are stored in `CampaignSessionMovementProposal`. Approval atomically checks Session/owner/capture and
+runtime revision, changes Instance state, records its decision, and appends causal journal events.
+A retry returns the original receipt. No-rule and rejected declarations do not move actors; failed
+chains cannot commit partial effects. The existing preparation position endpoint remains unavailable
+during active play.
 
-Add Instance/Session-scoped root-event submission, execution proposals, decisions, and causal history.
-Select rules from the Instance's captured World server-side. Persist source inputs, resolved labels,
-captured versions, effects, resulting events, recorded entropy, and expected runtime revision.
-Atomic approval must recheck Session state and authority, apply approved effects, record the decision,
-and append history once. Rejection or a no-rule event applies no gameplay changes. A GM override, if
-supported, must have explicit rule/effect semantics rather than invoke a hidden normal-action path.
+## Determinism and first movement profile
 
-Complete GM review and player-safe projections, then verify publish → migrate → event → chain →
-review → commit, competing decisions, stale runtime, retries, and failure behavior against PostgreSQL.
-The movement modifier prototype is not a substitute for these acceptance tests.
+Lower authored priorities execute first. Rules in one priority stage share a baseline; each rule's
+ordered effects see its own preceding writes, and later stages see merged prior stages. Competing
+attempted writes fail the whole chain, including equal-value writes. Unique authored names order
+independent same-stage outputs; IDs never decide conflict precedence. Events use FIFO delivery,
+per-event locals, causal root/parent references, and effective field-change granularity. Recorded dice
+suspend pure execution and resume through replay with the same root and supplied entropy tape.
+The Session adapter supplies entropy once for the durable proposal, never again on approval.
+
+Execution is bounded to 128 events, 512 effects, 20,000 operations, depth 24, and 2,048 trace entries,
+with additional bounded JSON and output budgets. Failure returns original state and no committable
+writes/events. Review applies an entire successful chain; partial chain approval is unsupported.
+
+The six explicitly adopted starter rules initialize missing allowance and move count, compute cost
+as geometric distance plus five feet per sloped support segment, apply authored geometry/allowance
+conditions, move and debit in order, then count the resulting position-change event. Initializers
+may produce effects without moving the actor; review distinguishes this outcome. Allowance persists
+as an authored resource with no implicit Session/turn reset.
+
+The host adapter exposes scoped captured/runtime fields and bounded direct point-route geometry.
+Bulk terrain chunks are queried by the geometry capability instead of duplicated into scalar state.
+Movement is currently within one captured isometric Location; valid support/bounds remain structural
+integrity constraints. This is not swept-volume body clearance, locomotion, gravity, or full pathfinding.
+These mechanics require additional authored rules/capabilities rather than hidden movement defaults.
+
+## Remaining delivery
+
+Player/Spectator-safe live map projection and actor-focused gameplay rendering remain separate work.
+The current Run map stays a captured GM reference while the movement panel provides numeric
+coordinates, human-readable effect review, decisions, and history. Full combat, turn/resource-renewal
+mechanics, arbitrary event sources, richer schema query catalogs, and automated execution remain
+unsupported until explicitly implemented and authored.
