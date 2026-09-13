@@ -65,11 +65,12 @@ export interface LocationImage {
   readonly height: number;
   readonly mimeType: `image/${string}`;
   /** How this image is used by the encounter map renderer. */
-  readonly orientation: LocationMapOrientation;
+  readonly orientation: LocationImageOrientation;
   readonly focalPoint?: NormalizedMapCoordinate;
 }
 
-export type LocationMapOrientation = "scenic" | "overhead" | "side-on";
+export type LocationImageOrientation = "scenic" | "overhead" | "side-on";
+export type LocationMapOrientation = LocationImageOrientation | "isometric";
 
 export interface NormalizedMapCoordinate {
   readonly kind: "normalized-map";

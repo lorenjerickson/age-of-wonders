@@ -1,3 +1,4 @@
+import { SaveLocationTerrainDto, UploadTerrainChunkDto } from "./dto/location-terrain.dto";
 import {
   BadRequestException,
   Body,
@@ -240,6 +241,64 @@ export class WorldAuthoringController {
     @Body() dto: UpsertWorldLocationDraftDto,
   ) {
     return this.authoring.updateLocation(
+      worldId,
+      locationId,
+      dto,
+      request.user!.id,
+    );
+  }
+
+  @Post(":worldId/atlas/locations/:locationId/map/chunks")
+  uploadTerrainChunk(
+    @Param("worldId") worldId: string,
+    @Param("locationId") locationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UploadTerrainChunkDto,
+  ) {
+    return this.authoring.uploadTerrainChunk(
+      worldId,
+      locationId,
+      dto,
+      request.user!.id,
+    );
+  }
+
+  @Get(":worldId/atlas/locations/:locationId/map/chunks/:contentHash")
+  terrainChunk(
+    @Param("worldId") worldId: string,
+    @Param("locationId") locationId: string,
+    @Param("contentHash") contentHash: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.authoring.getTerrainChunk(
+      worldId,
+      locationId,
+      contentHash,
+      request.user!.id,
+    );
+  }
+
+  @Get(":worldId/atlas/locations/:locationId/map")
+  getTerrain(
+    @Param("worldId") worldId: string,
+    @Param("locationId") locationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.authoring.getLocationTerrain(
+      worldId,
+      locationId,
+      request.user!.id,
+    );
+  }
+
+  @Put(":worldId/atlas/locations/:locationId/map")
+  saveTerrain(
+    @Param("worldId") worldId: string,
+    @Param("locationId") locationId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: SaveLocationTerrainDto,
+  ) {
+    return this.authoring.saveLocationTerrain(
       worldId,
       locationId,
       dto,

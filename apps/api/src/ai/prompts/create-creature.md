@@ -155,7 +155,10 @@ Create a shared visual specification and three production-ready image prompts un
   from extremity to extremity without cropping. Use a clear three-quarter or frontal view, a
   readable pose, appropriate scale cues, and an unobtrusive setting or neutral background. This is
   the dramatic table illustration, not a headshot or token.
-- `overheadToken` requests a true orthographic top-down view centered directly above the creature.
+- `overheadToken` requests a strict orthographic plan view: camera directly above the creature,
+  looking vertically straight down at 90 degrees to the ground plane with zero tilt or horizontal
+  offset. Show the tops of the head, shoulders, and equipment. No three-quarter, isometric, or
+  oblique view; no horizon or perspective foreshortening.
   Show the entire footprint, including wings, tails, limbs, weapons, and carried objects. Use a
   transparent or clean flat background, even lighting, no perspective tilt, no circular token ring,
   no text, and no UI.

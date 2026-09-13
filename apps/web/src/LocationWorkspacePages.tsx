@@ -18,6 +18,7 @@ import {
 } from "./worldAuthoringModel";
 import { InternalLink } from "./navigation";
 import { WorldLocationPlacements } from "./WorldAuthoringPages";
+import { RecordThumbnail } from "./RecordArtwork";
 import {
   locationHref,
   locationParentOptions,
@@ -173,6 +174,12 @@ function LocationDescription({ record }: { record: WorldDraftRecord }) {
         },
       }}
     >
+      <RecordThumbnail
+        payload={payload}
+        name={name}
+        className="max-w-sm"
+        onlyIfPresent
+      />
       <Field label="Location name" required>
         <Input
           className="mt-2 w-full"
@@ -243,93 +250,224 @@ function LocationDiscoveries({ record }: { record: WorldDraftRecord }) {
     provenance?: string;
     [key: string]: JsonValue | undefined;
   };
-  const [claims, setClaims] = useState<Claim[]>(() => {
-    const value = recordPayload(record).discoveries;
-    return Array.isArray(value) ? (value as Claim[]) : [];
+  const { saveRecord, canEdit } = useWorldAuthoring();
+  const value = recordPayload(record).discoveries;
+  const claims = Array.isArray(value) ? (value as Claim[]) : [];
+  const [editor, setEditor] = useState<Claim | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const dirty = editor !== null && JSON.stringify(editor) !== baseline;
+  useBlocker({
+    shouldBlockFn: () =>
+      dirty && !window.confirm("Leave without saving this discovery?"),
+    enableBeforeUnload: dirty,
   });
-  function update(index: number, field: string, value: string) {
-    setClaims((current) =>
-      current.map((claim, i) =>
-        i === index ? { ...claim, [field]: value } : claim,
-      ),
-    );
+  function openEditor(claim?: Claim) {
+    const next = claim
+      ? { ...claim }
+      : {
+          id: crypto.randomUUID(),
+          kind: "truth",
+          statement: "",
+        };
+    setEditor(next);
+    setEditingId(claim?.id ?? null);
+    setBaseline(JSON.stringify(next));
+    setMessage("");
+  }
+  async function persist(next: Claim[], successMessage: string) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const success = await saveRecord(
+        updateLocationFields(record, { discoveries: next as JsonValue }),
+      );
+      if (success) setMessage(successMessage);
+      return success;
+    } finally {
+      setBusy(false);
+    }
   }
   return (
-    <LocationForm
-      record={record}
-      title="Discoveries"
-      valid={claims.every((claim) => claim.statement.trim())}
-      fields={{ discoveries: claims as JsonValue }}
-    >
-      <p className="text-base-content/65">
+    <>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-semibold">Discoveries</h1>
+        <Button
+          type="button"
+          tone="primary"
+          disabled={!canEdit || busy || editor !== null}
+          onClick={() => openEditor()}
+        >
+          Add discovery
+        </Button>
+      </div>
+      <p className="mt-6 text-base-content/65">
         Author truths, rumors, and beliefs the party may discover here. These
         remain GM-authored content until revealed during play.
       </p>
-      {!claims.length && (
-        <Alert>No discoveries have been authored here yet.</Alert>
-      )}
-      {claims.map((claim, index) => (
-        <section
-          key={claim.id}
-          className="space-y-4 rounded-box border border-base-300 bg-base-200 p-5"
-        >
-          <Field label="Discovery kind">
-            <Select
-              className="mt-2 w-full"
-              value={claim.kind}
-              onChange={(event) => update(index, "kind", event.target.value)}
-            >
-              <option value="truth">Truth</option>
-              <option value="rumor">Rumor</option>
-              <option value="belief">Belief</option>
-            </Select>
-          </Field>
-          <Field label="Statement" required>
-            <Textarea
-              className="mt-2 w-full"
-              required
-              rows={4}
-              value={claim.statement}
-              onChange={(event) =>
-                update(index, "statement", event.target.value)
-              }
-            />
-          </Field>
-          <Field label="Source or provenance">
-            <Input
-              className="mt-2 w-full"
-              value={claim.provenance ?? ""}
-              onChange={(event) =>
-                update(index, "provenance", event.target.value)
-              }
-            />
-          </Field>
-          <Button
-            type="button"
-            tone="outline"
-            onClick={() =>
-              setClaims((current) => current.filter((_, i) => i !== index))
+      {editor && (
+        <form
+          className="mt-6 rounded-box border border-base-300 bg-base-200 p-5"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (busy || !canEdit || !editor.statement.trim()) return;
+            const next = editingId
+              ? claims.map((claim) => (claim.id === editingId ? editor : claim))
+              : [...claims, editor];
+            if (
+              await persist(
+                next,
+                editingId
+                  ? "Discovery saved."
+                  : "Discovery added to this Location.",
+              )
+            ) {
+              setEditor(null);
+              setEditingId(null);
             }
-          >
-            Remove discovery
-          </Button>
-        </section>
-      ))}
-      <Button
-        type="button"
-        tone="outline"
-        onClick={() =>
-          setClaims((current) => [
-            ...current,
-            { id: crypto.randomUUID(), kind: "truth", statement: "" },
-          ])
-        }
-      >
-        Add discovery
-      </Button>
-    </LocationForm>
+          }}
+        >
+          <Fieldset disabled={busy || !canEdit} className="space-y-4">
+            <h2 className="text-lg font-semibold">
+              {editingId ? "Edit discovery" : "New discovery"}
+            </h2>
+            <Field label="Discovery kind">
+              <Select
+                className="mt-2 w-full"
+                value={editor.kind}
+                onChange={(event) =>
+                  setEditor({ ...editor, kind: event.target.value })
+                }
+              >
+                <option value="truth">Truth</option>
+                <option value="rumor">Rumor</option>
+                <option value="belief">Belief</option>
+              </Select>
+            </Field>
+            <Field label="Statement" required>
+              <Textarea
+                className="mt-2 w-full"
+                required
+                rows={4}
+                value={editor.statement}
+                onChange={(event) =>
+                  setEditor({ ...editor, statement: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Source or provenance">
+              <Input
+                className="mt-2 w-full"
+                value={editor.provenance ?? ""}
+                onChange={(event) =>
+                  setEditor({ ...editor, provenance: event.target.value })
+                }
+              />
+            </Field>
+            <div className="flex gap-3">
+              <Button
+                type="submit"
+                tone="primary"
+                loading={busy}
+                disabled={!editor.statement.trim()}
+              >
+                Save discovery
+              </Button>
+              <Button
+                type="button"
+                tone="outline"
+                onClick={() => {
+                  setEditor(null);
+                  setEditingId(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </Fieldset>
+        </form>
+      )}
+      {message && (
+        <Alert className="mt-6" tone="success" aria-live="polite">
+          {message}
+        </Alert>
+      )}
+      <div className="mt-6 overflow-x-auto rounded-box border border-base-300">
+        <table className="w-full text-left text-sm">
+          <caption className="sr-only">Discoveries at this Location</caption>
+          <thead className="bg-base-200">
+            <tr>
+              <th scope="col" className="px-4 py-3">
+                Kind
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Statement
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Source or provenance
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {claims.map((claim) => (
+              <tr key={claim.id} className="border-t border-base-300 align-top">
+                <td className="px-4 py-3">
+                  {{ truth: "Truth", rumor: "Rumor", belief: "Belief" }[
+                    claim.kind
+                  ] ?? "Discovery"}
+                </td>
+                <td className="px-4 py-3 whitespace-pre-wrap break-words">
+                  {claim.statement}
+                </td>
+                <td className="px-4 py-3 whitespace-pre-wrap break-words">
+                  {claim.provenance || "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      tone="outline"
+                      disabled={!canEdit || busy || editor !== null}
+                      onClick={() => openEditor(claim)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      tone="outline"
+                      disabled={!canEdit || busy || editor !== null}
+                      onClick={() =>
+                        void persist(
+                          claims.filter((item) => item.id !== claim.id),
+                          "Discovery removed.",
+                        )
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!claims.length && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-base-content/65">
+                  No discoveries have been authored here yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
+
 function LocationConnections({ record }: { record: WorldDraftRecord }) {
   const { definition, draft } = useWorldAuthoring();
   const suffix = worldWorkspaceSuffix(useLocation().searchStr);

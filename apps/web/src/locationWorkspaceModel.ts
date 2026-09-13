@@ -83,7 +83,7 @@ export function locationMutationInput(
   };
   const scene = (payload.mapScene ?? {}) as {
     notes?: string;
-    orientation?: "scenic" | "overhead" | "side-on";
+    orientation?: import("@aow/common").LocationMapOrientation;
   };
   const placement = (payload.placement ?? {}) as { parentLocationId?: string };
   return {

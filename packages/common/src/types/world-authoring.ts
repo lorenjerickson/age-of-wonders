@@ -1,3 +1,4 @@
+import type { LocationMap } from "./isometric-terrain";
 import type { DiscoveryClaim } from "./plots";
 import type { MovementSpeed } from "./character";
 import type {
@@ -40,6 +41,8 @@ export interface WorldLocationDefinition<
   readonly discoveries?: readonly DiscoveryClaim[];
   /** Optional until an uploaded, selected, or generated image is attached. */
   readonly image?: LocationImage;
+  /** Source map; omitted means the existing image presentation. */
+  readonly map?: LocationMap;
   readonly kind: LocationKind;
   readonly placement:
     | { readonly kind: "root" }
@@ -133,6 +136,8 @@ export interface CreateWorldCreatureDraftRequest extends WorldDraftMutationReque
   readonly equipmentSlots: readonly EquipmentSlot[];
   readonly instanceEmbodimentPolicy: CreatureInstanceEmbodimentPolicy;
   readonly artDirection?: string;
+  /** Artwork replacements; omitted views retain their existing images. */
+  readonly images?: Partial<CreatureImages>;
   readonly movement?: readonly MovementSpeed[];
   readonly skillDefinitionIds?: readonly DefinitionId[];
   readonly professionDefinitionIds?: readonly DefinitionId[];

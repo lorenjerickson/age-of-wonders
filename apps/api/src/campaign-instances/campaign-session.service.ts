@@ -1,3 +1,5 @@
+import { participantActorBinding } from "./participant-spatial-binding";
+import type { ParticipantSpatialBinding } from "@aow/common";
 import {
   BadRequestException,
   ConflictException,
@@ -678,6 +680,61 @@ export class CampaignSessionService {
       participantName: participation.participantName,
       present: true,
     };
+  }
+
+  async participantSpatialBinding(
+    instanceId: string,
+    sessionId: string,
+    userId: string,
+  ): Promise<ParticipantSpatialBinding> {
+    const participant = await this.participationForUser(
+      instanceId,
+      sessionId,
+      userId,
+    );
+    if (participant.role !== "PLAYER")
+      return { status: "unavailable", reason: "not-player" };
+    if (participant.session.status !== "ACTIVE")
+      return { status: "unavailable", reason: "session-inactive" };
+    const membership =
+      await this.prisma.campaignInstanceHumanMembership.findFirst({
+        where: {
+          id: participant.humanMembershipId!,
+          campaignInstanceId: instanceId,
+          userId,
+          status: "ACTIVE",
+          role: "PLAYER",
+          user: { playerProfile: { standing: "ACTIVE" } },
+        },
+        select: {
+          activeCharacter: { select: { characterId: true, status: true } },
+          campaignInstance: {
+            select: {
+              runtime: { select: { state: true, revision: true } },
+              currentSnapshot: {
+                select: {
+                  worldDefinitionSnapshot: { select: { manifest: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+    if (
+      !membership?.activeCharacter ||
+      membership.activeCharacter.status !== "ACTIVE"
+    )
+      return { status: "unavailable", reason: "no-active-character" };
+    const instance = membership.campaignInstance;
+    if (!instance.runtime)
+      return { status: "unavailable", reason: "actor-unplaced" };
+    return participantActorBinding(
+      instanceId,
+      instance.runtime.state,
+      membership.activeCharacter.characterId,
+      instance.runtime.revision,
+      instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
+    );
   }
 
   async participantProjection(

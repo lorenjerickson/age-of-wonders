@@ -157,11 +157,15 @@ export class UpsertWorldLocationDraftDto extends WorldDraftMutationDto {
   mapSceneNotes?: string;
 
   @IsOptional()
-  @IsIn(["scenic", "overhead", "side-on"])
-  mapOrientation?: "scenic" | "overhead" | "side-on";
+  @IsIn(["scenic", "overhead", "side-on", "isometric"])
+  mapOrientation?: "scenic" | "overhead" | "side-on" | "isometric";
 }
 
 export class UpsertWorldCreatureDraftDto extends WorldDraftMutationDto {
+  @IsOptional()
+  @IsObject()
+  images?: Record<string, unknown>;
+
   @IsObject()
   attributes!: Record<string, number>;
 

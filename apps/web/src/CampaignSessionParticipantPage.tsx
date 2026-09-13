@@ -1,7 +1,9 @@
+import type { ParticipantSpatialBinding } from "@aow/common";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, StatusIndicator } from "@aow/ui";
 import {
   ApiRequestError,
+  getParticipantSpatialBinding,
   getMyAuthenticationProviders,
   getParticipantCampaignSession,
   getParticipantCampaignSessionEvents,
@@ -38,6 +40,7 @@ export function CampaignSessionParticipantPage({
   const [session, setSession] =
     useState<ParticipantCampaignSessionProjection>();
   const [events, setEvents] = useState<ParticipantCampaignSessionEvents>();
+  const [spatial, setSpatial] = useState<ParticipantSpatialBinding>();
   const [present, setPresent] = useState(false);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
@@ -46,28 +49,52 @@ export function CampaignSessionParticipantPage({
       Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
     >();
   const connectionKey = useRef("");
+  const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     try {
       const [nextSession, nextEvents] = await Promise.all([
         getParticipantCampaignSession(campaignInstanceId, sessionId),
         getParticipantCampaignSessionEvents(campaignInstanceId, sessionId),
       ]);
+      if (sequence !== loadSequence.current) return;
       setSession(nextSession);
+      setSpatial(undefined);
+      if (nextSession.role === "player" && nextSession.status === "active") {
+        const binding = await getParticipantSpatialBinding(
+          campaignInstanceId,
+          sessionId,
+        );
+        if (sequence !== loadSequence.current) return;
+        setSpatial(binding);
+      }
       setEvents(nextEvents);
       setMessage("");
     } catch (caught) {
+      if (sequence !== loadSequence.current) return;
+      setSession(undefined);
+      setEvents(undefined);
+      setSpatial(undefined);
       setMessage(
         caught instanceof ApiRequestError
           ? caught.message
           : "The Session could not be loaded.",
       );
     } finally {
-      setBusy(false);
+      if (sequence === loadSequence.current) setBusy(false);
     }
   }, [campaignInstanceId, sessionId]);
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    setSpatial(undefined);
+    setSession(undefined);
+    setEvents(undefined);
+    void load();
+    return () => {
+      loadSequence.current++;
+    };
+  }, [load]);
 
   useEffect(() => {
     void getMyAuthenticationProviders().then(
@@ -198,6 +225,19 @@ export function CampaignSessionParticipantPage({
         </header>
 
         {message && <Alert tone="error">{message}</Alert>}
+        {session?.role === "player" && session.status === "active" && (
+          <section className="rounded-box border border-neutral-content/15 p-5">
+            <h2 className="text-xl font-semibold">Your map actor</h2>
+            <p className="mt-2">
+              {spatial?.status === "awaiting-visibility"
+                ? `${spatial.actor.name} is bound to your Character. The map is waiting for authoritative visibility.`
+                : spatial?.status === "unavailable" &&
+                    spatial.reason === "no-active-character"
+                  ? "Activate a Character before entering the map."
+                  : "Your actor needs a valid map placement before the map can open."}
+            </p>
+          </section>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
           <section className="rounded-box border border-neutral-content/15 bg-neutral-focus/35 p-5">

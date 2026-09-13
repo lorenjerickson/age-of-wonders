@@ -1,3 +1,6 @@
+import { LocationTerrainEditor } from "./LocationTerrainEditor";
+import { ZoomableImage } from "./ZoomableImage";
+import { MediaImage } from "./MediaImage";
 import { useEffect, useRef, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import {
@@ -40,7 +43,11 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
   const [image, setImage] = useState<ImageRecord>(object(payload.image));
   const [notes, setNotes] = useState(String(scene.notes ?? ""));
   const [orientation, setOrientation] = useState(
-    String(object(payload.image).orientation ?? scene.orientation ?? "scenic"),
+    String(
+      object(payload.map).kind === "isometric"
+        ? "isometric"
+        : (scene.orientation ?? object(payload.image).orientation ?? "scenic"),
+    ),
   );
   const [altText, setAltText] = useState(
     String(
@@ -56,6 +63,8 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
   useEffect(() => {
     if (dirty) markDirty();
   }, [dirty, markDirty]);
+  const [terrainDirty, setTerrainDirty] = useState(false);
+  const [terrainBusy, setTerrainBusy] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [saved, setSaved] = useState(false);
@@ -91,9 +100,9 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
   }, [assetId]);
   useBlocker({
     shouldBlockFn: () =>
-      (dirty || !!busy) &&
+      (dirty || terrainDirty || terrainBusy || !!busy) &&
       !window.confirm("Leave without saving these Map changes?"),
-    enableBeforeUnload: dirty || !!busy,
+    enableBeforeUnload: dirty || terrainDirty || terrainBusy || !!busy,
   });
   async function selectAsset(asset: Pick<MediaAsset, "id" | "mimeType">) {
     const { url } = await getMediaDownloadUrl(asset.id);
@@ -194,210 +203,259 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
           : "Location unavailable"}
       </p>
       <h1 className="mt-3 text-3xl font-semibold">Map</h1>
-      <div className="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-200">
-        {preview && !previewError ? (
-          <img
-            src={preview}
-            alt={altText}
-            className="max-h-[36rem] w-full object-contain"
-            onError={() => setPreviewError(true)}
-          />
-        ) : (
-          <p className="p-10 text-center text-base-content/60">
-            {previewError
-              ? "The attached image could not be loaded. Choose an existing image or upload a replacement."
-              : assetId
-                ? "Loading Map…"
-                : "No map image attached yet."}
-          </p>
-        )}
-      </div>
-      <DraftRequired>
-        {record && (
-          <>
-            <Fieldset disabled={!!busy || !canEdit} className="mt-6 space-y-5">
-              <div className="flex flex-wrap gap-3">
-                <Button tone="outline" onClick={() => void searchMedia()}>
-                  Pick image
-                </Button>
-                <Button
-                  tone="outline"
-                  onClick={() => setGenerateOpen((open) => !open)}
+      <Field label="Map orientation" className="mt-6">
+        <Select
+          value={orientation}
+          disabled={!!busy || terrainBusy || !canEdit}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (
+              (dirty || terrainDirty) &&
+              !window.confirm(
+                "Discard unsaved Map changes and change orientation?",
+              )
+            )
+              return;
+            const previous = JSON.parse(baseline);
+            setImage(previous.image);
+            setNotes(previous.notes);
+            setAltText(previous.altText);
+            setTerrainDirty(false);
+            setTerrainBusy(false);
+            setSaved(false);
+            setOrientation(next);
+          }}
+        >
+          <option value="scenic">Scenic</option>
+          <option value="overhead">Overhead</option>
+          <option value="side-on">Side-on</option>
+          <option value="isometric">Isometric</option>
+        </Select>
+      </Field>
+      {orientation === "isometric" ? (
+        <LocationTerrainEditor
+          locationId={locationId}
+          disabled={!!busy}
+          onDirtyChange={setTerrainDirty}
+          onBusyChange={setTerrainBusy}
+          onSaved={() =>
+            setBaseline((previous) =>
+              JSON.stringify({
+                ...JSON.parse(previous),
+                orientation: "isometric",
+              }),
+            )
+          }
+        />
+      ) : (
+        <>
+          <div className="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-200">
+            {preview && !previewError ? (
+              <ZoomableImage
+                key={preview}
+                src={preview}
+                alt={altText}
+                className="max-h-[36rem] w-full object-contain"
+                onError={() => setPreviewError(true)}
+              />
+            ) : (
+              <p className="p-10 text-center text-base-content/60">
+                {previewError
+                  ? "The attached image could not be loaded. Choose an existing image or upload a replacement."
+                  : assetId
+                    ? "Loading Map…"
+                    : "No map image attached yet."}
+              </p>
+            )}
+          </div>
+          <DraftRequired>
+            {record && (
+              <>
+                <Fieldset
+                  disabled={!!busy || terrainBusy || !canEdit}
+                  className="mt-6 space-y-5"
                 >
-                  Generate image
-                </Button>
-              </div>
-              <Field label="Upload image" help="Choose an image up to 20 MB.">
-                <FileInput
-                  accept="image/*"
-                  className="mt-2 w-full"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void upload(file);
-                    event.target.value = "";
-                  }}
-                />
-              </Field>
-            </Fieldset>
-            {pickerOpen && (
-              <section
-                className="mt-6 rounded-box border border-base-300 p-5"
-                aria-label="Image library"
-              >
-                <form
-                  className="flex flex-wrap items-end gap-3"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void searchMedia();
-                  }}
-                >
-                  <Field label="Search images">
-                    <Input
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
-                  </Field>
-                  <Button type="submit" disabled={!!busy}>
-                    Search
-                  </Button>
-                  <Button tone="ghost" onClick={() => setPickerOpen(false)}>
-                    Close library
-                  </Button>
-                </form>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {media.map((asset) => (
-                    <MediaChoice
-                      key={asset.id}
-                      asset={asset}
-                      disabled={!!busy}
-                      onSelect={async () => {
-                        setBusy("Opening image");
-                        setMessage("");
-                        try {
-                          await selectAsset(asset);
-                        } catch {
-                          setMessage(
-                            "That image could not be opened. Choose another image.",
-                          );
-                        } finally {
-                          setBusy("");
-                        }
+                  <div className="flex flex-wrap gap-3">
+                    <Button tone="outline" onClick={() => void searchMedia()}>
+                      Pick image
+                    </Button>
+                    <Button
+                      tone="outline"
+                      onClick={() => setGenerateOpen((open) => !open)}
+                    >
+                      Generate image
+                    </Button>
+                  </div>
+                  <Field
+                    label="Upload image"
+                    help="Choose an image up to 20 MB."
+                  >
+                    <FileInput
+                      accept="image/*"
+                      className="mt-2 w-full"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void upload(file);
+                        event.target.value = "";
                       }}
                     />
-                  ))}
-                </div>
-                {!media.length && !busy && (
-                  <p className="mt-4">No matching images.</p>
+                  </Field>
+                </Fieldset>
+                {pickerOpen && (
+                  <section
+                    className="mt-6 rounded-box border border-base-300 p-5"
+                    aria-label="Image library"
+                  >
+                    <form
+                      className="flex flex-wrap items-end gap-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void searchMedia();
+                      }}
+                    >
+                      <Field label="Search images">
+                        <Input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                        />
+                      </Field>
+                      <Button type="submit" disabled={!!busy}>
+                        Search
+                      </Button>
+                      <Button tone="ghost" onClick={() => setPickerOpen(false)}>
+                        Close library
+                      </Button>
+                    </form>
+                    <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {media.map((asset) => (
+                        <MediaChoice
+                          key={asset.id}
+                          asset={asset}
+                          disabled={!!busy}
+                          onSelect={async () => {
+                            setBusy("Opening image");
+                            setMessage("");
+                            try {
+                              await selectAsset(asset);
+                            } catch {
+                              setMessage(
+                                "That image could not be opened. Choose another image.",
+                              );
+                            } finally {
+                              setBusy("");
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {!media.length && !busy && (
+                      <p className="mt-4">No matching images.</p>
+                    )}
+                    <div className="mt-4 flex gap-3">
+                      <Button
+                        disabled={offset === 0 || !!busy}
+                        onClick={() =>
+                          void searchMedia(Math.max(0, offset - 24))
+                        }
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        disabled={offset + media.length >= total || !!busy}
+                        onClick={() => void searchMedia(offset + 24)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </section>
                 )}
-                <div className="mt-4 flex gap-3">
-                  <Button
-                    disabled={offset === 0 || !!busy}
-                    onClick={() => void searchMedia(Math.max(0, offset - 24))}
+                {generateOpen && (
+                  <section className="mt-6 space-y-4 rounded-box border border-base-300 p-5">
+                    <Field
+                      label="Image direction"
+                      help="Describe the terrain, landmarks, style, and composition. Generation uses the configured AI provider."
+                    >
+                      <Textarea
+                        className="mt-2 w-full"
+                        rows={4}
+                        maxLength={4000}
+                        disabled={!!busy}
+                        value={direction}
+                        onChange={(event) => setDirection(event.target.value)}
+                      />
+                    </Field>
+                    <Button
+                      tone="primary"
+                      loading={busy === "Generating"}
+                      disabled={!!busy || !direction.trim()}
+                      onClick={() => void generate()}
+                    >
+                      Generate Map preview
+                    </Button>
+                  </section>
+                )}
+                <form
+                  className="mt-8 space-y-6"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    setBusy("Saving");
+                    setSaved(false);
+                    setMessage("");
+                    let next = locationWithMapScene(record, notes, orientation);
+                    if (assetId)
+                      next = {
+                        ...next,
+                        payload: {
+                          ...object(next.payload),
+                          image: { ...image, altText, orientation },
+                        },
+                      };
+                    const success = await saveRecord(next);
+                    setBusy("");
+                    if (success) {
+                      setBaseline(
+                        JSON.stringify({ image, notes, orientation, altText }),
+                      );
+                      setSaved(true);
+                    }
+                  }}
+                >
+                  <Fieldset
+                    disabled={!!busy || terrainBusy || !canEdit}
+                    className="space-y-6"
                   >
-                    Previous
-                  </Button>
-                  <Button
-                    disabled={offset + media.length >= total || !!busy}
-                    onClick={() => void searchMedia(offset + 24)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </section>
+                    <Field label="Alternative text">
+                      <Input
+                        className="mt-2 w-full"
+                        required={!!assetId}
+                        value={altText}
+                        onChange={(event) => setAltText(event.target.value)}
+                      />
+                    </Field>
+                    <Field label="Map or scene notes">
+                      <Textarea
+                        className="mt-2 w-full"
+                        maxLength={4000}
+                        rows={5}
+                        value={notes}
+                        onChange={(event) => setNotes(event.target.value)}
+                      />
+                    </Field>
+                    <Button
+                      type="submit"
+                      tone="primary"
+                      loading={busy === "Saving"}
+                      disabled={!dirty || (!!assetId && !altText.trim())}
+                    >
+                      Save Map
+                    </Button>
+                  </Fieldset>
+                </form>
+              </>
             )}
-            {generateOpen && (
-              <section className="mt-6 space-y-4 rounded-box border border-base-300 p-5">
-                <Field
-                  label="Image direction"
-                  help="Describe the terrain, landmarks, style, and composition. Generation uses the configured AI provider."
-                >
-                  <Textarea
-                    className="mt-2 w-full"
-                    rows={4}
-                    maxLength={4000}
-                    disabled={!!busy}
-                    value={direction}
-                    onChange={(event) => setDirection(event.target.value)}
-                  />
-                </Field>
-                <Button
-                  tone="primary"
-                  loading={busy === "Generating"}
-                  disabled={!!busy || !direction.trim()}
-                  onClick={() => void generate()}
-                >
-                  Generate Map preview
-                </Button>
-              </section>
-            )}
-            <form
-              className="mt-8 space-y-6"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setBusy("Saving");
-                setSaved(false);
-                setMessage("");
-                let next = locationWithMapScene(record, notes, orientation);
-                if (assetId)
-                  next = {
-                    ...next,
-                    payload: {
-                      ...object(next.payload),
-                      image: { ...image, altText, orientation },
-                    },
-                  };
-                const success = await saveRecord(next);
-                setBusy("");
-                if (success) {
-                  setBaseline(
-                    JSON.stringify({ image, notes, orientation, altText }),
-                  );
-                  setSaved(true);
-                }
-              }}
-            >
-              <Fieldset disabled={!!busy || !canEdit} className="space-y-6">
-                <Field label="Alternative text">
-                  <Input
-                    className="mt-2 w-full"
-                    required={!!assetId}
-                    value={altText}
-                    onChange={(event) => setAltText(event.target.value)}
-                  />
-                </Field>
-                <Field label="Map orientation">
-                  <Select
-                    className="mt-2 w-full"
-                    value={orientation}
-                    onChange={(event) => setOrientation(event.target.value)}
-                  >
-                    <option value="scenic">Scenic</option>
-                    <option value="overhead">Overhead</option>
-                    <option value="side-on">Side-on</option>
-                  </Select>
-                </Field>
-                <Field label="Map or scene notes">
-                  <Textarea
-                    className="mt-2 w-full"
-                    maxLength={4000}
-                    rows={5}
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                  />
-                </Field>
-                <Button
-                  type="submit"
-                  tone="primary"
-                  loading={busy === "Saving"}
-                  disabled={!dirty || (!!assetId && !altText.trim())}
-                >
-                  Save Map
-                </Button>
-              </Fieldset>
-            </form>
-          </>
-        )}
-      </DraftRequired>
+          </DraftRequired>
+        </>
+      )}
       {busy && (
         <p className="mt-4" role="status">
           {busy}…
@@ -425,28 +483,12 @@ function MediaChoice({
   disabled: boolean;
   onSelect(): void;
 }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    void getMediaDownloadUrl(asset.id).then(
-      (result) => {
-        if (!cancelled) setUrl(result.url);
-      },
-      () => undefined,
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [asset.id]);
   return (
     <article className="overflow-hidden rounded-lg border border-base-300">
-      {url && (
-        <img
-          src={url}
-          alt={asset.originalName || "Saved image"}
-          className="h-32 w-full object-cover"
-        />
-      )}
+      <MediaImage
+        image={{ assetId: asset.id }}
+        name={asset.originalName || "Saved image"}
+      />
       <div className="space-y-3 p-3">
         <p className="break-words text-sm">
           {asset.originalName || "Saved image"}

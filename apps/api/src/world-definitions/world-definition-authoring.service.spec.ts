@@ -468,6 +468,7 @@ describe("WorldDefinitionAuthoringService", () => {
           sourceRevision: 7,
           payload: {
             name: "Bell Keeper",
+            attributes: { standard: { might: { score: 42, modifier: -1 }, will: { score: 67, modifier: 2 } } },
             worldId: "world-1",
             relationships: [{ kind: "guards", targetId: "root" }],
           },
@@ -490,6 +491,7 @@ describe("WorldDefinitionAuthoringService", () => {
         }),
       },
       worldDefinitionDraft: { updateMany },
+      mediaAsset: { findFirst: jest.fn().mockResolvedValue({ id: "new-art", mimeType: "image/webp" }) },
     };
     const service = serviceWith(prisma, {
       resolveEffectiveRoots: jest.fn().mockResolvedValue({
@@ -504,8 +506,9 @@ describe("WorldDefinitionAuthoringService", () => {
       {
         expectedStorageRevision: 3,
         name: "Bell Keeper",
-        attributes: {},
+        attributes: { "aow:attribute-might": 42, "aow:attribute-wisdom": 67 },
         equipmentSlots: [],
+        images: { overheadToken: { assetId: "new-art", altText: "Keeper overhead", width: 1024, height: 1024, mimeType: "image/webp" } },
         instanceEmbodimentPolicy: { strategy: "one-per-instance" },
         movement: [],
         skillDefinitionIds: [],
@@ -514,6 +517,7 @@ describe("WorldDefinitionAuthoringService", () => {
       "gm-1",
     );
 
+    expect(prisma.mediaAsset.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "new-art", createdByUserId: "gm-1", scopeType: "world-definition", scopeId: "world-1" } }));
     const updateCalls = updateMany.mock.calls as unknown[][];
     const write = updateCalls[0]?.[0] as {
       data: {
@@ -537,6 +541,10 @@ describe("WorldDefinitionAuthoringService", () => {
     expect(upgraded).toBeDefined();
     const upgradedPayload = upgraded?.payload as Record<string, unknown>;
     expect(upgradedPayload.kind).toBe("creature");
+    expect(upgradedPayload.components).toMatchObject({
+      attributes: { "aow:attribute-might": 42, "aow:attribute-wisdom": 67 },
+      art: { images: { overheadToken: { assetId: "new-art" } } },
+    });
     const extensions = upgradedPayload.extensions as Record<string, unknown>;
     expect(extensions["aow:legacy-creature"]).toEqual({
       resourceType: "creatures",
@@ -554,6 +562,14 @@ describe("WorldDefinitionAuthoringService", () => {
         }),
       ]),
     );
+
+    prisma.mediaAsset.findFirst.mockResolvedValue(null as never);
+    await expect(service.upgradeLegacyCreature("world-1", "legacy-creature", {
+      expectedStorageRevision: 3, name: "Keeper", attributes: {}, equipmentSlots: [],
+      instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+      images: { portrait: { assetId: "foreign-art" } },
+    }, "gm-1")).rejects.toThrow("Choose an image belonging to this World.");
+    expect(updateMany).toHaveBeenCalledTimes(1);
 
     const upgradedDraft = {
       ...legacyDraft,

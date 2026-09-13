@@ -8,7 +8,7 @@ import { OpenAiService } from "./openai.service";
 const IMAGE_ROLES = ["portrait", "overheadToken", "paperDollToken"] as const;
 type ImageRole = (typeof IMAGE_ROLES)[number];
 
-const roleSettings: Record<
+export const roleSettings: Record<
   ImageRole,
   {
     size: "1024x1024" | "1024x1536";
@@ -26,7 +26,7 @@ const roleSettings: Record<
     size: "1024x1024",
     background: "transparent",
     fallback:
-      "Create a true orthographic top-down token. Show the creature's entire footprint without a ring, text, or UI.",
+      "Create a strict orthographic plan-view token for a directly overhead map. Place the camera directly above the creature, looking vertically straight down at 90 degrees to the ground plane, with zero tilt or horizontal offset. Show the tops of the head, shoulders, and equipment as seen from directly above. No three-quarter view, isometric view, oblique angle, horizon, or perspective foreshortening. Keep the entire footprint visible without a ring, text, or UI. These camera requirements override any conflicting angle in the art brief.",
   },
   paperDollToken: {
     size: "1024x1024",

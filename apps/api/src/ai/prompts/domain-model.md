@@ -176,7 +176,15 @@ contract (`id`, `kind: "truth" | "rumor" | "belief"`, `statement`, optional prov
 relationships). These authored discoveries are not automatically revealed to participants.
 Optional `image: LocationImage` references the attached media asset with alternative text, dimensions,
 MIME type, and scenic/overhead/side-on orientation; signed download URLs are resolved at read time.
+When re-saving existing Location artwork that lacks orientation, authoring repairs it from the
+existing image or map-scene orientation, falling back to `scenic`. Newly attached images must
+still supply their orientation.
 The Location remains stored as a `locations` snapshot record, with no separate persisted Map resource.
+`WorldLocationDefinition.map` optionally selects `{ kind: "image" }` or an
+`IsometricTerrainManifest` with `kind: "isometric"`. Omission retains existing image behavior;
+`LocationImage.orientation` and the older `LocationState` contract are unchanged. Source images
+remain independent illustrations. Map manifests are changed through the dedicated Location Map
+endpoint, not through the ordinary Location create/update request or AI image generation.
 The dedicated Location mutation accepts GM description, discoveries, and image metadata and verifies
 new image references against media accessible to the GM. Location sections must use this mutation;
 the generic draft save intentionally rejects changes to protected Location records.
@@ -266,7 +274,7 @@ Instance-created content. Only realized/replaced decisions name an Instance-owne
 or Item. `CampaignInstanceCreatureEmbodiment` gives every realized Creature a new Instance-scoped
 runtime identity and exact source provenance. Its `creature` member is a bounded, server-owned
 runtime overlay (`identity`, `entityId`, human name, optional captured `definitionId`, optional
-current Location, and namespaced extensions), not a partial `CreatureState` produced by copying a
+current Location, optional `terrainPosition`, and namespaced extensions), not a partial `CreatureState` produced by copying a
 Creature Definition. The captured Definition remains the immutable source of descriptive and rules
 content. Runtime Item creation likewise persists only defined `ItemInstance` fields and never
 spreads an authored Item Definition into mutable state. Instance-created Creature and Item
@@ -359,6 +367,17 @@ Slots, movement modes, item families (including Object, Trap, and Hazard), profe
 portrait/overhead-token/side-on-token art roles. These are seed data, not closed enums. The seed
 also publishes explicit mappings from legacy `attributes.standard.will` to Wisdom and from legacy
 `paperDollToken` imagery to the side-on-token art role.
+
+Creature draft create, edit, and legacy-upgrade requests accept optional `images` replacements
+for `portrait`, `overheadToken`, and `paperDollToken`. Omitted views retain their existing images;
+replacements are stored in `components.art.images`. Older upgraded Creatures may retain artwork
+only in `extensions["aow:legacy-creature"].payload.images`; rendering and subsequent saves recover
+missing views from that preserved source while keeping newer canonical images. Newly attached assets must belong to the
+requesting GM and World. The editor can generate individual artwork previews for Creatures and
+square inventory images for Items, including new records. Applying a preview stages its reference;
+only saving the editor changes the World draft. Generation is owner-scoped, revision-checked,
+idempotent, rate-limited, and audited. Item images continue to use the existing `image` field.
+
 
 `ProfessionExpertise` is a `NamespacedKey`, not a fixed rank union. A Profession Definition's
 `expertiseOrder`, expertise-level `tier`, acquisition `startingExpertise`, and Character runtime
@@ -1866,7 +1885,9 @@ interface CreatureImage {
 ```
 
 Each property must identify its own stored media asset. `portrait` shows the entire creature at full
-illustration scale; it is not a headshot. `overheadToken` must use a true top-down camera angle.
+illustration scale; it is not a headshot. `overheadToken` must use a strict orthographic plan view with the camera directly above,
+looking vertically straight down at 90 degrees to the ground plane, with zero tilt or offset.
+Three-quarter, isometric, and oblique token views are not suitable for overhead maps.
 `paperDollToken` must show the entire creature in profile at a smaller token scale. Generated or
 uploaded images are stored as media assets; do not fabricate or persist signed `uri` values.
 
@@ -2452,3 +2473,348 @@ becomes 20, blocked if available movement is below 20. Preview is deterministic 
 state mutation, authorization, snapshot selection, clock access, or persistence. World authoring,
 provenance, publication/migration validation, declaration/decision idempotency, runtime concurrency,
 and Session audit remain integration work.
+
+
+## Isometric terrain (source authoring and immutable chunk capture)
+
+`packages/common/src/types/isometric-terrain.ts` declares spatial values used by the pure geometry
+and authoring helpers in `packages/common/src/spatial`. The initial GM editor uses these values;
+Instance actor setup and Player Character binding are implemented below. Participant gameplay, movement, and rules-driven visibility remain pending.
+
+`WorldLocationDefinition.map?: LocationMap` is the persisted source map selection.
+`LocationMap` is `{ kind: "image" } | IsometricTerrainManifest`. The isometric branch has
+`kind: "isometric"`, `formatVersion: 1`, dimensions, five-foot `cellSize`, `chunkSize: 16`, materials,
+and `chunks: readonly { address: TerrainAddress; contentHash: string }[]`. Each hash is lowercase
+64-character SHA-256 of the canonical chunk payload. It must resolve to a captured component whose
+address and content match, and the fully hydrated volume must validate. Empty maps have no chunks.
+A `locations` record remains the aggregate owner. Snapshot-only `location-terrain-chunks` records
+use the content hash as `sourceId` and an ordinary `TerrainChunk` as `payload`. They are deliberately
+absent from `apps/api/src/domain/domain-resource.ts`'s generic CRUD registry. Do not invent these
+hashes, register a competing Map aggregate, or embed inline cells in a Location manifest.
+
+GM-owned endpoints below are relative to `/worlds/:worldId/atlas/locations/:locationId`:
+
+| Operation | Route and contract |
+| --- | --- |
+| Stage a chunk | `POST /map/chunks`: `expectedDraftId`, `expectedStorageRevision`, and `chunk`; returns canonical `contentHash` and address |
+| Save source map | `PUT /map`: `SaveLocationTerrainRequest` with expected draft identity/revision, `operationId`, and `map` |
+| Read hydrated terrain | `GET /map`: authorized complete `IsometricTerrainVolume` |
+| Read one captured chunk | `GET /map/chunks/:contentHash`: requires that exact chunk to be referenced by this Location's active draft map |
+
+`WorldTerrainUpload` is draft-scoped staging; it is not published terrain. `WorldTerrainSave` records
+request hashes and revisions for idempotent saves. The save transaction advances the World draft,
+updates the Location identity revision and map, captures all reachable chunk records, invalidates
+validation, writes its receipt, and removes consumed uploads. Missing/invalid chunks and stale
+revisions cannot partially apply a map. Replaying the same operation does not advance state;
+reusing it for a different request is rejected. Draft deletion cascades both staging and receipts.
+Abandoned uploads are removed after 24 hours during subsequent uploads, with a staging count cap.
+Published snapshots contain actual chunk payloads and do not depend on staging lifetime. Forks
+preserve chunk hashes/content. Ordinary Location mutations preserve `map`; generic draft saves
+preserve server-owned chunk components and cannot submit replacements. Draft responses omit chunk
+buffers so ordinary edits need not resend the whole terrain.
+
+`IsometricTerrainVolume` is the working value: `kind: "isometric-terrain"`, `formatVersion: 1`,
+`dimensions: { x, y, z }` (integer counts 1–100), `cellSize: { value: 5, unit: "ft" }`, `chunkSize: 16`,
+`materials`, and sparse `chunks`. X/Y are horizontal and Z is up. Each occupied chunk has an integer
+`address` in chunk units and `cells`. Cells use `offset = localX + 16*localY + 256*localZ` in 0–4095.
+The last partial chunk cannot contain cells beyond the map dimensions. Empty chunks are omitted;
+absent cells are air. Chunk addresses, cell offsets, palette keys, and opening identities must be
+unique in their respective scopes. A volume has one to 256 material references.
+
+`TerrainMaterialReference` contains `key: NamespacedKey`, positive integer `revision`, human `name`,
+and `terrainType: NamespacedKey`. It identifies one versioned palette entry, not texture data or a
+media URL. Every cell's `materialKey` must resolve in this palette. Changing a selected cell's
+material changes its associated terrain type while preserving all geometry and opening fields.
+Built-in revision 1 keys `terrain:grass`, `terrain:dirt`, `terrain:sand`, `terrain:rock`,
+`terrain:wood`, and `terrain:stone` resolve through the web renderer's immutable local PBR registry;
+`terrain:water` uses procedural ripple normals and transparent shading. The bundle includes pinned
+source/delivery checksums and CC0 provenance in `apps/web/public/terrain/v1/sources.json`.
+These are application assets, not new generic domain resources or MediaAsset records. Unknown keys
+or revisions render neutral surfaces; the renderer must not substitute the newest material revision.
+The custom uploaded material/media asset contract remains pending.
+
+`TerrainCell` also has `shape: TerrainShape`, optional `smoothing` (0–1, visual only), and optional
+`opening`. `TerrainShape.top` is a tuple of four heights ordered 00, 10, 11, 01. Heights lie in 0–1,
+quantized to sixteenths; all-zero shapes are invalid. X/Y upper corners stay fixed; bottom corners
+stay at zero. `diagonal` is `"00-11" | "10-01"`. A cube has `[1,1,1,1]`; a ramp `[0,1,1,0]`;
+a ridge and valley both have `[1,0,1,0]`, with high `00-11` and low `10-01` diagonals respectively.
+Quarter-turn helpers rotate corner heights and diagonal together. Persisted orientation is baked
+into the shape rather than stored as a redundant shape rotation field. Nonuniform heights classify
+the shape as difficult terrain; this is a geometry fact, not a movement cost or automatic effect.
+
+`TerrainOpening` has `id`, integer `facing` 0–3, and `frameThickness` from 1/16 to 7/16 of a cell.
+Its discriminated state is either `{ kind: "door", state: "open" | "closed" | "locked" }` or
+`{ kind: "window", state: "open" | "closed" }`. An opening requires a full-height cube and zero
+smoothing. The GM editor can apply/remove openings on selected cube cells, set initial state/facing/frame
+thickness, and undo those edits while preserving existing opening identity. It renders procedural
+frames, retracting door panels, locked crossbars, and closed-window glass. This is authoring
+presentation only; runtime lock actions, transmission, and rule-produced transitions are not implemented. `terrainSolidTriangles` and
+`intersectTerrainShape` operate on a shape's closed solid, not on door/window apertures, and cannot
+serve as the final gameplay sight implementation for openings.
+
+`TerrainAddress` denotes integer cell/chunk addresses or dimension counts according to its containing
+field. `TerrainPoint` denotes a continuous local geometry point. Neither extends the existing
+normalized image or geographic coordinate union. `TerrainRegion` has inclusive `minimum` and
+`maximum` cell addresses. `TerrainCellWrite` has an `address` and `cell` without a chunk offset;
+`cell: null` erases exactly that address. `applyTerrainWrites` validates the whole result before
+returning a new volume plus inverse/redo writes; it performs no storage, authorization, revision
+check, actor relocation, or gameplay effect. Selection editing supports disconnected addresses at
+any elevation, deduplicates selection membership, and skips air. Removing terrain never deletes
+actors or neighboring levels.
+
+`TerrainGenerationSettings` contains:
+
+- `version: 1`, unsigned 32-bit integer `seed`, and `preset: "plains" | "rolling-hills" | "mountains"`.
+- Inclusive `region`, `minimumElevation`, `maximumElevation`, and `baseElevation`, in grid units,
+  quantized to sixteenths and contained within the region's lower edge and upper surface boundary.
+- `featureSize` (2–100 cells), `roughness` (0–1), a palette `materialKey`, and
+  `mode: "fill-empty" | "replace-region"`.
+- Optional `mask`, an exact list of writable cell addresses inside the region, including air.
+  Missing mask means the whole region; an empty mask produces no writes.
+
+Version 1 uses seeded multiscale coherent noise, preset weights, and a squared-magnitude bias
+favoring elevations near the base. It fills supported columns with one sloped top block; when
+corner elevations cross block levels, closed side faces form contour cliffs. It does not create
+caves, simulate erosion, or perform a neighborhood-relaxation pass. `generateTerrainPreview` returns
+writes and created/replaced/removed/skipped counts without changing the input. Fill Empty preserves
+occupied cells; Replace Region may replace openings and erase existing cells above the generated
+surface, but never modifies addresses outside the region/mask. Deterministic output requires the
+same settings and source volume. Helpers remain synchronous; the initial editor invokes generation
+in a cancellable worker, checks the draft revision before Apply, and saves ordinary generated cells.
+Persisted generation provenance and the full set of generation controls remain pending. Play will
+consume captured cells rather than regenerate them.
+
+Example **working value only**, not a Location API payload:
+
+```json
+{
+  "kind": "isometric-terrain",
+  "formatVersion": 1,
+  "dimensions": { "x": 100, "y": 100, "z": 100 },
+  "cellSize": { "value": 5, "unit": "ft" },
+  "chunkSize": 16,
+  "materials": [
+    { "key": "terrain:grass", "revision": 1, "name": "Grass", "terrainType": "terrain:grass" }
+  ],
+  "chunks": [
+    {
+      "address": { "x": 0, "y": 0, "z": 0 },
+      "cells": [
+        { "offset": 0, "materialKey": "terrain:grass", "shape": { "top": [1, 1, 1, 1], "diagonal": "00-11" } }
+      ]
+    }
+  ]
+}
+```
+
+
+Example persisted empty isometric map (the optional `map` field on a source Location):
+
+```json
+{
+  "kind": "isometric",
+  "formatVersion": 1,
+  "dimensions": { "x": 100, "y": 100, "z": 100 },
+  "cellSize": { "value": 5, "unit": "ft" },
+  "chunkSize": 16,
+  "materials": [
+    { "key": "terrain:grass", "revision": 1, "name": "Grass", "terrainType": "terrain:grass" }
+  ],
+  "chunks": []
+}
+```
+
+The editor renders built-in textured terrain, procedural door/window apertures, and its preview actor.
+Selection smoothing applies the existing 0–1 strength as shared area-weighted normal blending across
+chunk/material boundaries; it moves no vertices and excludes openings. XY/XZ/YZ work planes support
+placement and selection, with slicing along the fixed axis. Color/normal/roughness maps use the same
+material on all faces. Texture quality (1K, 2K, or untextured) is local presentation state, not a new
+persisted domain field. Custom texture assets, geometric edge rounding, and runtime actor visibility
+remain pending. It is not an authorized player map renderer.
+
+
+### Implemented actor terrain setup and participant binding
+
+`CampaignInstanceCreatureStateOverlay.terrainPosition?: TerrainPoint` stores an actor's feet in
+continuous grid units, with X/Y horizontal and Z up, at its `currentLocationId`. It is an Instance
+runtime overlay, never a source Creature field or normalized image coordinate. The containing
+runtime's captured Campaign/World pair determines the map; source draft terrain is never consulted.
+Coordinates must be finite within 100-cell global bounds. A position requires a captured Location;
+API validation also resolves that Location's captured isometric manifest/chunks, checks exact map
+bounds, and requires a terrain support surface. Openings are not treated as support surfaces.
+Actor body clearance, occupancy, movement cost, and sight remain pending rule decisions.
+
+`PUT /campaigns/:campaignDefinitionId/instances/:campaignInstanceId/creature-embodiments/:actorId/position`
+accepts `PlaceCampaignInstanceActorRequest`: `expectedRuntimeRevision`, `locationId`, and `position`
+(`TerrainPoint` or explicit `null` to remove placement while retaining the current Location).
+It is GM-owned Instance setup, uses the existing audited revision transaction, advances Creature
+identity version and runtime revision, and is blocked while a Session is active. It cannot be used
+as a player movement action. `CampaignInstanceCreatureEmbodimentProjection` now exposes optional
+`currentLocationId`, resolved `currentLocationName`, and `terrainPosition`; its list also exposes
+optional `terrainLocations` with human names. No new resource mapping or database table is added:
+these values remain in `CampaignInstanceRuntime.state.creatureEmbodiments[].creature`.
+Captured-pair runtime validation checks support, so incompatible map changes are rejected rather
+than silently relocating actors.
+
+`GET /me/campaign-instances/:instanceId/sessions/:sessionId/spatial` returns
+`ParticipantSpatialBinding`. It requires an accepted, selected Session participation and active
+membership/Player standing. Only the Player role in an active Session resolves an actor. The server
+uses that membership's active Character association and exactly one matching Character embodiment;
+it accepts no client-selected observer identity. Missing, duplicate, unplaced, or invalid actors fail
+closed. This is a binding/readiness endpoint, not a playable map projection.
+
+The result is either `{ status: "unavailable", reason: "not-player" | "session-inactive" |
+"no-active-character" | "actor-unplaced" }` or `{ status: "awaiting-visibility", runtimeRevision,
+actor: { name, position } }`. It sends no terrain chunks/materials, other actors, runtime extensions,
+source identities, or GM notes. The participant page displays the binding status and clears stale
+binding data on failed authorization or Session changes. Actual actor-centered gameplay rendering,
+GM random focus/switching, movement effects, fog/LOS projection, and camera terrain fading remain
+pending. Never infer player map access from a successful actor binding.
+
+
+### Internal sight geometry and surface projection
+
+`terrainOpeningParts` supplies canonical frame/panel/glass triangles shared by the GM renderer and
+`createTerrainSightIndex`. The latter owns a validated volume copy, indexes occupied cells, caches
+up to 4,096 cell meshes, and reports finite-segment surface contacts in grid-unit distances plus
+strict starting-volume interiors. Grid boundary ties visit all touched cells; coplanar grazing is
+conservative with a 1e-9 geometry tolerance. Sloped tops use canonical triangles; visual smoothing
+has no effect. Traces reject nonfinite endpoints, coordinates beyond ±1,024, and zero length.
+These are geometry capabilities, not a default sight policy. A closed window reports glass facts;
+it does not automatically transmit or block sight. Captured rules must supply that decision.
+
+The API-internal `projectAuthorizedTerrain` requires an evaluated decision matching Campaign Instance,
+snapshot, runtime revision, Location, and observer. It validates surface grants against canonical geometry,
+requires the selected actor, and explicitly constructs approved triangle/actor/material fields.
+It strips unapproved surfaces, cell/opening state, source extensions, and palette labels. Missing,
+stale, or invalid grants yield `awaiting-visibility`; malformed source volumes are validation errors.
+The gate is not a public request contract and must never accept client-provided visibility grants.
+Every future visibility-affecting mutation must advance the runtime revision. Exploration persistence
+now composes this gate as described below; a rules evaluator and participant renderer remain pending.
+Do not generate these internal query results as authored domain records.
+`ParticipantSpatialBinding` remains the only implemented participant spatial DTO.
+
+
+### Observer exploration snapshots (internal values and dedicated persistence)
+
+`packages/common/src/types/terrain-exploration.ts` is the exact contract for these new values:
+
+- `TerrainObservationContext`: `campaignInstanceId`, `snapshotId`, `locationId`, `observerId`, and
+  positive safe-integer `runtimeRevision`. The server selects these identities; they are not user
+  labels. Snapshot identity is part of the scope, so new captures do not inherit memory implicitly.
+- `TerrainExploredSurface`: canonical `key`, `material: { key, revision }`, `treatment:
+  "terrain" | "glass"`, and a three-point `triangle` in grid units. Material revision belongs to
+  each surface: remembered and current geometry can reference different versions of the same key.
+- `TerrainExplorationObservation`: `context`, authorized `surfaces`, and `absentSurfaceKeys` for
+  explicitly observed disappearances. This is an internal evaluated observation, never player input.
+- `TerrainExplorationSnapshot`: `formatVersion: 1`, `context`, `visibleSurfaceKeys`, and `surfaces`
+  with `lastSeenRuntimeRevision`. It contains no actors, full cells, opening state, labels, or notes.
+
+`parseTerrainExplorationSnapshot` validates versioned JSON, rejecting unknown fields, duplicate or
+malformed surface keys, invalid geometry coordinates, invalid material references, impossible
+revision relationships, and values over 100,000 surfaces. It returns owned copies in deterministic
+key order. `updateTerrainExploration` preserves last-known geometry without querying current terrain,
+replaces only observed surfaces, and removes only explicitly observed absent keys. It rejects foreign
+scope, backward revisions, contradictory grants, and conflicting same-revision updates; exact retries
+are idempotent. Capacity failures reject the whole update, with no eviction or partial mutation.
+
+`projectTerrainWithExploration` composes the existing server redaction gate with these helpers.
+The gate's optional `observedAbsentSurfaceKeys` must be explicitly authorized and absent in canonical
+current geometry; missing visible grants never imply observed absence. A successful composition
+returns `{ status: "ready", exploration, projection }`. `exploration` is server-only storage output.
+`projection` contains context, currently authorized actors, `visibleSurfaces`, and `rememberedSurfaces`;
+each surface includes its own material reference. Last-seen revisions and disappearance grants are
+not included in the participant projection. Missing decisions, invalid/foreign memory, and conflicting
+revisions produce `awaiting-visibility` without partial current or remembered data.
+
+These are serializable internal values, not new World records, Instance runtime fields, or endpoints.
+`TerrainExplorationSnapshot` is persisted in `CampaignTerrainExploration.payload` as described below;
+`apps/api/src/domain/domain-resource.ts` has no generic exploration resource mapping. Do not generate
+exploration snapshots as authored content. A captured-rule evaluator and live participant delivery remain pending. Checkpoint-specific recovery
+is implemented below. Existing `ParticipantSpatialBinding` and its readiness-only behavior are
+unchanged. The surface budget is an implementation limit pending scalable storage, not a change
+to the accepted 100³-cell map requirement.
+
+
+### Exploration database storage
+
+`TerrainExplorationSnapshot` maps to Prisma `CampaignTerrainExploration.payload`. Its composite
+primary key is `(campaignInstanceId, snapshotId, locationId, observerId)`; `snapshotId` references
+`CampaignInstanceSnapshot`, with a composite foreign key enforcing the owning Instance. The row
+also stores `runtimeRevision`, canonical SHA-256 `contentHash`, `createdAt`, and `updatedAt`. SQL
+checks require version-one JSON context to match every scope column and revision. This dedicated
+derived-state table is not a `DomainRecord` resource and is never generated as authored content.
+
+`TerrainExplorationStore.projectAndStore` is a Nest provider without a public controller. It accepts
+an internal `EvaluatedVisibilityDecision`; the future rules executor must bind the participant and
+observer and evaluate captured rules before calling it. The service does not accept caller-supplied
+terrain, actor lists, or previous memory. A READ COMMITTED transaction locks the Instance runtime
+row before reading the current adopted snapshot/revision, captured World terrain, runtime actor
+embodiments, and matching stored memory. It validates the payload hash and composes through the
+existing redaction/update helpers. Only successful results are upserted; identical retries preserve
+timestamps. No projection is returned before commit. Storage errors roll back and propagate;
+stale/invalid decisions and corrupt exploration produce no partial projection or write. These
+derived writes do not increment gameplay runtime revision and serialize with runtime mutations.
+
+Memory survives reconnects and Session transitions within the same capture. Migration and restore
+create a new Instance snapshot and retain historical rows. Migration starts empty exploration;
+restore recovers its departure checkpoint as described below. Later or foreign-snapshot knowledge
+cannot be reused automatically. This table stores latest memory per scope; the checkpoint child
+table stores immutable historical captures. Cross-capture remapping is not inferred. The participant spatial endpoint remains readiness-only until rule
+evaluation and Session authority integration are implemented. The additive SQL migration is
+`20260918000000_terrain_exploration`; it performs no automatic exploration backfill.
+
+
+### Checkpoint exploration capture and predecessor recovery
+
+`CampaignInstanceRuntimeCheckpoint` now declares optional `explorationHash` and `explorationCount`.
+The matching nullable Prisma columns hold the canonical aggregate SHA-256 and number of observer/map
+entries; both are absent/null for legacy unrecorded captures. New checkpoints always have both,
+including count zero and the hash of an empty descriptor array. They are supplied at INSERT because
+runtime checkpoints are immutable. `CampaignCheckpointExploration` stores `(checkpointId, locationId,
+observerId)` as primary key, with `campaignInstanceId`, `snapshotId`, `payload`, and `contentHash`.
+Its composite foreign key binds all three owning checkpoint/Instance/snapshot identities. Payload is
+an exact `TerrainExplorationSnapshot` at capture time. UPDATE/DELETE are rejected by the database.
+The aggregate hashes sorted `{locationId, observerId, contentHash}` descriptors and detects missing
+or extra entries. Neither table is a generic `DomainRecord` resource or AI-authored content.
+
+Initial Instance creation seals empty exploration. Migration/restore prepare the seal, insert the
+checkpoint, and copy matching memory within the same transaction; source and result captures both
+participate in rollback. The Session SHARE lock and Runtime EXCLUSIVE table lock precede all
+SERIALIZABLE reads to include exploration commits already in flight. Runtime writers remain excluded
+until adoption commits. This global lock is specific to snapshot adoption, not ordinary observations.
+
+The existing direct-predecessor restore resolves `sourceRuntimeCheckpointId` from the adoption audit
+whose result is the current Instance snapshot. It never picks the latest exploration rows. Recovery
+checks descriptor count/hash, payload hashes and schema, owning scope, revision bounds, and exact
+captured World/Campaign snapshot identities. It copies remembered surfaces into the newly created
+Instance snapshot, preserves last-seen geometry/material revisions, and clears `visibleSurfaceKeys`.
+Memory context revision becomes restored runtime revision minus one, leaving that new runtime
+revision available for fresh visibility evaluation. It does not restore live creature visibility,
+change observer identities, or replace the existing ongoing runtime-overlay restore semantics.
+
+`CampaignInstanceMigrationPreviewProjection.explorationRecovery?` reports `{status: "checkpoint" |
+"not-recorded" | "empty", checkpointNumber?, memoryCount}`. The GM sees a checkpoint number and
+plain-language recovery behavior, never its internal ID. Checkpoint identity/hash/count are included
+in the internal plan hash and rechecked at apply. Legacy unrecorded checkpoints start empty memory
+with a preview notice; corrupt recorded captures abort rather than silently losing knowledge.
+Rules, participant authority, and live visibility remain separate and deferred. Migration SQL is
+`20260919000000_exploration_checkpoints`, with no historical discovery backfill.
+
+
+### Unified map orientation authoring
+
+`LocationMapOrientation` is now `LocationImageOrientation | "isometric"`, where
+`LocationImageOrientation` remains `"scenic" | "overhead" | "side-on"`. `LocationImage.orientation`
+uses the image-only type; image generation still accepts only image orientations. The Location's
+`mapScene.orientation` and `WorldLocationMutationInput.mapOrientation` accept all four orientations.
+
+Isometric is selected from the existing Map orientation selector. It immediately exposes a blank
+manual terrain editor and optional generation controls. There is no separate Location-level map
+feature toggle. Empty terrain manifests with zero chunks are valid and save without generation.
+The internal `LocationMap` discriminant still selects the stored representation. Terrain saves
+atomically set `mapScene.orientation` to `isometric`; explicit selection of an image orientation
+through Location authoring replaces an active isometric manifest with `{kind:"image"}`. Ordinary
+Location edits without an orientation change preserve terrain. Existing image assets remain intact.
+Legacy isometric manifests lacking orientation metadata resolve to Isometric in the Map UI. No
+resource mapping or database migration changes accompany this orientation workflow adjustment.

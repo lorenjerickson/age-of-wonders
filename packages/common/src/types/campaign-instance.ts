@@ -1,3 +1,5 @@
+import type { TerrainPoint } from "./isometric-terrain";
+import { isTerrainActorPosition } from "../spatial/actor-position";
 import type { CampaignLocationCanvasConfiguration } from "./campaign";
 import type { ResolvedCreatureInstanceEmbodimentPolicy } from "./creatures";
 import type { ItemInstance } from "./items";
@@ -104,6 +106,8 @@ export interface CampaignInstanceCreatureStateOverlay<
   readonly name: string;
   readonly definitionId?: DefinitionId;
   readonly currentLocationId?: LocationId;
+  /** Feet in grid units of the current captured isometric Location. Setup only; not a movement effect. */
+  readonly terrainPosition?: TerrainPoint;
   readonly extensions?: Extensions;
 }
 
@@ -168,7 +172,8 @@ export type CampaignInstanceRuntimeValidationIssueCode =
   | "creature-embodiment-cardinality-exceeded"
   | "creature-embodiment-policy-mismatch"
   | "creature-source-not-captured"
-  | "runtime-entity-not-found";
+  | "runtime-entity-not-found"
+  | "invalid-terrain-position";
 
 export interface CampaignInstanceRuntimeValidationIssue {
   readonly code: CampaignInstanceRuntimeValidationIssueCode;
@@ -313,6 +318,19 @@ export function validateCampaignInstanceRuntimeState(
         "A Creature embodiment's runtime identities do not match its mutable Creature state.",
       );
     }
+    if (
+      embodiment.creature.terrainPosition !== undefined &&
+      (!embodiment.creature.currentLocationId ||
+        !context.capturedLocationIds.has(
+          embodiment.creature.currentLocationId,
+        ) ||
+        !isTerrainActorPosition(embodiment.creature.terrainPosition))
+    )
+      add(
+        "invalid-terrain-position",
+        subject,
+        "An actor terrain position requires a captured Location and valid grid coordinates.",
+      );
     if (embodiment.source.kind === "captured-world-creature") {
       const sourceId = embodiment.source.sourceCreatureId;
       const capturedPolicy = context.capturedCreaturePolicies.get(sourceId);
@@ -494,6 +512,9 @@ export interface CampaignInstanceRuntimeCheckpoint {
     | "restore-result";
   readonly runtimeRevision: number;
   readonly state: CampaignInstanceRuntimeState;
+  /** Absent on legacy checkpoints; a recorded empty capture has count zero and a hash. */
+  readonly explorationHash?: string;
+  readonly explorationCount?: number;
   readonly contentHash: string;
   readonly createdAt: string;
 }

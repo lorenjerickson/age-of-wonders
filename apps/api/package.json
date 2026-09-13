@@ -26,7 +26,8 @@
     "test": "jest --passWithNoTests",
     "test:campaign-instance:postgres": "jest --runInBand campaign-instance-migrations.postgres.spec.ts",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:terrain-exploration:postgres": "jest --runInBand terrain-exploration-store.postgres.spec.ts"
   },
   "dependencies": {
     "@aow/common": "workspace:*",

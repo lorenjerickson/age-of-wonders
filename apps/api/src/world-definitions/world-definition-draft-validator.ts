@@ -1,3 +1,4 @@
+import { terrainSnapshotIssue } from "./terrain-snapshot";
 import { isPublicationJson } from "../domain/snapshot-manifest";
 import { isCreatureInstanceEmbodimentPolicy } from "@aow/common";
 import type { WorldDraftRecordDto } from "./dto/world-definition-authoring.dto";
@@ -141,6 +142,8 @@ export function validateWorldDefinitionDraft(
         "The World Location must use root placement.",
       );
   }
+  const terrainIssue = terrainSnapshotIssue(records);
+  if (terrainIssue) add("terrain-capture-invalid", "Location terrain", terrainIssue);
   validateLocationGraph(locations, byId, add);
   validateWorldPlacements(
     worldPlacements,

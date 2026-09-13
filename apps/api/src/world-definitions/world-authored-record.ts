@@ -1,3 +1,4 @@
+import { locationMapIssue } from "@aow/common";
 import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   isCreatureInstanceEmbodimentPolicy,
@@ -22,7 +23,7 @@ export function worldLocationPayload(
     discoveries?: WorldLocationDefinition["discoveries"];
     image?: Record<string, unknown>;
     mapSceneNotes?: string;
-    mapOrientation?: "scenic" | "overhead" | "side-on";
+    mapOrientation?: "scenic" | "overhead" | "side-on" | "isometric";
   },
   previous?: unknown,
 ): WorldLocationDefinition {
@@ -45,17 +46,35 @@ export function worldLocationPayload(
       : {}),
     ...(input.mapOrientation ? { orientation: input.mapOrientation } : {}),
   };
+  const image = input.image ?? prior.image;
+  const imageFields = object(image);
+  const previousImage = object(prior.image);
+  // Older attached artwork can lack orientation. Repair it when re-saving
+  // that asset so unrelated Location edits do not fail image validation.
+  const repairImageOrientation =
+    image !== undefined &&
+    imageFields.orientation === undefined &&
+    nonEmpty(previousImage.assetId) &&
+    imageFields.assetId === previousImage.assetId;
+  const previousOrientation = previousImage.orientation ?? object(prior.mapScene).orientation;
+  const repairedOrientation = ["scenic", "overhead", "side-on"].includes(String(previousOrientation))
+    ? previousOrientation
+    : "scenic";
   return {
     ...preserved,
+    ...(input.mapOrientation && input.mapOrientation !== "isometric" && object(prior.map).kind === "isometric"
+      ? { map: { kind: "image" as const } } : {}),
     ...(input.gmDescription !== undefined
       ? { gmDescription: input.gmDescription }
       : {}),
     ...(input.discoveries !== undefined
       ? { discoveries: input.discoveries }
       : {}),
-    ...(input.image !== undefined
+    ...(image !== undefined
       ? {
-          image: input.image as unknown as NonNullable<
+          image: (repairImageOrientation
+            ? { ...imageFields, orientation: repairedOrientation }
+            : image) as unknown as NonNullable<
             WorldLocationDefinition["image"]
           >,
         }
@@ -96,6 +115,17 @@ export function worldLocationPayload(
   };
 }
 
+/** Recover artwork retained by older Creature upgrades without replacing newer views. */
+export function preservedCreatureImages(previous: unknown): Record<string, unknown> {
+  const prior = object(previous);
+  const archived = object(object(object(prior.extensions)["aow:legacy-creature"]).payload);
+  return {
+    ...object(archived.images),
+    ...object(prior.images),
+    ...object(object(object(prior.components).art).images),
+  };
+}
+
 export function worldCreaturePayload(
   id: string,
   input: {
@@ -105,6 +135,7 @@ export function worldCreaturePayload(
     equipmentSlots: string[];
     instanceEmbodimentPolicy: Record<string, unknown>;
     artDirection?: string;
+    images?: Record<string, unknown>;
     movement?: WorldCreatureDefinition["components"]["movement"];
     skillDefinitionIds?: string[];
     professionDefinitionIds?: string[];
@@ -116,6 +147,7 @@ export function worldCreaturePayload(
   const prior = object(previous);
   const priorComponents = object(prior.components);
   const preservedArt = withoutKeys(object(priorComponents.art), "direction");
+  const images = { ...preservedCreatureImages(prior), ...input.images };
   const preservedMechanics = withoutKeys(
     object(priorComponents.progressiveMechanics),
     "notes",
@@ -129,6 +161,7 @@ export function worldCreaturePayload(
       equipmentSlots: input.equipmentSlots as never,
       art: {
         ...preservedArt,
+        ...(Object.keys(images).length ? { images } : {}),
         ...(input.artDirection?.trim()
           ? { direction: input.artDirection.trim() }
           : {}),
@@ -246,6 +279,10 @@ export function canonicalWorldRecordIssue(
       );
       if (new Set(ids).size !== ids.length)
         return "Each discovery must have its own identity.";
+    }
+    if (payload.map !== undefined) {
+      const issue = locationMapIssue(payload.map);
+      if (issue) return issue;
     }
     if (payload.image !== undefined) {
       const image = object(payload.image);

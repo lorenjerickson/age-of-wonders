@@ -1,6 +1,9 @@
+import { ArtworkGenerator } from "./ArtworkGenerator";
 import { ProfessionModifiersEditor, type ModifierEdit } from "./ProfessionModifiersEditor";
 import { professionModifierLevels, professionModifiersValid } from "./professionModifierModel";
 import { useEditorSave } from "./useEditorSave";
+import { MediaImage } from "./MediaImage";
+import { CreatureArtwork, RecordThumbnail } from "./RecordArtwork";
 import {
   useEffect,
   useMemo,
@@ -52,6 +55,8 @@ import {
 import { DraftRequired, useWorldAuthoring } from "./WorldAuthoringShell";
 import {
   hierarchyRows,
+  adoptedLegacyModelKey,
+  creatureAttributesForEditor,
   attributeNumberConfig,
   definitionConformance,
   creatureEmbodimentPolicyForSave,
@@ -730,7 +735,10 @@ export function AtlasPage() {
                   className="flex min-h-11 items-center justify-between rounded-box border border-base-300 bg-base-200 px-4"
                   href={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/${encodeURIComponent(row.record.sourceId)}${guideSuffix}`}
                 >
-                  <span>{row.name}</span>
+                  <span className="flex items-center gap-3 py-2">
+                    <RecordThumbnail payload={recordPayload(row.record)} name={row.name} className="w-20 shrink-0" onlyIfPresent />
+                    <span>{row.name}</span>
+                  </span>
                   {row.issue && <Badge tone="warning">{row.issue}</Badge>}
                 </InternalLink>
               </li>
@@ -758,6 +766,7 @@ export function BestiaryPage() {
         {creatures.length ? (
           <CardGrid
             records={creatures}
+            showImages
             href={(record) =>
               `/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/${encodeURIComponent(record.sourceId)}`
             }
@@ -801,6 +810,7 @@ export function ItemCompendiumPage() {
         {items.length ? (
           <CardGrid
             records={items}
+            showImages
             href={(record) =>
               `/worlds/${encodeURIComponent(definition.id)}/item-compendium/items/${encodeURIComponent(record.sourceId)}`
             }
@@ -855,9 +865,11 @@ function LibraryPage({
 function CardGrid({
   records,
   href,
+  showImages = false,
 }: {
   records: WorldDraftRecord[];
   href: (record: WorldDraftRecord) => string;
+  showImages?: boolean;
 }) {
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
@@ -868,6 +880,13 @@ function CardGrid({
           href={`${href(record)}${guideSuffix}`}
           className="card border border-base-300 bg-base-200"
         >
+          {showImages && (
+            <RecordThumbnail
+              payload={recordPayload(record)}
+              name={recordName(record, "Unnamed record")}
+              className="m-3 mb-0"
+            />
+          )}
           <div className="card-body">
             <h2 className="card-title">
               {recordName(record, "Unnamed record")}
@@ -910,7 +929,12 @@ export function DraftRecordEditor({
   const initialComponents = objectValue(initial.components);
   const initialEquippable = objectValue(initialComponents.equippable);
   const initialModelValues = objectValue(initial.modelValues);
-  const initialImage = objectValue(initial.image);
+  const [itemArtwork, setItemArtwork] = useState<Record<string, JsonValue>>();
+  const [creatureArtwork, setCreatureArtwork] = useState<
+    Record<string, JsonValue>
+  >({});
+  const [artworkBusy, setArtworkBusy] = useState(false);
+  const initialImage = itemArtwork ?? objectValue(initial.image);
   const models = draft?.effectiveModels;
   const [name, setName] = useState(
     String(initialIdentity.name ?? initial.name ?? ""),
@@ -923,6 +947,15 @@ export function DraftRecordEditor({
       kind === "items"
         ? (initialModelValues["aow:item-family"] ??
             initial.itemFamilyKey ??
+            models?.itemFamilies.find(
+              (family) =>
+                family.key ===
+                adoptedLegacyModelKey(
+                  String(initialComponents.category ?? initial.category ?? ""),
+                  "item-family",
+                  models.itemFamilies,
+                ),
+            )?.key ??
             models?.itemFamilies[0]?.key ??
             "")
         : (initial.kind ?? (kind === "locations" ? "region" : "creature")),
@@ -958,12 +991,8 @@ export function DraftRecordEditor({
   const [mapOrientation, setMapOrientation] = useState(
     String(initialMapScene.orientation ?? ""),
   );
-  const [attributes, setAttributes] = useState<Record<string, number>>(
-    () =>
-      objectValue(initialComponents.attributes ?? initial.attributes) as Record<
-        string,
-        number
-      >,
+  const [attributes, setAttributes] = useState<Record<string, number>>(() =>
+    creatureAttributesForEditor(initial, models?.attributes ?? []),
   );
   const [slotSets, setSlotSets] = useState<string[][]>(() => {
     const canonicalSlots =
@@ -979,7 +1008,17 @@ export function DraftRecordEditor({
           : [];
     return candidates
       .map((entry) =>
-        entry.filter((value): value is string => typeof value === "string"),
+        entry
+          .filter((value): value is string => typeof value === "string")
+          .map((value) =>
+            kind === "items"
+              ? adoptedLegacyModelKey(
+                  value,
+                  "equipment-slot",
+                  models?.equipmentSlots ?? [],
+                )
+              : value,
+          ),
       )
       .filter((entry) => entry.length > 0);
   });
@@ -1089,6 +1128,8 @@ export function DraftRecordEditor({
     itemCategory,
     itemQuality,
     itemImageFileName: itemImageFile?.name ?? "",
+    itemArtwork,
+    creatureArtwork,
     itemImageAltText,
     embodimentStrategy,
     embodimentMaximum,
@@ -1121,7 +1162,7 @@ export function DraftRecordEditor({
   }, [dirty, markDirty]);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !name.trim()) return;
+    if (!draft || !name.trim() || artworkBusy) return;
     setSaveError("");
     if (kind !== "locations" && !conformance) return;
     let saved;
@@ -1152,7 +1193,7 @@ export function DraftRecordEditor({
                 ...(mapOrientation
                   ? {
                       mapOrientation: mapOrientation as
-                        "scenic" | "overhead" | "side-on",
+                        "scenic" | "overhead" | "side-on" | "isometric",
                     }
                   : {}),
               },
@@ -1173,6 +1214,9 @@ export function DraftRecordEditor({
                   attributes: attributes as never,
                   equipmentSlots: slots as never,
                   artDirection,
+                  ...(Object.keys(creatureArtwork).length
+                    ? { images: creatureArtwork as never }
+                    : {}),
                   movement: movementDistance
                     ? [
                         {
@@ -1229,7 +1273,10 @@ export function DraftRecordEditor({
                         mimeType: asset.mimeType as `image/${string}`,
                       };
                     })()
-                  : (initial.image as never);
+                  : ({
+                      ...initialImage,
+                      altText: itemImageAltText.trim(),
+                    } as never);
                 return saveWorldItem(
                   definition.id,
                   {
@@ -1619,6 +1666,37 @@ export function DraftRecordEditor({
               </Field>
             </div>
           )}
+          {kind === "items" && Boolean(initialImage.assetId) && (
+            <MediaImage
+              image={initialImage}
+              name={name || "Item image"}
+              className="max-w-xs"
+            />
+          )}
+          {kind === "items" && draft && (
+            <ArtworkGenerator
+              worldId={definition.id}
+              storageRevision={draft.storageRevision}
+              role="item"
+              label="Item image"
+              name={name}
+              description={description}
+              direction={`Category: ${itemCategory}. Quality: ${itemQuality}.`}
+              hasImage={Boolean(initialImage.assetId)}
+              disabled={
+                !canEdit ||
+                artworkBusy ||
+                editorSave.saving ||
+                draft.status === "stale"
+              }
+              onBusyChange={setArtworkBusy}
+              onApply={(image) => {
+                setItemArtwork(image);
+                setItemImageFile(undefined);
+                setItemImageAltText(String(image.altText ?? ""));
+              }}
+            />
+          )}
           {kind === "items" && (
             <div className="grid gap-5 sm:grid-cols-2">
               <Field
@@ -1630,9 +1708,10 @@ export function DraftRecordEditor({
                   type="file"
                   accept="image/*"
                   required={!initialImage.assetId}
-                  onChange={(event) =>
-                    setItemImageFile(event.target.files?.[0])
-                  }
+                  onChange={(event) => {
+                    setItemImageFile(event.target.files?.[0]);
+                    setItemArtwork(undefined);
+                  }}
                   className="mt-2 w-full"
                 />
               </Field>
@@ -1647,10 +1726,55 @@ export function DraftRecordEditor({
             </div>
           )}
           {kind === "creatures" && (
+            <CreatureArtwork
+              payload={{
+                ...initial,
+                components: {
+                  ...initialComponents,
+                  art: {
+                    ...initialArt,
+                    images: {
+                      ...objectValue(initial.images),
+                      ...objectValue(initialArt.images),
+                      ...creatureArtwork,
+                    },
+                  },
+                },
+              }}
+              name={name || "Creature"}
+              renderControls={(role, label, hasImage) =>
+                draft && (
+                  <ArtworkGenerator
+                    worldId={definition.id}
+                    storageRevision={draft.storageRevision}
+                    role={role}
+                    label={label}
+                    name={name}
+                    description={description}
+                    direction={artDirection}
+                    hasImage={hasImage}
+                    disabled={
+                      !canEdit ||
+                      artworkBusy ||
+                      editorSave.saving ||
+                      draft.status === "stale"
+                    }
+                    onBusyChange={setArtworkBusy}
+                    onApply={(image) =>
+                      setCreatureArtwork((current) => ({
+                        ...current,
+                        [role]: image,
+                      }))
+                    }
+                  />
+                )
+              }
+            />
+          )}
+          {kind === "creatures" && (
             <Alert>
-              Creature kinds do not yet have an approved Model vocabulary. This
-              Definition conforms to the effective Creature concept without
-              inventing a free-text taxonomy.
+              Creature type selection isn’t available yet. You can still edit
+              and save this creature.
             </Alert>
           )}
           {kind === "creatures" && (
@@ -1888,6 +2012,7 @@ export function DraftRecordEditor({
               tone="primary"
               disabled={
                 editorSave.saving ||
+                artworkBusy ||
                 !draft ||
                 draft.status === "stale" ||
                 proposalPending ||
@@ -2143,6 +2268,9 @@ export function WorldLocationPlacements({
           placements.map((record) => {
             const payload = recordPayload(record);
             const position = objectValue(payload.mapPosition);
+            const sourceRecord = [...creatures, ...items].find(
+              (candidate) => candidate.sourceId === worldPlacementSourceId(record),
+            );
             return (
               <article
                 key={record.sourceId}
@@ -2150,6 +2278,9 @@ export function WorldLocationPlacements({
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
+                    {sourceRecord && (
+                      <RecordThumbnail payload={recordPayload(sourceRecord)} name={labelForSource(record)} className="mb-3 w-28" onlyIfPresent />
+                    )}
                     <h3 className="font-semibold">
                       {recordName(record, "Unnamed World placement")}
                     </h3>

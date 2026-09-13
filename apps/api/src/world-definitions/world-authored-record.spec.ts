@@ -11,6 +11,41 @@ const conformance = {
 };
 
 describe("canonical World authored records", () => {
+  it("recovers archived legacy artwork when saving an already upgraded Creature", () => {
+    const image = (assetId: string) => ({ assetId, altText: "Elyena", width: 1024, height: 1024, mimeType: "image/webp" });
+    const originalImages = { portrait: image("portrait"), overheadToken: image("overhead"), paperDollToken: image("side") };
+    const prior = { components: { art: {} }, extensions: { "aow:legacy-creature": { payload: { images: originalImages } } } };
+    const input = { name: "Elyena", attributes: {}, equipmentSlots: [], instanceEmbodimentPolicy: { strategy: "one-per-instance" } };
+    const recovered = worldCreaturePayload("creature", input, conformance, prior);
+    expect(recovered.components.art.images).toEqual(originalImages);
+    expect(recovered.extensions).toEqual(prior.extensions);
+    expect(canonicalWorldRecordIssue("definitions", "creature", recovered)).toBeUndefined();
+    const replaced = worldCreaturePayload("creature", { ...input, images: { overheadToken: image("new") } }, conformance, recovered);
+    expect(replaced.components.art.images).toEqual({ ...originalImages, overheadToken: image("new") });
+  });
+
+  it("replaces one Creature artwork view while preserving other views and art metadata", () => {
+    const image = (assetId: string) => ({ assetId, altText: "Keeper", width: 1024, height: 1024, mimeType: "image/webp" });
+    const prior = { components: { art: { direction: "Blue wool", custom: "keep", images: { portrait: image("portrait"), overheadToken: image("old"), paperDollToken: image("side") } } } };
+    const updated = worldCreaturePayload("keeper", { name: "Keeper", attributes: {}, equipmentSlots: [], instanceEmbodimentPolicy: { strategy: "one-per-instance" }, artDirection: "Blue wool", images: { overheadToken: image("new") } }, conformance, prior);
+    expect(updated.components.art).toMatchObject({ custom: "keep", images: { portrait: image("portrait"), overheadToken: image("new"), paperDollToken: image("side") } });
+    expect(canonicalWorldRecordIssue("definitions", "keeper", updated)).toBeUndefined();
+  });
+
+  it("preserves legacy Creature artwork on upgrade and canonical artwork on later edits", () => {
+    const images = Object.fromEntries(
+      ["portrait", "overheadToken", "paperDollToken"].map((view) => [view, {
+        assetId: `asset-${view}`, altText: view, width: 512, height: 512, mimeType: "image/png",
+      }]),
+    );
+    const input = { name: "Bell Keeper", attributes: {}, equipmentSlots: [], instanceEmbodimentPolicy: { strategy: "one-per-instance" } };
+    const upgraded = worldCreaturePayload("creature-1", input, conformance, { images });
+    expect(upgraded.components.art.images).toEqual(images);
+    expect(canonicalWorldRecordIssue("definitions", "creature-1", upgraded)).toBeUndefined();
+    const edited = worldCreaturePayload("creature-1", { ...input, name: "New name" }, conformance, upgraded);
+    expect(edited.components.art.images).toEqual(images);
+  });
+
   it("creates and revises a server-owned Location identity", () => {
     const created = worldLocationPayload("location-1", {
       name: "Glass Harbor",
@@ -225,3 +260,31 @@ it("rejects malformed or duplicate discovery claims and preserves richer map fie
     }),
   ).toContain("own identity");
 });
+
+it.each([undefined, "overhead", "side-on", "isometric"])(
+  "saves discoveries with existing artwork missing orientation (scene: %s)",
+  (orientation) => {
+    const image = {
+      assetId: "existing-artwork", altText: "Village beneath a castle",
+      width: 1536, height: 1024, mimeType: "image/webp",
+      focalPoint: { x: 0.52, y: 0.63, kind: "normalized-map" },
+    };
+    const previous = {
+      ...worldLocationPayload("location", { name: "Village", kind: "settlement" }),
+      image, mapScene: { orientation },
+    };
+    const discoveries = [{ id: "new-discovery", kind: "truth" as const, statement: "The castle is inhabited." }];
+    for (const submittedImage of [undefined, image]) {
+      const saved = worldLocationPayload("location", {
+        name: "Village", kind: "settlement", image: submittedImage, discoveries,
+      }, previous);
+      expect(saved.discoveries).toEqual(discoveries);
+      expect(saved.image).toEqual({ ...image, orientation: orientation === "overhead" || orientation === "side-on" ? orientation : "scenic" });
+      expect(canonicalWorldRecordIssue("locations", "location", saved)).toBeUndefined();
+    }
+    const newImage = worldLocationPayload("location", {
+      name: "Village", kind: "settlement", image: { ...image, assetId: "replacement" }, discoveries,
+    }, previous);
+    expect(canonicalWorldRecordIssue("locations", "location", newImage)).toContain("orientation");
+  },
+);

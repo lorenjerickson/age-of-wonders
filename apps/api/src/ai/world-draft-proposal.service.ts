@@ -348,7 +348,7 @@ function normalizeProposal(
     );
     const mapOrientation = optionalEnum(
       value.mapOrientation,
-      ["scenic", "overhead", "side-on"] as const,
+      ["scenic", "overhead", "side-on", "isometric"] as const,
       "map orientation",
     );
     return {
@@ -439,7 +439,7 @@ function buildPrompt(
 ): string {
   const shape =
     kind === "location"
-      ? '{"name":string,"description"?:string,"kind":string,"profileSummary"?:string,"profileTags":string[],"mapSceneNotes"?:string,"mapOrientation"?:"scenic"|"overhead"|"side-on"}'
+      ? '{"name":string,"description"?:string,"kind":string,"profileSummary"?:string,"profileTags":string[],"mapSceneNotes"?:string,"mapOrientation"?:"scenic"|"overhead"|"side-on"|"isometric"}'
       : kind === "creature"
         ? '{"name":string,"description"?:string,"attributes":Record<allowedAttributeKey,number>,"equipmentSlots":allowedEquipmentSlotKey[],"instanceEmbodimentPolicy":{"strategy":"one-per-instance","maximumPerCampaignInstance":1}|{"strategy":"one-per-realization","maximumPerCampaignInstance"?:positive integer},"artDirection"?:string,"movement":Array<{"mode":string,"distance":{"value":positive number,"unit":"foot"|"mile"|"square"|"hex"|"meter"|"kilometer"},"hover"?:boolean}>,"progressiveMechanicsNotes"?:string}'
         : '{"name":string,"description"?:string,"itemFamilyKey":allowedItemFamilyKey,"category":string,"quality":"ramshackle"|"standard"|"fine"|"exquisite","compatibleEquipmentSlotSets":allowedEquipmentSlotKey[][]}';

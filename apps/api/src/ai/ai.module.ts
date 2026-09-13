@@ -1,3 +1,4 @@
+import { WorldArtworkController } from "./world-artwork.controller";
 import { WorldLocationMapController } from "./world-location-map.controller";
 import { Module } from "@nestjs/common";
 import { DomainModule } from "../domain/domain.module";
@@ -29,7 +30,7 @@ import { WorldDraftProposalService } from "./world-draft-proposal.service";
     WorldDefinitionsModule,
     ModelRegistryModule,
   ],
-  controllers: [AiController, WorldLocationMapController],
+  controllers: [AiController, WorldLocationMapController, WorldArtworkController],
   providers: [
     AiPromptService,
     OpenAiService,

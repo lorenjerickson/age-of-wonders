@@ -31,3 +31,7 @@ export * from "./versioning";
 
 export * from "./modifiers";
 export * from "./movement-rules";
+
+export * from "./isometric-terrain";
+
+export * from "./terrain-exploration";

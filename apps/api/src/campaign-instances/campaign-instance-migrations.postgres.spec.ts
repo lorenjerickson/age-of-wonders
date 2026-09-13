@@ -1,3 +1,5 @@
+import { updateTerrainExploration, parseTerrainExplorationSnapshot } from "@aow/common";
+import { canonicalJsonHash } from "../domain/snapshot-manifest";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,6 +47,312 @@ describePostgres("Campaign Instance migration PostgreSQL transactions", () => {
   afterAll(async () => {
     await prisma?.$disconnect();
   });
+
+  it("restores checkpoint knowledge rather than later discoveries, and clears current sight", async () => {
+    const f = await seedFixture(prisma);
+    const memory = updateTerrainExploration(undefined, {
+      context: {
+        campaignInstanceId: f.campaignInstanceId,
+        snapshotId: f.sourceSnapshotId,
+        locationId: "courtyard",
+        observerId: "hero",
+        runtimeRevision: 1,
+      },
+      surfaces: [
+        {
+          key: "1,1,1/solid/0",
+          material: { key: "terrain:stone", revision: 1 },
+          treatment: "terrain",
+          triangle: [
+            { x: 1, y: 1, z: 1 },
+            { x: 2, y: 1, z: 1 },
+            { x: 2, y: 2, z: 1 },
+          ],
+        },
+      ],
+      absentSurfaceKeys: [],
+    });
+    await prisma.campaignTerrainExploration.create({
+      data: {
+        campaignInstanceId: f.campaignInstanceId,
+        snapshotId: f.sourceSnapshotId,
+        locationId: "courtyard",
+        observerId: "hero",
+        runtimeRevision: 1,
+        payload: memory as unknown as Prisma.InputJsonValue,
+        contentHash: canonicalJsonHash(memory),
+      },
+    });
+    const moved = await service.apply(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      await migrationRequest(service, f),
+    );
+    const audit = await prisma.campaignInstanceMigrationAudit.findUniqueOrThrow(
+      { where: { resultSnapshotId: moved.snapshot.snapshotId } },
+    );
+    const captured =
+      await prisma.campaignCheckpointExploration.findFirstOrThrow({
+        where: { checkpointId: audit.sourceRuntimeCheckpointId },
+      });
+    await expect(
+      prisma.campaignCheckpointExploration.deleteMany({
+        where: { checkpointId: audit.sourceRuntimeCheckpointId },
+      }),
+    ).rejects.toThrow();
+    // Later changes to mutable memory must never rewrite an immutable checkpoint.
+    const later = { ...memory, surfaces: [], visibleSurfaceKeys: [] };
+    await prisma.campaignTerrainExploration.updateMany({
+      where: { campaignInstanceId: f.campaignInstanceId },
+      data: {
+        payload: later as unknown as Prisma.InputJsonValue,
+        contentHash: canonicalJsonHash(later),
+      },
+    });
+    const request = {
+      sourceSnapshotId: moved.snapshot.snapshotId,
+      targetInstanceSnapshotId: f.sourceSnapshotId,
+      expectedRuntimeRevision: 2,
+      mappings: [],
+    };
+    const preview = await service.previewRestore(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      request as never,
+    );
+    expect(preview.explorationRecovery).toMatchObject({
+      status: "checkpoint",
+      memoryCount: 1,
+    });
+    const suffix = randomUUID().replaceAll("-", "");
+    const fn = `fail_exploration_restore_${suffix}`;
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION "${fn}"() RETURNS trigger AS $body$ BEGIN IF NEW."campaignInstanceId" = '${f.campaignInstanceId}' AND NEW."action" = 'instance.version.restored' THEN RAISE EXCEPTION 'forced exploration restore failure'; END IF; RETURN NEW; END; $body$ LANGUAGE plpgsql`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER "${fn}" BEFORE INSERT ON "CampaignInstanceAuditEvent" FOR EACH ROW EXECUTE FUNCTION "${fn}"()`,
+    );
+    try {
+      await expect(
+        service.applyRestore(f.campaignInstanceId, f.ownerUserId, {
+          ...request,
+          planHash: preview.planHash,
+        } as never),
+      ).rejects.toThrow();
+      expect(
+        (
+          await prisma.campaignInstanceRuntime.findUniqueOrThrow({
+            where: { id: f.runtimeId },
+          })
+        ).revision,
+      ).toBe(2);
+      expect(
+        await prisma.campaignInstanceRuntimeCheckpoint.count({
+          where: { campaignInstanceId: f.campaignInstanceId },
+        }),
+      ).toBe(2);
+      expect(
+        await prisma.campaignTerrainExploration.count({
+          where: { campaignInstanceId: f.campaignInstanceId },
+        }),
+      ).toBe(1);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        `DROP TRIGGER "${fn}" ON "CampaignInstanceAuditEvent"`,
+      );
+      await prisma.$executeRawUnsafe(`DROP FUNCTION "${fn}"()`);
+    }
+    const restored = await service.applyRestore(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      { ...request, planHash: preview.planHash } as never,
+    );
+    const row = await prisma.campaignTerrainExploration.findFirstOrThrow({
+      where: { snapshotId: restored.snapshot.snapshotId },
+    });
+    const recovered = parseTerrainExplorationSnapshot(row.payload);
+    expect(recovered.surfaces).toEqual(memory.surfaces);
+    expect(recovered.visibleSurfaceKeys).toEqual([]);
+    expect(recovered.context.runtimeRevision).toBeLessThan(
+      restored.runtimeRevision,
+    );
+    expect(recovered.context.snapshotId).toBe(restored.snapshot.snapshotId);
+    expect(
+      await prisma.campaignCheckpointExploration.findFirst({
+        where: { checkpointId: audit.sourceRuntimeCheckpointId },
+      }),
+    ).toEqual(captured);
+    const restoreAudit =
+      await prisma.campaignInstanceMigrationAudit.findUniqueOrThrow({
+        where: { resultSnapshotId: restored.snapshot.snapshotId },
+      });
+    expect(
+      await prisma.campaignCheckpointExploration.count({
+        where: { checkpointId: restoreAudit.resultRuntimeCheckpointId },
+      }),
+    ).toBe(1);
+    const fresh = updateTerrainExploration(recovered, {
+      context: {
+        ...recovered.context,
+        runtimeRevision: restored.runtimeRevision,
+      },
+      surfaces: [],
+      absentSurfaceKeys: [],
+    });
+    expect(fresh.surfaces).toEqual(memory.surfaces);
+  }, 40000);
+
+  it("rejects missing checkpoint entries instead of silently restoring incomplete knowledge", async () => {
+    const f = await seedFixture(prisma);
+    const moved = await service.apply(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      await migrationRequest(service, f),
+    );
+    const audit = await prisma.campaignInstanceMigrationAudit.findUniqueOrThrow(
+      { where: { resultSnapshotId: moved.snapshot.snapshotId } },
+    );
+    await expect(
+      prisma.campaignInstanceRuntimeCheckpoint.update({
+        where: { id: audit.sourceRuntimeCheckpointId },
+        data: { explorationCount: 1 },
+      }),
+    ).rejects.toThrow();
+    // Inject a damaged legacy backup only in this disposable database; application writes cannot mutate checkpoints.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        "SET LOCAL session_replication_role = replica",
+      );
+      await tx.campaignInstanceRuntimeCheckpoint.update({
+        where: { id: audit.sourceRuntimeCheckpointId },
+        data: { explorationCount: 1 },
+      });
+    });
+    await expect(
+      service.previewRestore(f.campaignInstanceId, f.ownerUserId, {
+        sourceSnapshotId: moved.snapshot.snapshotId,
+        targetInstanceSnapshotId: f.sourceSnapshotId,
+        expectedRuntimeRevision: 2,
+        mappings: [],
+      } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      (
+        await prisma.campaignInstanceRuntime.findUniqueOrThrow({
+          where: { id: f.runtimeId },
+        })
+      ).revision,
+    ).toBe(2);
+  }, 40000);
+
+  it("identifies legacy unrecorded exploration without inventing a backfill", async () => {
+    const f = await seedFixture(prisma);
+    const moved = await service.apply(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      await migrationRequest(service, f),
+    );
+    const audit = await prisma.campaignInstanceMigrationAudit.findUniqueOrThrow(
+      { where: { resultSnapshotId: moved.snapshot.snapshotId } },
+    );
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        "SET LOCAL session_replication_role = replica",
+      );
+      await tx.campaignInstanceRuntimeCheckpoint.update({
+        where: { id: audit.sourceRuntimeCheckpointId },
+        data: { explorationCount: null, explorationHash: null },
+      });
+    });
+    const request = {
+      sourceSnapshotId: moved.snapshot.snapshotId,
+      targetInstanceSnapshotId: f.sourceSnapshotId,
+      expectedRuntimeRevision: 2,
+      mappings: [],
+    };
+    const preview = await service.previewRestore(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      request as never,
+    );
+    expect(preview.explorationRecovery?.status).toBe("not-recorded");
+    const restored = await service.applyRestore(
+      f.campaignInstanceId,
+      f.ownerUserId,
+      { ...request, planHash: preview.planHash } as never,
+    );
+    expect(
+      await prisma.campaignTerrainExploration.count({
+        where: { snapshotId: restored.snapshot.snapshotId },
+      }),
+    ).toBe(0);
+  }, 40000);
+
+  it("includes an observation committed while checkpoint capture is waiting for the runtime lock", async () => {
+    const f = await seedFixture(prisma),
+      request = await migrationRequest(service, f);
+    let release!: () => void, acquired!: () => void;
+    const hold = new Promise<void>((r) => (release = r)),
+      locked = new Promise<void>((r) => (acquired = r));
+    const memory = updateTerrainExploration(undefined, {
+      context: {
+        campaignInstanceId: f.campaignInstanceId,
+        snapshotId: f.sourceSnapshotId,
+        locationId: "courtyard",
+        observerId: "hero",
+        runtimeRevision: 1,
+      },
+      surfaces: [],
+      absentSurfaceKeys: [],
+    });
+    const writer = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "CampaignInstanceRuntime" WHERE "id"=${f.runtimeId} FOR UPDATE`;
+        await tx.campaignTerrainExploration.create({
+          data: {
+            campaignInstanceId: f.campaignInstanceId,
+            snapshotId: f.sourceSnapshotId,
+            locationId: "courtyard",
+            observerId: "hero",
+            runtimeRevision: 1,
+            payload: memory as unknown as Prisma.InputJsonValue,
+            contentHash: canonicalJsonHash(memory),
+          },
+        });
+        acquired();
+        await hold;
+      },
+      { timeout: 30000 },
+    );
+    await locked;
+    const attempt = service.apply(f.campaignInstanceId, f.ownerUserId, request);
+    try {
+      let waiting = false;
+      for (let n = 0; n < 100; n++) {
+        const rows = await prisma.$queryRaw<
+          { waiting: boolean }[]
+        >`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%LOCK TABLE%CampaignInstanceRuntime%EXCLUSIVE%') AS waiting`;
+        if (rows[0].waiting) {
+          waiting = true;
+          break;
+        }
+        await delay(25);
+      }
+      expect(waiting).toBe(true);
+    } finally {
+      release();
+      await writer;
+    }
+    const result = await attempt;
+    const audit = await prisma.campaignInstanceMigrationAudit.findUniqueOrThrow(
+      { where: { resultSnapshotId: result.snapshot.snapshotId } },
+    );
+    expect(
+      await prisma.campaignCheckpointExploration.count({
+        where: { checkpointId: audit.sourceRuntimeCheckpointId },
+      }),
+    ).toBe(1);
+  }, 40000);
 
   it("waits for an in-flight Session activation, then rejects migration without writes", async () => {
     const fixture = await seedFixture(prisma);

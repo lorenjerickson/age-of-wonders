@@ -59,6 +59,44 @@ export function campaignReturnSuffix(
   return `?${params.toString()}`;
 }
 
+/** Resolve pre-Model vocabulary values only when the World adopts their core key. */
+export function adoptedLegacyModelKey(
+  value: string,
+  vocabulary: "equipment-slot" | "item-family",
+  options: readonly { key: string }[],
+): string {
+  if (value.includes(":")) return value;
+  const key = `aow:${vocabulary}-${value}`;
+  return options.some((option) => option.key === key) ? key : value;
+}
+
+/** Project legacy scores into adopted Attributes; the upgrade retains the full source. */
+export function creatureAttributesForEditor(
+  payload: Record<string, unknown>,
+  options: readonly { key: string }[],
+): Record<string, number> {
+  const object = (value: unknown): Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  const components = object(payload.components);
+  if (components.attributes !== undefined)
+    return { ...object(components.attributes) } as Record<string, number>;
+  const legacy = object(payload.attributes);
+  const scores = { ...object(legacy.standard), ...legacy };
+  const result: Record<string, number> = {};
+  for (const [name, value] of Object.entries(scores)) {
+    const key = name.includes(":")
+      ? name
+      : `aow:attribute-${name === "will" ? "wisdom" : name}`;
+    const score = typeof value === "number" ? value : object(value).score;
+    if (options.some((option) => option.key === key) &&
+        typeof score === "number" && Number.isFinite(score))
+      result[key] = score;
+  }
+  return result;
+}
+
 export function projectEffectiveModels(
   response: EffectiveWorldModelResponse,
 ): EffectiveWorldModels {

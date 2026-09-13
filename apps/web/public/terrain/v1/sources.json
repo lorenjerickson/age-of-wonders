@@ -1,0 +1,567 @@
+[
+  {
+    "key": "grass",
+    "revision": 1,
+    "asset": "leafy_grass",
+    "source": "https://polyhaven.com/a/leafy_grass",
+    "license": "CC0-1.0",
+    "authors": [
+      "Charlotte Baglioni"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "grass-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_diff_1k.jpg",
+        "sha256": "cfa40bc9d9417d1852db8753a8d5917f110c40101179f63543c382e39bc05e4a",
+        "bytes": 1195394,
+        "delivery": {
+          "file": "grass-color-1k.webp",
+          "sha256": "eb206ff7fbcf53ad06383aa8ced521a2d7f32d294a6ed8d4cb6f5daaeb1f1de1",
+          "bytes": 436504,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "grass-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_diff_2k.jpg",
+        "sha256": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113",
+        "bytes": 4766204,
+        "delivery": {
+          "file": "grass-color-2k.webp",
+          "sha256": "bb636dd505e9045f527528dabbb6e735744fc9b2ccbed6068f77a22e4e393916",
+          "bytes": 1769016,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "grass-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_nor_gl_1k.jpg",
+        "sha256": "832328216adc0a7e1f70a31d5ee48c9ab7f2152d83816122736cf42ac4b2ebd6",
+        "bytes": 1466049,
+        "delivery": {
+          "file": "grass-normal-1k.webp",
+          "sha256": "8325e4e3aa04de187714c92621bd4ad5e350cfb98d0e42bc14868033dd9028ae",
+          "bytes": 729328,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "grass-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_nor_gl_2k.jpg",
+        "sha256": "df0cf0ce96e653f033e5b934d5b12995464bda027aa53bd12e329be889aa9f45",
+        "bytes": 6047262,
+        "delivery": {
+          "file": "grass-normal-2k.webp",
+          "sha256": "f821802bd6f1fea919997082af8c8f1763aad9db9f4c218a40b861b6a2a51f4c",
+          "bytes": 3016764,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "grass-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_rough_1k.jpg",
+        "sha256": "0c2a1d91aacb8e54a496051b59854e51e456fe858abeade778e308359ef16463",
+        "bytes": 511385,
+        "delivery": {
+          "file": "grass-roughness-1k.webp",
+          "sha256": "9b583a2b5b7abc6d0fd20780be58cea5a6e2c621766113abec4c0739a4a41cd3",
+          "bytes": 92542,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "grass-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_rough_2k.jpg",
+        "sha256": "34e1733bf4064b6950a575ff57e78c8b7ff71b63749eb48a49221bd65de6fb4f",
+        "bytes": 2274652,
+        "delivery": {
+          "file": "grass-roughness-2k.webp",
+          "sha256": "7dfb19396b22b7b96e8363b46d54a5da7ac71df2d0687b8c423cdb0a5ff179ae",
+          "bytes": 561772,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  },
+  {
+    "key": "dirt",
+    "revision": 1,
+    "asset": "dirt",
+    "source": "https://polyhaven.com/a/dirt",
+    "license": "CC0-1.0",
+    "authors": [
+      "Charlotte Baglioni"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "dirt-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dirt/dirt_diff_1k.jpg",
+        "sha256": "6ce6ca7e28ed046f7f93fa60dcb29f8cf42cd5a539adc5676675acccfa34efd3",
+        "bytes": 730425,
+        "delivery": {
+          "file": "dirt-color-1k.webp",
+          "sha256": "1a592cc2a590500e2b103a9f120eb75d5abeef868dada1f249145f505df3b6a0",
+          "bytes": 185428,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "dirt-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirt/dirt_diff_2k.jpg",
+        "sha256": "126d3e4886cc94b494ba609ddc323a77ff0362a1b156c3750d5d2a0a0ead02b8",
+        "bytes": 3053062,
+        "delivery": {
+          "file": "dirt-color-2k.webp",
+          "sha256": "9baefa4d6c463f728850a67d5dda9553a0cb0f08fcdaaa6007e16c59b76aa9cc",
+          "bytes": 831536,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "dirt-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dirt/dirt_nor_gl_1k.jpg",
+        "sha256": "5a5f97d920fdcdf352b350b95558bf48bb306be1fe61a47418aadc60b7deb0ce",
+        "bytes": 1202783,
+        "delivery": {
+          "file": "dirt-normal-1k.webp",
+          "sha256": "b7bdb3698393300ce7997c6cb0dc4e811632ae22c1175bec644db51d87aaa5b3",
+          "bytes": 616742,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "dirt-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirt/dirt_nor_gl_2k.jpg",
+        "sha256": "ff629fce04c5d6d581cfcb604ea85df6b726798e60d982fd5484c60cddcccd88",
+        "bytes": 4914156,
+        "delivery": {
+          "file": "dirt-normal-2k.webp",
+          "sha256": "33b902f290687374576ac3610e7ba61d396b039e85212e1f2eaf2aa3ab4d9aaa",
+          "bytes": 2359922,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "dirt-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dirt/dirt_rough_1k.jpg",
+        "sha256": "eff62d5ae7bf0c46b84173bc46f07528dd164aa39f5d550c93a805b36f54b704",
+        "bytes": 253549,
+        "delivery": {
+          "file": "dirt-roughness-1k.webp",
+          "sha256": "9b72ac4234eee947eddcfd5d1e9af283ea680ebcfa18f65fe151d8282ac136fa",
+          "bytes": 18274,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "dirt-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirt/dirt_rough_2k.jpg",
+        "sha256": "a17048230e1a86fc874b381360f6a821df1f6b0174ca7f85a59596c4290080fa",
+        "bytes": 964887,
+        "delivery": {
+          "file": "dirt-roughness-2k.webp",
+          "sha256": "3790dbf7959857a88cd0cf1c7b0cf38821efca434377d83ff9e8c7b4bcf7f86f",
+          "bytes": 56558,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  },
+  {
+    "key": "sand",
+    "revision": 1,
+    "asset": "coast_sand_01",
+    "source": "https://polyhaven.com/a/coast_sand_01",
+    "license": "CC0-1.0",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      15000,
+      15000
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "sand-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_diff_1k.jpg",
+        "sha256": "58af2e40100f7f405703a86d593af64379f822c4786850def23ecfc921450d54",
+        "bytes": 960614,
+        "delivery": {
+          "file": "sand-color-1k.webp",
+          "sha256": "935947259f9dadf7b7488add633edc2ba0df7abc6a1ecf6fe60414603c7d04c7",
+          "bytes": 349988,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "sand-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_diff_2k.jpg",
+        "sha256": "e1c37ea8b4282fda612b0584d864ca4eef2da28c2fa9f3930cad9209414eb979",
+        "bytes": 3552676,
+        "delivery": {
+          "file": "sand-color-2k.webp",
+          "sha256": "88f22b7e673acfe2a3245a1cda74200cf68c6e7c7b6a29b22ed5cdde7954e82d",
+          "bytes": 1226612,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "sand-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_nor_gl_1k.jpg",
+        "sha256": "fe4d045aec99e71e80f682fcf0ad958d2dff1fe614b73178b304d1bac047b54a",
+        "bytes": 1146826,
+        "delivery": {
+          "file": "sand-normal-1k.webp",
+          "sha256": "3aa5cb4b6bb4329610b7ad854f2b7e7793a897b6ae50fe958a5b01476c7de142",
+          "bytes": 581046,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "sand-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_nor_gl_2k.jpg",
+        "sha256": "e5b1430c751727c8ab0332adfd8960c48342936146de258aa9b7736630cdbb62",
+        "bytes": 4630126,
+        "delivery": {
+          "file": "sand-normal-2k.webp",
+          "sha256": "687dc247b0a7d13c642138a25c78405a57d00d0e9fc5ca79de9d8d69dcd86a39",
+          "bytes": 2216710,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "sand-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_rough_1k.jpg",
+        "sha256": "cbc3e0bf2214e04318a643c9dc81f50f33cc5f7b935a20016c5d9efd9a6d1696",
+        "bytes": 383892,
+        "delivery": {
+          "file": "sand-roughness-1k.webp",
+          "sha256": "a57fb114ff72d77e875951f20f793573462e65496e6023238df46575d459bec8",
+          "bytes": 28442,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "sand-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_rough_2k.jpg",
+        "sha256": "93caeb7332d1593702d97a59040ce178a27c9d705b30c55413e0d2507e09a762",
+        "bytes": 1389332,
+        "delivery": {
+          "file": "sand-roughness-2k.webp",
+          "sha256": "733ab4090aa675e42b9de4fe3e65665e46879f6bc5f3d568d5bfbd1a909668fb",
+          "bytes": 137262,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  },
+  {
+    "key": "rock",
+    "revision": 1,
+    "asset": "dark_rock",
+    "source": "https://polyhaven.com/a/dark_rock",
+    "license": "CC0-1.0",
+    "authors": [
+      "Amal Kumar"
+    ],
+    "dimensionsMm": [
+      2421.1976528167725,
+      2421.199083328247
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "rock-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dark_rock/dark_rock_diff_1k.jpg",
+        "sha256": "7e1148b1749b2200de463b943d4c8994bb24467c96418aa3c283bf65c30e7300",
+        "bytes": 533128,
+        "delivery": {
+          "file": "rock-color-1k.webp",
+          "sha256": "cb1eb252e776523d3f6a4722c0390d2a9a056ec9a151ab442c8e9073b7a50508",
+          "bytes": 73640,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "rock-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock/dark_rock_diff_2k.jpg",
+        "sha256": "0f01bfec36ec4546e23576a10c52ef073f9eb815826c5fce2a1cdb08cd8188b8",
+        "bytes": 2159653,
+        "delivery": {
+          "file": "rock-color-2k.webp",
+          "sha256": "8c4d7d8e04dd8c46248f0a01f5626e05b06880e136331b22e37b820d714e2062",
+          "bytes": 293436,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "rock-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dark_rock/dark_rock_nor_gl_1k.jpg",
+        "sha256": "0693d68d1a01b07389c7db22f56f9519ef572135bc2c1e59afbcdb6f52130fcc",
+        "bytes": 1006770,
+        "delivery": {
+          "file": "rock-normal-1k.webp",
+          "sha256": "84256f9b914f05e2cdf83d0bfe72f607db57ef907a13aa86bc8d7f4bd790e997",
+          "bytes": 465392,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "rock-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock/dark_rock_nor_gl_2k.jpg",
+        "sha256": "abb3c5f1f932693537333a6d467c3e79bb810afa84416d0deaa10ead9fb4f628",
+        "bytes": 3811444,
+        "delivery": {
+          "file": "rock-normal-2k.webp",
+          "sha256": "d250705f78beb7e0bd9608d40bfe95e2a8bee5950ce9ce26a278d501f9b51437",
+          "bytes": 1705664,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "rock-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dark_rock/dark_rock_rough_1k.jpg",
+        "sha256": "7a029c1eaba573aff8f977803ee9c78df201dfb80ab51741fb7359f18ae1f94b",
+        "bytes": 585646,
+        "delivery": {
+          "file": "rock-roughness-1k.webp",
+          "sha256": "0999a621eebac96281cb9cb515da144f549ae74928cb5b71bf2b3dca86cf98ed",
+          "bytes": 150148,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "rock-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock/dark_rock_rough_2k.jpg",
+        "sha256": "de4dc9e276ea769f0eb58faae8c3bc04b512ad62ca49301a0287efe35d26b058",
+        "bytes": 2312590,
+        "delivery": {
+          "file": "rock-roughness-2k.webp",
+          "sha256": "ed5fa135041ce93ecba7d12827dc438904abf501ee49edf36696dbf7e0cb64e6",
+          "bytes": 565946,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  },
+  {
+    "key": "wood",
+    "revision": 1,
+    "asset": "medieval_wood",
+    "source": "https://polyhaven.com/a/medieval_wood",
+    "license": "CC0-1.0",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "wood-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/medieval_wood/medieval_wood_diff_1k.jpg",
+        "sha256": "66a36635dc3f2db696dbb6939b1d4f86c0b666c898c1b55c6b5d6d9f1896b43e",
+        "bytes": 747216,
+        "delivery": {
+          "file": "wood-color-1k.webp",
+          "sha256": "7ca0a23dc4f57fbab6fc98fb2d221fad931c87166161b7799fd159d3f9085491",
+          "bytes": 418634,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "wood-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/medieval_wood/medieval_wood_diff_2k.jpg",
+        "sha256": "90f32ac00dcd02df8fcad16ea80801a1c0014842eb077b5fe1b9496a1ae55413",
+        "bytes": 3034644,
+        "delivery": {
+          "file": "wood-color-2k.webp",
+          "sha256": "0dcf5bc46f79d4ffaeb063d6fdaccbe15bc50f4e7a163e02ae38677a7c5630b5",
+          "bytes": 1660878,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "wood-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/medieval_wood/medieval_wood_nor_gl_1k.jpg",
+        "sha256": "90b0ce551282d55830497397edad9b0c3ea690728483de45b7df13eb0850df01",
+        "bytes": 827061,
+        "delivery": {
+          "file": "wood-normal-1k.webp",
+          "sha256": "92f6b720ed8e7bd807e5a17b2b4b1ad7d75b102cd885cdb72e60ecaa1f38075f",
+          "bytes": 427042,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "wood-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/medieval_wood/medieval_wood_nor_gl_2k.jpg",
+        "sha256": "499b784619a59b140155120a51e3b9ac24a88d8cc15fa186706b521f39f61a56",
+        "bytes": 2928634,
+        "delivery": {
+          "file": "wood-normal-2k.webp",
+          "sha256": "42037925fe813ee2522f8c62c2214bee628e6289e1fc4098405e442b79f76edd",
+          "bytes": 1608726,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "wood-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/medieval_wood/medieval_wood_rough_1k.jpg",
+        "sha256": "e2fd3ab5e76a418bffceb88ce3837939e1039f94c432a3913c539b0d440ee7a5",
+        "bytes": 321025,
+        "delivery": {
+          "file": "wood-roughness-1k.webp",
+          "sha256": "4e1ce6a5f7a15ecee2c0288549855de35fe9f59b341bee30b65cddfd3bbd0f3f",
+          "bytes": 148526,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "wood-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/medieval_wood/medieval_wood_rough_2k.jpg",
+        "sha256": "1354a7af595ce39464523fa3fe3d99222ebcbb29a9bcfd5e091d72190f2e3da0",
+        "bytes": 1358722,
+        "delivery": {
+          "file": "wood-roughness-2k.webp",
+          "sha256": "49ab80aa54fcd4cfef8048795397d21ec14e454cb0560088f1957b1fe91a0a5a",
+          "bytes": 646348,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  },
+  {
+    "key": "stone",
+    "revision": 1,
+    "asset": "stone_wall",
+    "source": "https://polyhaven.com/a/stone_wall",
+    "license": "CC0-1.0",
+    "authors": [
+      "Dario Barresi",
+      "Charlotte Baglioni"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "maps": {
+      "color-1k": {
+        "file": "stone-color-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_wall/stone_wall_diff_1k.jpg",
+        "sha256": "390969aead48d9a10ac731a5e0af8761cc4ed89faa02ba775b913930b4398d87",
+        "bytes": 836975,
+        "delivery": {
+          "file": "stone-color-1k.webp",
+          "sha256": "1ce58b67b8986cb0a23c5950a0f20a3698bbf78a2a74cbe7e0c59d30a01b53cc",
+          "bytes": 259956,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "color-2k": {
+        "file": "stone-color-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_diff_2k.jpg",
+        "sha256": "131494c5be0531bb230d4e47c21750d94d44555a66396d2b21da962ef635c0c2",
+        "bytes": 3180415,
+        "delivery": {
+          "file": "stone-color-2k.webp",
+          "sha256": "b87577340b0e49414b67125cfdd3b30ab621723b601bd47d1f81510136597366",
+          "bytes": 956718,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "normal-1k": {
+        "file": "stone-normal-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_wall/stone_wall_nor_gl_1k.jpg",
+        "sha256": "801d7ff8bc472e5ad95872546c19a4c63cc776060b4ced629fece2d08591964e",
+        "bytes": 1172420,
+        "delivery": {
+          "file": "stone-normal-1k.webp",
+          "sha256": "7d81cfd806c253d85f659cfef1d733a588a560568be79d01855b66aca326f39d",
+          "bytes": 534986,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "normal-2k": {
+        "file": "stone-normal-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_nor_gl_2k.jpg",
+        "sha256": "fd6f6c1a27c741fb2a2c680c76a32ba5812e4ca03c94132d163212efaeed9b60",
+        "bytes": 4198819,
+        "delivery": {
+          "file": "stone-normal-2k.webp",
+          "sha256": "a16b23dd76c57310cafdd3c297b7df6f70da1fd252cc1e61f1ff6735e4b50363",
+          "bytes": 1839366,
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "roughness-1k": {
+        "file": "stone-roughness-1k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_wall/stone_wall_rough_1k.jpg",
+        "sha256": "8c06e7c67d0d9701966732cc90c4e356b5bd5656aa35bf82650576e78322cbdd",
+        "bytes": 301003,
+        "delivery": {
+          "file": "stone-roughness-1k.webp",
+          "sha256": "f54d4e4f219224b0bb11bae01bbbe6caa6735c44142d7052681693f03556905b",
+          "bytes": 19750,
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "roughness-2k": {
+        "file": "stone-roughness-2k.jpg",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_rough_2k.jpg",
+        "sha256": "0e4512383fcdef01c0e4f85b7caaea09ec277aeb056f0723be88ef07785dd034",
+        "bytes": 1222030,
+        "delivery": {
+          "file": "stone-roughness-2k.webp",
+          "sha256": "3f64ed29ddbcc0663e63d61831c9c4a01019471bde4da0799dba109c6ad2c566",
+          "bytes": 69752,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    }
+  }
+]

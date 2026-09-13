@@ -1,3 +1,6 @@
+import { locationMapIssue } from "@aow/common";
+import type { UploadTerrainChunkDto, SaveLocationTerrainDto } from "./dto/location-terrain.dto";
+import { TERRAIN_CHUNK_RESOURCE, validateUploadedTerrainChunk, captureTerrainRecords, resolveTerrainManifest } from "./terrain-snapshot";
 import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   BadRequestException,
@@ -34,6 +37,7 @@ import type {
 import { validateWorldDefinitionDraft } from "./world-definition-draft-validator";
 import {
   canonicalWorldRecordIssue,
+  preservedCreatureImages,
   worldCreaturePayload,
   worldItemPayload,
   worldLocationPayload,
@@ -103,6 +107,270 @@ export class WorldDefinitionAuthoringService {
     const row = await this.ownedDraft(worldDefinitionId, userId);
     if (row.status !== "ACTIVE") throw archivedConflict();
     return draftResponse(row.draft);
+  }
+
+  async uploadTerrainChunk(
+    worldId: string,
+    locationId: string,
+    dto: UploadTerrainChunkDto,
+    userId: string,
+  ) {
+    const owned = await this.prisma.worldDefinition.findUnique({
+      where: { id: worldId, ownerUserId: userId },
+      select: {
+        status: true,
+        draft: { select: { id: true, storageRevision: true, content: true } },
+      },
+    });
+    if (!owned?.draft) throw notFound();
+    this.assertTerrainDraft({ ...owned, draft: owned.draft }, dto);
+    const locationIds = objectValue(owned.draft.content).locationIds;
+    if (!Array.isArray(locationIds) || !locationIds.includes(locationId))
+      throw worldRecordNotFound();
+    const chunk = validateUploadedTerrainChunk(dto.chunk);
+    const contentHash = canonicalJsonHash(chunk);
+    // Abandoned uploads are disposable; committed data is already in snapshotRecords.
+    await this.prisma.worldTerrainUpload.deleteMany({
+      where: {
+        draftId: owned.draft.id,
+        createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+    });
+    const prior = await this.prisma.worldTerrainUpload.findUnique({
+      where: { draftId_contentHash: { draftId: owned.draft.id, contentHash } },
+    });
+    if (!prior) {
+      const count = await this.prisma.worldTerrainUpload.count({
+        where: { draftId: owned.draft.id },
+      });
+      if (count >= 4096)
+        throw new BadRequestException(
+          "The draft has too many pending terrain uploads. Save the current map before uploading more.",
+        );
+      await this.prisma.worldTerrainUpload.upsert({
+        where: {
+          draftId_contentHash: { draftId: owned.draft.id, contentHash },
+        },
+        create: {
+          draftId: owned.draft.id,
+          contentHash,
+          payload: jsonObject(chunk),
+        },
+        update: {},
+      });
+    }
+    return { contentHash, address: chunk.address };
+  }
+
+  async getLocationTerrain(
+    worldId: string,
+    locationId: string,
+    userId: string,
+  ) {
+    const owned = await this.ownedDraft(worldId, userId);
+    const records = readRecords(owned.draft.snapshotRecords);
+    const location = records.find(
+      (r) => r.resourceType === "locations" && r.sourceId === locationId,
+    );
+    const map = objectValue(objectValue(location?.payload).map);
+    if (map.kind !== "isometric")
+      throw new NotFoundException("This Location has no terrain map.");
+    return resolveTerrainManifest(
+      map as unknown as import("@aow/common").IsometricTerrainManifest,
+      records,
+    );
+  }
+
+  async getTerrainChunk(
+    worldId: string,
+    locationId: string,
+    contentHash: string,
+    userId: string,
+  ) {
+    const owned = await this.ownedDraft(worldId, userId);
+    const records = readRecords(owned.draft.snapshotRecords);
+    const location = records.find(
+      (r) => r.resourceType === "locations" && r.sourceId === locationId,
+    );
+    const map = objectValue(objectValue(location?.payload).map);
+    if (
+      map.kind !== "isometric" ||
+      !Array.isArray(map.chunks) ||
+      !map.chunks.some((r) => isObject(r) && r.contentHash === contentHash)
+    )
+      throw new NotFoundException(
+        "The terrain chunk is unavailable for this Location.",
+      );
+    const record = records.find(
+      (r) =>
+        r.resourceType === TERRAIN_CHUNK_RESOURCE && r.sourceId === contentHash,
+    );
+    if (!record || canonicalJsonHash(record.payload) !== contentHash)
+      throw new NotFoundException(
+        "The terrain chunk is unavailable for this Location.",
+      );
+    return record.payload;
+  }
+
+  async saveLocationTerrain(
+    worldId: string,
+    locationId: string,
+    dto: SaveLocationTerrainDto,
+    userId: string,
+  ) {
+    const owned = await this.ownedDraft(worldId, userId);
+    if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (owned.draft.id !== dto.expectedDraftId) throw staleDraft();
+    const issue = locationMapIssue(dto.map);
+    if (issue) throw new BadRequestException(issue);
+    const requestHash = canonicalJsonHash({
+      locationId,
+      expectedStorageRevision: dto.expectedStorageRevision,
+      map: dto.map,
+    });
+    const receiptKey = {
+      draftId: owned.draft.id,
+      operationId: dto.operationId,
+    };
+    const receipt = await this.prisma.worldTerrainSave.findUnique({
+      where: { draftId_operationId: receiptKey },
+    });
+    if (receipt) {
+      if (receipt.requestHash !== requestHash)
+        throw new ConflictException(
+          "This terrain save was already used for different changes.",
+        );
+      return draftResponse(owned.draft);
+    }
+    this.assertTerrainDraft(owned, dto);
+    const records = readRecords(owned.draft.snapshotRecords);
+    const location = records.find(
+      (r) => r.resourceType === "locations" && r.sourceId === locationId,
+    );
+    if (!location || !isObject(location.payload)) throw worldRecordNotFound();
+    const missing =
+      dto.map.kind === "isometric"
+        ? dto.map.chunks
+            .map((r) => r.contentHash)
+            .filter(
+              (hash) =>
+                !records.some(
+                  (r) =>
+                    r.resourceType === TERRAIN_CHUNK_RESOURCE &&
+                    r.sourceId === hash,
+                ),
+            )
+        : [];
+    const uploads = missing.length
+      ? await this.prisma.worldTerrainUpload.findMany({
+          where: {
+            draftId: owned.draft.id,
+            contentHash: { in: missing },
+          },
+        })
+      : [];
+    const identity = objectValue(location.payload.identity);
+    const version = objectValue(identity.version);
+    const payload = {
+      ...location.payload,
+      map: dto.map,
+      mapScene: {
+        ...objectValue(location.payload.mapScene),
+        orientation:
+          dto.map.kind === "isometric"
+            ? "isometric"
+            : (objectValue(location.payload.image).orientation ?? "scenic"),
+      },
+      identity: {
+        ...identity,
+        version: {
+          ...version,
+          revision: Number(version.revision) + 1,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    };
+    const locationIssue = canonicalWorldRecordIssue(
+      "locations",
+      locationId,
+      payload,
+    );
+    if (locationIssue) throw new BadRequestException(locationIssue);
+    const nextRecords = normalizeRecords(
+      captureTerrainRecords([
+        ...records.filter(
+          (r) => !(r.resourceType === "locations" && r.sourceId === locationId),
+        ),
+        { ...location, payload },
+        ...uploads.map((upload) => ({
+          resourceType: TERRAIN_CHUNK_RESOURCE,
+          sourceId: upload.contentHash,
+          payload: upload.payload,
+        })),
+      ]),
+    );
+    assertBoundedDraftJson(owned.draft.content, nextRecords);
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          const updated = await tx.worldDefinitionDraft.updateMany({
+            where: {
+              id: owned.draft.id,
+              storageRevision: dto.expectedStorageRevision,
+              worldDefinition: { ownerUserId: userId, status: "ACTIVE" },
+            },
+            data: {
+              snapshotRecords: jsonArray(nextRecords),
+              storageRevision: { increment: 1 },
+              validationStatus: "NOT_VALIDATED",
+              validatedStorageRevision: null,
+              validationReport: Prisma.DbNull,
+              updatedByUserId: userId,
+              updatedAt: new Date(),
+            },
+          });
+          if (updated.count !== 1) throw staleDraft();
+          await tx.worldTerrainSave.create({
+            data: {
+              ...receiptKey,
+              requestHash,
+              storageRevision: dto.expectedStorageRevision + 1,
+            },
+          });
+          await tx.worldTerrainUpload.deleteMany({
+            where: {
+              draftId: owned.draft.id,
+              contentHash: { in: uploads.map((u) => u.contentHash) },
+            },
+          });
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+        },
+      );
+    } catch (error) {
+      // A concurrent retry may have committed the same operation. Never apply it a second time.
+      const completed = await this.prisma.worldTerrainSave.findUnique({
+        where: { draftId_operationId: receiptKey },
+      });
+      if (completed?.requestHash === requestHash)
+        return this.getDraft(worldId, userId);
+      this.rethrow(error);
+    }
+    return this.getDraft(worldId, userId);
+  }
+
+  private assertTerrainDraft(
+    owned: { status: string; draft: { id: string; storageRevision: number } },
+    dto: { expectedDraftId: string; expectedStorageRevision: number },
+  ) {
+    if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (
+      owned.draft.id !== dto.expectedDraftId ||
+      owned.draft.storageRevision !== dto.expectedStorageRevision
+    )
+      throw staleDraft();
   }
 
   createLocation(
@@ -193,19 +461,29 @@ export class WorldDefinitionAuthoringService {
       "creature",
     );
     const prior = isObject(legacy.payload) ? legacy.payload : {};
-    const payload = worldCreaturePayload(id, dto, authoredModel.conformance, {
-      ...prior,
-      extensions: {
-        ...objectValue(prior.extensions),
-        "aow:legacy-creature": {
-          resourceType: legacy.resourceType,
-          ...(legacy.sourceRevision === undefined
-            ? {}
-            : { sourceRevision: legacy.sourceRevision }),
-          payload: legacy.payload,
+    const payload = worldCreaturePayload(
+      id,
+      await this.verifiedWorldCreatureInput(
+        worldDefinitionId,
+        userId,
+        dto,
+        prior,
+      ),
+      authoredModel.conformance,
+      {
+        ...prior,
+        extensions: {
+          ...objectValue(prior.extensions),
+          "aow:legacy-creature": {
+            resourceType: legacy.resourceType,
+            ...(legacy.sourceRevision === undefined
+              ? {}
+              : { sourceRevision: legacy.sourceRevision }),
+            payload: legacy.payload,
+          },
         },
       },
-    });
+    );
     const issue = canonicalWorldRecordIssue("definitions", id, payload);
     if (issue) throw new BadRequestException(issue);
     assertGovernedRecordConformance(
@@ -383,7 +661,12 @@ export class WorldDefinitionAuthoringService {
       if (kind === "creature") {
         payload = worldCreaturePayload(
           id,
-          dto as UpsertWorldCreatureDraftDto,
+          await this.verifiedWorldCreatureInput(
+            worldDefinitionId,
+            userId,
+            dto as UpsertWorldCreatureDraftDto,
+            existing?.payload,
+          ),
           authoredModel.conformance,
           existing?.payload,
         );
@@ -492,6 +775,50 @@ export class WorldDefinitionAuthoringService {
         conceptId: concept.lineage.id as never,
       },
     };
+  }
+
+  private async verifiedWorldCreatureInput(
+    worldId: string,
+    userId: string,
+    dto: UpsertWorldCreatureDraftDto,
+    previous: unknown,
+  ): Promise<UpsertWorldCreatureDraftDto> {
+    if (!dto.images) return dto;
+    const priorImages = preservedCreatureImages(previous);
+    const images: Record<string, unknown> = {};
+    for (const [role, value] of Object.entries(dto.images)) {
+      if (
+        !["portrait", "overheadToken", "paperDollToken"].includes(role) ||
+        !isObject(value)
+      )
+        throw new BadRequestException("Choose a valid Creature artwork view.");
+      const priorImage = objectValue(priorImages[role]);
+      if (
+        value.assetId === priorImage.assetId &&
+        typeof value.assetId === "string"
+      ) {
+        images[role] = priorImage;
+        continue;
+      }
+      const asset =
+        typeof value.assetId === "string"
+          ? await this.prisma.mediaAsset.findFirst({
+              where: {
+                id: value.assetId,
+                createdByUserId: userId,
+                scopeType: "world-definition",
+                scopeId: worldId,
+              },
+              select: { id: true, mimeType: true },
+            })
+          : null;
+      if (!asset || !asset.mimeType.startsWith("image/"))
+        throw new BadRequestException(
+          "Choose an image belonging to this World.",
+        );
+      images[role] = { ...value, mimeType: asset.mimeType };
+    }
+    return { ...dto, images };
   }
 
   private async verifiedWorldItemInput(
@@ -657,10 +984,29 @@ export class WorldDefinitionAuthoringService {
     if (owned.status !== "ACTIVE") throw archivedConflict();
     if (owned.draft.storageRevision !== dto.expectedStorageRevision)
       throw staleDraft();
-    const records = normalizeRecords(dto.records);
+    if (
+      dto.records.some((r) => r.resourceType.trim() === TERRAIN_CHUNK_RESOURCE)
+    )
+      throw new BadRequestException(
+        "Terrain chunks must be saved through the Location map editor.",
+      );
+    const records = normalizeRecords([
+      ...dto.records,
+      ...readRecords(owned.draft.snapshotRecords).filter(
+        (r) => r.resourceType === TERRAIN_CHUNK_RESOURCE,
+      ),
+    ]);
     for (const record of records) {
-      if (record.resourceType !== "definitions" || !isObject(record.payload) || !["profession", "skill"].includes(String(record.payload.kind))) continue;
-      const issue = record.payload.kind === "skill" ? skillModifierGrantIssue(record.payload.components) : professionModifierGrantIssue(record.payload.components);
+      if (
+        record.resourceType !== "definitions" ||
+        !isObject(record.payload) ||
+        !["profession", "skill"].includes(String(record.payload.kind))
+      )
+        continue;
+      const issue =
+        record.payload.kind === "skill"
+          ? skillModifierGrantIssue(record.payload.components)
+          : professionModifierGrantIssue(record.payload.components);
       if (issue) throw new BadRequestException(issue);
     }
     assertBoundedDraftJson(dto.content, records);
@@ -1007,6 +1353,7 @@ export class WorldDefinitionAuthoringService {
           );
           const mapping: ResourceIdentityMapping = {};
           for (const record of sourceRecords) {
+            if (record.resourceType === TERRAIN_CHUNK_RESOURCE) continue;
             (mapping[record.resourceType] ??= {})[record.sourceId] =
               randomUUID();
           }
@@ -1018,11 +1365,14 @@ export class WorldDefinitionAuthoringService {
             ...(record.sourceRevision === undefined
               ? {}
               : { sourceRevision: record.sourceRevision }),
-            payload: rewriteReferences(
-              record.payload,
-              mapping,
-              record.resourceType,
-            ),
+            payload:
+              record.resourceType === TERRAIN_CHUNK_RESOURCE
+                ? record.payload
+                : rewriteReferences(
+                    record.payload,
+                    mapping,
+                    record.resourceType,
+                  ),
           }));
           const world = await tx.worldDefinition.create({
             data: {
@@ -1231,7 +1581,7 @@ function draftResponse(
     baseSnapshotId: row.baseSnapshotId ?? undefined,
     revisionName: row.revisionName,
     content: row.content,
-    records: readRecords(row.snapshotRecords),
+    records: readRecords(row.snapshotRecords).filter((r) => r.resourceType !== TERRAIN_CHUNK_RESOURCE),
     storageRevision: row.storageRevision,
     validationStatus: row.validationStatus.toLowerCase().replaceAll("_", "-"),
     validatedStorageRevision: row.validatedStorageRevision ?? undefined,

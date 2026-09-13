@@ -1,3 +1,4 @@
+import { capturedActorPositionIssue } from "./actor-position";
 import {
   BadRequestException,
   ConflictException,
@@ -22,6 +23,7 @@ import { isCanonicalSnapshotManifest } from "../domain/snapshot-manifest";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
   ConfigureCampaignInstanceAgentDto,
+  PlaceCampaignInstanceActorDto,
   DecideCampaignInstancePlacementDto,
   UpdateCampaignInstanceAgentStatusDto,
   UpdateCampaignInstanceLifecycleDto,
@@ -568,6 +570,74 @@ export class CampaignInstanceManagementService {
     };
   }
 
+  async placeActor(
+    id: string,
+    ownerUserId: string,
+    actorId: string,
+    dto: PlaceCampaignInstanceActorDto,
+  ) {
+    const instance = await this.ownedEditable(id, ownerUserId);
+    const state = requireRuntime(instance);
+    if (instance.runtime!.revision !== dto.expectedRuntimeRevision)
+      throw new ConflictException(
+        "Instance runtime changed; reload and retry.",
+      );
+    const actors = arrayValue(state.creatureEmbodiments).map(objectValue);
+    const actor = actors.find((a) => a.runtimeCreatureId === actorId);
+    if (!actor)
+      throw new NotFoundException(
+        "The actor was not found in this Campaign Instance.",
+      );
+    const creature = objectValue(actor.creature);
+    if (dto.position !== null) {
+      const issue = capturedActorPositionIssue(
+        instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
+        dto.locationId,
+        dto.position,
+      );
+      if (issue) throw new BadRequestException(issue);
+    }
+    const nextCreature = { ...creature };
+    if (dto.position === null) delete nextCreature.terrainPosition;
+    else {
+      nextCreature.currentLocationId = dto.locationId;
+      nextCreature.terrainPosition = cleanJsonValue(dto.position, 500);
+    }
+    const identity = objectValue(creature.identity);
+    const version = objectValue(identity.version);
+    if (
+      typeof version.revision !== "number" ||
+      !Number.isSafeInteger(version.revision) ||
+      version.revision < 1
+    )
+      throw new ConflictException(
+        "The actor revision is unavailable; repair its runtime state before placement.",
+      );
+    nextCreature.identity = {
+      ...identity,
+      version: {
+        revision: version.revision + 1,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    const nextState = {
+      ...state,
+      creatureEmbodiments: actors.map((a) =>
+        a === actor ? { ...a, creature: nextCreature } : a,
+      ),
+    };
+    await this.writeRuntime(
+      instance,
+      ownerUserId,
+      dto.expectedRuntimeRevision,
+      nextState,
+      "instance.actor.placed",
+      typeof creature.name === "string" ? creature.name : "Actor",
+      "Actor",
+    );
+    return this.embodiments(id, ownerUserId);
+  }
+
   async embodiments(id: string, ownerUserId: string) {
     const instance = await this.owned(id, ownerUserId);
     const state = requireRuntime(instance);
@@ -575,6 +645,17 @@ export class CampaignInstanceManagementService {
       campaignInstanceId: id,
       campaignInstanceName: instance.name,
       runtimeRevision: instance.runtime!.revision,
+      terrainLocations: snapshotRecords(
+        instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
+        "locations",
+      )
+        .filter(
+          (r) => objectValue(objectValue(r.payload).map).kind === "isometric",
+        )
+        .map((r) => ({
+          id: r.sourceId,
+          name: humanName(r.payload, "Captured Location"),
+        })),
       items: arrayValue(state.creatureEmbodiments).map((value) => {
         const embodiment = objectValue(value);
         const creature = objectValue(embodiment.creature);
@@ -593,6 +674,11 @@ export class CampaignInstanceManagementService {
             typeof creature.name === "string" && creature.name.trim()
               ? creature.name.trim()
               : "Captured creature",
+          currentLocationId: creature.currentLocationId,
+          currentLocationName: capturedLocationNames(instance).get(
+            String(creature.currentLocationId),
+          ),
+          terrainPosition: creature.terrainPosition,
           policyLabel: "Independent Instance embodiment",
           policyDefaulted: false,
         };
@@ -1496,6 +1582,19 @@ export function validateRuntimeForCapturedPair(
     !isCanonicalSnapshotManifest(worldManifest)
   ) {
     return [{ detail: "The captured Campaign and World pair is unavailable." }];
+  }
+  const terrainCache = new Map();
+  for (const value of arrayValue(state.creatureEmbodiments)) {
+    const creature = objectValue(objectValue(value).creature);
+    if (creature.terrainPosition !== undefined) {
+      const issue = capturedActorPositionIssue(
+        worldManifest,
+        creature.currentLocationId,
+        creature.terrainPosition,
+        terrainCache,
+      );
+      if (issue) return [{ detail: issue }];
+    }
   }
   const capturedPlotObjectiveIds = new Map(
     campaignManifest.records

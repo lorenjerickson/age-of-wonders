@@ -17,6 +17,9 @@ interface RespondInput {
 
 const DEFAULT_PROVIDER_DEADLINE_MS = 60_000;
 const MAX_PROVIDER_DEADLINE_MS = 120_000;
+// High-quality images need more time than text. Keep this below the web proxy's
+// five-minute upstream header timeout, leaving room for upload and persistence.
+const IMAGE_PROVIDER_DEADLINE_MS = 240_000;
 
 export interface GeneratedImage {
   buffer: Buffer;
@@ -36,7 +39,8 @@ export class OpenAiService {
   constructor(private readonly configuration: HostedConfigurationService) {}
 
   async respond(request: RespondInput) {
-    const { input, instructions, maxOutputTokens, deadlineMs, signal } = request;
+    const { input, instructions, maxOutputTokens, deadlineMs, signal } =
+      request;
     const { client, model } = await this.connection();
     if (!client) {
       throw new ServiceUnavailableException(
@@ -76,39 +80,65 @@ export class OpenAiService {
       );
     }
 
-    const response = await client.responses.create({
-      model,
-      input: prompt,
-      tool_choice: { type: "image_generation" },
-      tools: [
-        {
-          type: "image_generation",
-          background: options.background ?? "opaque",
-          output_format: "webp",
-          quality: "high",
-          size: options.size ?? "1536x1024",
-        },
-      ],
-    });
-    const image = response.output.find(
-      (item) => item.type === "image_generation_call" && item.result,
+    const boundary = providerBoundary(
+      undefined,
+      IMAGE_PROVIDER_DEADLINE_MS,
+      IMAGE_PROVIDER_DEADLINE_MS,
     );
-    if (!image || image.type !== "image_generation_call" || !image.result) {
-      throw new ServiceUnavailableException(
-        "The image generation service did not return an image.",
+    try {
+      const response = await client.responses.create(
+        {
+          model,
+          input: prompt,
+          tool_choice: { type: "image_generation" },
+          tools: [
+            {
+              type: "image_generation",
+              background: options.background ?? "opaque",
+              output_format: "webp",
+              quality: "high",
+              size: options.size ?? "1536x1024",
+            },
+          ],
+        },
+        {
+          signal: boundary.signal,
+          timeout: IMAGE_PROVIDER_DEADLINE_MS,
+          maxRetries: 0,
+        },
       );
-    }
+      const image = response.output.find(
+        (item) => item.type === "image_generation_call" && item.result,
+      );
+      if (!image || image.type !== "image_generation_call" || !image.result) {
+        throw new ServiceUnavailableException(
+          "The image generation service did not return an image.",
+        );
+      }
 
-    const [width, height] = (options.size ?? "1536x1024")
-      .split("x")
-      .map(Number);
-    return {
-      buffer: Buffer.from(image.result, "base64"),
-      mimeType: "image/webp",
-      width,
-      height,
-      responseId: response.id,
-    };
+      const [width, height] = (options.size ?? "1536x1024")
+        .split("x")
+        .map(Number);
+      return {
+        buffer: Buffer.from(image.result, "base64"),
+        mimeType: "image/webp",
+        width,
+        height,
+        responseId: response.id,
+      };
+    } catch (error) {
+      if (
+        boundary.signal.aborted ||
+        error instanceof OpenAI.APIConnectionTimeoutError
+      ) {
+        throw new GatewayTimeoutException(
+          "Image generation did not finish within four minutes. Please try again.",
+        );
+      }
+      throw error;
+    } finally {
+      boundary.dispose();
+    }
   }
 
   private async connection() {
@@ -129,7 +159,11 @@ export class OpenAiService {
   }
 }
 
-function providerBoundary(callerSignal?: AbortSignal, requestedDeadline?: number) {
+function providerBoundary(
+  callerSignal?: AbortSignal,
+  requestedDeadline?: number,
+  maximumDeadline = MAX_PROVIDER_DEADLINE_MS,
+) {
   const deadlineMs =
     requestedDeadline === undefined
       ? DEFAULT_PROVIDER_DEADLINE_MS
@@ -137,9 +171,11 @@ function providerBoundary(callerSignal?: AbortSignal, requestedDeadline?: number
   if (
     !Number.isInteger(deadlineMs) ||
     deadlineMs < 1 ||
-    deadlineMs > MAX_PROVIDER_DEADLINE_MS
+    deadlineMs > maximumDeadline
   ) {
-    throw new RangeError("AI provider deadline is outside the supported range.");
+    throw new RangeError(
+      "AI provider deadline is outside the supported range.",
+    );
   }
   const controller = new AbortController();
   let timedOut = false;

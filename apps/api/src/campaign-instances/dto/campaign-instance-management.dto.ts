@@ -21,6 +21,7 @@ import {
   Min,
   MinLength,
   ValidateNested,
+  ValidateIf,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -323,4 +324,19 @@ export class ImportCampaignInstanceCharacterDto {
   @MinLength(1)
   @MaxLength(120)
   name?: string;
+}
+
+export class PlaceCampaignInstanceActorDto {
+  @IsInt()
+  @Min(1)
+  expectedRuntimeRevision!: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  locationId!: string;
+
+  @ValidateIf((_object, value) => value !== null)
+  @IsDefined()
+  position!: unknown;
 }

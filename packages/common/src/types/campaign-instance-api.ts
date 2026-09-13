@@ -1,3 +1,4 @@
+import type { TerrainPoint } from "./isometric-terrain";
 import type {
   CampaignInstanceAgentParticipationId,
   CampaignInstanceId,
@@ -415,6 +416,8 @@ export interface CampaignInstanceCreatureEmbodimentProjection {
   readonly policyLabel: string;
   readonly policyDefaulted: boolean;
   readonly currentLocationName?: string;
+  readonly currentLocationId?: string;
+  readonly terrainPosition?: TerrainPoint;
 }
 
 export interface CampaignInstanceCreatureEmbodimentListProjection {
@@ -422,6 +425,7 @@ export interface CampaignInstanceCreatureEmbodimentListProjection {
   readonly campaignInstanceName: string;
   readonly runtimeRevision: number;
   readonly items: readonly CampaignInstanceCreatureEmbodimentProjection[];
+  readonly terrainLocations?: readonly { id: string; name: string }[];
 }
 
 export interface CreateCampaignInstanceInvitationRequest {
@@ -733,6 +737,12 @@ export interface CampaignInstanceMigrationPreviewProjection {
     CampaignInstanceVersionProjection,
     "snapshotId" | "snapshotNumber" | "reason" | "adoptedAt" | "current"
   >;
+  /** Exploration recovery is independent of current visibility authorization. */
+  readonly explorationRecovery?: {
+    readonly status: "checkpoint" | "not-recorded" | "empty";
+    readonly checkpointNumber?: number;
+    readonly memoryCount: number;
+  };
   readonly planHash: string;
   readonly expectedRuntimeRevision: number;
   readonly ready: boolean;
@@ -814,3 +824,28 @@ export interface ApplyCampaignInstanceRestoreRequest {
   readonly planHash: string;
   readonly mappings: readonly CampaignInstanceMigrationMappingRequest[];
 }
+
+export interface PlaceCampaignInstanceActorRequest {
+  readonly expectedRuntimeRevision: number;
+  readonly locationId: string;
+  readonly position: TerrainPoint | null;
+}
+
+/** Binding only. No terrain or other actors may be sent until visibility is authoritative. */
+export type ParticipantSpatialBinding =
+  | {
+      readonly status: "unavailable";
+      readonly reason:
+        | "not-player"
+        | "session-inactive"
+        | "no-active-character"
+        | "actor-unplaced";
+    }
+  | {
+      readonly status: "awaiting-visibility";
+      readonly runtimeRevision: number;
+      readonly actor: {
+        readonly name: string;
+        readonly position: TerrainPoint;
+      };
+    };

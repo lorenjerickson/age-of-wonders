@@ -185,17 +185,28 @@ are normalized and can be filtered with `any` or `all` matching.
 
 The repository is bind-mounted into both application containers. Nest and Vite use polling so edits made on the host are detected reliably across Docker Desktop platforms.
 
+Each container has isolated dependency and shared-package build volumes. The development supervisor
+(`scripts/dev-container.mjs`) installs the locked dependencies and builds shared JavaScript and
+TypeScript declarations before starting the app. It watches shared-package sources and configuration,
+rebuilds them, and restarts the consuming app. Host builds cannot erase a running container's package
+declarations. App source edits continue to use Nest watch or Vite hot reload. The web supervisor
+waits for API health before starting, avoiding startup requests against an API still compiling.
+
+Dependency manifest or lockfile changes trigger a fresh frozen-lockfile install. Prisma schema changes
+regenerate the API client; database schema changes after startup still require an explicit migration
+or `db:push`. Build/install failures stop the app and remain visible in its logs until an input is fixed.
+
 ```bash
 docker compose logs -f api web
 docker compose down
 docker compose down -v # also removes the development database volume
 ```
 
-After changing dependencies, rebuild the relevant image so its `node_modules` volume is refreshed:
+Ordinary source and dependency edits refresh automatically. After changing Dockerfiles or Compose
+configuration, rebuild and recreate the application containers (database and artwork volumes remain):
 
 ```bash
-docker compose build api web
-docker compose up
+docker compose up -d --build api web
 ```
 
 ## Debugging
@@ -222,6 +233,10 @@ these records during local development with `docker compose logs -f api`.
 ## OpenAI integration
 
 `POST /api/ai/generate` performs a direct content-generation call. `POST /api/ai/pipelines/content` runs a composable outline → draft → editorial review pipeline. Generation records and OpenAI response IDs are saved to PostgreSQL.
+
+High-quality image generation has a separate four-minute provider deadline; text generation keeps
+its existing bounded deadlines. Image timeouts return HTTP 504 with a retryable editor message,
+and automatic provider retries remain disabled to avoid duplicating paid image requests.
 
 The OpenAI API key exists only in the API container. `OPENAI_MODEL` defaults to `gpt-5.6-terra` and can be changed in `.env` without rebuilding.
 

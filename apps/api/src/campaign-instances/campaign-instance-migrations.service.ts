@@ -1,3 +1,4 @@
+import { checkpointExplorationSeal, captureCheckpointExploration, recoverCheckpointExploration, restoreExplorationSource } from "./terrain-exploration-checkpoints";
 import {
   BadRequestException,
   ConflictException,
@@ -71,6 +72,9 @@ export class CampaignInstanceMigrationsService {
         await tx.$executeRawUnsafe(
           'LOCK TABLE "CampaignInstanceSession" IN SHARE MODE',
         );
+        // EXCLUSIVE conflicts with the exploration store's SELECT FOR UPDATE (ROW SHARE).
+        // Acquire before any SERIALIZABLE snapshot read so an in-flight observation is included.
+        await tx.$executeRawUnsafe('LOCK TABLE "CampaignInstanceRuntime" IN EXCLUSIVE MODE');
         const plan = await this.buildPlan(tx, id, ownerUserId, dto, kind);
         if (!plan.ready || plan.planHash !== dto.planHash) {
           throw new ConflictException(
@@ -208,8 +212,10 @@ export class CampaignInstanceMigrationsService {
         const checkpointCount = await tx.campaignInstanceRuntimeCheckpoint.count({
           where: { campaignInstanceId: id },
         });
+        const sourceSeal = await checkpointExplorationSeal(tx, id, source.currentSnapshot.id);
         const sourceCheckpoint = await tx.campaignInstanceRuntimeCheckpoint.create({
           data: {
+            ...sourceSeal,
             campaignInstanceId: id,
             campaignInstanceSnapshotId: source.currentSnapshot.id,
             checkpointNumber: checkpointCount + 1,
@@ -221,6 +227,9 @@ export class CampaignInstanceMigrationsService {
             createdByUserId: ownerUserId,
           },
         });
+        await captureCheckpointExploration(tx, sourceCheckpoint.id);
+        const explorationSource = kind === "restore"
+          ? await restoreExplorationSource(tx, id, source.currentSnapshot.id) : undefined;
         const manifest = compatibilityManifest(target);
         const snapshot = await tx.campaignInstanceSnapshot.create({
           data: {
@@ -245,8 +254,13 @@ export class CampaignInstanceMigrationsService {
             createdByUserId: ownerUserId,
           },
         });
+        if (explorationSource) {
+          await recoverCheckpointExploration(tx, explorationSource, snapshot.id, source.runtime.revision + 1);
+        }
+        const resultSeal = await checkpointExplorationSeal(tx, id, snapshot.id);
         const resultCheckpoint = await tx.campaignInstanceRuntimeCheckpoint.create({
           data: {
+            ...resultSeal,
             campaignInstanceId: id,
             campaignInstanceSnapshotId: snapshot.id,
             checkpointNumber: checkpointCount + 2,
@@ -258,6 +272,7 @@ export class CampaignInstanceMigrationsService {
             createdByUserId: ownerUserId,
           },
         });
+        await captureCheckpointExploration(tx, resultCheckpoint.id);
         const runtimeChanged = await tx.campaignInstanceRuntime.updateMany({
           where: {
             id: source.runtime.id,
@@ -347,7 +362,7 @@ export class CampaignInstanceMigrationsService {
           runtimeRevision: source.runtime.revision + 1,
         };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 },
       );
     } catch (error) {
       if (isPrismaCode(error, "P2002") || isPrismaCode(error, "P2034")) {
@@ -585,8 +600,18 @@ export class CampaignInstanceMigrationsService {
     }
     conflicts.sort((left, right) => left.key.localeCompare(right.key));
     changes.sort(compareChange);
+    const explorationSource = kind === "restore"
+      ? await restoreExplorationSource(client, id, instance.currentSnapshot.id) : undefined;
+    const explorationRecovery = explorationSource
+      ? { status: explorationSource.recorded ? "checkpoint" as const : "not-recorded" as const,
+          checkpointNumber: explorationSource.checkpoint.checkpointNumber, memoryCount: explorationSource.rows.length }
+      : { status: "empty" as const, memoryCount: 0 };
     const semantic = {
       kind,
+      explorationCheckpoint: explorationSource ? {
+        id: explorationSource.checkpoint.id, hash: explorationSource.checkpoint.explorationHash,
+        count: explorationSource.checkpoint.explorationCount,
+      } : null,
       sourceSnapshotId: dto.sourceSnapshotId,
       targetCampaignDefinitionSnapshotId: dto.targetCampaignDefinitionSnapshotId,
       expectedRuntimeRevision: dto.expectedRuntimeRevision,
@@ -639,6 +664,7 @@ export class CampaignInstanceMigrationsService {
         campaignDefinition: revisionLink(target.campaignDefinitionRevision, "campaign"),
         worldDefinition: revisionLink(target.capturedWorldSnapshot.worldDefinitionRevision, "world"),
       },
+      explorationRecovery,
       planHash: canonicalJsonHash(semantic),
       expectedRuntimeRevision: dto.expectedRuntimeRevision,
       ready: conflicts.length === 0,

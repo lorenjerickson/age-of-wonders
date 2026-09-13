@@ -1,3 +1,4 @@
+import { PlaceCampaignInstanceActorDto } from "./dto/campaign-instance-management.dto";
 import {
   BadRequestException,
   Body,
@@ -231,6 +232,23 @@ export class CampaignInstanceHierarchyController {
       campaignInstanceId,
       realizationId,
       request.user!.id,
+      dto,
+    );
+  }
+
+  @Put(":campaignInstanceId/creature-embodiments/:actorId/position")
+  async placeActor(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("actorId") actorId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: PlaceCampaignInstanceActorDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.management.placeActor(
+      campaignInstanceId,
+      request.user!.id,
+      actorId,
       dto,
     );
   }

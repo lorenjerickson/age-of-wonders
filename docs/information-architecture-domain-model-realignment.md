@@ -669,6 +669,16 @@ The map belongs to its Location as the diagram specifies. A runtime scene can st
 that map, but must not become the competing owner of the location's map, walls, doors, orientation,
 or source presentation.
 
+Isometric is a Map orientation alongside Scenic, Overhead, and Side-on. Selecting it opens manual terrain authoring with optional generation; it is not a separate Location option.
+Accepted isometric-map target behavior is specified in [the isometric maps design](isometric-maps-design.md).
+Location-owned terrain uses at most 100 cells per axis with five-foot cell edges. Its authoring
+experience includes weighted random generation and arbitrary selection edits/removal. Interactive
+views remain centered on a selected actor; a player is restricted to their bound actor. Captured
+source terrain stays immutable during play, and Instance runtime owns opening-state changes and
+exploration. The shared terrain foundation, Location-owned manifest/chunk capture, and initial 3D GM editor
+are implemented. World authoring exposes the full source geometry only to its owning GM. Spatial
+Instance actor setup, Player Character binding, shared 3D sight facts, internal redacted projections, and observer exploration snapshot helpers are implemented. Transactional exploration storage is implemented. Checkpoint capture and predecessor-checkpoint exploration recovery are implemented. Authoritative rules evaluation and gameplay integration remain pending. Versioned built-in PBR texture sets and device quality controls are implemented; custom material assets remain pending. Vertical work planes and normal-only smoothing are implemented. Door/window authoring and procedural presentation are implemented.
+
 Within a selected World workspace reached through the primary **Worlds** destination, **Atlas**,
 **Bestiary**, **Item Compendium**, **Characters**, and **Rules** are the five secondary navigation
 groups. “Item Compendium” is preferred to unqualified “Compendium”: it communicates a broad source

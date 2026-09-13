@@ -20,5 +20,19 @@ export function locationWithMapScene(
   const nextScene: Record<string, JsonValue> = { ...scene, notes };
   if (orientation) nextScene.orientation = orientation;
   else delete nextScene.orientation;
-  return { ...record, payload: { ...payload, mapScene: nextScene } };
+  return {
+    ...record,
+    payload: {
+      ...payload,
+      ...(orientation &&
+      orientation !== "isometric" &&
+      typeof payload.map === "object" &&
+      payload.map !== null &&
+      !Array.isArray(payload.map) &&
+      payload.map.kind === "isometric"
+        ? { map: { kind: "image" } }
+        : {}),
+      mapScene: nextScene,
+    },
+  };
 }

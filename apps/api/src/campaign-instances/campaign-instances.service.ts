@@ -618,6 +618,8 @@ export class CampaignInstancesService {
                 campaignInstanceSnapshotId: snapshot.id,
                 checkpointNumber: 1,
                 reason: "INITIAL",
+                explorationHash: canonicalJsonHash([]),
+                explorationCount: 0,
                 runtimeRevision: runtime.revision,
                 state: runtimeState,
                 extensions: {},

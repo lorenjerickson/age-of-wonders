@@ -1,3 +1,4 @@
+import { ActorPlacementForm } from "./ActorPlacementForm";
 import {
   useEffect,
   useMemo,
@@ -1048,6 +1049,21 @@ export function CampaignInstancePlacementsPage() {
                     {embodiment.policyLabel}
                     {embodiment.policyDefaulted ? " · legacy default" : ""}
                   </p>
+                  {embodiments && (
+                    <ActorPlacementForm
+                      key={embodiment.runtimeCreatureId}
+                      actor={embodiment}
+                      data={embodiments}
+                      campaignDefinitionId={instance.campaignDefinitionId}
+                      onSaved={(next) => {
+                        setEmbodiments(next);
+                        void getCampaignInstancePlacements(
+                          instance.campaignDefinitionId,
+                          instance.id,
+                        ).then(setData);
+                      }}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
@@ -3695,6 +3711,15 @@ export function CampaignInstanceMigrationPage() {
                 </Button>
               )}
             </section>
+          )}
+          {preview.explorationRecovery && (
+            <Alert>
+              {preview.explorationRecovery.status === "checkpoint"
+                ? `Exploration will be recovered from checkpoint ${preview.explorationRecovery.checkpointNumber}. Later discoveries will not be included. Current visibility must be evaluated again.`
+                : preview.explorationRecovery.status === "not-recorded"
+                  ? "This checkpoint predates exploration capture. Restored maps will have no remembered terrain until they are explored again."
+                  : "The new snapshot starts with unexplored maps. Existing exploration is preserved in the source checkpoint."}
+            </Alert>
           )}
           <Checkbox
             label={`I reviewed the complete all-or-nothing ${restoring ? "restore" : "migration"} plan`}

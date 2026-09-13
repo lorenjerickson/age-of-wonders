@@ -726,6 +726,8 @@ model WorldDefinitionDraft {
   baseSnapshot             WorldDefinitionSnapshot?        @relation(fields: [baseSnapshotId, worldDefinitionId, baseRevisionId], references: [id, worldDefinitionId, worldDefinitionRevisionId], onDelete: Restrict)
   createdBy                User                            @relation("WorldDraftCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   updatedBy                User                            @relation("WorldDraftUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  terrainUploads           WorldTerrainUpload[]
+  terrainSaves             WorldTerrainSave[]
 
   @@index([worldDefinitionId, validationStatus])
   @@index([baseSnapshotId])
@@ -1062,6 +1064,7 @@ model CampaignInstance {
   characters             CampaignInstanceCharacterAssociation[] @relation("CharacterInstance")
   characterDrafts        CampaignInstanceCharacterDraft[]
   characterImportSources CampaignInstanceCharacterAssociation[] @relation("CharacterImportSourceInstance")
+  terrainExploration     CampaignTerrainExploration[]
   runtimeCheckpoints     CampaignInstanceRuntimeCheckpoint[]
   migrationAudits        CampaignInstanceMigrationAudit[]
   auditEvents            CampaignInstanceAuditEvent[]
@@ -1501,6 +1504,7 @@ model CampaignInstanceSnapshot {
   subsequentSnapshots          CampaignInstanceSnapshot[]          @relation("CampaignInstanceSnapshotLineage")
   createdBy                    User?                               @relation("CampaignSnapshotAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
   runtime                      CampaignInstanceRuntime?
+  terrainExploration           CampaignTerrainExploration[]
   runtimeCheckpoints           CampaignInstanceRuntimeCheckpoint[]
   sourceMigrationAudits        CampaignInstanceMigrationAudit[]    @relation("CampaignInstanceMigrationSourceSnapshot")
   resultMigrationAudit         CampaignInstanceMigrationAudit?     @relation("CampaignInstanceMigrationResultSnapshot")
@@ -1546,6 +1550,9 @@ model CampaignInstanceRuntimeCheckpoint {
   runtimeRevision            Int
   state                      Json
   extensions                 Json                                    @default("{}")
+  explorationHash            String?
+  explorationCount           Int?
+  exploration                CampaignCheckpointExploration[]
   contentHash                String
   createdByUserId            String?
   createdAt                  DateTime                                @default(now())
@@ -1661,4 +1668,63 @@ model InstallationRolloutAudit {
 
   @@index([rolloutStateId, createdAt])
   @@index([phase, createdAt])
+}
+
+// Transient, draft-scoped content uploads. Committed content lives in the World snapshot records.
+model WorldTerrainUpload {
+  draftId     String
+  contentHash String
+  payload     Json
+  createdAt   DateTime             @default(now())
+  draft       WorldDefinitionDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@id([draftId, contentHash])
+  @@index([draftId, createdAt])
+}
+
+// Durable idempotency receipts for a mutable draft; never part of a published map.
+model WorldTerrainSave {
+  draftId         String
+  operationId     String
+  requestHash     String
+  storageRevision Int
+  createdAt       DateTime             @default(now())
+  draft           WorldDefinitionDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@id([draftId, operationId])
+}
+
+
+/// Latest validated last-known surfaces per observer and captured map. Never contains actors.
+/// Snapshot migration/restore retain historical rows and begin a separate scope.
+model CampaignTerrainExploration {
+  campaignInstanceId String
+  snapshotId         String
+  locationId         String
+  observerId         String
+  runtimeRevision    Int
+  payload            Json
+  contentHash        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  campaignInstance   CampaignInstance @relation(fields: [campaignInstanceId], references: [id], onDelete: Restrict, map: "CampaignTerrainExploration_instance_fkey")
+  snapshot           CampaignInstanceSnapshot @relation(fields: [campaignInstanceId, snapshotId], references: [campaignInstanceId, id], onDelete: Restrict, map: "CampaignTerrainExploration_snapshot_fkey")
+
+  @@id([campaignInstanceId, snapshotId, locationId, observerId], map: "CampaignTerrainExploration_pkey")
+  @@index([campaignInstanceId, snapshotId])
+}
+
+
+/// Immutable exploration captured with one runtime checkpoint, sealed by its aggregate hash/count.
+model CampaignCheckpointExploration {
+  checkpointId       String
+  campaignInstanceId String
+  snapshotId         String
+  locationId         String
+  observerId         String
+  payload            Json
+  contentHash        String
+  checkpoint CampaignInstanceRuntimeCheckpoint @relation(fields: [campaignInstanceId, checkpointId, snapshotId], references: [campaignInstanceId, id, campaignInstanceSnapshotId], onDelete: Restrict, map: "CampaignCheckpointExploration_checkpoint_fkey")
+
+  @@id([checkpointId, locationId, observerId], map: "CampaignCheckpointExploration_pkey")
 }

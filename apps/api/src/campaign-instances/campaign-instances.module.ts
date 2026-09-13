@@ -1,3 +1,4 @@
+import { TerrainExplorationStore } from "./terrain-exploration-store.service";
 import { Module } from "@nestjs/common";
 import { CampaignInstancesService } from "./campaign-instances.service";
 import { CampaignInstanceManagementService } from "./campaign-instance-management.service";
@@ -35,6 +36,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
     CampaignInstanceCharacterDraftsController,
   ],
   providers: [
+    TerrainExplorationStore,
     CampaignInstancesService,
     CampaignInstanceManagementService,
     CampaignInstanceInvitationsService,

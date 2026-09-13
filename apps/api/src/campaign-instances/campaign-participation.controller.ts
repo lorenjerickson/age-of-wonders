@@ -108,6 +108,19 @@ export class CampaignSessionMeController {
     );
   }
 
+  @Get("spatial")
+  spatial(
+    @Param("instanceId") instanceId: string,
+    @Param("sessionId") sessionId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.sessions.participantSpatialBinding(
+      instanceId,
+      sessionId,
+      request.user!.id,
+    );
+  }
+
   @Get("events")
   events(
     @Param("instanceId") instanceId: string,

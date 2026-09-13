@@ -1,3 +1,4 @@
+import type { PlaceCampaignInstanceActorRequest, ParticipantSpatialBinding } from "@aow/common";
 import type {
   CharacterDraft,
   CharacterSelections,
@@ -2475,5 +2476,92 @@ export function generateLocationMap(
       },
       body: JSON.stringify(input),
     },
+  );
+}
+
+function terrainMapPath(worldId: string, locationId: string) {
+  return `/worlds/${encodeURIComponent(worldId)}/atlas/locations/${encodeURIComponent(locationId)}/map`;
+}
+
+export function uploadLocationTerrainChunk(
+  worldId: string,
+  locationId: string,
+  input: {
+    expectedDraftId: string;
+    expectedStorageRevision: number;
+    chunk: import("@aow/common").TerrainChunk;
+  },
+) {
+  return request<{
+    contentHash: string;
+    address: import("@aow/common").TerrainAddress;
+  }>(`${terrainMapPath(worldId, locationId)}/chunks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+export function getLocationTerrainChunk(
+  worldId: string,
+  locationId: string,
+  hash: string,
+) {
+  return request<import("@aow/common").TerrainChunk>(
+    `${terrainMapPath(worldId, locationId)}/chunks/${encodeURIComponent(hash)}`,
+  );
+}
+export function saveLocationTerrain(
+  worldId: string,
+  locationId: string,
+  input: import("@aow/common").SaveLocationTerrainRequest,
+) {
+  return request<WorldDefinitionDraft>(terrainMapPath(worldId, locationId), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function getLocationTerrain(worldId: string, locationId: string) {
+  return request<import("@aow/common").IsometricTerrainVolume>(
+    terrainMapPath(worldId, locationId),
+  );
+}
+
+
+export function placeCampaignInstanceActor(
+  campaignDefinitionId: string,
+  instanceId: string,
+  actorId: string,
+  body: PlaceCampaignInstanceActorRequest,
+) {
+  return request<CampaignInstanceCreatureEmbodimentListProjection>(
+    instancePath(
+      campaignDefinitionId,
+      instanceId,
+      `/creature-embodiments/${encodeURIComponent(actorId)}/position`,
+    ),
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
+export function getParticipantSpatialBinding(
+  instanceId: string,
+  sessionId: string,
+) {
+  return request<ParticipantSpatialBinding>(
+    `${participantSessionPath(instanceId, sessionId)}/spatial`,
+  );
+}
+
+export type ArtworkRole = "portrait" | "overheadToken" | "paperDollToken" | "item";
+export function generateWorldArtwork(
+  worldId: string,
+  input: { expectedStorageRevision: number; role: ArtworkRole; name: string; description: string; direction: string },
+  idempotencyKey: string,
+) {
+  return request<{ image: Record<string, JsonValue>; storageRevision: number }>(
+    `/ai/worlds/${encodeURIComponent(worldId)}/artwork-proposals`,
+    { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(input) },
   );
 }

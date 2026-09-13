@@ -8,6 +8,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/common/package.json packages/common/package.json
+COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM base AS development
@@ -17,7 +18,7 @@ EXPOSE 3000 9229
 
 FROM base AS build
 COPY . .
-RUN pnpm --filter @aow/api db:generate && pnpm --filter @aow/api build
+RUN pnpm --filter @aow/api db:generate && pnpm --filter @aow/api... build
 
 FROM node:22-alpine AS production
 ENV NODE_ENV=production

@@ -1,3 +1,13 @@
+// Persistence behavior is exercised against PostgreSQL; these tests isolate migration planning.
+jest.mock("./terrain-exploration-checkpoints", () => ({
+  checkpointExplorationSeal: jest.fn().mockResolvedValue({explorationHash: "empty", explorationCount: 0}),
+  captureCheckpointExploration: jest.fn().mockResolvedValue(undefined),
+  recoverCheckpointExploration: jest.fn().mockResolvedValue(undefined),
+  restoreExplorationSource: jest.fn().mockResolvedValue({
+    checkpoint: { id: "exploration-checkpoint", checkpointNumber: 1, explorationHash: null, explorationCount: null },
+    rows: [], recorded: false,
+  }),
+}));
 import { BadRequestException } from "@nestjs/common";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import {

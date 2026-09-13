@@ -11,3 +11,6 @@ coverage
 .vscode/*.local.json
 apps/web/dist
 **/.output
+
+# Container-only compiler output mount
+.container-build/
