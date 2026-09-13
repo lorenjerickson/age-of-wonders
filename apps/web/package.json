@@ -16,7 +16,8 @@
     "smoke:materials": "node scripts/terrain-materials-smoke.mjs",
     "textures:prepare": "node scripts/prepare-terrain-textures.mjs",
     "smoke:actors": "node scripts/actor-binding-smoke.mjs",
-    "smoke:session": "node scripts/session-shell-smoke.mjs"
+    "smoke:session": "node scripts/session-shell-smoke.mjs",
+    "smoke:session-table": "node scripts/session-table-smoke.mjs"
   },
   "dependencies": {
     "@aow/common": "workspace:*",

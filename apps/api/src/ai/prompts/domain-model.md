@@ -2818,3 +2818,35 @@ through Location authoring replaces an active isometric manifest with `{kind:"im
 Location edits without an orientation change preserve terrain. Existing image assets remain intact.
 Legacy isometric manifests lacking orientation metadata resolve to Isometric in the Map UI. No
 resource mapping or database migration changes accompany this orientation workflow adjustment.
+
+### GM Session table read projection
+
+`CampaignSessionTableProjection` and recursive `CampaignSessionTablePlot` in
+`packages/common/src/types/session-table.ts` describe the GM-only
+`GET /campaigns/:campaignDefinitionId/instances/:instanceId/sessions/:sessionId/table`
+response. Ownership and all three parent identifiers are checked together; only active or paused
+Sessions expose this table. A repeatable-read transaction reads the Instance current captured
+Campaign and World snapshots, their immutable revision labels, continuing runtime, and active
+Character bindings. Mutable upstream authoring is never consulted. This projection adds no persisted
+resource mapping to `domain-resource.ts`.
+
+Optional `locationId` selects a captured Location for local GM viewing only. `focus` distinguishes
+`requested`, `starting-location`, `first-available`, and `unavailable`; none declares an active scene,
+party location, movement, or saved runtime mutation. Locations include human-readable names, captured
+description/image, and verified hydrated isometric terrain when present. Missing or invalid maps
+and missing content produce explicit unavailable messages.
+
+`party` is a display collection of active membership Characters and remaining Instance creature
+embodiments, not evidence of a persisted party relationship. Each entry resolves human-readable
+Character/actor, Player, and Location labels; unresolved references use neutral descriptions. IDs
+and keys are UI selection values only and must never become visible labels. Runtime coordinates
+are read-only facts about each actor’s own Location; the table currently renders named Location
+labels, not gameplay tokens. They must not be used to infer movement or place actors on another map.
+
+`plots` preserves captured recursive Plot hierarchy and exposes objectives, pressures, resistances,
+discoveries and truth/belief/rumor statements alongside same-Instance progress. `atFocusedLocation`
+marks authored Location context relevance without hiding broader Plot cues. A claim's `revealed`
+flag comes only from that Plot progress's `revealedClaimIds`; individual `creatureKnowledge` never
+implies global revelation. Unrevealed claims are included solely because this endpoint is GM-only.
+Encounter adjudication, authoritative Rules execution, Player/Spectator map delivery, and runtime
+mutation remain unavailable; do not generate actions implying this read projection implements them.

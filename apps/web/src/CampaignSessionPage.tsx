@@ -27,6 +27,7 @@ import { dateLabel, statusLabel } from "./campaignLibraryModel";
 import { RouterButtonLink, useInternalNavigate } from "./navigation";
 import { quickStartSuffix } from "./quickStartModel";
 import { useSessionPresence } from "./useSessionPresence";
+import { CampaignSessionTable } from "./CampaignSessionTable";
 
 const pageClass = "mx-auto max-w-6xl px-6 py-12 lg:px-10";
 
@@ -388,7 +389,7 @@ export function CampaignSessionPage({
         </h1>
         <p className="mt-4 max-w-3xl opacity-65">
           {operational
-            ? "Follow your participants and Session activity, and pause or end play."
+            ? "Consult your captured maps and Plot cues, follow the party, and manage play."
             : "Manage planning, lobby readiness, lifecycle, and durable Session history."}
         </p>
       </header>
@@ -611,6 +612,15 @@ export function CampaignSessionPage({
                   ))}
                 </ul>
               </section>
+            )}
+            {operational && (
+              <div className="min-w-0 lg:col-span-3">
+                <CampaignSessionTable
+                  campaignDefinitionId={campaignDefinitionId}
+                  campaignInstanceId={instance.id}
+                  sessionId={sessionId}
+                />
+              </div>
             )}
             <section
               className={`rounded-box border border-base-300 bg-base-200 p-6 text-base-content ${operational ? "lg:col-span-1" : "lg:col-span-2"}`}

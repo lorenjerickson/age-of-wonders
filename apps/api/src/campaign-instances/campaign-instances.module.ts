@@ -1,3 +1,5 @@
+import { CampaignSessionTableController } from "./campaign-session-table.controller";
+import { CampaignSessionTableService } from "./campaign-session-table.service";
 import { TerrainExplorationStore } from "./terrain-exploration-store.service";
 import { Module } from "@nestjs/common";
 import { CampaignInstancesService } from "./campaign-instances.service";
@@ -27,6 +29,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
 @Module({
   imports: [NotificationsModule],
   controllers: [
+    CampaignSessionTableController,
     CampaignInstanceHierarchyController,
     CampaignInstanceMeController,
     CampaignSessionsController,
@@ -36,6 +39,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
     CampaignInstanceCharacterDraftsController,
   ],
   providers: [
+    CampaignSessionTableService,
     TerrainExplorationStore,
     CampaignInstancesService,
     CampaignInstanceManagementService,

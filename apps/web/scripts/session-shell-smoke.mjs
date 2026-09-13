@@ -199,6 +199,29 @@ await withFixture(async (url) => {
           ],
         },
       });
+    if (path.endsWith("/table"))
+      return route.fulfill({
+        json: {
+          sessionName: "Into the cavern",
+          campaignInstanceName: "Friday campaign",
+          status,
+          runtimeRevision: 1,
+          captured: {
+            snapshotNumber: 1,
+            campaign: { name: "Glasswake", revisionNumber: 1 },
+            world: { name: "Captured World", revisionNumber: 1 },
+          },
+          locations: [],
+          focus: "unavailable",
+          party: [],
+          plots: [],
+          unavailable: [],
+          encounter: {
+            status: "unavailable",
+            detail: "Encounter adjudication is not available.",
+          },
+        },
+      });
     if (path.endsWith("/events"))
       return route.fulfill({
         json: {

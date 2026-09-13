@@ -36,6 +36,7 @@ import type {
   UpdateCampaignInstancePreparationRequest,
   UpdateCampaignInstanceAgentStatusRequest,
   CampaignSessionDetailProjection,
+  CampaignSessionTableProjection,
   CampaignSessionReadinessProjection,
   CampaignSessionLifecycleRequest,
   CreateCampaignSessionRequest,
@@ -1601,6 +1602,22 @@ export function createCampaignSession(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
+  );
+}
+
+export function getCampaignSessionTable(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  sessionId: string,
+  locationId?: string,
+) {
+  const path = campaignSessionsPath(
+    campaignDefinitionId,
+    campaignInstanceId,
+    `/${encodeURIComponent(sessionId)}/table`,
+  );
+  return request<CampaignSessionTableProjection>(
+    locationId ? `${path}?locationId=${encodeURIComponent(locationId)}` : path,
   );
 }
 

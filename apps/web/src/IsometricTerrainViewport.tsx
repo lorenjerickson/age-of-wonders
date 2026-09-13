@@ -26,6 +26,8 @@ import {
 } from "./isometricEditorModel";
 
 export interface IsometricViewportProps {
+  /** Full captured GM map reference; no authoring or gameplay actor is displayed. */
+  overview?: boolean;
   volume: IsometricTerrainVolume;
   level: number;
   plane?: TerrainWorkPlane;
@@ -41,7 +43,7 @@ export interface IsometricViewportProps {
   ): void;
 }
 
-/** Authoring preview only; receives full GM terrain, never a participant projection. */
+/** GM terrain only: authoring preview or captured reference, never a participant projection. */
 export function IsometricTerrainViewport(props: IsometricViewportProps) {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
@@ -85,7 +87,16 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         scene.add(terrain);
         let azimuth = Math.PI / 4,
           elevation = Math.atan(1 / Math.sqrt(2)),
-          span = 24;
+          span = latest.current.overview
+            ? Math.min(
+                180,
+                Math.max(
+                  24,
+                  Math.max(...Object.values(latest.current.volume.dimensions)) *
+                    2,
+                ),
+              )
+            : 24;
         const raycaster = new T.Raycaster(),
           ndc = new T.Vector2();
         let drag:
@@ -197,6 +208,9 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         let shownPlane: TerrainWorkPlane | undefined;
         function update() {
           const p = latest.current;
+          actor.visible = !p.overview;
+          floorMarker.visible = !p.overview;
+          grid.visible = !p.overview;
           if (materialQuality !== (p.textureQuality ?? "balanced")) {
             materials.dispose();
             materialQuality = p.textureQuality ?? "balanced";
@@ -443,7 +457,8 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             return;
           }
           const hit = point(event);
-          cursor.visible = !!hit && !latest.current.disabled;
+          cursor.visible =
+            !!hit && !latest.current.disabled && !latest.current.overview;
           if (drag) drag.end = hit;
           if (hit) {
             const start = drag?.start ?? hit;
@@ -462,17 +477,26 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         }
         function down(event: PointerEvent) {
           if (event.button !== 0 && event.button !== 2) return;
-          if (drag || (latest.current.disabled && event.button === 0)) return;
+          if (
+            drag ||
+            (latest.current.disabled &&
+              event.button === 0 &&
+              !latest.current.overview)
+          )
+            return;
           event.preventDefault();
           element!.focus();
           renderer.domElement.setPointerCapture(event.pointerId);
           drag = {
-            button: event.button,
+            button: latest.current.overview ? 2 : event.button,
             x: event.clientX,
             y: event.clientY,
             level: latest.current.level,
             plane: latest.current.plane ?? "xy",
-            start: event.button === 0 ? point(event) : undefined,
+            start:
+              event.button === 0 && !latest.current.overview
+                ? point(event)
+                : undefined,
             mode: event.altKey
               ? "subtract"
               : event.ctrlKey || event.metaKey
@@ -493,7 +517,8 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             stroke?.button === 0 &&
             stroke.start &&
             stroke.end &&
-            !latest.current.disabled
+            !latest.current.disabled &&
+            !latest.current.overview
           )
             latest.current.onStroke(stroke.start, stroke.end, stroke.mode);
           draw();
@@ -545,7 +570,17 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           if (event.key === "0") {
             azimuth = Math.PI / 4;
             elevation = Math.atan(1 / Math.sqrt(2));
-            span = 24;
+            span = latest.current.overview
+              ? Math.min(
+                  180,
+                  Math.max(
+                    24,
+                    Math.max(
+                      ...Object.values(latest.current.volume.dimensions),
+                    ) * 2,
+                  ),
+                )
+              : 24;
           }
           draw();
         }
@@ -562,7 +597,9 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         const lost = (event: Event) => {
           event.preventDefault();
           setError(
-            "The terrain view lost its graphics context. Your edits are still available.",
+            latest.current.overview
+              ? "The map reference lost its graphics context. Retry to reopen it."
+              : "The terrain view lost its graphics context. Your edits are still available.",
           );
         };
         canvas.addEventListener("webglcontextlost", lost);
@@ -626,7 +663,11 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
       <div
         ref={host}
         tabIndex={0}
-        aria-label="Isometric terrain editor. Right drag to orbit; left drag edits the work plane. Arrow keys orbit, plus and minus zoom, zero resets view."
+        aria-label={
+          props.overview
+            ? "Captured terrain reference. Drag or arrow keys to orbit, plus and minus to zoom, zero to reset."
+            : "Isometric terrain editor. Right drag to orbit; left drag edits the work plane. Arrow keys orbit, plus and minus zoom, zero resets view."
+        }
         className="h-[32rem] w-full overflow-hidden rounded-box bg-slate-900 outline-offset-2"
       />
       <p role="status" className="mt-2 text-sm opacity-70">
@@ -638,8 +679,9 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         </Button>
       )}
       <p className="mt-2 text-sm opacity-70">
-        Focused on Preview actor · Right drag to pivot · Scroll to zoom · Left
-        drag on the work plane · Esc cancels
+        {props.overview
+          ? "Captured map reference · Drag or arrow keys to orbit · Scroll or plus/minus to zoom · Zero resets the view"
+          : "Focused on Preview actor · Right drag to pivot · Scroll to zoom · Left drag on the work plane · Esc cancels"}
       </p>
     </div>
   );

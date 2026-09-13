@@ -35,3 +35,5 @@ export * from "./movement-rules";
 export * from "./isometric-terrain";
 
 export * from "./terrain-exploration";
+
+export * from "./session-table";
