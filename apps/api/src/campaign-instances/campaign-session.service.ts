@@ -1465,6 +1465,34 @@ export class CampaignSessionService {
             },
           });
           if (changed.count !== 1) throw staleSession();
+          if (["start", "resume", "pause"].includes(command)) {
+            const activePresence = {
+              sessionId,
+              leftAt: null,
+              ejectedAt: null,
+              expiresAt: { gt: now },
+            };
+            // Keep the same lease interval: total presence includes lobby and
+            // paused time, and is accounted once when the connection closes.
+            await client.sessionPresenceLease.updateMany({
+              where: {
+                ...activePresence,
+                participation: { selected: true, response: "ACCEPTED" },
+              },
+              data: { phase: command === "pause" ? "LOBBY" : "PLAY" },
+            });
+            if (command !== "pause") {
+              await client.sessionParticipation.updateMany({
+                where: {
+                  sessionId,
+                  selected: true,
+                  response: "ACCEPTED",
+                  presenceLeases: { some: activePresence },
+                },
+                data: { attendance: "ATTENDED" },
+              });
+            }
+          }
           await this.appendEvent(client, {
             instanceId,
             sessionId,

@@ -1,8 +1,271 @@
 import { BadRequestException } from "@nestjs/common";
 import { canTransitionCampaignSessionStatus } from "@aow/common";
 import { CampaignSessionService } from "./campaign-session.service";
+import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 
 describe("Campaign Session contracts", () => {
+  it("carries lobby attendance through start, pause, resume, and conclusion without resetting presence time", async () => {
+    const joinedAt = new Date(Date.now() - 30_000);
+    const participants = [
+      {
+        id: "present",
+        selected: true,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "absent",
+        selected: true,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "expired",
+        selected: true,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "left",
+        selected: true,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "ejected",
+        selected: true,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "removed",
+        selected: false,
+        response: "ACCEPTED",
+        attendance: "PENDING",
+      },
+      {
+        id: "declined",
+        selected: true,
+        response: "DECLINED",
+        attendance: "PENDING",
+      },
+    ];
+    const leases = participants
+      .filter((p) => p.id !== "absent")
+      .map((p) => ({
+        participationId: p.id,
+        phase: "LOBBY",
+        joinedAt,
+        expiresAt: new Date(
+          Date.now() + (p.id === "expired" ? -1_000 : 90_000),
+        ),
+        leftAt: p.id === "left" ? new Date() : null,
+        ejectedAt: p.id === "ejected" ? new Date() : null,
+      }));
+    const row = {
+      id: "session-1",
+      campaignInstanceId: "instance-1",
+      name: "Storm Warning",
+      status: "LOBBY",
+      metadataRevision: 2,
+      lastEventSequence: 1,
+      // Participants are optional here so attendance, rather than readiness, is under test.
+      participations: participants.map((p) => ({
+        ...p,
+        required: false,
+        presenceLeases: [],
+      })),
+      runtimeBoundaries: [{ snapshotId: "snapshot-1", runtimeRevision: 4 }],
+    };
+    const manifest = buildSnapshotManifest(1, [
+      {
+        resourceType: "locations",
+        sourceId: "harbor",
+        sourceRevision: 1,
+        payload: { name: "Harbor" },
+      },
+    ]);
+    const instance = {
+      id: "instance-1",
+      name: "Tuesday Glasswake",
+      status: "ACTIVE",
+      currentSnapshotId: "snapshot-1",
+      runtime: {
+        revision: 4,
+        state: {
+          formatVersion: 1,
+          preparation: {},
+          plotProgress: [],
+          placementRealizations: [],
+          creatureEmbodiments: [],
+          itemInstances: [],
+        },
+      },
+      currentSnapshot: {
+        campaignDefinitionSnapshot: { manifest },
+        worldDefinitionSnapshot: { manifest },
+      },
+      owner: { displayName: "Morgan" },
+    };
+    const liveLease = (lease: (typeof leases)[number], now: Date) =>
+      !lease.leftAt && !lease.ejectedAt && lease.expiresAt > now;
+    const tx = {
+      $executeRawUnsafe: jest.fn(),
+      campaignInstance: { findFirst: jest.fn().mockResolvedValue(instance) },
+      campaignInstanceSession: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findFirstOrThrow: jest.fn().mockResolvedValue(row),
+        updateMany: jest.fn(async ({ data }) => {
+          Object.assign(row, data, {
+            metadataRevision: row.metadataRevision + 1,
+          });
+          return { count: 1 };
+        }),
+      },
+      sessionPresenceLease: {
+        updateMany: jest.fn(async ({ where, data }) => {
+          for (const lease of leases) {
+            const participant = participants.find(
+              (p) => p.id === lease.participationId,
+            )!;
+            if (
+              data.phase &&
+              liveLease(lease, where.expiresAt.gt) &&
+              participant.selected &&
+              participant.response === "ACCEPTED"
+            )
+              lease.phase = data.phase;
+            if (data.leftAt && !lease.leftAt) lease.leftAt = data.leftAt;
+          }
+          return { count: 1 };
+        }),
+        findMany: jest.fn(async () => leases.filter((lease) => !lease.leftAt)),
+      },
+      sessionParticipation: {
+        updateMany: jest.fn(async ({ where, data }) => {
+          for (const participant of participants) {
+            if (!participant.selected) continue;
+            if (where.presenceLeases) {
+              if (
+                participant.response !== "ACCEPTED" ||
+                !leases.some(
+                  (lease) =>
+                    lease.participationId === participant.id &&
+                    liveLease(lease, where.presenceLeases.some.expiresAt.gt),
+                )
+              )
+                continue;
+            } else if (participant.attendance !== where.attendance) continue;
+            participant.attendance = data.attendance;
+          }
+          return { count: 1 };
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      campaignSessionEvent: {
+        findUnique: jest.fn().mockResolvedValue({ contentHash: "prior" }),
+        create: jest.fn().mockResolvedValue({}),
+      },
+      campaignSessionRuntimeBoundary: {
+        create: jest.fn().mockResolvedValue({}),
+      },
+      campaignSessionSummary: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const service = new CampaignSessionService(
+      { ...tx, $transaction: jest.fn((operation) => operation(tx)) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service, "detail").mockResolvedValue({} as never);
+    const command = async (action: string) => {
+      const readiness = await service.readiness(
+        "instance-1",
+        "session-1",
+        "gm-1",
+      );
+      await service.command("instance-1", "session-1", "gm-1", action, {
+        expectedMetadataRevision: row.metadataRevision,
+        expectedRuntimeRevision: 4,
+        readinessToken: readiness.token,
+      });
+    };
+
+    await command("start");
+    expect(
+      participants.filter((p) => p.attendance === "ATTENDED").map((p) => p.id),
+    ).toEqual(["present"]);
+    expect(
+      leases
+        .filter((lease) => lease.phase === "PLAY")
+        .map((lease) => lease.participationId),
+    ).toEqual(["present"]);
+    expect(tx.sessionPresenceLease.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        sessionId: "session-1",
+        leftAt: null,
+        ejectedAt: null,
+        expiresAt: { gt: expect.any(Date) },
+        participation: { selected: true, response: "ACCEPTED" },
+      },
+      data: { phase: "PLAY" },
+    });
+    expect(tx.sessionParticipation.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        sessionId: "session-1",
+        selected: true,
+        response: "ACCEPTED",
+        presenceLeases: {
+          some: {
+            sessionId: "session-1",
+            leftAt: null,
+            ejectedAt: null,
+            expiresAt: { gt: expect.any(Date) },
+          },
+        },
+      },
+      data: { attendance: "ATTENDED" },
+    });
+    await command("pause");
+    expect(leases[0].phase).toBe("LOBBY");
+    // An optional attendee can arrive during the pause and must be counted on resume.
+    leases.push({
+      participationId: "absent",
+      phase: "LOBBY",
+      joinedAt,
+      expiresAt: new Date(Date.now() + 90_000),
+      leftAt: null,
+      ejectedAt: null,
+    });
+    await command("resume");
+    expect(participants[1].attendance).toBe("ATTENDED");
+    expect(leases[0].phase).toBe("PLAY");
+    expect(leases.every((lease) => lease.joinedAt === joinedAt)).toBe(true);
+    expect(tx.sessionParticipation.update).not.toHaveBeenCalled();
+    await command("conclude");
+    expect(participants.slice(0, 2).map((p) => p.attendance)).toEqual([
+      "ATTENDED",
+      "ATTENDED",
+    ]);
+    expect(participants.slice(2, 5).map((p) => p.attendance)).toEqual([
+      "NOT_ATTENDED",
+      "NOT_ATTENDED",
+      "NOT_ATTENDED",
+    ]);
+    expect(tx.sessionParticipation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "present" },
+        data: {
+          leftAt: expect.any(Date),
+          totalPresentSeconds: { increment: expect.any(Number) },
+        },
+      }),
+    );
+  });
+
   it.each([
     ["planned", "lobby", true],
     ["planned", "active", false],

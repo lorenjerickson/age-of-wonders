@@ -7,22 +7,11 @@ import {
   getMyAuthenticationProviders,
   getParticipantCampaignSession,
   getParticipantCampaignSessionEvents,
-  heartbeatCampaignSession,
-  joinCampaignSession,
-  leaveCampaignSession,
   type ParticipantCampaignSessionEvents,
   type ParticipantCampaignSessionProjection,
 } from "./api";
 
-function presenceKey(sessionId: string) {
-  const storageKey = `aow.session.${sessionId}.presence`;
-  let value = sessionStorage.getItem(storageKey);
-  if (!value) {
-    value = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-    sessionStorage.setItem(storageKey, value);
-  }
-  return value;
-}
+import { useSessionPresence } from "./useSessionPresence";
 
 function sessionAction(status: ParticipantCampaignSessionProjection["status"]) {
   if (status === "active") return "Continue Session";
@@ -41,14 +30,12 @@ export function CampaignSessionParticipantPage({
     useState<ParticipantCampaignSessionProjection>();
   const [events, setEvents] = useState<ParticipantCampaignSessionEvents>();
   const [spatial, setSpatial] = useState<ParticipantSpatialBinding>();
-  const [present, setPresent] = useState(false);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
   const [auth0, setAuth0] =
     useState<
       Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
     >();
-  const connectionKey = useRef("");
   const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
@@ -108,70 +95,19 @@ export function CampaignSessionParticipantPage({
     return () => window.clearInterval(timer);
   }, [load]);
 
-  useEffect(() => {
-    if (!present) return;
-    const timer = window.setInterval(() => {
-      void heartbeatCampaignSession(
-        campaignInstanceId,
-        sessionId,
-        connectionKey.current,
-      ).then(load, () => setPresent(false));
-    }, 45_000);
-    return () => window.clearInterval(timer);
-  }, [campaignInstanceId, load, present, sessionId]);
+  const {
+    present,
+    join: joinPresence,
+    leave: leavePresence,
+    error: presenceError,
+  } = useSessionPresence({ campaignInstanceId, sessionId, onRefresh: load });
 
-  useEffect(
-    () => () => {
-      if (!present || !connectionKey.current) return;
-      void leaveCampaignSession(
-        campaignInstanceId,
-        sessionId,
-        connectionKey.current,
-      );
-    },
-    [campaignInstanceId, present, sessionId],
-  );
-
-  async function join() {
-    setBusy(true);
-    setMessage("");
-    try {
-      connectionKey.current = presenceKey(sessionId);
-      await joinCampaignSession(
-        campaignInstanceId,
-        sessionId,
-        connectionKey.current,
-      );
-      setPresent(true);
-      await load();
-    } catch (caught) {
-      setMessage(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : "The Session could not be joined.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function leave() {
-    if (!connectionKey.current) return;
+  async function updatePresence() {
     setBusy(true);
     try {
-      await leaveCampaignSession(
-        campaignInstanceId,
-        sessionId,
-        connectionKey.current,
-      );
-      setPresent(false);
-      await load();
-    } catch (caught) {
-      setMessage(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : "Your Session presence could not be updated.",
-      );
+      await (present ? leavePresence() : joinPresence());
+    } catch {
+      // The lease hook exposes the presence error independently of page refresh.
     } finally {
       setBusy(false);
     }
@@ -216,7 +152,7 @@ export function CampaignSessionParticipantPage({
                 <Button
                   tone={present ? "outline" : "primary"}
                   loading={busy}
-                  onClick={() => void (present ? leave() : join())}
+                  onClick={() => void updatePresence()}
                 >
                   {present ? "Leave Session" : sessionAction(session.status)}
                 </Button>
@@ -225,6 +161,7 @@ export function CampaignSessionParticipantPage({
         </header>
 
         {message && <Alert tone="error">{message}</Alert>}
+        {presenceError && <Alert tone="error">{presenceError}</Alert>}
         {session?.role === "player" && session.status === "active" && (
           <section className="rounded-box border border-neutral-content/15 p-5">
             <h2 className="text-xl font-semibold">Your map actor</h2>
