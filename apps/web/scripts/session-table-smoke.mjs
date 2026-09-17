@@ -266,7 +266,7 @@ await withFixture(async (url) => {
     if (request.method() !== "GET") writes.push(path);
     if (path.endsWith("/download"))
       return route.fulfill({ json: { url: image.uri } });
-    if (path.endsWith("/movement")) return route.fulfill({json:{runtimeRevision:1,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
+    if (path.endsWith("/movement")) return route.fulfill({json:{snapshotNumber:2,runtimeRevision:7,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
     if (path.endsWith("/table")) {
       locationReads.push(parsed.searchParams.get("locationId"));
       if (holdTable) {
@@ -413,31 +413,8 @@ await withFixture(async (url) => {
     await page
       .getByRole("heading", { name: "Stone Causeway", exact: true })
       .waitFor();
-    const terrainSurface = page.getByLabel(/^Captured terrain reference\./);
-    await terrainSurface.waitFor();
-    await terrainSurface.locator("canvas").waitFor();
-    const beforeDrag = writes.length;
-    const box = await terrainSurface.boundingBox();
-    if (!box) throw new Error("Terrain reference has no visible bounds");
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      box.x + box.width / 2 + 90,
-      box.y + box.height / 2 + 30,
-      { steps: 8 },
-    );
-    await page.mouse.up();
-    if (writes.length !== beforeDrag)
-      throw new Error("Dragging captured terrain submitted a mutation");
-    const terrainText = await page.locator("body").innerText();
-    if (
-      /Preview actor|left drag edits|Isometric terrain editor/i.test(
-        terrainText,
-      )
-    )
-      throw new Error(
-        "Terrain reference exposed editor or fabricated actor copy",
-      );
+    await page.getByText("Place an actor in this Location to open the interactive GM map.", {exact:true}).waitFor();
+    if (await page.locator("canvas").count()) throw new Error("An interactive map invented an actor when none was placed");
     await assertReadOnlyAndNamed();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({

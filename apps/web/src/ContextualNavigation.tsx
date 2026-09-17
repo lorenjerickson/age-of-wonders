@@ -18,7 +18,7 @@ function object(value: unknown): Record<string, unknown> {
     ? (value as Record<string, unknown>)
     : {};
 }
-function useNavigation() {
+function useNavigation(override?: NavigationData) {
   const location = useLocation();
   const matches = useMatches();
   const live = useContext(NavigationLiveData);
@@ -37,6 +37,10 @@ function useNavigation() {
     if (typeof instance.name === "string") data.instanceName = instance.name;
     const records = object(result.draft).records;
     if (Array.isArray(records)) data.records = records;
+    const locations = object(
+      object(result.draft).capturedWorldContent,
+    ).locations;
+    if (Array.isArray(locations)) data.locations = locations;
   }
   if (
     live?.world &&
@@ -45,8 +49,20 @@ function useNavigation() {
     )
   )
     data.records = live.world.records;
+  if (
+    live?.campaign &&
+    location.pathname.startsWith(
+      `/campaigns/definitions/${encodeURIComponent(live.campaign.campaignId)}/`,
+    )
+  ) {
+    data.records = live.campaign.records;
+    data.locations = live.campaign.locations;
+  }
   return {
-    stack: contextualNavigationStack(location.pathname, data),
+    stack: contextualNavigationStack(location.pathname, {
+      ...data,
+      ...override,
+    }),
     location,
     gmScope,
     suffix: worldWorkspaceSuffix(location.searchStr),
@@ -207,8 +223,10 @@ function SidebarDisclosure({
   );
 }
 
-export function ContextualBreadcrumbs() {
-  const { stack, location, suffix } = useNavigation();
+export function ContextualBreadcrumbs({
+  data,
+}: { data?: NavigationData } = {}) {
+  const { stack, location, suffix } = useNavigation(data);
   const crumbs = contextualBreadcrumbs(location.pathname, stack);
   return (
     <nav

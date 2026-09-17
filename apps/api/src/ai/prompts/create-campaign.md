@@ -45,17 +45,18 @@ Return exactly one JSON object shaped like this:
       "description": "GM-facing circumstances",
       "objectives": [{ "name": "Objective", "description": "Optional detail" }],
       "pressures": [{ "name": "Pressure", "description": "Optional detail" }],
-      "resistances": [{ "name": "Resistance", "description": "Optional detail" }],
+      "resistances": [
+        { "name": "Resistance", "description": "Optional detail" }
+      ],
       "discoveries": [
         {
           "name": "What may be learned",
-          "claims": [
-            { "key": "claim-truth", "kind": "truth", "statement": "An authoritative truth." },
+          "truth": { "statement": "An authoritative truth." },
+          "beliefs": [],
+          "rumors": [
             {
-              "key": "claim-rumor",
-              "kind": "rumor",
               "statement": "A possibly false rumor.",
-              "conflictsWithKeys": ["claim-truth"]
+              "relation": "contradicts"
             }
           ]
         }

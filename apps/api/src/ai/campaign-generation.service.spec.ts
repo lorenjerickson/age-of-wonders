@@ -11,7 +11,10 @@ describe("CampaignGenerationService", () => {
         resourceType: "world-definition-revision",
         sourceId: "world-revision-2",
         sourceRevision: 2,
-        payload: { rootLocationId: "world-1", locationIds: ["world-1", "location-1"] },
+        payload: {
+          rootLocationId: "world-1",
+          locationIds: ["world-1", "location-1"],
+        },
       },
       {
         resourceType: "locations",
@@ -102,7 +105,9 @@ describe("CampaignGenerationService", () => {
         },
       ],
     });
-    const respond = jest.fn().mockResolvedValue({ output, responseId: "response-1" });
+    const respond = jest
+      .fn()
+      .mockResolvedValue({ output, responseId: "response-1" });
     const findUnique = jest.fn().mockResolvedValue({
       id: "world-snapshot-2",
       worldDefinitionId: "world-definition-1",
@@ -164,15 +169,22 @@ describe("CampaignGenerationService", () => {
     expect(result.draftProposal.plots).toHaveLength(2);
     expect(result.draftProposal.plots[1]?.parent.kind).toBe("subplot");
     expect(result.draftProposal.plots[0]?.locationContexts).toHaveLength(1);
-    expect(result.draftProposal.plots[0]?.discoveries[0]?.claims).toHaveLength(2);
+    expect(result.draftProposal.plots[0]?.discoveries[0]?.truth.statement).toBe(
+      "The river is already rising.",
+    );
+    expect(result.draftProposal.plots[0]?.discoveries[0]?.rumors).toHaveLength(
+      1,
+    );
+    expect(result.draftProposal.plots[0]?.discoveries[0]?.rumors[0]?.relation).toBe(
+      "contradicts",
+    );
     expect(result.draftProposal.placements).toHaveLength(2);
-    expect(result.draftProposal.placements[0]?.plotDefinitionIds).toHaveLength(2);
-    expect(result.draftProposal.records.map(({ resourceType }) => resourceType)).toEqual([
-      "plots",
-      "plots",
-      "campaign-placements",
-      "campaign-placements",
-    ]);
+    expect(result.draftProposal.placements[0]?.plotDefinitionIds).toHaveLength(
+      2,
+    );
+    expect(
+      result.draftProposal.records.map(({ resourceType }) => resourceType),
+    ).toEqual(["plots", "plots", "campaign-placements", "campaign-placements"]);
     expect(JSON.stringify(result)).not.toContain('"resource":"campaigns"');
   });
 
@@ -181,13 +193,19 @@ describe("CampaignGenerationService", () => {
     const service = new CampaignGenerationService(
       { read: jest.fn() } as unknown as AiPromptService,
       { respond } as unknown as OpenAiService,
-      { worldDefinitionSnapshot: { findUnique: jest.fn().mockResolvedValue(null) } },
+      {
+        worldDefinitionSnapshot: {
+          findUnique: jest.fn().mockResolvedValue(null),
+        },
+      },
     );
 
     await expect(
       service.createDraftProposal("opaque-snapshot", "gm-1", "An idea"),
     ).rejects.toEqual(
-      new NotFoundException("The selected World Definition snapshot was not found."),
+      new NotFoundException(
+        "The selected World Definition snapshot was not found.",
+      ),
     );
     expect(respond).not.toHaveBeenCalled();
   });
@@ -223,10 +241,16 @@ describe("CampaignGenerationService", () => {
     '<a href="javascript:alert(1)">Premise</a>',
   ])("rejects unsafe rich text returned by the model", async (gmPremise) => {
     const manifest = buildSnapshotManifest(1, [
-      { resourceType: "locations", sourceId: "world", payload: { name: "World" } },
+      {
+        resourceType: "locations",
+        sourceId: "world",
+        payload: { name: "World" },
+      },
     ]);
     const service = new CampaignGenerationService(
-      { read: jest.fn().mockResolvedValue("prompt") } as unknown as AiPromptService,
+      {
+        read: jest.fn().mockResolvedValue("prompt"),
+      } as unknown as AiPromptService,
       {
         respond: jest.fn().mockResolvedValue({
           output: JSON.stringify({

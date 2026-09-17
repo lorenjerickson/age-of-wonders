@@ -42,6 +42,10 @@ suite("Session movement PostgreSQL boundary", () => {
     const before = await db.campaignInstanceRuntime.findUniqueOrThrow({
       where: { campaignInstanceId: f.scope.instanceId },
     });
+    expect(await service.context(f.scope)).toMatchObject({
+      snapshotNumber: 1,
+      runtimeRevision: 1,
+    });
     const proposal = await service.preview(f.scope, f.request);
     expect(proposal.status).toBe("pending");
     expect(proposal.effects).toContainEqual(
@@ -68,6 +72,14 @@ suite("Session movement PostgreSQL boundary", () => {
       .creatureEmbodiments[0].creature;
     expect(actor.terrainPosition).toEqual(f.request.destination);
     expect(actor.extensions?.["aow:rules"]).toMatchObject({ "aow:moves": 1 });
+    const committedContext = await service.context(f.scope);
+    expect(
+      committedContext.actors.find((entry) => entry.id === f.request.actorId),
+    ).toMatchObject({
+      position: f.request.destination,
+      recordedMoves: 1,
+      movementRemaining: 25,
+    });
     const events = await db.campaignSessionEvent.findMany({
       where: { sessionId: f.scope.sessionId },
       orderBy: { sequence: "asc" },
@@ -348,6 +360,10 @@ suite("Session movement PostgreSQL boundary", () => {
         data: { status: "ACTIVE", resumedAt: new Date() },
       });
     });
+    expect(await service.context(f.scope)).toMatchObject({
+      snapshotNumber: 2,
+      runtimeRevision: 2,
+    });
     await expect(
       service.decide(f.scope, proposal.id, "approved", "snapshot-decision"),
     ).rejects.toThrow("captured rules changed");
@@ -449,6 +465,31 @@ suite("Session movement PostgreSQL boundary", () => {
         where: { sessionId: e.scope.sessionId },
       }),
     ).toBe(3);
+  });
+  it("resolves legacy proposal coordinate space from saved state and never guesses missing origins", async () => {
+    const f = await seed(db);
+    const preview = await service.preview(f.scope, f.request);
+    const context = await service.context(f.scope);
+    expect(preview.locationId).toBe(context.actors[0].locationId);
+    const row = await db.campaignSessionMovementProposal.findUniqueOrThrow({
+      where: { id: preview.id },
+    });
+    const legacy = { ...(row.projection as Prisma.JsonObject) };
+    delete legacy.locationId;
+    await db.campaignSessionMovementProposal.update({
+      where: { id: preview.id },
+      data: { projection: legacy },
+    });
+    expect((await service.context(f.scope)).proposals[0].locationId).toBe(
+      preview.locationId,
+    );
+    await db.campaignSessionMovementProposal.update({
+      where: { id: preview.id },
+      data: { nextState: {} },
+    });
+    expect(
+      (await service.context(f.scope)).proposals[0].locationId,
+    ).toBeUndefined();
   });
 });
 

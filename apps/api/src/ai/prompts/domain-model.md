@@ -378,7 +378,6 @@ square inventory images for Items, including new records. Applying a preview sta
 only saving the editor changes the World draft. Generation is owner-scoped, revision-checked,
 idempotent, rate-limited, and audited. Item images continue to use the existing `image` field.
 
-
 `ProfessionExpertise` is a `NamespacedKey`, not a fixed rank union. A Profession Definition's
 `expertiseOrder`, expertise-level `tier`, acquisition `startingExpertise`, and Character runtime
 expertise values must use Profession Rank option keys from the exact Model Schema releases captured
@@ -818,12 +817,14 @@ runtime realization links, per-Creature knowledge, revealed claims, and approved
 not copy Plot parentage into a second runtime hierarchy or turn mutable actors and Items into
 Campaign Definition content.
 
-A `PlotDiscovery` contains at least one claim discriminated as `truth`, `belief`, or `rumor` in a
-publishable Campaign Definition draft. Truth claims do
-not offer a contradiction field. Beliefs and Rumors may name claims they conflict with, and a Rumor's
-`relatedTruthClaimId` is optional because a false Rumor need not resolve to a Truth. Per-Creature
-knowledge is separately discriminated as `knows-truth`, `holds-belief`, or `heard-rumor`; learning a
-claim never changes its epistemic kind.
+A `PlotDiscovery` is a composed epistemic object with exactly one `truth` facet and one or more
+supporting or contradicting facets distributed across its `beliefs` and `rumors` arrays. Each belief
+and rumor has its own stable `id`, `statement`, optional `provenance`, and required `relation` of
+`supports` or `contradicts`; these facets are defined independently while remaining owned by the
+Discovery. New writes must use this composed shape. The deprecated `claims` array is accepted only
+when reading older snapshots so they can be migrated without losing content. Per-Creature knowledge
+is separately discriminated as `knows-truth`, `holds-belief`, or `heard-rumor`; learning a facet never
+changes its epistemic kind.
 
 Use `validatePlotHierarchy` before accepting an authored Plot set. It reports duplicate identities,
 missing or cross-Definition parents and relationship targets, parent cycles, combined
@@ -845,7 +846,7 @@ directory, membership lifecycle, and Character association/import APIs now opera
 | `PlayerProfile`                                 | `PlayerProfile`                             | One durable Player profile per authenticated User; standing is independent of Instance membership; Spectator-only Users have no profile; each non-null contact hash is unique installation-wide                                                                             |
 | Protected authentication-provider association   | `AuthenticationProviderAssociation`         | Belongs to the durable User and optionally its Player profile, supporting administrators and Spectators without invented Player profiles; exact Auth0 subjects are encrypted/hashed, credentials remain external references, and no contact field may infer or claim a link |
 | `CampaignInstanceHumanMembership`               | `CampaignInstanceHumanMembership`           | Explicit Instance FK; Player role requires a Player profile, while GM and Spectator roles forbid one                                                                                                                                                                        |
-| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`                | Explicit Instance FK; Player/Spectator only; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                                                                                     |
+| Protected `CampaignInstanceInvitation` workflow | `CampaignInstanceInvitation`                | Explicit Instance FK; GM/Player/Spectator roles; contacts are encrypted/hashed and invitation credentials are hash-only; acceptance/revocation fields must agree with status and chronology                                                                                 |
 | Invitation delivery attempt                     | `CampaignInstanceInvitationDeliveryAttempt` | Contact-free per-channel outcome and provider reference for one Instance invitation; recipient addresses and tokens are never stored in this audit row                                                                                                                      |
 | Non-human Agent identity                        | `AgentIdentity`                             | GM-owned stable Agent identity with protected configuration reference rather than embedded credentials                                                                                                                                                                      |
 | `CampaignInstanceAgentParticipation`            | `CampaignInstanceAgentParticipation`        | Explicit Instance and Agent FKs; observe and act capability arrays are stored separately and must be selected from the closed core Session capability registry                                                                                                              |
@@ -2474,7 +2475,6 @@ state mutation, authorization, snapshot selection, clock access, or persistence.
 provenance, publication/migration validation, declaration/decision idempotency, runtime concurrency,
 and Session audit remain integration work.
 
-
 ## Isometric terrain (source authoring and immutable chunk capture)
 
 `packages/common/src/types/isometric-terrain.ts` declares spatial values used by the pure geometry
@@ -2494,12 +2494,12 @@ hashes, register a competing Map aggregate, or embed inline cells in a Location 
 
 GM-owned endpoints below are relative to `/worlds/:worldId/atlas/locations/:locationId`:
 
-| Operation | Route and contract |
-| --- | --- |
-| Stage a chunk | `POST /map/chunks`: `expectedDraftId`, `expectedStorageRevision`, and `chunk`; returns canonical `contentHash` and address |
-| Save source map | `PUT /map`: `SaveLocationTerrainRequest` with expected draft identity/revision, `operationId`, and `map` |
-| Read hydrated terrain | `GET /map`: authorized complete `IsometricTerrainVolume` |
-| Read one captured chunk | `GET /map/chunks/:contentHash`: requires that exact chunk to be referenced by this Location's active draft map |
+| Operation               | Route and contract                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Stage a chunk           | `POST /map/chunks`: `expectedDraftId`, `expectedStorageRevision`, and `chunk`; returns canonical `contentHash` and address |
+| Save source map         | `PUT /map`: `SaveLocationTerrainRequest` with expected draft identity/revision, `operationId`, and `map`                   |
+| Read hydrated terrain   | `GET /map`: authorized complete `IsometricTerrainVolume`                                                                   |
+| Read one captured chunk | `GET /map/chunks/:contentHash`: requires that exact chunk to be referenced by this Location's active draft map             |
 
 `WorldTerrainUpload` is draft-scoped staging; it is not published terrain. `WorldTerrainSave` records
 request hashes and revisions for idempotent saves. The save transaction advances the World draft,
@@ -2594,19 +2594,27 @@ Example **working value only**, not a Location API payload:
   "cellSize": { "value": 5, "unit": "ft" },
   "chunkSize": 16,
   "materials": [
-    { "key": "terrain:grass", "revision": 1, "name": "Grass", "terrainType": "terrain:grass" }
+    {
+      "key": "terrain:grass",
+      "revision": 1,
+      "name": "Grass",
+      "terrainType": "terrain:grass"
+    }
   ],
   "chunks": [
     {
       "address": { "x": 0, "y": 0, "z": 0 },
       "cells": [
-        { "offset": 0, "materialKey": "terrain:grass", "shape": { "top": [1, 1, 1, 1], "diagonal": "00-11" } }
+        {
+          "offset": 0,
+          "materialKey": "terrain:grass",
+          "shape": { "top": [1, 1, 1, 1], "diagonal": "00-11" }
+        }
       ]
     }
   ]
 }
 ```
-
 
 Example persisted empty isometric map (the optional `map` field on a source Location):
 
@@ -2618,7 +2626,12 @@ Example persisted empty isometric map (the optional `map` field on a source Loca
   "cellSize": { "value": 5, "unit": "ft" },
   "chunkSize": 16,
   "materials": [
-    { "key": "terrain:grass", "revision": 1, "name": "Grass", "terrainType": "terrain:grass" }
+    {
+      "key": "terrain:grass",
+      "revision": 1,
+      "name": "Grass",
+      "terrainType": "terrain:grass"
+    }
   ],
   "chunks": []
 }
@@ -2631,7 +2644,6 @@ placement and selection, with slicing along the fixed axis. Color/normal/roughne
 material on all faces. Texture quality (1K, 2K, or untextured) is local presentation state, not a new
 persisted domain field. Custom texture assets, geometric edge rounding, and runtime actor visibility
 remain pending. It is not an authorized player map renderer.
-
 
 ### Implemented actor terrain setup and participant binding
 
@@ -2671,7 +2683,6 @@ binding data on failed authorization or Session changes. Actual actor-centered g
 GM random focus/switching, player-facing movement, fog/LOS projection, and camera terrain fading remain
 pending. GM-reviewed rule effects now change Instance positions through the separate movement endpoints. Never infer player map access from a successful actor binding.
 
-
 ### Internal sight geometry and surface projection
 
 `terrainOpeningParts` supplies canonical frame/panel/glass triangles shared by the GM renderer and
@@ -2694,7 +2705,6 @@ now composes this gate as described below; a rules evaluator and participant ren
 Do not generate these internal query results as authored domain records.
 `ParticipantSpatialBinding` remains the only implemented participant spatial DTO.
 
-
 ### Observer exploration snapshots (internal values and dedicated persistence)
 
 `packages/common/src/types/terrain-exploration.ts` is the exact contract for these new values:
@@ -2703,7 +2713,7 @@ Do not generate these internal query results as authored domain records.
   positive safe-integer `runtimeRevision`. The server selects these identities; they are not user
   labels. Snapshot identity is part of the scope, so new captures do not inherit memory implicitly.
 - `TerrainExploredSurface`: canonical `key`, `material: { key, revision }`, `treatment:
-  "terrain" | "glass"`, and a three-point `triangle` in grid units. Material revision belongs to
+"terrain" | "glass"`, and a three-point `triangle` in grid units. Material revision belongs to
   each surface: remembered and current geometry can reference different versions of the same key.
 - `TerrainExplorationObservation`: `context`, authorized `surfaces`, and `absentSurfaceKeys` for
   explicitly observed disappearances. This is an internal evaluated observation, never player input.
@@ -2735,7 +2745,6 @@ is implemented below. Existing `ParticipantSpatialBinding` and its readiness-onl
 unchanged. The surface budget is an implementation limit pending scalable storage, not a change
 to the accepted 100³-cell map requirement.
 
-
 ### Exploration database storage
 
 `TerrainExplorationSnapshot` maps to Prisma `CampaignTerrainExploration.payload`. Its composite
@@ -2763,7 +2772,6 @@ cannot be reused automatically. This table stores latest memory per scope; the c
 table stores immutable historical captures. Cross-capture remapping is not inferred. The participant spatial endpoint remains readiness-only until rule
 evaluation and Session authority integration are implemented. The additive SQL migration is
 `20260918000000_terrain_exploration`; it performs no automatic exploration backfill.
-
 
 ### Checkpoint exploration capture and predecessor recovery
 
@@ -2800,7 +2808,6 @@ in the internal plan hash and rechecked at apply. Legacy unrecorded checkpoints 
 with a preview notice; corrupt recorded captures abort rather than silently losing knowledge.
 Rules, participant authority, and live visibility remain separate and deferred. Migration SQL is
 `20260919000000_exploration_checkpoints`, with no historical discovery backfill.
-
 
 ### Unified map orientation authoring
 
@@ -2906,7 +2913,19 @@ remains the sole mutable owner. Location/position structure is validated against
 
 `SessionMovementRequest`, `SessionMovementDecisionRequest`, `SessionMovementContext`, and
 `SessionMovementProposal` in `movement-execution-api.ts` define GM-only movement declarations,
-review, and receipts. The server selects captured rules and trusted actor/geometry context, records
+review, and receipts. Context actors expose optional finite numeric `movementRemaining` and
+`recordedMoves` read from committed `creature.extensions['aow:rules']` values
+`aow:movementRemaining` and `aow:moves`. Absence means not initialized, never an implicit zero or
+allowance. The GM Run panel displays these alongside committed position so preview and approval
+outcomes can be compared; it never edits or resets these resources directly.
+Movement context carries `snapshotNumber` and `runtimeRevision`; interactive
+GM maps must match both against the displayed Session table, and select actors by the context
+actor identity and matching Location. Table party keys are presentation identities and must not be
+used as movement actor identities. Proposal `locationId` identifies the original coordinate space;
+rebuilding requires the same actor Location and the viewed map. Legacy receipts resolve this from
+their saved evaluated actor state; if unresolved, the field is omitted and rebuilding is unavailable.
+A local Location selection does not move actors or authorize
+requests against another map. The server selects captured rules and trusted actor/geometry context, records
 entropy and the isolated resulting state, and persists them in `CampaignSessionMovementProposal`.
 This relational table is scoped to the Instance, Session, and snapshot; it is not a generic domain
 resource. Status is pending/approved/rejected/no-op/failed. Request keys are unique per Session;
@@ -2914,6 +2933,26 @@ conflicting reuse is rejected. Approval rechecks active Session, ownership, snap
 revision, then updates runtime, proposal decision, and causal Session journal in one transaction.
 Rejection and no-rule outcomes never move an actor. A completed decision retry returns its receipt
 without applying effects again; stale pending proposals require a new preview. GM history exposes
-resolved names and explanations; raw causal payloads and runtime state remain GM-only. Player map
-visibility, actor-focused gameplay rendering, full combat, and automatic action execution are not
-provided by this first reviewed movement path.
+resolved names and explanations; raw causal payloads and runtime state remain GM-only. The explicit
+GM overview renders real named actors, preserves one actor focus, and picks authored support surfaces
+for candidate destinations; numeric controls remain available. Selection and pending markers do not
+change runtime. Player map visibility, actor-relative sight, declared-body-height camera anchoring,
+full combat, and automatic action execution remain pending.
+
+Campaign Instance migration initializes progress only for newly introduced captured target Plots
+(including subplots) and newly introduced Objectives, with `not-started` status and the exact
+Instance scope. Migration preview and apply use the same transformation; restore does not initialize additions. Existing statuses and overlays
+are preserved; missing progress for an already captured source Plot is not repaired. Explicit
+Plot/Objective mappings retain their existing progress, and the complete result must pass target
+capture validation before adoption. No actor embodiment or placement is fabricated by migration.
+
+
+### Instance opening Location choices
+
+`CampaignInstancePreparationProjection.locations` is the named Location list from the Instance's
+captured World snapshot. Both preparation reads and saves return these choices. The Instance
+Overview edits `preparation.startingLocationId` using this captured list and an expected runtime
+revision; out-of-capture references remain invalid. The chosen Location is the Session table's
+initial view, not a movement command or an automatic actor placement. Definition preparation
+supplies defaults on new Instance creation; existing Instances retain their own preparation.
+No persisted resource mapping changes are introduced by this projection.

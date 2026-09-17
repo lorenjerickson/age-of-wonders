@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import { defineConfig, type Plugin } from "vite";
+import { reactPluginOptions } from "./react-plugin-options";
 
 function prerenderPreviewPort(): Plugin {
   return {
@@ -33,7 +34,7 @@ export default defineConfig({
         failOnError: true,
       },
     }),
-    react({ compiler: true }),
+    react(reactPluginOptions),
     tailwindcss(),
     nitro({ preset: "node-server", sourcemap: true }),
     // Nitro currently turns Start's ephemeral preview port (0) into 3000.

@@ -67,7 +67,9 @@ export function CampaignInstanceJoinPage() {
       await navigate(
         result.user.role === "player"
           ? `/play/instances/${encodeURIComponent(result.campaignInstanceId)}/characters`
-          : "/join",
+          : result.user.role === "gm"
+            ? `/campaigns/instances/${encodeURIComponent(result.campaignInstanceId)}`
+            : "/join",
         { replace: true },
       );
     } catch (caught) {
@@ -96,7 +98,9 @@ export function CampaignInstanceJoinPage() {
               You are invited as{" "}
               {state.invitation.role === "spectator"
                 ? "a Spectator"
-                : "a Player"}
+                : state.invitation.role === "gm"
+                  ? "a Game Master"
+                  : "a Player"}
               .
             </p>
           </div>

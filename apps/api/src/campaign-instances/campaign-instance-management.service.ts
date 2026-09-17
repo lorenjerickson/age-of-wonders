@@ -188,6 +188,7 @@ export class CampaignInstanceManagementService {
       campaignInstanceName: instance.name,
       runtimeRevision: instance.runtime!.revision,
       preparation: objectValue(state.preparation),
+      locations: preparationLocations(instance),
     };
   }
 
@@ -233,6 +234,7 @@ export class CampaignInstanceManagementService {
       campaignInstanceName: instance.name,
       runtimeRevision: dto.expectedRuntimeRevision + 1,
       preparation,
+      locations: preparationLocations(instance),
     };
   }
 
@@ -1910,4 +1912,10 @@ function runtimeItem(
     quality: "standard",
     location: { kind: "location", locationId: realization.sourceLocationId },
   };
+}
+
+
+function preparationLocations(instance: {currentSnapshot: {worldDefinitionSnapshot: {manifest: unknown}} | null}) {
+  return snapshotRecords(instance.currentSnapshot?.worldDefinitionSnapshot.manifest, "locations")
+    .map(record => ({id: record.sourceId, name: humanName(record.payload, "Unnamed captured Location")}));
 }

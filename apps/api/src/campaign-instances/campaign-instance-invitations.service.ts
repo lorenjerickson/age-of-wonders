@@ -88,7 +88,10 @@ export class CampaignInstanceInvitationsService {
             (await tx.user.create({
               data: {
                 displayName: invitation.invitedName ?? "Participant",
-                role: UserRole.PARTICIPANT,
+                role:
+                  invitation.role === CampaignInstanceHumanRole.GM
+                    ? UserRole.GM
+                    : UserRole.PARTICIPANT,
               },
             }));
           const profile =
@@ -105,6 +108,16 @@ export class CampaignInstanceInvitationsService {
                   },
                 })))
               : null;
+          if (
+            invitation.role === CampaignInstanceHumanRole.GM &&
+            existingUser &&
+            existingUser.role !== UserRole.GM
+          ) {
+            await tx.user.update({
+              where: { id: user.id },
+              data: { role: UserRole.GM },
+            });
+          }
           if (!existingUser) {
             await tx.authenticationProviderAssociation.create({
               data: {
@@ -155,9 +168,11 @@ export class CampaignInstanceInvitationsService {
       user: {
         displayName: accepted.user.displayName,
         role:
-          accepted.membership.role === "SPECTATOR"
-            ? ("spectator" as const)
-            : ("player" as const),
+          accepted.membership.role === "GM"
+            ? ("gm" as const)
+            : accepted.membership.role === "SPECTATOR"
+              ? ("spectator" as const)
+              : ("player" as const),
       },
       campaignInstanceId: invitation.campaignInstanceId,
       campaignInstanceName: invitation.campaignInstance.name,
@@ -290,7 +305,9 @@ export class CampaignInstanceInvitationsService {
             role:
               dto.role === "player"
                 ? CampaignInstanceHumanRole.PLAYER
-                : CampaignInstanceHumanRole.SPECTATOR,
+                : dto.role === "gm"
+                  ? CampaignInstanceHumanRole.GM
+                  : CampaignInstanceHumanRole.SPECTATOR,
             invitedName,
             invitedUserId,
             emailEncrypted: email?.encrypted,

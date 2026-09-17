@@ -14,7 +14,6 @@ import type {
   CampaignPlacementDefinitionId,
   CreatureId,
   DefinitionId,
-  DiscoveryClaim,
   LocationId,
   ModelSchemaReleaseId,
   PlotDefinition,
@@ -188,12 +187,17 @@ export class CampaignGenerationService {
         "The AI response included unsafe Campaign rich text.",
       );
     }
-    const locationIds = new Set(catalogs.locations.map(({ sourceId }) => sourceId));
-    const creatureIds = new Set(catalogs.creatures.map(({ sourceId }) => sourceId));
+    const locationIds = new Set(
+      catalogs.locations.map(({ sourceId }) => sourceId),
+    );
+    const creatureIds = new Set(
+      catalogs.creatures.map(({ sourceId }) => sourceId),
+    );
     const itemIds = new Set(catalogs.items.map(({ sourceId }) => sourceId));
     const worldPlacementLocations = new Map(
       catalogs.worldPlacements.flatMap((record) =>
-        isObject(record.payload) && typeof record.payload.locationId === "string"
+        isObject(record.payload) &&
+        typeof record.payload.locationId === "string"
           ? [[record.sourceId, record.payload.locationId] as const]
           : [],
       ),
@@ -220,7 +224,8 @@ export class CampaignGenerationService {
         worldDefinitionSnapshotId as WorldDefinitionSnapshotId,
       name,
       description:
-        typeof generated.description === "string" && generated.description.trim()
+        typeof generated.description === "string" &&
+        generated.description.trim()
           ? generated.description.trim()
           : undefined,
       content: {
@@ -280,7 +285,10 @@ export class CampaignGenerationService {
       const common = {
         id: randomUUID() as CampaignPlacementDefinitionId,
         locationId: locationId as LocationId,
-        plotDefinitionIds: plotDefinitionIds as [PlotDefinitionId, ...PlotDefinitionId[]],
+        plotDefinitionIds: plotDefinitionIds as [
+          PlotDefinitionId,
+          ...PlotDefinitionId[],
+        ],
         ...(typeof candidate.name === "string" && candidate.name.trim()
           ? { name: candidate.name.trim() }
           : {}),
@@ -294,12 +302,14 @@ export class CampaignGenerationService {
         worldPlacementLocations.get(candidate.capturedWorldPlacementId) ===
           locationId
       ) {
-        return [{
-          ...common,
-          kind: "world-decoration" as const,
-          capturedWorldPlacementId:
-            candidate.capturedWorldPlacementId as WorldPlacementDefinitionId,
-        }];
+        return [
+          {
+            ...common,
+            kind: "world-decoration" as const,
+            capturedWorldPlacementId:
+              candidate.capturedWorldPlacementId as WorldPlacementDefinitionId,
+          },
+        ];
       }
       if (candidate.kind !== "independent" || !isObject(candidate.source)) {
         return [];
@@ -310,20 +320,32 @@ export class CampaignGenerationService {
         typeof source.creatureId === "string" &&
         creatureIds.has(source.creatureId)
       ) {
-        return [{ ...common, kind: "independent" as const, source: {
-          kind: "world-creature" as const,
-          creatureId: source.creatureId as CreatureId,
-        }}];
+        return [
+          {
+            ...common,
+            kind: "independent" as const,
+            source: {
+              kind: "world-creature" as const,
+              creatureId: source.creatureId as CreatureId,
+            },
+          },
+        ];
       }
       if (
         source.kind === "world-item" &&
         typeof source.itemDefinitionId === "string" &&
         itemIds.has(source.itemDefinitionId)
       ) {
-        return [{ ...common, kind: "independent" as const, source: {
-          kind: "world-item" as const,
-          itemDefinitionId: source.itemDefinitionId as DefinitionId,
-        }}];
+        return [
+          {
+            ...common,
+            kind: "independent" as const,
+            source: {
+              kind: "world-item" as const,
+              itemDefinitionId: source.itemDefinitionId as DefinitionId,
+            },
+          },
+        ];
       }
       return [];
     });
@@ -337,7 +359,9 @@ export class CampaignGenerationService {
     plotIdsByKey: ReadonlyMap<string, PlotDefinitionId>;
   } {
     if (!Array.isArray(value) || value.length === 0) {
-      throw new BadGatewayException("The AI response did not include any Plots.");
+      throw new BadGatewayException(
+        "The AI response did not include any Plots.",
+      );
     }
     const candidates = value.filter(isObject);
     const plotIdsByKey = new Map<string, PlotDefinitionId>();
@@ -373,7 +397,8 @@ export class CampaignGenerationService {
           ? ({ kind: "subplot", parentPlotDefinitionId: parentId } as const)
           : ({ kind: "root" } as const),
         name,
-        ...(typeof candidate.description === "string" && candidate.description.trim()
+        ...(typeof candidate.description === "string" &&
+        candidate.description.trim()
           ? { description: candidate.description.trim() }
           : {}),
         objectives: namedNotes(candidate.objectives),
@@ -436,7 +461,8 @@ function capturedCatalogs(
   manifest: CanonicalSnapshotManifest,
 ): CapturedCatalogs {
   const definitions = manifest.records.filter(
-    (record) => record.resourceType === "definitions" && isObject(record.payload),
+    (record) =>
+      record.resourceType === "definitions" && isObject(record.payload),
   );
   return {
     locations: manifest.records.filter(
@@ -446,8 +472,9 @@ function capturedCatalogs(
       ...manifest.records.filter(
         (record) => record.resourceType === "creatures",
       ),
-      ...definitions.filter((record) =>
-        isObject(record.payload) && record.payload.kind === "creature",
+      ...definitions.filter(
+        (record) =>
+          isObject(record.payload) && record.payload.kind === "creature",
       ),
     ],
     items: definitions.filter(
@@ -505,7 +532,8 @@ function namedNotes(value: unknown) {
       return [{ id: randomUUID(), name: candidate.trim() }];
     }
     if (!isObject(candidate)) return [];
-    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const name =
+      typeof candidate.name === "string" ? candidate.name.trim() : "";
     if (!name) return [];
     return [
       {
@@ -556,11 +584,31 @@ function plotDiscoveries(value: unknown): PlotDiscovery[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     if (!isObject(candidate)) return [];
-    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const name =
+      typeof candidate.name === "string" ? candidate.name.trim() : "";
     if (!name) return [];
-    const claimCandidates = Array.isArray(candidate.claims)
+    type CandidateClaim = Record<string, unknown>;
+    const claimCandidates: CandidateClaim[] = Array.isArray(candidate.claims)
       ? candidate.claims.filter(isObject)
-      : [];
+      : [
+          ...(isObject(candidate.truth)
+            ? [{ ...candidate.truth, kind: "truth", key: "truth" }]
+            : []),
+          ...(Array.isArray(candidate.beliefs)
+            ? candidate.beliefs.filter(isObject).map((belief, index) => ({
+                ...belief,
+                kind: "belief",
+                key: `belief-${index}`,
+              }))
+            : []),
+          ...(Array.isArray(candidate.rumors)
+            ? candidate.rumors.filter(isObject).map((rumor, index) => ({
+                ...rumor,
+                kind: "rumor",
+                key: `rumor-${index}`,
+              }))
+            : []),
+        ];
     const idsByKey = new Map<string, string>();
     const kindsByKey = new Map<string, unknown>();
     for (const claim of claimCandidates) {
@@ -569,14 +617,33 @@ function plotDiscoveries(value: unknown): PlotDiscovery[] {
         kindsByKey.set(claim.key, claim.kind);
       }
     }
-    const claims = claimCandidates.flatMap<DiscoveryClaim>((claim) => {
+    type NormalizedClaim = {
+      id: string;
+      kind: "truth" | "belief" | "rumor";
+      statement: string;
+      conflictsWithClaimIds?: string[];
+      relatedTruthClaimId?: string;
+      relation?: unknown;
+      provenance?: string;
+    };
+    const normalized: NormalizedClaim[] = [];
+    for (const claim of claimCandidates) {
       const key = typeof claim.key === "string" ? claim.key : "";
       const id = idsByKey.get(key);
       const statement =
         typeof claim.statement === "string" ? claim.statement.trim() : "";
-      if (!id || !statement) return [];
+      if (!id || !statement) continue;
       if (claim.kind === "truth") {
-        return [{ id, kind: "truth" as const, statement }];
+        normalized.push({
+          id,
+          kind: "truth",
+          statement,
+          relation: claim.relation,
+          ...(typeof claim.provenance === "string" && claim.provenance.trim()
+            ? { provenance: claim.provenance.trim() }
+            : {}),
+        });
+        continue;
       }
       const conflictsWithClaimIds = Array.isArray(claim.conflictsWithKeys)
         ? claim.conflictsWithKeys.flatMap((conflictKey) =>
@@ -586,30 +653,64 @@ function plotDiscoveries(value: unknown): PlotDiscovery[] {
           )
         : [];
       if (claim.kind === "belief") {
-        return [{
+        normalized.push({
           id,
-          kind: "belief" as const,
+          kind: "belief",
           statement,
-          ...(conflictsWithClaimIds.length > 0 ? { conflictsWithClaimIds } : {}),
-        }];
+          relation: claim.relation,
+          ...(typeof claim.provenance === "string" && claim.provenance.trim()
+            ? { provenance: claim.provenance.trim() }
+            : {}),
+          ...(conflictsWithClaimIds.length > 0
+            ? { conflictsWithClaimIds }
+            : {}),
+        });
+        continue;
       }
       if (claim.kind === "rumor") {
         const relatedTruthClaimId =
-          typeof claim.relatedTruthKey === "string"
-            ? kindsByKey.get(claim.relatedTruthKey) === "truth"
-              ? idsByKey.get(claim.relatedTruthKey)
-              : undefined
+          typeof claim.relatedTruthKey === "string" &&
+          kindsByKey.get(claim.relatedTruthKey) === "truth"
+            ? idsByKey.get(claim.relatedTruthKey)
             : undefined;
-        return [{
+        normalized.push({
           id,
-          kind: "rumor" as const,
+          kind: "rumor",
           statement,
+          relation: claim.relation,
+          ...(typeof claim.provenance === "string" && claim.provenance.trim()
+            ? { provenance: claim.provenance.trim() }
+            : {}),
           ...(relatedTruthClaimId ? { relatedTruthClaimId } : {}),
-          ...(conflictsWithClaimIds.length > 0 ? { conflictsWithClaimIds } : {}),
-        }];
+          ...(conflictsWithClaimIds.length > 0
+            ? { conflictsWithClaimIds }
+            : {}),
+        });
+        continue;
       }
-      return [];
+    }
+    const truth = normalized.find((claim) => claim.kind === "truth");
+    if (!truth) return [];
+    const facet = (claim: (typeof normalized)[number]) => ({
+      id: claim.id,
+      statement: claim.statement,
+      ...(claim.provenance ? { provenance: claim.provenance } : {}),
+      relation:
+        claim.relation === "contradicts" ||
+        (claim.kind !== "truth" && claim.conflictsWithClaimIds?.length)
+          ? ("contradicts" as const)
+          : ("supports" as const),
     });
-    return [{ id: randomUUID(), name, claims }];
+    return [
+      {
+        id: randomUUID(),
+        name,
+        truth: { id: truth.id, statement: truth.statement },
+        beliefs: normalized
+          .filter((claim) => claim.kind === "belief")
+          .map(facet),
+        rumors: normalized.filter((claim) => claim.kind === "rumor").map(facet),
+      },
+    ];
   });
 }

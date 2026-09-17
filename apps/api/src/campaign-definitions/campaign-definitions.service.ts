@@ -1,3 +1,4 @@
+import { canonicalCreatureMigrationSources } from "../domain/canonical-creature-migration";
 import {
   BadRequestException, ConflictException, Inject, Injectable, NotFoundException,
   ServiceUnavailableException,
@@ -973,8 +974,8 @@ export function buildCampaignWorldMigrationPlan(
   if (!isCanonicalSnapshotManifest(source.manifest) || !isCanonicalSnapshotManifest(target.manifest))
     throw new BadRequestException("A selected World snapshot failed its integrity check.");
 
-  const sourceRecords = keyed(source.manifest.records.filter((r) => r.resourceType !== "world-definition-revision"));
   const targetRecords = keyed(target.manifest.records.filter((r) => r.resourceType !== "world-definition-revision"));
+  const sourceRecords = keyed(canonicalCreatureMigrationSources(source.manifest.records.filter((r) => r.resourceType !== "world-definition-revision"), [...targetRecords.values()]));
   const normalizedMappings = [...suppliedMappings].map((item) => ({
     resourceType: item.resourceType.trim(),
     sourceId: item.sourceId.trim(),

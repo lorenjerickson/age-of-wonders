@@ -18,7 +18,15 @@
     "smoke:actors": "node scripts/actor-binding-smoke.mjs",
     "smoke:session": "node scripts/session-shell-smoke.mjs",
     "smoke:rules": "node scripts/rules-movement-smoke.mjs",
-    "smoke:session-table": "node scripts/session-table-smoke.mjs"
+    "smoke:session-map": "node scripts/session-map-smoke.mjs",
+    "smoke:session-table": "node scripts/session-table-smoke.mjs",
+    "smoke:campaigns": "node scripts/campaign-views-smoke.mjs",
+    "smoke:campaign-plots": "node scripts/campaign-plot-interactions-smoke.mjs",
+    "smoke:campaign-migration": "node scripts/campaign-migration-interactions-smoke.mjs",
+    "smoke:campaign-create": "node scripts/campaign-create-overview-smoke.mjs",
+    "smoke:campaign-lifecycle": "node scripts/campaign-authoring-lifecycle-smoke.mjs",
+    "smoke:campaign-lifecycle:database": "node scripts/campaign-lifecycle-interactions-smoke.mjs",
+    "smoke:campaign-placements:database": "node ../../scripts/campaign-placement-interactions-smoke.mjs"
   },
   "dependencies": {
     "@aow/common": "workspace:*",

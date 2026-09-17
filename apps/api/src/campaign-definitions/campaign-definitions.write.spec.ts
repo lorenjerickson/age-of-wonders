@@ -50,6 +50,34 @@ describe("Campaign Definition draft validation", () => {
     expect(result.issues.map(({ code }) => code)).toContain("plot-invalid");
   });
 
+  it("accepts a composed Discovery with one Truth and supporting or contradicting facets", () => {
+    const plot = {
+      id: "plot", campaignDefinitionId: "campaign", parent: { kind: "root" }, name: "Composed discovery",
+      objectives: [], pressures: [], resistances: [], locationContexts: [],
+      discoveries: [{
+        id: "discovery", name: "The sealed archive",
+        truth: { id: "truth", statement: "The archive was opened from within." },
+        beliefs: [{ id: "belief", statement: "The keeper had a key.", relation: "supports" }],
+        rumors: [{ id: "rumor", statement: "The flood opened it.", relation: "contradicts" }],
+      }],
+    };
+    const result = validateCampaignDefinitionDraft(
+      "campaign", { formatVersion: 1, gmPremise: "Premise", playerIntroduction: "Introduction", plotDefinitionIds: ["plot"], placementDefinitionIds: [], modelSchemaReleaseIds: [] },
+      [{ resourceType: "plots", sourceId: "plot", payload: plot }], world,
+    );
+    expect(result).toEqual({ valid: true, issues: [] });
+  });
+
+  it("rejects a composed Discovery without a Truth or supporting facet", () => {
+    const base = { id: "discovery", name: "Incomplete", beliefs: [], rumors: [], truth: { id: "truth", statement: "" } };
+    const plot = { id: "plot", campaignDefinitionId: "campaign", parent: { kind: "root" }, name: "Incomplete", objectives: [], pressures: [], resistances: [], discoveries: [base], locationContexts: [] };
+    const result = validateCampaignDefinitionDraft(
+      "campaign", { formatVersion: 1, gmPremise: "", playerIntroduction: "", plotDefinitionIds: ["plot"], placementDefinitionIds: [], modelSchemaReleaseIds: [] },
+      [{ resourceType: "plots", sourceId: "plot", payload: plot }], world,
+    );
+    expect(result.valid).toBe(false);
+  });
+
   it("resolves canonical Creature and Item definitions captured by the World", () => {
     const records = [
       { resourceType: "plots", sourceId: "root", payload: { id: "root", campaignDefinitionId: "campaign", parent: { kind: "root" }, name: "Arrival", objectives: [], pressures: [], resistances: [], discoveries: [], locationContexts: [{ id: "context", locationId: "harbor", placementDefinitionIds: ["creature-placement", "item-placement"] }] } },
@@ -422,3 +450,16 @@ function worldRow(
     },
   } as never;
 }
+
+describe("canonical Creature capture migration", () => {
+  it("preserves referenced same-ID Creatures across legacy-to-definition conversion and rename", () => {
+    const source = worldRow("legacy-source", "legacy-revision", null, buildSnapshotManifest(1, [{ resourceType: "creatures", sourceId: "same-creature", payload: { identity: { name: "Original name" } } }]));
+    const target = worldRow("canonical-target", "canonical-revision", "legacy-revision", buildSnapshotManifest(1, [{ resourceType: "definitions", sourceId: "same-creature", payload: { kind: "creature", identity: { name: "Renamed creature" } } }]));
+    const draft = { id: "draft", campaignDefinitionId: "campaign", worldDefinitionId: "world", content: { creatureId: "same-creature" }, snapshotRecords: [], storageRevision: 2, capturedWorldSnapshot: source } as never;
+    const plan = buildCampaignWorldMigrationPlan(draft, target, []);
+    expect(plan.ready).toBe(true);
+    expect(plan.changes.removed).toEqual([]);
+    expect(plan.changes.added).toEqual([]);
+    expect(plan.changes.changed).toMatchObject([{ id: "same-creature", name: "Renamed creature" }]);
+  });
+});

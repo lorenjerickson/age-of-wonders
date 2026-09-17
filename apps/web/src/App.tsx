@@ -1,6 +1,7 @@
 import {
   NavigationLiveData,
   type LiveNavigationWorld,
+  type LiveNavigationCampaign,
 } from "./navigationLiveData";
 import {
   type KeyboardEvent,
@@ -46,6 +47,8 @@ export function AppShell({
   gmAccess?: boolean;
   systemAdministrator?: boolean;
 }) {
+  const [navigationCampaign, setNavigationCampaign] =
+    useState<LiveNavigationCampaign>();
   const [navigationWorld, setNavigationWorld] = useState<LiveNavigationWorld>();
   const location = useLocation();
   const pathname = location.pathname;
@@ -158,7 +161,12 @@ export function AppShell({
 
   return (
     <NavigationLiveData.Provider
-      value={{ world: navigationWorld, setWorld: setNavigationWorld }}
+      value={{
+        world: navigationWorld,
+        setWorld: setNavigationWorld,
+        campaign: navigationCampaign,
+        setCampaign: setNavigationCampaign,
+      }}
     >
       <div className="drawer h-dvh overflow-hidden lg:drawer-open">
         <StructuralCheckbox

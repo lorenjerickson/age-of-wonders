@@ -46,7 +46,7 @@ createRoot(document.getElementById('root')!).render(<RouterProvider router={rout
     );
     await writeFile(
       config,
-      `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; import tailwindcss from '@tailwindcss/vite'; export default defineConfig({plugins:[react(),tailwindcss()],appType:'mpa',server:{host:'127.0.0.1',port:${port},strictPort:true,hmr:false,watch:null}});`,
+      `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; import tailwindcss from '@tailwindcss/vite'; import { reactPluginOptions } from './react-plugin-options'; export default defineConfig({plugins:[react(reactPluginOptions),tailwindcss()],appType:'mpa',server:{host:'127.0.0.1',port:${port},strictPort:true,watch:null}});`,
     );
     server = spawn(
       process.execPath,
@@ -322,12 +322,65 @@ await withFixture(async (fixtureUrl) => {
       .click();
     await page.getByLabel("Work plane", { exact: true }).selectOption("xy");
     await page.getByLabel(/Work level/).fill("0");
-    await page
-      .getByRole("button", { name: "Generate preview", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Apply terrain", exact: true })
-      .waitFor({ state: "visible", timeout: 60000 });
+    // A synchronous worker startup failure must release the busy controls.
+    await page.evaluate(() => {
+      const OriginalWorker = window.Worker;
+      window.Worker = class extends OriginalWorker {
+        constructor(...args) {
+          window.Worker = OriginalWorker;
+          throw new Error("Fixture worker startup failure");
+        }
+      };
+    });
+    await page.getByRole("button", { name: "Generate preview", exact: true }).click();
+    await page.getByText("Terrain generation could not start. Your map is unchanged. Try generating again.", { exact: true }).waitFor();
+    await page.getByText("3 cells · Unsaved terrain", { exact: false }).waitFor();
+    // Hold a real worker result long enough to exercise cancellation reliably.
+    await page.evaluate(() => {
+      const OriginalWorker = window.Worker;
+      window.Worker = class extends OriginalWorker {
+        constructor(...args) { super(...args); window.Worker = OriginalWorker; }
+        postMessage(message) { setTimeout(() => super.postMessage(message), 1000); }
+      };
+    });
+    await page.getByRole("button", { name: "Generate preview", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel generation", exact: true }).click();
+    await page.getByText("3 cells · Unsaved terrain", { exact: false }).waitFor();
+    await page.getByRole("button", { name: "Hide beyond work plane", exact: true }).click();
+    await page.getByRole("button", { name: "Generate preview", exact: true }).click();
+    await page.getByRole("button", { name: "Apply terrain", exact: true }).waitFor({ state: "visible", timeout: 60000 });
+    await page.getByText("Terrain textures ready", { exact: true }).waitFor();
+    await page.locator("canvas").scrollIntoViewIfNeeded();
+    // Assert the generated rock surface fills the view, not only an empty work plane.
+    // Decode a browser screenshot because WebGL does not preserve its drawing buffer.
+    const previewPixels = (await page.locator("canvas").screenshot()).toString("base64");
+    const visibleTerrainRatio = await page.evaluate(async (encoded) => {
+      const picture = new Image();
+      picture.src = `data:image/png;base64,${encoded}`;
+      await picture.decode();
+      const sample = document.createElement("canvas");
+      sample.width = picture.width;
+      sample.height = picture.height;
+      const context = sample.getContext("2d");
+      context.drawImage(picture, 0, 0);
+      const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
+      let rockPixels = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        // Warm rock differs from the blue-gray viewport background/grid.
+        if (pixels[index] > pixels[index + 2] + 5 && pixels[index] > pixels[index + 1]) rockPixels++;
+      }
+      return rockPixels / (pixels.length / 4);
+    }, previewPixels);
+    if (visibleTerrainRatio < 0.3) throw new Error(`Generated preview is blank or clipped: terrain coverage ${visibleTerrainRatio}`);
+    await page.screenshot({ path: "/tmp/aow-terrain-preview.png", fullPage: true });
+    if (appliedSaves !== 0 || chunks.size !== 0) throw new Error("Generating preview wrote live terrain");
+    await page.getByRole("button", { name: "Discard preview", exact: true }).click();
+    await page.getByText("3 cells · Unsaved terrain", { exact: false }).waitFor();
+    if (await page.getByRole("button", { name: "Show all levels", exact: true }).getAttribute("aria-pressed") !== "true") throw new Error("Discard changed base slice preference");
+    if (appliedSaves !== 0 || chunks.size !== 0) throw new Error("Discarding preview wrote live terrain");
+    await page.getByRole("button", { name: "Show all levels", exact: true }).click();
+    await page.getByRole("button", { name: "Generate preview", exact: true }).click();
+    await page.getByRole("button", { name: "Apply terrain", exact: true }).waitFor({ state: "visible", timeout: 60000 });
     await page
       .getByRole("button", { name: "Apply terrain", exact: true })
       .click();
@@ -391,6 +444,7 @@ await withFixture(async (fixtureUrl) => {
       JSON.stringify({
         passed: true,
         uploadedChunks: count,
+        previewTerrainCoverage: visibleTerrainRatio,
         revision: draft.storageRevision,
         screenshot: screenshotPath,
       }),

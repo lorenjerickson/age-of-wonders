@@ -46,7 +46,7 @@ createRoot(document.getElementById('root')!).render(<RouterProvider router={rout
     );
     await writeFile(
       config,
-      `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; import tailwindcss from '@tailwindcss/vite'; export default defineConfig({plugins:[react(),tailwindcss()],appType:'mpa',server:{host:'127.0.0.1',port:${port},strictPort:true,hmr:false,watch:null}});`,
+      `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; import tailwindcss from '@tailwindcss/vite'; import { reactPluginOptions } from './react-plugin-options.ts'; export default defineConfig({plugins:[react(reactPluginOptions),tailwindcss()],appType:'mpa',server:{host:'127.0.0.1',port:${port},strictPort:true,hmr:false,watch:null}});`,
     );
     server = spawn(
       process.execPath,
@@ -126,6 +126,7 @@ await withFixture(async (url) => {
   });
   const movement = () => ({
     runtimeRevision,
+    snapshotNumber: 1,
     status: sessionStatus,
     actors: [
       {
@@ -134,6 +135,9 @@ await withFixture(async (url) => {
         locationId: "hidden-cavern-id",
         locationName: "Cavern",
         position,
+        ...(commitCount
+          ? { movementRemaining: 25, recordedMoves: commitCount }
+          : {}),
       },
     ],
     capturedRules:
@@ -224,6 +228,7 @@ await withFixture(async (url) => {
       const p = {
         id: "proposal-" + ++proposalCount,
         actorId,
+        locationId: "hidden-cavern-id",
         status: mode,
         actorName: "Tamsin",
         locationName: "Cavern",
@@ -337,14 +342,12 @@ await withFixture(async (url) => {
       lastSaved.effects[1].kind !== "move"
     )
       throw new Error("Structured conditions/effect order were not preserved");
-    const card = page
-      .locator("li")
-      .filter({
-        has: page.getByRole("button", {
-          name: "Edit Reviewed movement",
-          exact: true,
-        }),
-      });
+    const card = page.locator("li").filter({
+      has: page.getByRole("button", {
+        name: "Edit Reviewed movement",
+        exact: true,
+      }),
+    });
     await card.getByRole("button", { name: "Duplicate", exact: true }).click();
     await page
       .getByRole("button", { name: "Edit Reviewed movement copy", exact: true })
@@ -380,6 +383,13 @@ await withFixture(async (url) => {
         .count())
     )
       throw new Error("No-rule preview exposed movement");
+    if (
+      (await page
+        .getByRole("region", { name: "Committed actor state" })
+        .getByText("Not initialized by rules", { exact: true })
+        .count()) !== 2
+    )
+      throw new Error("Missing resources were presented as initialized");
     mode = "failed";
     await page
       .getByRole("button", { name: "Preview movement", exact: true })
@@ -423,6 +433,11 @@ await withFixture(async (url) => {
       approvalKeys[0] !== approvalKeys[1]
     )
       throw new Error("Approval retry was not exactly once");
+    const committed = page.getByRole("region", {
+      name: "Committed actor state",
+    });
+    await committed.getByText("25", { exact: true }).waitFor();
+    await committed.getByText("1", { exact: true }).waitFor();
     await x.fill("2.5");
     await page
       .getByRole("button", { name: "Preview movement", exact: true })

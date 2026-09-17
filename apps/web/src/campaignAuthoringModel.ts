@@ -179,27 +179,37 @@ export function mergeNamedComponentLines(
   prefix: string,
 ): Record<string, JsonValue>[] {
   const previous = jsonArray(existing).map(jsonObject);
-  const byName = new Map(
-    previous.map((entry) => [String(entry.name ?? "").trim(), entry]),
-  );
-  const claimed = new Set<Record<string, JsonValue>>();
-  return lines
+  const names = lines
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map<Record<string, JsonValue>>((name, index) => {
-      const exact = byName.get(name);
-      const ordered = previous[index];
-      const prior =
-        exact && !claimed.has(exact)
-          ? exact
-          : ordered && !claimed.has(ordered)
-            ? ordered
-            : previous.find((entry) => !claimed.has(entry));
-      if (prior) claimed.add(prior);
-      if (prior) return { ...prior, name } as Record<string, JsonValue>;
-      return { id: `${prefix}:${crypto.randomUUID()}`, name };
-    });
+    .filter(Boolean);
+  const reserved = new Set<Record<string, JsonValue>>();
+  // Reserve retained names before positional rename fallback sees new lines.
+  // Searching unreserved records also keeps duplicate names distinct.
+  const matches = names.map((name) => {
+    const match = previous.find(
+      (entry) =>
+        !reserved.has(entry) && String(entry.name ?? "").trim() === name,
+    );
+    if (match) reserved.add(match);
+    return match;
+  });
+  const claimed = new Set<Record<string, JsonValue>>();
+  return names.map<Record<string, JsonValue>>((name, index) => {
+    const exact = matches[index];
+    const ordered = previous[index];
+    const prior =
+      exact && !claimed.has(exact)
+        ? exact
+        : ordered && !reserved.has(ordered) && !claimed.has(ordered)
+          ? ordered
+          : previous.find(
+              (entry) => !reserved.has(entry) && !claimed.has(entry),
+            );
+    if (prior) claimed.add(prior);
+    if (prior) return { ...prior, name } as Record<string, JsonValue>;
+    return { id: `${prefix}:${crypto.randomUUID()}`, name };
+  });
 }
 
 export function mergeDiscoveryLines(
@@ -207,66 +217,86 @@ export function mergeDiscoveryLines(
   existing: JsonValue | undefined,
 ): Record<string, JsonValue>[] {
   const previous = jsonArray(existing).map(jsonObject);
-  const byRenderedLine = new Map(
-    previous.map((discovery) => {
-      const claim = jsonObject(jsonArray(discovery.claims)[0]);
-      return [
-        `${String(claim.kind ?? "rumor")} | ${String(discovery.name ?? "Discovery")} | ${String(claim.statement ?? "")}`,
-        discovery,
-      ];
-    }),
-  );
-  const byName = new Map(
-    previous.map((entry) => [String(entry.name ?? "").trim(), entry]),
-  );
-  const claimed = new Set<Record<string, JsonValue>>();
-  const merged = lines
+  const parsedLines = lines
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map<Record<string, JsonValue>>((line, index) => {
-      const unchanged = byRenderedLine.get(line);
-      if (unchanged && !claimed.has(unchanged)) {
-        claimed.add(unchanged);
-        return unchanged;
-      }
-      const [rawKind, rawName, ...statementParts] = line.split("|");
-      const name = rawName?.trim() || "Discovery";
-      const kind = rawKind?.trim().toLowerCase();
-      const approvedKind =
-        kind === "truth" || kind === "belief" ? kind : "rumor";
-      const named = byName.get(name);
-      const ordered = previous[index];
-      const prior =
-        named && !claimed.has(named)
-          ? named
-          : ordered && !claimed.has(ordered)
-            ? ordered
-            : previous.find((entry) => !claimed.has(entry));
-      if (prior) claimed.add(prior);
-      const claims = jsonArray(prior?.claims);
-      const first = jsonObject(claims[0]);
-      return {
-        ...(prior ?? {}),
-        id:
-          typeof prior?.id === "string"
-            ? prior.id
-            : `discovery:${crypto.randomUUID()}`,
-        name,
-        claims: [
-          {
-            ...first,
-            id:
-              typeof first.id === "string"
-                ? first.id
-                : `claim:${crypto.randomUUID()}`,
-            kind: approvedKind,
-            statement: statementParts.join("|").trim() || name,
-          },
-          ...claims.slice(1),
-        ],
-      };
-    });
+    .filter(Boolean);
+  const renderedLine = (discovery: Record<string, JsonValue>) => {
+    const claim = jsonObject(jsonArray(discovery.claims)[0]);
+    return `${String(claim.kind ?? "rumor")} | ${String(discovery.name ?? "Discovery")} | ${String(claim.statement ?? "")}`;
+  };
+  const reserved = new Set<Record<string, JsonValue>>();
+  const matches = parsedLines.map((line) => {
+    const match = previous.find(
+      (entry) => !reserved.has(entry) && renderedLine(entry) === line,
+    );
+    if (match) reserved.add(match);
+    return match;
+  });
+  // Name matches preserve identity when only a claim changes. Reserve them too
+  // before treating unmatched lines as renames or additions.
+  parsedLines.forEach((line, index) => {
+    if (matches[index]) return;
+    const name = line.split("|")[1]?.trim() || "Discovery";
+    const match = previous.find(
+      (entry) =>
+        !reserved.has(entry) && String(entry.name ?? "").trim() === name,
+    );
+    if (match) {
+      reserved.add(match);
+      matches[index] = match;
+    }
+  });
+  const claimed = new Set<Record<string, JsonValue>>();
+  const merged = parsedLines.map<Record<string, JsonValue>>((line, index) => {
+    const named = matches[index];
+    if (named && renderedLine(named) === line) {
+      claimed.add(named);
+      return named;
+    }
+    const [rawKind, rawName, ...statementParts] = line.split("|");
+    const name = rawName?.trim() || "Discovery";
+    const kind = rawKind?.trim().toLowerCase();
+    const approvedKind = kind === "truth" || kind === "belief" ? kind : "rumor";
+    const ordered = previous[index];
+    const prior =
+      named && !claimed.has(named)
+        ? named
+        : ordered &&
+            !reserved.has(ordered) &&
+            !claimed.has(ordered) &&
+            jsonArray(ordered.claims).length > 0
+          ? ordered
+          : previous.find(
+              (entry) =>
+                !reserved.has(entry) &&
+                !claimed.has(entry) &&
+                jsonArray(entry.claims).length > 0,
+            );
+    if (prior) claimed.add(prior);
+    const claims = jsonArray(prior?.claims);
+    const first = jsonObject(claims[0]);
+    return {
+      ...(prior ?? {}),
+      id:
+        typeof prior?.id === "string"
+          ? prior.id
+          : `discovery:${crypto.randomUUID()}`,
+      name,
+      claims: [
+        {
+          ...first,
+          id:
+            typeof first.id === "string"
+              ? first.id
+              : `claim:${crypto.randomUUID()}`,
+          kind: approvedKind,
+          statement: statementParts.join("|").trim() || name,
+        },
+        ...claims.slice(1),
+      ],
+    };
+  });
   return [
     ...merged,
     ...previous.filter(

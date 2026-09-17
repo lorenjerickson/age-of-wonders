@@ -195,9 +195,9 @@ export class CreateCampaignInstanceInvitationDto {
   @MaxLength(120)
   invitedName!: string;
 
-  @ApiProperty({ enum: ["player", "spectator"] })
-  @IsIn(["player", "spectator"])
-  role!: "player" | "spectator";
+  @ApiProperty({ enum: ["gm", "player", "spectator"] })
+  @IsIn(["gm", "player", "spectator"])
+  role!: "gm" | "player" | "spectator";
 
   @ApiPropertyOptional({ description: "Explicit existing Player profile" })
   @IsOptional()

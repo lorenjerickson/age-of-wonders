@@ -391,8 +391,11 @@ describe("CampaignInstancesService", () => {
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const transactionOptions = firstCallArgument(prisma.$transaction, 1);
+    // Captured terrain replication remains one atomic transaction and has a
+    // bounded budget beyond Prisma's five-second default.
     expect(transactionOptions).toEqual({
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      timeout: 60_000,
     });
     const findSnapshotArgs = firstCallArgument(
       tx.campaignDefinitionSnapshot.findUnique,
@@ -401,7 +404,9 @@ describe("CampaignInstancesService", () => {
       where: {
         id: "campaign-snapshot-3",
         campaignDefinitionId: "campaign-definition-1",
-        campaignDefinition: { ownerUserId: "gm-1" },
+        campaignDefinitionRevision: {
+          campaignDefinition: { ownerUserId: "gm-1" },
+        },
       },
     });
     const createInstanceArgs = firstCallArgument(tx.campaignInstance.create);

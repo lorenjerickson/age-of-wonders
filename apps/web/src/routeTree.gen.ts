@@ -76,6 +76,8 @@ import { Route as GmWorldsWorldIdVersionsDraftReviewRouteImport } from './routes
 import { Route as ParticipantPlayInstancesCampaignInstanceIdSessionsSessionIdRouteImport } from './routes/_participant.play.instances.$campaignInstanceId.sessions.$sessionId'
 import { Route as PlayerPlayInstancesCampaignInstanceIdCharactersIndexRouteImport } from './routes/_player.play.instances.$campaignInstanceId.characters.index'
 import { Route as PlayerPlayInstancesCampaignInstanceIdCharactersCharacterIdRouteImport } from './routes/_player.play.instances.$campaignInstanceId.characters.$characterId'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.index'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection'
 import { Route as GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.versions.draft.review'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.connections'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.creatures'
@@ -83,6 +85,15 @@ import { Route as GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRouteImport 
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdItemsRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.items'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdMapRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.map'
 import { Route as GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRouteImport } from './routes/_gm.worlds.$worldId.characters.model.$definitionKind.$definitionId'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.index'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.index'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.claims'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.placements'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.claims.index'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.claims.$claimId'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.placements.index'
+import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection.$childId.placements.$placementId'
 
 const GmRoute = GmRouteImport.update({
   id: '/_gm',
@@ -462,6 +473,24 @@ const PlayerPlayInstancesCampaignInstanceIdCharactersCharacterIdRoute =
     path: '/instances/$campaignInstanceId/characters/$characterId',
     getParentRoute: () => PlayerPlayRoute,
   } as any)
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRouteImport.update(
+    {
+      id: '/',
+      path: '/',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteImport.update(
+    {
+      id: '/$collection',
+      path: '/$collection',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute,
+    } as any,
+  )
 const GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute =
   GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport.update(
     {
@@ -507,6 +536,87 @@ const GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute =
     path: '/model/$definitionKind/$definitionId',
     getParentRoute: () => GmWorldsWorldIdCharactersRoute,
   } as any)
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRouteImport.update(
+    {
+      id: '/',
+      path: '/',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteImport.update(
+    {
+      id: '/$childId',
+      path: '/$childId',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRouteImport.update(
+    {
+      id: '/',
+      path: '/',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteImport.update(
+    {
+      id: '/claims',
+      path: '/claims',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteImport.update(
+    {
+      id: '/placements',
+      path: '/placements',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRouteImport.update(
+    {
+      id: '/',
+      path: '/',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRouteImport.update(
+    {
+      id: '/$claimId',
+      path: '/$claimId',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRouteImport.update(
+    {
+      id: '/',
+      path: '/',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute,
+    } as any,
+  )
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRouteImport.update(
+    {
+      id: '/$placementId',
+      path: '/$placementId',
+      getParentRoute: () =>
+        GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof GmIndexRoute
@@ -553,7 +663,7 @@ export interface FileRoutesByFullPath {
   '/campaigns/definitions/$campaignDefinitionId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdIndexRoute
   '/campaigns/instances/$campaignInstanceId/': typeof GmCampaignsInstancesCampaignInstanceIdIndexRoute
   '/worlds/$worldId/characters/': typeof GmWorldsWorldIdCharactersIndexRoute
-  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteWithChildren
   '/campaigns/definitions/$campaignDefinitionId/versions/migrate': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsMigrateRoute
   '/campaigns/instances/$campaignInstanceId/roster/agents': typeof GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute
   '/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
@@ -573,6 +683,7 @@ export interface FileRoutesByFullPath {
   '/campaigns/instances/$campaignInstanceId/versions/': typeof GmCampaignsInstancesCampaignInstanceIdVersionsIndexRoute
   '/worlds/$worldId/characters/$definitionKind/': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren
   '/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
   '/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
   '/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
@@ -580,6 +691,16 @@ export interface FileRoutesByFullPath {
   '/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
   '/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteWithChildren
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteWithChildren
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteWithChildren
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof GmIndexRoute
@@ -614,7 +735,6 @@ export interface FileRoutesByTo {
   '/campaigns/definitions/$campaignDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdIndexRoute
   '/campaigns/instances/$campaignInstanceId': typeof GmCampaignsInstancesCampaignInstanceIdIndexRoute
   '/worlds/$worldId/characters': typeof GmWorldsWorldIdCharactersIndexRoute
-  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
   '/campaigns/definitions/$campaignDefinitionId/versions/migrate': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsMigrateRoute
   '/campaigns/instances/$campaignInstanceId/roster/agents': typeof GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute
   '/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
@@ -641,6 +761,13 @@ export interface FileRoutesByTo {
   '/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
   '/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute
+  '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -691,7 +818,7 @@ export interface FileRoutesById {
   '/_gm/campaigns/definitions/$campaignDefinitionId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdIndexRoute
   '/_gm/campaigns/instances/$campaignInstanceId/': typeof GmCampaignsInstancesCampaignInstanceIdIndexRoute
   '/_gm/worlds/$worldId/characters/': typeof GmWorldsWorldIdCharactersIndexRoute
-  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteWithChildren
   '/_gm/campaigns/definitions/$campaignDefinitionId/versions/migrate': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsMigrateRoute
   '/_gm/campaigns/instances/$campaignInstanceId/roster/agents': typeof GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute
   '/_gm/campaigns/instances/$campaignInstanceId/run/$sessionId': typeof GmCampaignsInstancesCampaignInstanceIdRunSessionIdRoute
@@ -711,6 +838,7 @@ export interface FileRoutesById {
   '/_gm/campaigns/instances/$campaignInstanceId/versions/': typeof GmCampaignsInstancesCampaignInstanceIdVersionsIndexRoute
   '/_gm/worlds/$worldId/characters/$definitionKind/': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/_player/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren
   '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
@@ -718,6 +846,16 @@ export interface FileRoutesById {
   '/_gm/worlds/$worldId/atlas/locations/$locationId/items': typeof GmWorldsWorldIdAtlasLocationsLocationIdItemsRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/map': typeof GmWorldsWorldIdAtlasLocationsLocationIdMapRoute
   '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId': typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteWithChildren
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteWithChildren
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteWithChildren
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute
+  '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -786,6 +924,7 @@ export interface FileRouteTypes {
     | '/campaigns/instances/$campaignInstanceId/versions/'
     | '/worlds/$worldId/characters/$definitionKind/'
     | '/play/instances/$campaignInstanceId/characters/'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
     | '/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
     | '/worlds/$worldId/atlas/locations/$locationId/connections'
     | '/worlds/$worldId/atlas/locations/$locationId/creatures'
@@ -793,6 +932,16 @@ export interface FileRouteTypes {
     | '/worlds/$worldId/atlas/locations/$locationId/items'
     | '/worlds/$worldId/atlas/locations/$locationId/map'
     | '/worlds/$worldId/characters/model/$definitionKind/$definitionId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -827,7 +976,6 @@ export interface FileRouteTypes {
     | '/campaigns/definitions/$campaignDefinitionId'
     | '/campaigns/instances/$campaignInstanceId'
     | '/worlds/$worldId/characters'
-    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId'
     | '/campaigns/definitions/$campaignDefinitionId/versions/migrate'
     | '/campaigns/instances/$campaignInstanceId/roster/agents'
     | '/campaigns/instances/$campaignInstanceId/run/$sessionId'
@@ -854,6 +1002,13 @@ export interface FileRouteTypes {
     | '/worlds/$worldId/atlas/locations/$locationId/items'
     | '/worlds/$worldId/atlas/locations/$locationId/map'
     | '/worlds/$worldId/characters/model/$definitionKind/$definitionId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims'
+    | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements'
   id:
     | '__root__'
     | '/_gm'
@@ -923,6 +1078,7 @@ export interface FileRouteTypes {
     | '/_gm/campaigns/instances/$campaignInstanceId/versions/'
     | '/_gm/worlds/$worldId/characters/$definitionKind/'
     | '/_player/play/instances/$campaignInstanceId/characters/'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
     | '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/connections'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures'
@@ -930,6 +1086,16 @@ export interface FileRouteTypes {
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/items'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/map'
     | '/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/'
+    | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1413,6 +1579,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayerPlayInstancesCampaignInstanceIdCharactersCharacterIdRouteImport
       parentRoute: typeof PlayerPlayRoute
     }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/'
+      path: '/'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
+      path: '/$collection'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
+    }
     '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review': {
       id: '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
       path: '/draft/review'
@@ -1461,6 +1641,69 @@ declare module '@tanstack/react-router' {
       fullPath: '/worlds/$worldId/characters/model/$definitionKind/$definitionId'
       preLoaderRoute: typeof GmWorldsWorldIdCharactersModelDefinitionKindDefinitionIdRouteImport
       parentRoute: typeof GmWorldsWorldIdCharactersRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/'
+      path: '/'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId'
+      path: '/$childId'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/'
+      path: '/'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims'
+      path: '/claims'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements'
+      path: '/placements'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/'
+      path: '/'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId'
+      path: '/$claimId'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/'
+      path: '/'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute
+    }
+    '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId': {
+      id: '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId'
+      path: '/$placementId'
+      fullPath: '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId'
+      preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRouteImport
+      parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute
     }
   }
 }
@@ -1614,15 +1857,108 @@ const GmWorldsWorldIdRouteWithChildren = GmWorldsWorldIdRoute._addFileChildren(
   GmWorldsWorldIdRouteChildren,
 )
 
+interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteChildren {
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute
+}
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteChildren =
+  {
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsClaimIdRoute,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsIndexRoute,
+  }
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteWithChildren =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute._addFileChildren(
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteChildren,
+  )
+
+interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteChildren {
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute
+}
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteChildren =
+  {
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsPlacementIdRoute,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsIndexRoute,
+  }
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteWithChildren =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute._addFileChildren(
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteChildren,
+  )
+
+interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteChildren {
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteWithChildren
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteWithChildren
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute
+}
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteChildren =
+  {
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdClaimsRouteWithChildren,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdPlacementsRouteWithChildren,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdIndexRoute,
+  }
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteWithChildren =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute._addFileChildren(
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteChildren,
+  )
+
+interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteChildren {
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteWithChildren
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute
+}
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteChildren =
+  {
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionChildIdRouteWithChildren,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionIndexRoute,
+  }
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute._addFileChildren(
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteChildren,
+  )
+
+interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteChildren {
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute
+}
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteChildren =
+  {
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren,
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute:
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRoute,
+  }
+
+const GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteWithChildren =
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute._addFileChildren(
+    GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteChildren,
+  )
+
 interface GmCampaignsDefinitionsCampaignDefinitionIdPlotsRouteChildren {
-  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute
+  GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteWithChildren
   GmCampaignsDefinitionsCampaignDefinitionIdPlotsIndexRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsIndexRoute
 }
 
 const GmCampaignsDefinitionsCampaignDefinitionIdPlotsRouteChildren: GmCampaignsDefinitionsCampaignDefinitionIdPlotsRouteChildren =
   {
     GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute:
-      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRoute,
+      GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdRouteWithChildren,
     GmCampaignsDefinitionsCampaignDefinitionIdPlotsIndexRoute:
       GmCampaignsDefinitionsCampaignDefinitionIdPlotsIndexRoute,
   }

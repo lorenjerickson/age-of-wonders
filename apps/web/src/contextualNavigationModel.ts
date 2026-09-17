@@ -1,4 +1,10 @@
 import {
+  CAMPAIGN_PLOT_COLLECTIONS,
+  campaignPlotNavigation,
+  plotObject,
+  plotLabel,
+} from "./campaignPlotNavigationModel";
+import {
   locationAncestry,
   locationHref,
   locationSectionHref,
@@ -31,6 +37,7 @@ export interface NavigationData {
   worldName?: string;
   campaignName?: string;
   instanceName?: string;
+  locations?: readonly { id: string; name: string }[];
   records?: readonly {
     sourceId: string;
     resourceType: string;
@@ -93,7 +100,10 @@ export function contextualNavigationStack(
       label: "GM Workspace",
       kind: "Workspace",
       href: "/",
-      links: [...PRIMARY_NAVIGATION],
+      links: [
+        ...PRIMARY_NAVIGATION,
+        { label: "Session canvas", href: "/session-canvas-lab" },
+      ],
     },
   ];
   if (!parts.length) return stack;
@@ -200,6 +210,90 @@ export function contextualNavigationStack(
     stack.at(-1)!.groups = instance
       ? campaignInstanceNavigationForPath(parts[2], pathname)
       : campaignDefinitionNavigationForPath(parts[2], pathname);
+    if (!instance && parts[3] === "plots") {
+      push("Plots", "Plot collection", path(4));
+      if (!parts[4]) return stack;
+      const navigation = campaignPlotNavigation(pathname, data.records);
+      push(
+        parts[4] === "new" ? "New Plot" : (navigation?.label ?? "Plot"),
+        "Plot",
+        path(5),
+      );
+      if (navigation) stack.at(-1)!.links = navigation.links;
+      const collection = CAMPAIGN_PLOT_COLLECTIONS.find(
+        (entry) => entry.key === parts[5],
+      );
+      if (!collection) return stack;
+      push(collection.label, "Plot collection", path(6));
+      if (navigation) stack.at(-1)!.links = navigation.links;
+      if (!parts[6]) return stack;
+      const payload = plotObject(
+        data.records?.find(
+          (record) =>
+            record.resourceType === "plots" && record.sourceId === parts[4],
+        )?.payload,
+      );
+      const items =
+        payload[
+          collection.key === "locations" ? "locationContexts" : collection.key
+        ];
+      const child = plotObject(
+        Array.isArray(items)
+          ? items.find((value) => {
+              const object = plotObject(value);
+              return (
+                object.id === parts[6] || object.plotDefinitionId === parts[6]
+              );
+            })
+          : undefined,
+      );
+      let label = plotLabel(child.name, collection.singular);
+      if (
+        collection.key === "subplots" ||
+        collection.key === "prerequisites" ||
+        collection.key === "dependencies"
+      )
+        label = navigationRecordName(data, parts[6], collection.singular);
+      if (collection.key === "locations")
+        label =
+          data.locations?.find((location) => location.id === child.locationId)
+            ?.name ?? "Location context";
+      push(
+        parts[6] === "new" ? `New ${collection.singular.toLowerCase()}` : label,
+        collection.singular,
+        path(7),
+      );
+      if (collection.key === "locations" && parts[7] === "placements") {
+        push("Placement associations", "Location context placements", path(8));
+        if (parts[8])
+          push(
+            parts[8] === "new"
+              ? "New placement association"
+              : navigationRecordName(data, parts[8], "Campaign placement"),
+            "Placement association",
+            path(9),
+          );
+      }
+      if (collection.key === "discoveries" && parts[7] === "claims") {
+        push("Claims", "Discovery claims", path(8));
+        if (parts[8]) {
+          const claim = plotObject(
+            Array.isArray(child.claims)
+              ? child.claims.find((value) => plotObject(value).id === parts[8])
+              : undefined,
+          );
+          push(
+            parts[8] === "new"
+              ? "New claim"
+              : plotLabel(claim.statement, "Claim"),
+            "Claim",
+            path(9),
+          );
+        }
+      }
+      if (navigation) stack.at(-1)!.links = navigation.links;
+      return stack;
+    }
     if (parts[4] && ["plots", "sessions", "run"].includes(parts[3])) {
       const kind = parts[3] === "plots" ? "Plot" : "Session";
       push(navigationRecordName(data, parts[4], kind), kind, path(5));

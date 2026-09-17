@@ -1,0 +1,128 @@
+---
+status: active
+role: implementation-scope
+---
+
+# One-to-many authoring experience
+
+This is the active scope for the user's request to replace multiline and stacked collection
+editing with dedicated list, add, and edit pages, explicit removal, contextual left navigation,
+and ancestry breadcrumbs throughout the application. The first implementation slice is Campaign
+Plot authoring. This document records the source audit and delivery scope. The inventory describes the baseline
+before the first slice; the dedicated Plot collection slice is now implemented, with bounded browser
+evidence and remaining verification limits in `campaign-authoring-verification.md`.
+
+The authority is [the documentation index](README.md), the common TypeScript types, and the
+[canonical architecture](information-architecture-domain-model-realignment.md). In particular,
+the architecture's “Product model” contextual navigation contract requires direct-entry URLs,
+parent links, mobile equivalence, and breadcrumbs for **ancestry, not selected sections**.
+Its Campaign Definition/Instance/Plot section preserves captured ownership, recursive Plots,
+and explicit knowledge provenance. The user request refines the editing experience; it does not
+turn immutable history into editable content or move Instance state into Definitions.
+
+## Required interaction pattern
+
+For each editable owned collection, the parent exposes a named collection destination in its
+contextual left navigation. The collection has a dedicated list with useful summaries, an Add
+action, and item links. Add and Edit open separate addressable experiences with one focused form,
+Save and Cancel; they do not append another form below the list. Existing records expose an
+explicit Delete action, with a named confirmation and dependency handling. Where the domain uses
+archive, revoke, remove association, or an audited runtime command, use that operation and wording
+instead of inventing destructive deletion. A confirmation dialog is sufficient for deletion;
+a separate deletion page is not required.
+
+Selecting a child record advances the contextual navigation frame. Breadcrumbs reconstruct the
+actual parent ancestry, including recursive parents, on direct entry and reload. A dedicated child collection list is a real navigation frame and appears in the breadcrumb
+ancestry between its owning record and a selected child. Ordinary section tabs do not become
+artificial ownership ancestors. Names must resolve
+without exposing internal identifiers. The same frame works in the mobile drawer.
+
+An owned child object is different from a scalar list or a reference selection. Stable child
+identity, independently editable fields, nested children, ordering, provenance, or removal impact
+are strong reasons for a collection workspace. Tags, dice values, coordinates, text paragraphs,
+and checkbox selections do not require a page per scalar. Reference relationships with their own
+rationale, state, or provenance do require a relationship editor; selecting an existing entity
+must never edit or delete that source entity implicitly.
+
+## Source-backed application inventory
+
+“Partial” means some list/detail/navigation exists but the complete pattern is absent. “Gap”
+means inline, multiline, or missing authoring. “Command/read-only” identifies a collection whose
+lifecycle must be preserved rather than converted to generic CRUD. Priorities are delivery order,
+not a claim that all later capabilities are already accepted for unrestricted manual authoring.
+
+| Area and collection                                                                          | Baseline and required scope                                                                                                                                                                                                                                         | Priority         | Primary implementation/domain evidence                                                                                                                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| World library → World lineages                                                               | Partial: library, creation, selected World frame exist. Preserve archive/fork/publish semantics and verify parent navigation instead of replacing the frame.                                                                                                        | P2               | `routes/_gm.worlds.index.tsx`, `routes/_gm.worlds.new.tsx`, `worldDefinitionModel.ts`                                                                              |
+| World → Locations and recursive child Locations                                              | Partial: Atlas and selected Location six-section frame exist; generic record editor and Connections contain creation/relationship controls. Separate Add Location and record editing, preserve root rules and containment ancestry.                                 | P1               | `WorldAuthoringPages.tsx:715,911`, `LocationWorkspacePages.tsx:506`, `types/locations.ts`                                                                          |
+| Location → Discoveries/claims                                                                | Gap: list and editor coexist in Discoveries section. Give records separate routes; preserve truth/belief/rumor identity and provenance, not one text line per claim.                                                                                                | P1               | `LocationWorkspacePages.tsx:245,296,333,417`, `types/plots.ts:59,80`                                                                                               |
+| Location → Creature and Item placements                                                      | Gap: section list plus inline placement form. Dedicated placement Add/Edit with ownership-safe removal and source selection.                                                                                                                                        | P1               | `WorldAuthoringPages.tsx:2057,2268,2368`, `types/placements.ts`                                                                                                    |
+| Location → Connections                                                                       | Partial: containment parent/children UI is not a full connection-record editor. Distinguish reparenting from explicit traversable connections; expose connection records only under their actual ownership contract.                                                | P2               | `LocationWorkspacePages.tsx:506,544`, `types/locations.ts:291,301,330`                                                                                             |
+| World → Creature/Item Definitions                                                            | Partial: library and selected record routes already exist; generic list/editor creation needs dedicated Add routes and consistent removal/navigation.                                                                                                               | P1               | `WorldAuthoringPages.tsx:755,782,877,911`, `routes/_gm.worlds.$worldId.bestiary.creatures.$creatureId.tsx`, `types/creatures.ts`, `types/items.ts`                 |
+| Creature → Skills, Professions, equipment/attribute selections                               | Mixed: checkbox/value selections are references, not owned Skill/Profession definitions. Rich proficiency, progression, inventory or equipped-item records need separate child experiences when authored; do not manufacture source definitions through a checkbox. | P2               | `WorldAuthoringPages.tsx:1834,1858,1937,1977`, `types/creatures.ts`, `types/professions.ts`                                                                        |
+| World → Skill/Profession/Background and other Character-option Definitions                   | Partial: definition-kind libraries and selected records exist. Audit Add/Delete routing for each supported kind; missing domain kinds are capability gaps, not implemented pages.                                                                                   | P1               | `WorldAuthoringPages.tsx:2548,2588`, `routes/_gm.worlds.$worldId.characters.$definitionKind.$definitionId.tsx`, `types/character.ts`                               |
+| Profession → expertise levels, modifier grants                                               | Gap: rank sections, grant list and grant editor all live within Save Profession. Separate rank/grant list and editor contexts; preserve grant IDs, dice recipes and authored stacking semantics.                                                                    | P1               | `ProfessionModifiersEditor.tsx:11,35,44`, `types/professions.ts:50,95`, `types/modifiers.ts`                                                                       |
+| Profession → acquisition rules, actions/improvements, choices/prerequisites                  | Domain capability gap: richer collections exist beyond the exposed starting-rank/modifier form. Scope structured child editing after supported persistence/validation is verified.                                                                                  | P2               | `types/professions.ts:88,95,97,98`, `WorldAuthoringPages.tsx:2763`                                                                                                 |
+| Character-option Definition → traits, choices, restrictions                                  | Domain capability gap: nested typed content is not a complete list/Add/Edit experience. Preserve imported richer content until explicit supported editors exist.                                                                                                    | P2               | `types/character.ts:118,135,146,148`, `WorldAuthoringPages.tsx:2588`                                                                                               |
+| World → rules                                                                                | Gap: rule list and selected rule editor share one Rules page. Dedicated rule routes, stable selection and delete; retain draft revision/validation boundaries.                                                                                                      | P1               | `WorldRulesPage.tsx:40,307`, `WorldRuleEditor.tsx:671`, `types/world-rules.ts:16`                                                                                  |
+| Rule → ordered effects/conditions and nested expressions                                     | Gap: stacked recursive editors. Effects are ordered structured child values; give focused collection/detail editing without changing engine semantics. Small expression operands may remain controls within that editor, not a sidebar frame per literal.           | P1               | `WorldRuleEditor.tsx:310,407,753,760,794`, `types/world-rules.ts:56,69,106`                                                                                        |
+| Model registry → vocabulary elements                                                         | Gap: World Model editor lists revisions/options and edits on the same page. Dedicated element Add/Edit, explicit archive, exact revision adoption; never mutate an adopted immutable release.                                                                       | P1               | `WorldAuthoringPages.tsx:2815,2891,3378,3395`, `types/model-registry.ts`                                                                                           |
+| Model Schema Structure → Concepts, Fields, Relationships                                     | Gap: nested schema content has list and inline editor. Separate record contexts with parent Concepts, relationship endpoints and cardinality; preserve archive/release behavior.                                                                                    | P1               | `WorldModelStructureEditor.tsx:56,428,488,544,838`, `types/model-registry.ts:147,225,245`                                                                          |
+| Campaign library → Definitions/Instances                                                     | Partial: library, create routes and frames exist. Verify create/cancel destinations and exact selected lineage, preserve separation of Definition and Instance.                                                                                                     | P2               | `routes/_gm.campaigns.index.tsx`, `CampaignDefinitionPages.tsx:114`, `CampaignInstancePages.tsx:190`                                                               |
+| Campaign Definition → root Plots; Plot → subplots                                            | Partial: list/selected Plot routes, but hierarchy selection and editing share the page; deletion missing at baseline. First slice supplies full recursive record contexts and lifecycle.                                                                            | P0               | `CampaignDefinitionPages.tsx:622`, `routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.tsx`, `types/plots.ts:141`                      |
+| Plot → Objectives, Pressures, Resistances                                                    | Gap: identity-bearing objects flattened to multiline names. First slice: dedicated collection and child forms exposing supported fields, preserving IDs/extensions and sibling order.                                                                               | P0               | `CampaignDefinitionPages.tsx:1072,1083,1094`, `types/plots.ts:31,40,49,149`                                                                                        |
+| Plot → Discoveries → truth/beliefs/rumors                                                    | Gap: pipe-delimited multiline Discovery editing hides the composed facets. First slice must keep one Truth plus explicit supporting/contradicting Belief and Rumor records, including provenance.                                                                   | P0               | `CampaignPlotCollectionPage.tsx`, `types/plots.ts:58,80`                                                                                                           |
+| Plot → Location contexts → actor/item placement intents                                      | Gap: Location checkboxes preserve hidden context objects but do not expose rich owned children. Dedicated context selection/editor and child intents; source Locations remain captured read-only.                                                                   | P0/P1            | `CampaignDefinitionPages.tsx:1134`, `types/plots.ts:100,113,126,132`                                                                                               |
+| Plot → prerequisites/dependencies                                                            | Gap: checkbox relationships plus rationale mixed into Plot form. Relationship list/Add/Edit/remove with cycle and cross-branch validation; removing a link never deletes its target Plot.                                                                           | P1               | `CampaignDefinitionPages.tsx:622`, `types/plots.ts:25,154,155`                                                                                                     |
+| Campaign Definition → placement overlays                                                     | Gap: list plus inline Add/Edit. Dedicated overlay routes, independent vs decorated source handling, Plot associations and named removal impact.                                                                                                                     | P1               | `CampaignDefinitionPages.tsx:1206`, `types/placements.ts`                                                                                                          |
+| Campaign → preparation defaults                                                              | Scalar fields are not separate child entities. Existing notes/templates remain forms; structured per-Location canvas configurations, when exposed, need a collection editor.                                                                                        | P2               | `CampaignDefinitionPages.tsx:1641`, `types/campaign-instance.ts:35`                                                                                                |
+| Instance → Plot/objective progress and Location realizations/knowledge                       | Command-bound gap: stacked progress controls. Dedicated captured Plot progress detail and nested records; no Add/Delete of captured Plot Definitions. Reveals/overrides retain authority and audit semantics.                                                       | P2               | `CampaignInstancePages.tsx:650`, `types/plots.ts:208,225,231`                                                                                                      |
+| Instance → placement realizations, creature embodiments, item instances                      | Command-bound gap: placement cards and controls share a page. Separate selected realization/actor details; only supported realize/defer/replace/remove commands.                                                                                                    | P2               | `CampaignInstancePages.tsx:826,1017`, `types/campaign-instance.ts:136`                                                                                             |
+| Instance → members/invitations/Characters                                                    | Gap: roster combines member, invitation, Character import/review forms and lists. Separate collection destinations and record pages; invitations revoke and membership changes follow authority, not generic delete.                                                | P2               | `CampaignInstancePages.tsx:1093,1487,1548,1699`, `types/participation.ts`, `types/player-api.ts`                                                                   |
+| Instance → Agents                                                                            | Gap: configuration form plus configured-Agent list. Dedicated Add/Edit and supported removal, preserve profile/assignment distinction.                                                                                                                              | P2               | `CampaignInstancePages.tsx:2097,2216,2279`, `types/campaign-instance-api.ts`                                                                                       |
+| Instance → Sessions                                                                          | Partial: Session record routes exist; planning form embedded in list. Separate Plan Session, preserve lobby/start/pause/conclude/cancel lifecycle and historical records.                                                                                           | P2               | `CampaignInstancePages.tsx:2361,2523`, `CampaignSessionPage.tsx:38`, `types/session.ts`                                                                            |
+| Player → Instance Characters                                                                 | Partial: character list and selected creation/review flow exist. Reference choices and allocated attributes remain focused form controls; any rich Character child records need ownership-aware pages.                                                              | P2               | `CharacterCreationPage.tsx:77,407,459,509`, `routes/_player.play.instances.$campaignInstanceId.characters.$characterId.tsx`                                        |
+| Players directory → selected Player, identities/memberships                                  | Gap for selected profile navigation: directory selection is inline. Identity/membership collections are read-only or command-controlled, not GM-owned editable identity records.                                                                                    | P2               | `routes/_gm.players.tsx:147,189,222,237`                                                                                                                           |
+| Settings → areas/settings                                                                    | Partial: areas selected in one route, multiple SettingCards stacked. Addressable area/setting details improve navigation; fixed settings taxonomy is not an Add/Delete collection. Credential rotation/revocation remains protected.                                | P2               | `routes/_gm.settings.tsx:110,140,158,180`, `types/system-settings-api.ts`                                                                                          |
+| Revisions, migration plans/impacts, Session participants/events/summaries/movement proposals | Command/read-only: retain lists, pagination and named detail views. No generic edit/delete for immutable snapshots, event journals, receipts or historical attendance.                                                                                              | Exempt from CRUD | `CampaignInstancePages.tsx:2601,2702`, `CampaignSessionPage.tsx:635,684,746`, `SessionMovementPanel.tsx`, `types/versioning.ts`, `types/movement-execution-api.ts` |
+| Map geometry, terrain cells/chunks, walls, transitions; aggregate cultural/political records | Specialized/domain gap: terrain remains a spatial editor, not pages per voxel. Named transitions/walls or authored cultural/political records warrant focused list/detail only when supported ownership and editing scope are established.                          | P2               | `LocationTerrainEditor.tsx`, `types/locations.ts:204,222,270`, `types/isometric-terrain.ts`                                                                        |
+
+Implementation file paths in this table are relative to `apps/web/src`; `types/` paths are relative
+to `packages/common/src`. Line anchors identify the inspected baseline and may shift during delivery.
+No deprecated documents were used. Hidden domain collections are reported explicitly rather than
+misrepresented as currently editable UI.
+
+## Delivery and verification gates
+
+1. Deliver the recursive Plot slice first. Establish reusable list/detail/add navigation, a single
+   focused child editor, stable record identity, deletion policy, and provider save/dirty semantics.
+2. Apply that pattern to existing high-risk multiline or stacked authoring: World discoveries and
+   placements, Campaign overlays, Profession grants, rules and Models. Preserve each resource's
+   immutable adoption and source ownership rules.
+3. Extend to Instance operational records, Players/Settings navigation, and richer domain content.
+   Resolve unsupported capability and authorization questions before exposing mutations. The user
+   request authorizes consistent UX work, not fabricated runtime state or schema-free generic CRUD.
+
+Every delivered collection must have empirical browser coverage of these bounded scenarios:
+
+- Empty list → Add → required-field failure → save → list/detail → reload shows persisted fields.
+- Select an existing child → edit one field → save retains its identity, unexposed rich data and all
+  untouched siblings. Include duplicate display names and first/middle/last list positions.
+- Cancel Add and Edit; navigate by sidebar, parent breadcrumb and browser back/forward with dirty
+  input; cancel departure preserves it, accepted departure discards only the intended unsaved edit.
+- Delete cancellation and confirmation; named dependency failures; deletion of another item while
+  editing retains the current unsaved form and dirty guard. Successful removal preserves siblings.
+- Direct entry/reload reconstructs correct contextual sidebar and human ancestry. Unknown records
+  are neutral, cross-owner IDs denied, and ancestor reparenting updates breadcrumbs without cycles.
+- Pending save prevents duplicates; rejected save retains input; stale revision blocks overwrite;
+  archived/read-only permissions block click and keyboard submissions. Refresh/retry recovers.
+- Keyboard navigation and submit, narrow viewport/drawer, focus after transition, and no visible
+  opaque IDs. Collection lists have useful names, accessible actions and explicit empty states.
+- Immutable captured records, references and histories remain immutable. Removing an association
+  never deletes its source; Instance changes never mutate a World or Campaign Definition.
+
+Record each implemented collection's concrete route, controls, assertions and evidence in a
+verification record. A shared component test alone does not prove every route, and the existing
+[Campaign authoring verification](campaign-authoring-verification.md) covers the previous form
+experience, not this new route pattern. This scope-only change does not change common types or
+persisted resources; the AI-facing domain model guide remains accurate.

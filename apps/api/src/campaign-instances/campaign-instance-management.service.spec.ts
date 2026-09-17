@@ -229,6 +229,7 @@ describe("CampaignInstanceManagementService", () => {
       campaignInstanceName: "Tuesday Glasswake",
       runtimeRevision: 4,
       preparation: { startingContext: "Observatory" },
+      locations: [],
     });
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: "runtime-1", campaignInstanceId: "instance-1", revision: 3 },

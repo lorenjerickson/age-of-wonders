@@ -189,7 +189,7 @@ interface CampaignInstanceCreateTransaction {
 export interface CampaignInstanceStore extends CampaignInstanceReader {
   readonly $transaction?: (
     operation: (tx: CampaignInstanceCreateTransaction) => Promise<unknown>,
-    options: { readonly isolationLevel: unknown },
+    options: { readonly isolationLevel: unknown; readonly timeout?: number },
   ) => Promise<unknown>;
 }
 
@@ -267,7 +267,6 @@ const detailSelect = {
       predecessorSnapshotId: true,
       reason: true,
       contentHash: true,
-      content: true,
       adoptedAt: true,
       campaignDefinitionSnapshot: {
         select: {
@@ -295,7 +294,7 @@ const detailSelect = {
       updatedAt: true,
     },
   },
-} as const;
+} as const satisfies Prisma.CampaignInstanceSelect;
 
 const selectedSnapshotSelect = {
   id: true,
@@ -328,7 +327,7 @@ const selectedSnapshotSelect = {
       worldDefinitionRevision: { select: worldRevisionDetailSelect },
     },
   },
-} as const;
+} as const satisfies Prisma.CampaignDefinitionSnapshotSelect;
 
 @Injectable()
 export class CampaignInstancesService {
@@ -658,7 +657,12 @@ export class CampaignInstancesService {
             },
           };
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          // Creating an Instance verifies and captures the complete terrain-backed
+          // World; valid chunk payloads can exceed the five-second default.
+          timeout: 60_000,
+        },
       )) as Record<string, unknown>;
       if (typeof result.idempotentInstanceId === "string") {
         return this.get(
@@ -851,8 +855,36 @@ function replicatedCompatibilityManifest(
   ]);
 }
 
+/** Captured inputs shared by creation and the strictly empty legacy-envelope repair. */
+export interface InitialInstanceRuntimeCapture {
+  readonly manifest: unknown;
+  readonly campaignDefinitionRevision: { readonly content: unknown };
+  readonly capturedWorldSnapshot: { readonly manifest: unknown };
+}
+
+/** Pure repair only. Caller must lock/check ownership, snapshot, revision and Session state,
+ * retain a source checkpoint, then CAS the runtime and record an audit transactionally.
+ * A non-null legacy game or any other runtime field requires explicit conversion instead. */
+export function initializeEmptyLegacyInstanceRuntime(
+  selected: InitialInstanceRuntimeCapture,
+  campaignInstanceId: string,
+  state: unknown,
+  extensions: unknown,
+) {
+  if (
+    !state || typeof state !== "object" || Array.isArray(state) ||
+    Object.keys(state).length !== 1 ||
+    !("legacyGamePayload" in state) || state.legacyGamePayload !== null ||
+    !extensions || typeof extensions !== "object" || Array.isArray(extensions) ||
+    Object.keys(extensions).length !== 0 ||
+    !isCanonicalSnapshotManifest(selected.manifest) ||
+    !isCanonicalSnapshotManifest(selected.capturedWorldSnapshot.manifest)
+  ) throw new ConflictException("Only an empty legacy runtime with verified captures can be initialized.");
+  return { ...initialRuntimeState(selected, campaignInstanceId), legacyGamePayload: null };
+}
+
 function initialRuntimeState(
-  selected: SelectedCampaignDefinitionSnapshotRow,
+  selected: InitialInstanceRuntimeCapture,
   campaignInstanceId: string,
 ) {
   const campaignRecords = isCanonicalSnapshotManifest(selected.manifest)

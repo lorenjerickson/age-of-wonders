@@ -25,6 +25,7 @@ import {
   type NamespacedKey,
   type SaveLocationTerrainRequest,
 } from "@aow/common";
+import { startTerrainGenerationJob } from "./terrainGenerationJob";
 import { useWorldAuthoring } from "./WorldAuthoringShell";
 import {
   ApiRequestError,
@@ -152,7 +153,7 @@ export function LocationTerrainEditor({
   const [generationMode, setGenerationMode] =
     useState<TerrainGenerationSettings["mode"]>("fill-empty");
   const [candidate, setCandidate] = useState<GenerationCandidate>();
-  const worker = useRef<Worker | null>(null);
+  const worker = useRef<{ cancel(): void } | null>(null);
   const generationRevision = useRef<number | undefined>(undefined);
   const saveJob = useRef<
     | { volume: IsometricTerrainVolume; request: SaveLocationTerrainRequest }
@@ -168,7 +169,7 @@ export function LocationTerrainEditor({
   }, [busy, onBusyChange]);
   useEffect(
     () => () => {
-      worker.current?.terminate();
+      worker.current?.cancel();
     },
     [],
   );
@@ -360,48 +361,43 @@ export function LocationTerrainEditor({
     setBusy("Generating terrain");
     setMessage("");
     generationRevision.current = draft.storageRevision;
-    const task = new Worker(
-      new URL("./terrainGeneration.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    worker.current = task;
-    task.onmessage = (
-      event: MessageEvent<GenerationCandidate & { error?: string }>,
-    ) => {
-      task.terminate();
-      worker.current = null;
-      setBusy("");
-      if (event.data.error) setMessage(event.data.error);
-      else setCandidate(event.data);
-    };
-    task.onerror = () => {
-      task.terminate();
-      worker.current = null;
-      setBusy("");
-      setMessage("Terrain generation failed. Your map is unchanged.");
-    };
-    task.postMessage({
-      volume,
-      settings: {
-        version: 1,
-        seed,
-        preset,
-        region: {
-          minimum: { x: 0, y: 0, z: 0 },
-          maximum: {
-            x: volume.dimensions.x - 1,
-            y: volume.dimensions.y - 1,
-            z: volume.dimensions.z - 1,
+    worker.current?.cancel();
+    worker.current = startTerrainGenerationJob<GenerationCandidate>({
+      createWorker: () =>
+        new Worker(new URL("./terrainGeneration.worker.ts", import.meta.url), {
+          type: "module",
+        }),
+      onResult: (result) => {
+        setBusy("");
+        setCandidate(result);
+      },
+      onError: (message) => {
+        setBusy("");
+        setMessage(message);
+      },
+      request: {
+        volume,
+        settings: {
+          version: 1,
+          seed,
+          preset,
+          region: {
+            minimum: { x: 0, y: 0, z: 0 },
+            maximum: {
+              x: volume.dimensions.x - 1,
+              y: volume.dimensions.y - 1,
+              z: volume.dimensions.z - 1,
+            },
           },
+          minimumElevation: 0,
+          maximumElevation: Math.min(14, volume.dimensions.z),
+          baseElevation: Math.min(7, Math.floor(volume.dimensions.z / 2)),
+          featureSize: 12,
+          roughness: 0.5,
+          materialKey: material,
+          mode: generationMode,
+          ...(selection.length ? { mask: selection } : {}),
         },
-        minimumElevation: 0,
-        maximumElevation: Math.min(14, volume.dimensions.z),
-        baseElevation: Math.min(7, Math.floor(volume.dimensions.z / 2)),
-        featureSize: 12,
-        roughness: 0.5,
-        materialKey: material,
-        mode: generationMode,
-        ...(selection.length ? { mask: selection } : {}),
       },
     });
   }
@@ -875,7 +871,7 @@ export function LocationTerrainEditor({
           {busy === "Generating terrain" && (
             <Button
               onClick={() => {
-                worker.current?.terminate();
+                worker.current?.cancel();
                 worker.current = null;
                 setBusy("");
               }}
@@ -925,8 +921,12 @@ export function LocationTerrainEditor({
             level={level}
             plane={plane}
             textureQuality={textureQuality}
-            slice={slice}
-            actor={actor}
+            slice={candidate ? false : slice}
+            actor={
+              candidate
+                ? terrainPreviewActor(candidate.result.volume, actor.x, actor.y)
+                : actor
+            }
             selection={selection}
             disabled={locked}
             onStroke={stroke}

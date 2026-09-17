@@ -13,6 +13,7 @@ import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import {
   CampaignInstanceMigrationsService,
   capturedClosure,
+  initializeAddedPlotProgress,
   rewriteRuntimeReferences,
   scopedMigrationReference,
   validateTargetRuntime,
@@ -753,5 +754,58 @@ describe("CampaignInstanceMigrationsService", () => {
     });
     expect(result.kind).toBe("restore");
     expect(result.source.snapshotNumber).toBe(1);
+  });
+});
+
+describe("canonical Creature Instance adoption", () => {
+  it("keeps exact Creature identity through canonical resource conversion", async () => {
+    const setup = fixture();
+    const source = revisionManifest("world-definition-revision", "world-revision-1", 1, [{ resourceType: "locations", sourceId: "old-location", payload: { name: "Old Harbor" } }, { resourceType: "creatures", sourceId: "same-creature", payload: { identity: { name: "Original name" } } }]);
+    const target = revisionManifest("world-definition-revision", "world-revision-2", 2, [{ resourceType: "locations", sourceId: "new-location", payload: { name: "New Harbor" } }, { resourceType: "definitions", sourceId: "same-creature", payload: { kind: "creature", identity: { name: "Renamed creature" } } }]);
+    setup.instance.currentSnapshot.worldDefinitionSnapshot.manifest = source;
+    setup.target.capturedWorldSnapshot.manifest = target;
+    setup.target.capturedWorldSnapshot.contentHash = target.contentHash;
+    setup.target.capturedWorldSnapshot.worldDefinitionRevision.contentHash = target.records[0].contentHash;
+    const result = await new CampaignInstanceMigrationsService(setup.prisma as never).preview("instance-1", "gm-1", { sourceSnapshotId: "instance-snapshot-1" as never, targetCampaignDefinitionSnapshotId: "campaign-snapshot-2" as never, expectedRuntimeRevision: 3, mappings: [{ resourceType: "locations", sourceId: "old-location", targetId: "new-location" }] });
+    expect(result.ready).toBe(true);
+    expect(result.conflicts).toEqual([]);
+    expect(result.changes).toContainEqual(expect.objectContaining({ subjectName: "Original name", change: "changed" }));
+  });
+});
+
+
+describe("new captured Plot progress initialization", () => {
+  const manifest = (plots: Array<{ id: string; objectives?: string[] }>) => revisionManifest(
+    "campaign-definition-revision", "revision", 1, plots.map(plot => ({resourceType: "plots", sourceId: plot.id,
+      payload: { objectives: (plot.objectives ?? []).map(id => ({id})) }})));
+  it("initializes each newly captured root and subplot with exact Instance scope without changing input", () => {
+    const state = {plotProgress: []};
+    const result = initializeAddedPlotProgress(state, "instance", manifest([]), manifest([
+      {id: "root", objectives: ["goal"]}, {id: "child"},
+    ]), new Map());
+    expect(result).toEqual({plotProgress: [
+      {campaignInstanceId: "instance", plotDefinitionId: "root", status: "not-started", objectiveProgress: [{objectiveId: "goal", status: "not-started"}]},
+      {campaignInstanceId: "instance", plotDefinitionId: "child", status: "not-started", objectiveProgress: []},
+    ]});
+    expect(state.plotProgress).toEqual([]);
+  });
+  it("preserves prior status and missing source progress; only initializes newly captured objectives", () => {
+    const entry = {campaignInstanceId: "instance", plotDefinitionId: "root", status: "active", objectiveProgress: [{objectiveId: "old", status: "completed"}]};
+    const result = initializeAddedPlotProgress({plotProgress: [entry]}, "instance",
+      manifest([{id: "root", objectives: ["old", "missing"]}, {id: "missing-source"}]),
+      manifest([{id: "root", objectives: ["old", "missing", "new"]}, {id: "missing-source"}]), new Map());
+    expect(result).toEqual({plotProgress: [{...entry, objectiveProgress: [...entry.objectiveProgress, {objectiveId: "new", status: "not-started"}]}]});
+  });
+  it("leaves restore state untouched", () => {
+    const state = {plotProgress: []};
+    expect(initializeAddedPlotProgress(state, "instance", manifest([]), manifest([{id: "root"}]), new Map(), false)).toBe(state);
+  });
+  it("does not reset or duplicate mapped Plot and objective progress", () => {
+    const entry = {campaignInstanceId: "instance", plotDefinitionId: "new-plot", status: "completed", objectiveProgress: [{objectiveId: "new-goal", status: "completed"}]};
+    expect(initializeAddedPlotProgress({plotProgress: [entry]}, "instance", manifest([{id: "old-plot", objectives: ["old-goal"]}]),
+      manifest([{id: "new-plot", objectives: ["new-goal"]}]), new Map([
+        ["plots:old-plot", "new-plot"],
+        [`plot-objectives:${scopedMigrationReference(["old-plot"], "old-goal")}`, scopedMigrationReference(["new-plot"], "new-goal")],
+      ]))).toEqual({plotProgress: [entry]});
   });
 });

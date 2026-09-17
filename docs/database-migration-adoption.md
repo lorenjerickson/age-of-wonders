@@ -82,3 +82,26 @@ checkpoint tables and their child rows together in database backups; missing rec
 restore to fail closed. The existing predecessor Restore action recovers the departure checkpoint,
 not an arbitrary timestamp or latest snapshot cache. A legacy checkpoint restores empty exploration
 with an explicit preview notice. No gameplay rules runtime is needed for capture or recovery.
+
+## Reviewed Session movement
+
+`20260920000000_session_movement_proposals` adds `CampaignSessionMovementProposal` with
+same-Instance Session/snapshot foreign keys, bounded status values, and per-Session request-key
+uniqueness. It does not move actors or grant rules/resources to existing Worlds. Apply with
+`db:deploy` on baselined installations. For a local unbaselined `db push` database, back up first,
+verify that the proposal table is absent, and apply only this checked-in additive DDL in one
+transaction. Do not mark unrelated migrations as applied.
+
+After schema deployment, explicitly adopt starter rules or author mechanics in World → Rules,
+validate and publish the World draft, migrate the Campaign Definition to that World capture, and
+preview/apply the Campaign Instance migration while no Session is active. Existing unpublished
+content must pass publication validation; enabling movement does not bypass that gate. Rule
+adoption changes neither actor positions nor Session lifecycle. Keep the proposal table with
+Instance runtime and Session journal records in full database backups.
+
+Recovered Instances whose only runtime field is `legacyGamePayload: null` require a separate,
+explicit initialization before migration. `initializeEmptyLegacyInstanceRuntime` is a guarded pure
+helper, not an automatic read-time repair: callers must verify ownership, unchanged snapshot/revision,
+no active Session or related Character/Agent state, preserve a source checkpoint, and write the
+runtime plus audit atomically. It rejects non-null legacy payloads and additional runtime/extension
+state. Nonempty legacy games require an explicit conversion plan; the helper must never reset them.

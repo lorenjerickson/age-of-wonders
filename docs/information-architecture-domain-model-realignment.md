@@ -115,7 +115,7 @@ Age of Wonders
 │   │   └── Plot
 │   │       ├── subplots (recursive Plot hierarchy)
 │   │       ├── name, description, objective, pressure, resistance
-│   │       ├── discoveries: truth, belief, rumor
+│   │       ├── discoveries: one truth + supporting/contradicting beliefs and rumors
 │   │       └── location context: items, loot, actors
 │   ├── Sessions
 │   │   ├── date, time
@@ -724,7 +724,7 @@ Campaigns
 │       │       │   └── Plot Definition (recursive)
 │       │       ├── name and description
 │       │       ├── objectives, pressures, and resistances
-│       │       ├── discoveries: truths, beliefs, rumors
+│       │       ├── discoveries: one truth with supporting/contradicting beliefs and rumors
 │       │       └── location contexts: actors, items, and loot
 │       ├── Placements
 │       │   ├── Creatures and Items, including Object/Trap/Hazard families
@@ -1474,15 +1474,14 @@ reference World creature content or describe an actor role/staging intent, while
 Plot state may link a concrete runtime actor. Neither form points ambiguously to mutable state shared
 by another Instance.
 
-A Discovery organizes Truth, Belief, and Rumor claims. Any Creature—including a Character or an
-Instance embodiment of a World Creature—may know a Truth, hold a Belief, or have heard a Rumor
-through an explicit knowledge relationship. Truths are authoritative within their applicable
-captured World/Campaign context and cannot contradict one another. Beliefs and Rumors may contradict
-Truths or each other. A Rumor may be false and does not need to resolve to or reference a Truth.
-Knowledge and reveal state are tracked per Creature and retain provenance; learning a claim does not
-make it true. Items and Loot remain separate children of Plot Location context; a Discovery may
-still have an outcome or reward relationship, but money or items cannot substitute for its
-epistemic meaning.
+A Discovery is composed of exactly one authoritative Truth facet and one or more independently
+defined Belief or Rumor facets. Each facet has its own identity, statement, provenance, and relation
+to the Truth (`supports` or `contradicts`). Any Creature—including a Character or an Instance
+embodiment of a World Creature—may know a Truth, hold a Belief, or have heard a Rumor through an
+explicit knowledge relationship. Knowledge and reveal state are tracked per Creature and retain
+provenance; learning a facet does not make it true. Items and Loot remain separate children of Plot
+Location context; a Discovery may still have an outcome or reward relationship, but money or items
+cannot substitute for its epistemic meaning.
 
 Current `CampaignState.quests` overlaps the new Plot/Objectives model and cannot remain a competing
 authored hierarchy. Detailed mapping may remove it, migrate it, or reinterpret it as runtime
@@ -1793,41 +1792,41 @@ do not violate that constraint.
 
 ## Decisions that this proposal supersedes
 
-| Current decision or implementation                                                                                                              | Replacement required by this proposal                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Exactly one persisted Campaign conflates reusable authoring and actual play                                                                     | Multiple Worlds each support multiple Campaign Definitions, each with one or more Campaign Instances                                     |
-| `CampaignDefinition` and embedded `CampaignState` share campaign identity without a first-class instance boundary                               | Definition owns reusable authored content; Instance owns roster, Sessions, progress, and runtime                                         |
-| World is treated as indistinguishable from a root Location in identity, ownership, and navigation                                               | World is a first-class concept that owns the Location hierarchy; exact persistence shape is deferred                                     |
-| Flat GM nav: Location, Campaign, Sessions, Creatures, Items                                                                                     | Stable Home, Worlds, Campaigns, Players, and Settings; Continue actions live on Home and Instance pages                                  |
-| A singleton/current World is inferred from installation state or latest-record selection                                                        | Worlds is an explicit library; every authoring and Campaign creation flow deliberately selects a human-readable World context            |
-| World libraries and model tools appear as a long, flat set of peer navigation items                                                             | Five accordion-capable secondary groups: Atlas, Bestiary, Item Compendium, Characters, and Rules, with Advanced disclosure               |
-| “Location” opens Campaign Locations when a Campaign exists                                                                                      | World Atlas owns Locations; Campaign Plots reference them                                                                                |
-| Global Sessions uses the latest Campaign                                                                                                        | Sessions are always scoped beneath an explicitly selected Campaign Instance                                                              |
-| Home silently opens the latest Campaign location workspace                                                                                      | Home exposes Quick Start, readiness, and deliberate context choices                                                                      |
-| Product-content onboarding and hosted-system setup share one implied setup flow                                                                 | Setup is reserved for hosted-system readiness; Quick Start separately guides World, Campaign, Player, and first-Session creation         |
-| Current Campaign Definition materializes all World location IDs without a revision contract                                                     | Each Campaign Definition revision captures a reproducible snapshot of one World Definition revision and its Location hierarchy           |
-| Current Campaign Definition owns persistent canvas/placement state without distinguishing source, overlay, and runtime                          | World owns source Maps; Campaign Definition owns non-mutating placement overlays/defaults; Instance owns realized mutable placement      |
-| Combined location surface obscures whether edits affect World, Definition defaults, Instance preparation, or live state                         | Replace it with discrete World Authoring, Campaign Authoring, Instance Management, and Run workspaces with explicit transitions          |
-| Campaign has no formal story/narrative hierarchy                                                                                                | Campaign Definition owns recursive Plot/subplot trees with objectives, pressures, resistances, discoveries, and location contexts        |
-| Discoveries are grant bags with no Belief concept                                                                                               | Discoveries organize Truth, Belief, and Rumor knowledge; Creature knowledge, conflict, falsity, and provenance have explicit semantics   |
-| Player Campaign membership owns portable character history                                                                                      | Each Character belongs to exactly one Campaign Instance; one-way import creates a new destination Character with provenance              |
-| World-owned mutable CreatureState is reused by campaign placement                                                                               | Every Campaign Instance realizes an independent embodiment, including for named unique World Creatures                                   |
-| `CampaignState.quests` provides a parallel authored objective hierarchy                                                                         | Campaign Definition Plot/Objectives are authored authority; Instance quests may become runtime progress, migrate, or be removed          |
-| Profession is flat and its relationship to Class/Subclass is undefined                                                                          | Profession fully replaces Class/Subclass; Creatures may progress independently through multiple Professions                              |
-| Standard `will` attribute and `paperDollToken` art key                                                                                          | Baseline Wisdom Attribute and Side-on Token art-role definitions in open registries                                                      |
-| Creature state has no intrinsic description; diagram movement modes are not all seeds                                                           | Creature supports description and seeded Walk/Run/Swim/Fly/Crawl/Jump definitions; users may add more                                    |
-| Flat profession definitions and a tier list containing Tradesman                                                                                | Recursive editable profession taxonomy plus a seeded Novice-to-Grand-Master progression                                                  |
-| Current item categories omit several diagram families; durability is instance-only                                                              | Editable item-family definitions seeded from the diagram, plus base durability semantics and instance current durability                 |
-| Environmental Objects and Hazards are modeled and navigated as entity families parallel to Items                                                | Objects, Traps, and Hazards are Item families/capabilities within Item Compendium, with specialized runtime behavior where required      |
-| World ownership is a mix of `worldId`, `LocationId`, and extension keys                                                                         | Typed, validated World relationships across World libraries without prescribing storage shape                                            |
-| User stores name/role while contact and status are repeated on invitation/membership records                                                    | Durable Player profile represents name, contact, and Player status; workflow records retain only their scoped state/snapshots            |
-| Generic domain resources have no World concept, Campaign Instance, Plot, Player profile, Agent participation, or Session participation concepts | Add explicit persistence contracts for the approved concepts; relational vs document shape is deferred                                   |
-| `STANDARD_ATTRIBUTES` and `AttributeCollection.standard` define a compiled mandatory Attribute set                                              | Attribute Definitions form an editable ordered registry; records store values by stable definition identity                              |
-| `EQUIPMENT_SLOTS` is a closed tuple used by item compatibility                                                                                  | Equipment Slot Definitions are user-authorable, hierarchical where useful, and resolved dynamically                                      |
-| Open strings and `ExtensionData` accept extra values without making them discoverable or editable                                               | Registered custom concepts, fields, and relationships carry labels, schemas, validation, UI behavior, provenance, and migration metadata |
-| Hard-coded seed arrays and unions are treated as product truth                                                                                  | Seed declarations bootstrap the editable model but are never exhaustive runtime authority                                                |
-| Definition references behave as live pointers with no explicit adoption boundary                                                                | Published revisions are immutable; downstream snapshots change only through optional, complete, direct-lineage migration                 |
-| No compatible World/Campaign revision-pair contract exists for running campaigns                                                                | Every Instance captures a compatible Campaign/World revision pair and migrates it atomically only while no Session is active             |
+| Current decision or implementation                                                                                                              | Replacement required by this proposal                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exactly one persisted Campaign conflates reusable authoring and actual play                                                                     | Multiple Worlds each support multiple Campaign Definitions, each with one or more Campaign Instances                                                                       |
+| `CampaignDefinition` and embedded `CampaignState` share campaign identity without a first-class instance boundary                               | Definition owns reusable authored content; Instance owns roster, Sessions, progress, and runtime                                                                           |
+| World is treated as indistinguishable from a root Location in identity, ownership, and navigation                                               | World is a first-class concept that owns the Location hierarchy; exact persistence shape is deferred                                                                       |
+| Flat GM nav: Location, Campaign, Sessions, Creatures, Items                                                                                     | Stable Home, Worlds, Campaigns, Players, and Settings; Continue actions live on Home and Instance pages                                                                    |
+| A singleton/current World is inferred from installation state or latest-record selection                                                        | Worlds is an explicit library; every authoring and Campaign creation flow deliberately selects a human-readable World context                                              |
+| World libraries and model tools appear as a long, flat set of peer navigation items                                                             | Five accordion-capable secondary groups: Atlas, Bestiary, Item Compendium, Characters, and Rules, with Advanced disclosure                                                 |
+| “Location” opens Campaign Locations when a Campaign exists                                                                                      | World Atlas owns Locations; Campaign Plots reference them                                                                                                                  |
+| Global Sessions uses the latest Campaign                                                                                                        | Sessions are always scoped beneath an explicitly selected Campaign Instance                                                                                                |
+| Home silently opens the latest Campaign location workspace                                                                                      | Home exposes Quick Start, readiness, and deliberate context choices                                                                                                        |
+| Product-content onboarding and hosted-system setup share one implied setup flow                                                                 | Setup is reserved for hosted-system readiness; Quick Start separately guides World, Campaign, Player, and first-Session creation                                           |
+| Current Campaign Definition materializes all World location IDs without a revision contract                                                     | Each Campaign Definition revision captures a reproducible snapshot of one World Definition revision and its Location hierarchy                                             |
+| Current Campaign Definition owns persistent canvas/placement state without distinguishing source, overlay, and runtime                          | World owns source Maps; Campaign Definition owns non-mutating placement overlays/defaults; Instance owns realized mutable placement                                        |
+| Combined location surface obscures whether edits affect World, Definition defaults, Instance preparation, or live state                         | Replace it with discrete World Authoring, Campaign Authoring, Instance Management, and Run workspaces with explicit transitions                                            |
+| Campaign has no formal story/narrative hierarchy                                                                                                | Campaign Definition owns recursive Plot/subplot trees with objectives, pressures, resistances, discoveries, and location contexts                                          |
+| Discoveries are grant bags with no Belief concept                                                                                               | Each Discovery is one Truth plus independently defined supporting or contradicting Beliefs and Rumors; Creature knowledge, falsity, and provenance have explicit semantics |
+| Player Campaign membership owns portable character history                                                                                      | Each Character belongs to exactly one Campaign Instance; one-way import creates a new destination Character with provenance                                                |
+| World-owned mutable CreatureState is reused by campaign placement                                                                               | Every Campaign Instance realizes an independent embodiment, including for named unique World Creatures                                                                     |
+| `CampaignState.quests` provides a parallel authored objective hierarchy                                                                         | Campaign Definition Plot/Objectives are authored authority; Instance quests may become runtime progress, migrate, or be removed                                            |
+| Profession is flat and its relationship to Class/Subclass is undefined                                                                          | Profession fully replaces Class/Subclass; Creatures may progress independently through multiple Professions                                                                |
+| Standard `will` attribute and `paperDollToken` art key                                                                                          | Baseline Wisdom Attribute and Side-on Token art-role definitions in open registries                                                                                        |
+| Creature state has no intrinsic description; diagram movement modes are not all seeds                                                           | Creature supports description and seeded Walk/Run/Swim/Fly/Crawl/Jump definitions; users may add more                                                                      |
+| Flat profession definitions and a tier list containing Tradesman                                                                                | Recursive editable profession taxonomy plus a seeded Novice-to-Grand-Master progression                                                                                    |
+| Current item categories omit several diagram families; durability is instance-only                                                              | Editable item-family definitions seeded from the diagram, plus base durability semantics and instance current durability                                                   |
+| Environmental Objects and Hazards are modeled and navigated as entity families parallel to Items                                                | Objects, Traps, and Hazards are Item families/capabilities within Item Compendium, with specialized runtime behavior where required                                        |
+| World ownership is a mix of `worldId`, `LocationId`, and extension keys                                                                         | Typed, validated World relationships across World libraries without prescribing storage shape                                                                              |
+| User stores name/role while contact and status are repeated on invitation/membership records                                                    | Durable Player profile represents name, contact, and Player status; workflow records retain only their scoped state/snapshots                                              |
+| Generic domain resources have no World concept, Campaign Instance, Plot, Player profile, Agent participation, or Session participation concepts | Add explicit persistence contracts for the approved concepts; relational vs document shape is deferred                                                                     |
+| `STANDARD_ATTRIBUTES` and `AttributeCollection.standard` define a compiled mandatory Attribute set                                              | Attribute Definitions form an editable ordered registry; records store values by stable definition identity                                                                |
+| `EQUIPMENT_SLOTS` is a closed tuple used by item compatibility                                                                                  | Equipment Slot Definitions are user-authorable, hierarchical where useful, and resolved dynamically                                                                        |
+| Open strings and `ExtensionData` accept extra values without making them discoverable or editable                                               | Registered custom concepts, fields, and relationships carry labels, schemas, validation, UI behavior, provenance, and migration metadata                                   |
+| Hard-coded seed arrays and unions are treated as product truth                                                                                  | Seed declarations bootstrap the editable model but are never exhaustive runtime authority                                                                                  |
+| Definition references behave as live pointers with no explicit adoption boundary                                                                | Published revisions are immutable; downstream snapshots change only through optional, complete, direct-lineage migration                                                   |
+| No compatible World/Campaign revision-pair contract exists for running campaigns                                                                | Every Instance captures a compatible Campaign/World revision pair and migrates it atomically only while no Session is active                                               |
 
 These changes specifically supersede `docs/age-of-wonders-requirements.md`,
 `docs/campaign-design.md`, and the dated assessment in
@@ -2019,8 +2018,9 @@ model separates.
   Instance by recency.
 - The server can retain multiple active Campaign Instances but rejects starting a second globally
   active Session until the current active Session ceases to be active.
-- Any Creature can know a Truth, Belief, or Rumor. Conflicting Truths are rejected; conflicting
-  Beliefs/Rumors and false Rumors are preserved with provenance and per-Creature knowledge state.
+- Any Creature can know a Truth, Belief, or Rumor. A Discovery has exactly one Truth and at least
+  one supporting or contradicting Belief or Rumor; conflicting facets and false Rumors are preserved
+  with provenance and per-Creature knowledge state.
 - A non-human Agent participates at Campaign Instance scope under explicit observe/act capabilities,
   and its Session activity and state-changing actions are auditable without human impersonation.
 - Invitation-driven onboarding creates a profile associated with an authentication-provider

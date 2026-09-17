@@ -1,8 +1,11 @@
+import { NavigationLiveData } from "./navigationLiveData";
+import { campaignPlotNavigation } from "./campaignPlotNavigationModel";
 import { ContextualBreadcrumbs } from "./ContextualNavigation";
 import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -31,12 +34,14 @@ interface CampaignAuthoringContextValue {
   definition: CampaignDefinitionDetail;
   draft?: CampaignDefinitionDraft;
   saveState: SaveState;
+  getSaveState(): SaveState;
   message: string;
   canEdit: boolean;
   saveDraft(next: CampaignDefinitionDraft): Promise<boolean>;
   saveRecord(record: CampaignDraftRecord): Promise<boolean>;
   removeRecord(resourceType: string, sourceId: string): Promise<boolean>;
   markDirty(): void;
+  discardLocalChanges(): void;
   adoptDraft(draft: CampaignDefinitionDraft): void;
 }
 
@@ -61,12 +66,29 @@ export function CampaignDefinitionAuthoringProvider({
   children: ReactNode;
 }) {
   const [draft, setDraft] = useState(initialDraft);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const setNavigationCampaign = useContext(NavigationLiveData)?.setCampaign;
+  useEffect(() => {
+    setNavigationCampaign?.({
+      campaignId: definition.id,
+      records: draft?.records ?? [],
+      locations: draft?.capturedWorldContent?.locations,
+    });
+    return () => setNavigationCampaign?.(undefined);
+  }, [definition.id, draft, setNavigationCampaign]);
+  const [saveState, updateSaveState] = useState<SaveState>("idle");
+  const saveStateRef = useRef<SaveState>("idle");
+  function setSaveState(next: SaveState | ((current: SaveState) => SaveState)) {
+    const value =
+      typeof next === "function" ? next(saveStateRef.current) : next;
+    saveStateRef.current = value;
+    updateSaveState(value);
+  }
   const [message, setMessage] = useState("");
   const canEdit =
     definition.status.toLowerCase() !== "archived" && draft?.status !== "stale";
 
   async function saveDraft(next: CampaignDefinitionDraft) {
+    if (saveStateRef.current === "saving") return false;
     if (!draft || draft.status === "stale" || !canEdit) return false;
     setSaveState("saving");
     setMessage("");
@@ -138,6 +160,7 @@ export function CampaignDefinitionAuthoringProvider({
         definition,
         draft,
         saveState,
+        getSaveState: () => saveStateRef.current,
         message,
         canEdit,
         saveDraft,
@@ -146,6 +169,12 @@ export function CampaignDefinitionAuthoringProvider({
         markDirty: () => {
           if (canEdit && saveState !== "saving" && saveState !== "stale")
             setSaveState("dirty");
+        },
+        discardLocalChanges: () => {
+          setSaveState((current) =>
+            current === "dirty" || current === "error" ? "saved" : current,
+          );
+          setMessage("");
         },
         adoptDraft: (next) => {
           setDraft(next);
@@ -160,12 +189,19 @@ export function CampaignDefinitionAuthoringProvider({
 }
 
 export function CampaignDefinitionUnsavedNavigationGuard() {
-  const { saveState } = useCampaignDefinitionAuthoring();
+  const { saveState, getSaveState, discardLocalChanges } =
+    useCampaignDefinitionAuthoring();
   const unsaved = saveState === "dirty" || saveState === "error";
   useBlocker({
-    shouldBlockFn: () =>
-      unsaved &&
-      !window.confirm("Leave without saving your Campaign draft changes?"),
+    shouldBlockFn: () => {
+      const current = getSaveState();
+      if (current === "saving") return true;
+      if (current !== "dirty" && current !== "error") return false;
+      if (!window.confirm("Leave without saving your Campaign draft changes?"))
+        return true;
+      discardLocalChanges();
+      return false;
+    },
     enableBeforeUnload: unsaved,
   });
   return null;
@@ -220,16 +256,15 @@ export function CampaignDefinitionContextBar() {
     }
   }
 
-  const currentRevision =
-    definition.revisions?.find(
-      ({ id }) => id === definition.currentRevisionId,
-    );
+  const currentRevision = definition.revisions?.find(
+    ({ id }) => id === definition.currentRevisionId,
+  );
   const world = draft?.capturedWorld ?? currentRevision?.capturedWorld;
   const worldName = world?.worldName ?? world?.name;
   return (
     <>
       <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 basis-full sm:flex-1">
           <p className="truncate font-semibold" title={name}>
             {name}
           </p>
@@ -294,7 +329,13 @@ export function CampaignDefinitionContextBar() {
           </RouterButtonLink>
         )}
       </header>
-      <ContextualBreadcrumbs />
+      <ContextualBreadcrumbs
+        data={{
+          campaignName: definition.name,
+          records: draft?.records,
+          locations: draft?.capturedWorldContent?.locations,
+        }}
+      />
       {(message || actionError) && (
         <Alert tone="error" className="m-4" aria-live="polite">
           <div>
@@ -326,6 +367,11 @@ export function CampaignDefinitionSecondaryNavigation({
   gmScope: string;
 }) {
   const location = useLocation();
+  const authoring = useContext(CampaignAuthoringContext);
+  const plotNavigation = campaignPlotNavigation(
+    location.pathname,
+    authoring?.draft?.records,
+  );
   const groups = campaignDefinitionNavigationForPath(
     campaignDefinitionId,
     location.pathname,
@@ -388,7 +434,7 @@ export function CampaignDefinitionSecondaryNavigation({
         tone="outline"
         className="mb-3 min-h-11 w-full justify-between lg:hidden"
         aria-expanded={mobileOpen}
-        aria-controls="campaign-definition-navigation"
+        aria-controls="campaign-definition-navigation campaign-plot-navigation"
         onClick={() => setMobileOpen((open) => !open)}
       >
         Campaign navigation{" "}
@@ -458,6 +504,33 @@ export function CampaignDefinitionSecondaryNavigation({
           })}
         </ul>
       </nav>
+      {plotNavigation && (
+        <nav
+          id="campaign-plot-navigation"
+          aria-label={`${plotNavigation.label} Plot navigation`}
+          className={`mt-5 border-t border-base-300 pt-4 ${mobileOpen ? "block" : "hidden lg:block"}`}
+        >
+          <p className="px-3 text-sm font-semibold">{plotNavigation.label}</p>
+          <ul className="menu mt-2 gap-1 p-0">
+            {plotNavigation.links.map((link) => (
+              <li key={link.href}>
+                <InternalLink
+                  href={`${link.href}${guideSuffix}`}
+                  aria-current={
+                    location.pathname === link.href ||
+                    (link.href !== plotNavigation.href &&
+                      location.pathname.startsWith(`${link.href}/`))
+                      ? "page"
+                      : undefined
+                  }
+                >
+                  {link.label}
+                </InternalLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
       <InternalLink
         className="link mt-5 inline-block px-2 text-sm"
         href={`/campaigns${guideSuffix}`}
@@ -469,9 +542,15 @@ export function CampaignDefinitionSecondaryNavigation({
 }
 
 export function CampaignDraftRequired({ children }: { children: ReactNode }) {
-  const { definition, draft, canEdit } = useCampaignDefinitionAuthoring();
+  const { definition, draft, canEdit, saveState } =
+    useCampaignDefinitionAuthoring();
   const guideSuffix = quickStartSuffix(useLocation().searchStr);
-  if (draft && canEdit) return children;
+  if (draft && canEdit)
+    return (
+      <fieldset className="min-w-0" disabled={saveState === "saving"}>
+        {children}
+      </fieldset>
+    );
   if (draft?.status === "stale") {
     return (
       <Alert tone="warning" className="mt-8">

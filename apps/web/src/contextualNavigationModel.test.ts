@@ -84,3 +84,109 @@ describe("contextual navigation stack", () => {
     ).toEqual(["GM Workspace", "Players"]);
   });
 });
+
+const campaignData = {
+  campaignName: "The Bells",
+  locations: [{ id: "opaque-location", name: "Flooded harbor" }],
+  records: [
+    {
+      resourceType: "plots",
+      sourceId: "opaque-plot",
+      payload: {
+        name: "Find the bell",
+        objectives: [{ id: "opaque-objective", name: "Reach the tower" }],
+        discoveries: [
+          {
+            id: "opaque-discovery",
+            name: "The inscription",
+            claims: [
+              { id: "opaque-claim", statement: "The bell opens the gate" },
+            ],
+          },
+        ],
+        locationContexts: [
+          { id: "opaque-context", locationId: "opaque-location" },
+        ],
+      },
+    },
+    {
+      resourceType: "campaign-placements",
+      sourceId: "opaque-placement",
+      payload: { name: "Harbor keeper" },
+    },
+  ],
+};
+describe("Plot collection navigation", () => {
+  const base = "/campaigns/definitions/opaque-campaign/plots/opaque-plot";
+  it("restores every collection and named child from a direct URL", () => {
+    const stack = contextualNavigationStack(
+      `${base}/objectives/opaque-objective`,
+      campaignData,
+    );
+    expect(stack.map((frame) => frame.label)).toEqual([
+      "GM Workspace",
+      "Campaigns",
+      "The Bells",
+      "Plots",
+      "Find the bell",
+      "Objectives",
+      "Reach the tower",
+    ]);
+    expect(stack.at(-1)?.links.map((link) => link.label)).toEqual([
+      "Plot overview",
+      "Objectives",
+      "Pressures",
+      "Resistances",
+      "Discoveries",
+      "Subplots",
+      "Locations",
+      "Prerequisites",
+      "Dependencies",
+    ]);
+    expect(
+      contextualNavigationStack(`${base}/objectives/new`, campaignData).at(-1)
+        ?.label,
+    ).toBe("New objective");
+  });
+  it("resolves captured Locations, placement associations, and nested claims", () => {
+    expect(
+      contextualNavigationStack(
+        `${base}/locations/opaque-context`,
+        campaignData,
+      ).at(-1)?.label,
+    ).toBe("Flooded harbor");
+    expect(
+      contextualNavigationStack(
+        `${base}/locations/opaque-context/placements/opaque-placement`,
+        campaignData,
+      )
+        .slice(-2)
+        .map((frame) => frame.label),
+    ).toEqual(["Placement associations", "Harbor keeper"]);
+    expect(
+      contextualNavigationStack(
+        `${base}/discoveries/opaque-discovery/claims/opaque-claim`,
+        campaignData,
+      )
+        .slice(-2)
+        .map((frame) => frame.label),
+    ).toEqual(["Claims", "The bell opens the gate"]);
+  });
+  it("uses neutral fallbacks for unavailable records and keeps list breadcrumbs", () => {
+    for (const suffix of [
+      "objectives/missing",
+      "locations/missing",
+      "dependencies/missing",
+      "discoveries/missing/claims/missing",
+    ])
+      expect(
+        contextualNavigationStack(`${base}/${suffix}`)
+          .map((frame) => frame.label)
+          .join(" "),
+      ).not.toMatch(/opaque|missing/);
+    expect(
+      contextualNavigationStack(`${base}/dependencies`, campaignData).at(-1)
+        ?.label,
+    ).toBe("Dependencies");
+  });
+});

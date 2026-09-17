@@ -139,7 +139,10 @@ export function validateCampaignDefinitionDraft(
     }
     validatePlotMemberIdentity(plots, add);
     for (const placement of placements) {
-      if (new Set(placement.plotDefinitionIds).size !== placement.plotDefinitionIds.length) {
+      if (
+        new Set(placement.plotDefinitionIds).size !==
+        placement.plotDefinitionIds.length
+      ) {
         add(
           "placement-plot-id-duplicate",
           placement.name?.trim() || "Campaign placement",
@@ -150,7 +153,10 @@ export function validateCampaignDefinitionDraft(
         placement.kind === "independent" &&
         placement.source.kind === "actor-role" &&
         placement.source.suggestedCreatureDefinitionId !== undefined &&
-        !world.creatures.has(placement.source.suggestedCreatureDefinitionId as unknown as CreatureId)
+        !world.creatures.has(
+          placement.source
+            .suggestedCreatureDefinitionId as unknown as CreatureId,
+        )
       ) {
         add(
           "placement-source-not-creature",
@@ -205,10 +211,13 @@ function isPlot(value: unknown, sourceId: string): boolean {
     !optionalRelationships(value.prerequisites) ||
     !optionalRelationships(value.dependencies) ||
     (value.description !== undefined && typeof value.description !== "string")
-  ) return false;
-  return value.parent.kind === "root" ||
+  )
+    return false;
+  return (
+    value.parent.kind === "root" ||
     (value.parent.kind === "subplot" &&
-      typeof value.parent.parentPlotDefinitionId === "string");
+      typeof value.parent.parentPlotDefinitionId === "string")
+  );
 }
 
 function isCampaignPlacement(value: unknown, sourceId: string): boolean {
@@ -217,75 +226,149 @@ function isCampaignPlacement(value: unknown, sourceId: string): boolean {
     value.id !== sourceId ||
     typeof value.locationId !== "string" ||
     !stringArray(value.plotDefinitionIds)
-  ) return false;
+  )
+    return false;
   if (value.kind === "world-decoration") {
-    return typeof value.capturedWorldPlacementId === "string" &&
-      !("source" in value) && commonPlacementFields(value);
+    return (
+      typeof value.capturedWorldPlacementId === "string" &&
+      !("source" in value) &&
+      commonPlacementFields(value)
+    );
   }
-  return value.kind === "independent" && !("capturedWorldPlacementId" in value) &&
-    isIndependentSource(value.source) && commonPlacementFields(value);
+  return (
+    value.kind === "independent" &&
+    !("capturedWorldPlacementId" in value) &&
+    isIndependentSource(value.source) &&
+    commonPlacementFields(value)
+  );
 }
 
 function isNamedComponent(value: unknown): boolean {
-  return isObject(value) && nonEmpty(value.id) && nonEmpty(value.name) &&
-    (value.description === undefined || typeof value.description === "string");
+  return (
+    isObject(value) &&
+    nonEmpty(value.id) &&
+    nonEmpty(value.name) &&
+    (value.description === undefined || typeof value.description === "string")
+  );
 }
 
 function isDiscovery(value: unknown): boolean {
   if (!isNamedComponent(value)) return false;
-  const claims = (value as Record<string, unknown>).claims;
+  const candidate = value as Record<string, unknown>;
+  if (
+    isObject(candidate.truth) &&
+    nonEmpty(candidate.truth.id) &&
+    nonEmpty(candidate.truth.statement) &&
+    Array.isArray(candidate.beliefs) &&
+    Array.isArray(candidate.rumors) &&
+    candidate.beliefs.length + candidate.rumors.length > 0 &&
+    candidate.beliefs.every(isFacet) &&
+    candidate.rumors.every(isFacet)
+  )
+    return true;
+  // Accept old snapshots so they can be opened and migrated without data loss.
+  const claims = candidate.claims;
   return Array.isArray(claims) && claims.length > 0 && claims.every(isClaim);
 }
 
+function isFacet(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    nonEmpty(value.id) &&
+    nonEmpty(value.statement) &&
+    (value.relation === "supports" || value.relation === "contradicts") &&
+    (value.provenance === undefined || typeof value.provenance === "string")
+  );
+}
+
 function isClaim(value: unknown): boolean {
-  if (!isObject(value) || !nonEmpty(value.id) || !nonEmpty(value.statement)) return false;
-  if (value.provenance !== undefined && typeof value.provenance !== "string") return false;
+  if (!isObject(value) || !nonEmpty(value.id) || !nonEmpty(value.statement))
+    return false;
+  if (value.provenance !== undefined && typeof value.provenance !== "string")
+    return false;
   if (value.kind === "truth")
-    return value.conflictsWithClaimIds === undefined && value.relatedTruthClaimId === undefined;
+    return (
+      value.conflictsWithClaimIds === undefined &&
+      value.relatedTruthClaimId === undefined
+    );
   if (value.kind === "belief")
-    return optionalStringArray(value.conflictsWithClaimIds) && value.relatedTruthClaimId === undefined;
-  return value.kind === "rumor" && optionalStringArray(value.conflictsWithClaimIds) &&
-    (value.relatedTruthClaimId === undefined || nonEmpty(value.relatedTruthClaimId));
+    return (
+      optionalStringArray(value.conflictsWithClaimIds) &&
+      value.relatedTruthClaimId === undefined
+    );
+  return (
+    value.kind === "rumor" &&
+    optionalStringArray(value.conflictsWithClaimIds) &&
+    (value.relatedTruthClaimId === undefined ||
+      nonEmpty(value.relatedTruthClaimId))
+  );
 }
 
 function isLocationContext(value: unknown): boolean {
-  if (!isObject(value) || !nonEmpty(value.id) || !nonEmpty(value.locationId) ||
-      !optionalStringArray(value.placementDefinitionIds)) return false;
-  return (value.actorPlacements === undefined ||
-      (Array.isArray(value.actorPlacements) && value.actorPlacements.length === 0)) &&
+  if (
+    !isObject(value) ||
+    !nonEmpty(value.id) ||
+    !nonEmpty(value.locationId) ||
+    !optionalStringArray(value.placementDefinitionIds)
+  )
+    return false;
+  return (
+    (value.actorPlacements === undefined ||
+      (Array.isArray(value.actorPlacements) &&
+        value.actorPlacements.length === 0)) &&
     (value.itemPlacements === undefined ||
-      (Array.isArray(value.itemPlacements) && value.itemPlacements.length === 0));
+      (Array.isArray(value.itemPlacements) &&
+        value.itemPlacements.length === 0))
+  );
 }
 
 function optionalRelationships(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.every((entry) =>
-    isObject(entry) && nonEmpty(entry.plotDefinitionId) &&
-    (entry.crossBranchRationale === undefined || nonEmpty(entry.crossBranchRationale))));
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.every(
+        (entry) =>
+          isObject(entry) &&
+          nonEmpty(entry.plotDefinitionId) &&
+          (entry.crossBranchRationale === undefined ||
+            nonEmpty(entry.crossBranchRationale)),
+      ))
+  );
 }
 
 function commonPlacementFields(value: Record<string, unknown>): boolean {
-  return (value.name === undefined || typeof value.name === "string") &&
+  return (
+    (value.name === undefined || typeof value.name === "string") &&
     (value.notes === undefined || typeof value.notes === "string") &&
-    (value.scale === undefined || (typeof value.scale === "number" && Number.isFinite(value.scale) && value.scale > 0)) &&
+    (value.scale === undefined ||
+      (typeof value.scale === "number" &&
+        Number.isFinite(value.scale) &&
+        value.scale > 0)) &&
     (value.mapPosition === undefined || isCoordinate(value.mapPosition)) &&
     optionalConformance(value.conformance) &&
-    optionalModelValues(value.modelValues);
+    optionalModelValues(value.modelValues)
+  );
 }
 
 function optionalConformance(value: unknown): boolean {
-  return value === undefined || (
-    isObject(value) &&
-    nonEmpty(value.conceptId) &&
-    stringArray(value.modelSchemaReleaseIds)
+  return (
+    value === undefined ||
+    (isObject(value) &&
+      nonEmpty(value.conceptId) &&
+      stringArray(value.modelSchemaReleaseIds))
   );
 }
 
 function optionalModelValues(value: unknown): boolean {
-  return value === undefined || (isObject(value) && Object.values(value).every(isJsonValue));
+  return (
+    value === undefined ||
+    (isObject(value) && Object.values(value).every(isJsonValue))
+  );
 }
 
 function isJsonValue(value: unknown): boolean {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return true;
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(isJsonValue);
   return isObject(value) && Object.values(value).every(isJsonValue);
@@ -296,17 +379,31 @@ function isIndependentSource(value: unknown): boolean {
   if (value.kind === "world-creature") return nonEmpty(value.creatureId);
   if (value.kind === "world-item") return nonEmpty(value.itemDefinitionId);
   if (value.kind === "registered-content") return nonEmpty(value.definitionId);
-  return value.kind === "actor-role" && nonEmpty(value.role) &&
-    (value.suggestedCreatureDefinitionId === undefined || nonEmpty(value.suggestedCreatureDefinitionId));
+  return (
+    value.kind === "actor-role" &&
+    nonEmpty(value.role) &&
+    (value.suggestedCreatureDefinitionId === undefined ||
+      nonEmpty(value.suggestedCreatureDefinitionId))
+  );
 }
 
 function isPreparation(value: unknown): boolean {
-  if (!isObject(value) ||
-      (value.startingLocationId !== undefined && !nonEmpty(value.startingLocationId)) ||
-      (value.startingContext !== undefined && !boundedText(value.startingContext, 20_000)) ||
-      (value.mapVariations !== undefined && !boundedText(value.mapVariations, 20_000)) ||
-      (value.locationCanvases !== undefined && !Array.isArray(value.locationCanvases))) return false;
-  return value.locationCanvases === undefined || value.locationCanvases.every(isCanvas);
+  if (
+    !isObject(value) ||
+    (value.startingLocationId !== undefined &&
+      !nonEmpty(value.startingLocationId)) ||
+    (value.startingContext !== undefined &&
+      !boundedText(value.startingContext, 20_000)) ||
+    (value.mapVariations !== undefined &&
+      !boundedText(value.mapVariations, 20_000)) ||
+    (value.locationCanvases !== undefined &&
+      !Array.isArray(value.locationCanvases))
+  )
+    return false;
+  return (
+    value.locationCanvases === undefined ||
+    value.locationCanvases.every(isCanvas)
+  );
 }
 
 function validatePlotMemberIdentity(
@@ -314,16 +411,69 @@ function validatePlotMemberIdentity(
   add: (code: string, subject: string, detail: string) => void,
 ): void {
   for (const plot of plots) {
-    uniqueMemberIds(plot.objectives, "plot-objective-id-duplicate", plot.name, "Objective", add);
-    uniqueMemberIds(plot.pressures, "plot-pressure-id-duplicate", plot.name, "Pressure", add);
-    uniqueMemberIds(plot.resistances, "plot-resistance-id-duplicate", plot.name, "Resistance", add);
-    uniqueMemberIds(plot.discoveries, "plot-discovery-id-duplicate", plot.name, "Discovery", add);
-    uniqueMemberIds(plot.locationContexts, "plot-location-context-id-duplicate", plot.name, "Location context", add);
-    const claims = plot.discoveries.flatMap((discovery) => discovery.claims);
+    uniqueMemberIds(
+      plot.objectives,
+      "plot-objective-id-duplicate",
+      plot.name,
+      "Objective",
+      add,
+    );
+    uniqueMemberIds(
+      plot.pressures,
+      "plot-pressure-id-duplicate",
+      plot.name,
+      "Pressure",
+      add,
+    );
+    uniqueMemberIds(
+      plot.resistances,
+      "plot-resistance-id-duplicate",
+      plot.name,
+      "Resistance",
+      add,
+    );
+    uniqueMemberIds(
+      plot.discoveries,
+      "plot-discovery-id-duplicate",
+      plot.name,
+      "Discovery",
+      add,
+    );
+    uniqueMemberIds(
+      plot.locationContexts,
+      "plot-location-context-id-duplicate",
+      plot.name,
+      "Location context",
+      add,
+    );
+    const claims = plot.discoveries.flatMap((discovery) => {
+      if (discovery.claims) return discovery.claims;
+      return [
+        { ...discovery.truth, kind: "truth" as const },
+        ...discovery.beliefs.map((facet) => ({
+          ...facet,
+          kind: "belief" as const,
+        })),
+        ...discovery.rumors.map((facet) => ({
+          ...facet,
+          kind: "rumor" as const,
+        })),
+      ];
+    }) as Array<{
+      id: string;
+      kind: "truth" | "belief" | "rumor";
+      statement: string;
+      conflictsWithClaimIds?: readonly string[];
+      relatedTruthClaimId?: string;
+    }>;
     const claimIds = new Set<string>();
     for (const claim of claims) {
       if (claimIds.has(claim.id)) {
-        add("plot-claim-id-duplicate", plot.name, "Claim identities must be unique within a Plot.");
+        add(
+          "plot-claim-id-duplicate",
+          plot.name,
+          "Claim identities must be unique within a Plot.",
+        );
       }
       claimIds.add(claim.id);
     }
@@ -331,22 +481,39 @@ function validatePlotMemberIdentity(
       claims.filter((claim) => claim.kind === "truth").map((claim) => claim.id),
     );
     for (const claim of claims) {
-      const conflicts = claim.kind === "truth" ? [] : claim.conflictsWithClaimIds ?? [];
+      const conflicts =
+        claim.kind === "truth" ? [] : (claim.conflictsWithClaimIds ?? []);
       if (new Set(conflicts).size !== conflicts.length) {
-        add("claim-conflict-id-duplicate", plot.name, "A Claim conflict may be referenced only once.");
+        add(
+          "claim-conflict-id-duplicate",
+          plot.name,
+          "A Claim conflict may be referenced only once.",
+        );
       }
       if (conflicts.some((id) => !claimIds.has(id))) {
-        add("claim-conflict-not-found", plot.name, "A Claim conflict is not present in this Plot.");
+        add(
+          "claim-conflict-not-found",
+          plot.name,
+          "A Claim conflict is not present in this Plot.",
+        );
       }
       if (conflicts.includes(claim.id)) {
-        add("claim-self-conflict", plot.name, "A Claim cannot conflict with itself.");
+        add(
+          "claim-self-conflict",
+          plot.name,
+          "A Claim cannot conflict with itself.",
+        );
       }
       if (
         claim.kind === "rumor" &&
         claim.relatedTruthClaimId !== undefined &&
         !truthIds.has(claim.relatedTruthClaimId)
       ) {
-        add("claim-related-truth-not-found", plot.name, "A Rumor's related Truth is not present in this Plot.");
+        add(
+          "claim-related-truth-not-found",
+          plot.name,
+          "A Rumor's related Truth is not present in this Plot.",
+        );
       }
     }
   }
@@ -370,7 +537,19 @@ function boundedText(value: unknown, max: number): value is string {
 
 export function isSafeCampaignRichText(value: string): boolean {
   if (value.length > 50_000 || /<!--[\s\S]*?-->/.test(value)) return false;
-  const allowed = new Set(["p", "h2", "h3", "strong", "em", "ul", "ol", "li", "blockquote", "br", "a"]);
+  const allowed = new Set([
+    "p",
+    "h2",
+    "h3",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "br",
+    "a",
+  ]);
   const stack: string[] = [];
   const tagPattern = /<[^>]*>/g;
   let cursor = 0;
@@ -389,7 +568,9 @@ export function isSafeCampaignRichText(value: string): boolean {
       if (attributes.trim() || selfClosing || stack.pop() !== tag) return false;
     } else {
       if (tag === "a") {
-        const href = attributes.match(/^\s+href\s*=\s*(["'])([^"']*)\1\s*$/i)?.[2];
+        const href = attributes.match(
+          /^\s+href\s*=\s*(["'])([^"']*)\1\s*$/i,
+        )?.[2];
         if (!href || !safeHref(href)) return false;
       } else if (attributes.trim()) return false;
       if (!selfClosing) stack.push(tag);
@@ -401,54 +582,102 @@ export function isSafeCampaignRichText(value: string): boolean {
 
 function safeHref(value: string): boolean {
   const href = value.trim();
-  if (!href || href.length > 2_048 ||
-      [...href].some((character) => character === "\\" || character.charCodeAt(0) <= 31)) return false;
+  if (
+    !href ||
+    href.length > 2_048 ||
+    [...href].some(
+      (character) => character === "\\" || character.charCodeAt(0) <= 31,
+    )
+  )
+    return false;
   const lower = href.toLowerCase();
-  return lower.startsWith("https://") || lower.startsWith("http://") ||
-    lower.startsWith("mailto:") || lower.startsWith("#") ||
-    (lower.startsWith("/") && !lower.startsWith("//"));
+  return (
+    lower.startsWith("https://") ||
+    lower.startsWith("http://") ||
+    lower.startsWith("mailto:") ||
+    lower.startsWith("#") ||
+    (lower.startsWith("/") && !lower.startsWith("//"))
+  );
 }
 
 function isCanvas(value: unknown): boolean {
-  if (!isObject(value) || !nonEmpty(value.locationId) || !Array.isArray(value.layers) ||
-      (value.pixelsPerFiveFeet !== undefined && (!finite(value.pixelsPerFiveFeet) || value.pixelsPerFiveFeet <= 0)) ||
-      !value.layers.every(isLayer)) return false;
-  return optionalArray(value.lightSources, isLight) &&
+  if (
+    !isObject(value) ||
+    !nonEmpty(value.locationId) ||
+    !Array.isArray(value.layers) ||
+    (value.pixelsPerFiveFeet !== undefined &&
+      (!finite(value.pixelsPerFiveFeet) || value.pixelsPerFiveFeet <= 0)) ||
+    !value.layers.every(isLayer)
+  )
+    return false;
+  return (
+    optionalArray(value.lightSources, isLight) &&
     optionalArray(value.soundSources, isSound) &&
     optionalArray(value.drawings, isSizedCanvasObject) &&
     optionalArray(value.templates, isSizedCanvasObject) &&
-    optionalArray(value.notes, isNote);
+    optionalArray(value.notes, isNote)
+  );
 }
 
 function isLayer(value: unknown): boolean {
-  return isObject(value) && typeof value.key === "string" && CANVAS_LAYER_KEYS.has(value.key) && typeof value.visible === "boolean" &&
-    finite(value.opacity) && value.opacity >= 0 && value.opacity <= 1;
+  return (
+    isObject(value) &&
+    typeof value.key === "string" &&
+    CANVAS_LAYER_KEYS.has(value.key) &&
+    typeof value.visible === "boolean" &&
+    finite(value.opacity) &&
+    value.opacity >= 0 &&
+    value.opacity <= 1
+  );
 }
 
 function isLight(value: unknown): boolean {
-  return canvasIdentity(value) && isCoordinate(value.position) && normalized(value.radius) && nonEmpty(value.color);
+  return (
+    canvasIdentity(value) &&
+    isCoordinate(value.position) &&
+    normalized(value.radius) &&
+    nonEmpty(value.color)
+  );
 }
 
 function isSound(value: unknown): boolean {
-  return canvasIdentity(value) && isCoordinate(value.position) && normalized(value.radius) &&
-    normalized(value.volume) && (value.volumeMode === "distance" || value.volumeMode === "constant") &&
-    typeof value.loop === "boolean";
+  return (
+    canvasIdentity(value) &&
+    isCoordinate(value.position) &&
+    normalized(value.radius) &&
+    normalized(value.volume) &&
+    (value.volumeMode === "distance" || value.volumeMode === "constant") &&
+    typeof value.loop === "boolean"
+  );
 }
 
 function isSizedCanvasObject(value: unknown): boolean {
-  return canvasIdentity(value) && isCoordinate(value.position) && normalized(value.radius);
+  return (
+    canvasIdentity(value) &&
+    isCoordinate(value.position) &&
+    normalized(value.radius)
+  );
 }
 
 function isNote(value: unknown): boolean {
-  return canvasIdentity(value) && isCoordinate(value.position) && typeof value.text === "string";
+  return (
+    canvasIdentity(value) &&
+    isCoordinate(value.position) &&
+    typeof value.text === "string"
+  );
 }
 
 function canvasIdentity(value: unknown): value is Record<string, unknown> {
   return isObject(value) && nonEmpty(value.id) && nonEmpty(value.name);
 }
 
-function optionalArray(value: unknown, predicate: (entry: unknown) => boolean): boolean {
-  return value === undefined || (Array.isArray(value) && value.every(predicate));
+function optionalArray(
+  value: unknown,
+  predicate: (entry: unknown) => boolean,
+): boolean {
+  return (
+    value === undefined || (Array.isArray(value) && value.every(predicate))
+  );
 }
 
 function normalized(value: unknown): value is number {
@@ -456,8 +685,15 @@ function normalized(value: unknown): value is number {
 }
 
 function isCoordinate(value: unknown): boolean {
-  return isObject(value) && finite(value.x) && finite(value.y) &&
-    value.x >= 0 && value.x <= 1 && value.y >= 0 && value.y <= 1;
+  return (
+    isObject(value) &&
+    finite(value.x) &&
+    finite(value.y) &&
+    value.x >= 0 &&
+    value.x <= 1 &&
+    value.y >= 0 &&
+    value.y <= 1
+  );
 }
 
 function finite(value: unknown): value is number {
@@ -473,10 +709,28 @@ function optionalStringArray(value: unknown): boolean {
 }
 
 const CANVAS_LAYER_KEYS = new Set([
-  "background", "background-effects", "tiles", "grid", "regions", "drawings",
-  "templates", "walls", "tokens", "sounds", "lighting", "notes", "controls",
-  "special-effects", "illumination-effects", "coloration-effects", "darkness-effects",
-  "visibility", "particle-effects", "weather-effects", "filter-effects", "interface",
+  "background",
+  "background-effects",
+  "tiles",
+  "grid",
+  "regions",
+  "drawings",
+  "templates",
+  "walls",
+  "tokens",
+  "sounds",
+  "lighting",
+  "notes",
+  "controls",
+  "special-effects",
+  "illumination-effects",
+  "coloration-effects",
+  "darkness-effects",
+  "visibility",
+  "particle-effects",
+  "weather-effects",
+  "filter-effects",
+  "interface",
 ]);
 
 function worldContext(manifest: CanonicalSnapshotManifest) {
@@ -525,7 +779,9 @@ function worldContext(manifest: CanonicalSnapshotManifest) {
 }
 
 function stringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

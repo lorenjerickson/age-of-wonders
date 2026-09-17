@@ -1,4 +1,7 @@
-import type { PlaceCampaignInstanceActorRequest, ParticipantSpatialBinding } from "@aow/common";
+import type {
+  PlaceCampaignInstanceActorRequest,
+  ParticipantSpatialBinding,
+} from "@aow/common";
 import type {
   CharacterDraft,
   CharacterSelections,
@@ -1614,20 +1617,60 @@ export function createCampaignSession(
   );
 }
 
-export function getSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string) {
-  return request<SessionMovementContext>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement`));
+export function getSessionMovement(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  sessionId: string,
+) {
+  return request<SessionMovementContext>(
+    campaignSessionsPath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/${encodeURIComponent(sessionId)}/movement`,
+    ),
+  );
 }
 
-export function proposeSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string, input: SessionMovementRequest) {
-  return request<SessionMovementProposal>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement`), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
-  });
+export function proposeSessionMovement(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  sessionId: string,
+  input: SessionMovementRequest,
+) {
+  return request<SessionMovementProposal>(
+    campaignSessionsPath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/${encodeURIComponent(sessionId)}/movement`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
-export function decideSessionMovement(campaignDefinitionId: string, campaignInstanceId: string, sessionId: string, proposalId: string, decision: "approve" | "reject", input: SessionMovementDecisionRequest) {
-  return request<SessionMovementProposal>(campaignSessionsPath(campaignDefinitionId, campaignInstanceId, `/${encodeURIComponent(sessionId)}/movement/${encodeURIComponent(proposalId)}/${decision}`), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
-  });
+export function decideSessionMovement(
+  campaignDefinitionId: string,
+  campaignInstanceId: string,
+  sessionId: string,
+  proposalId: string,
+  decision: "approve" | "reject",
+  input: SessionMovementDecisionRequest,
+) {
+  return request<SessionMovementProposal>(
+    campaignSessionsPath(
+      campaignDefinitionId,
+      campaignInstanceId,
+      `/${encodeURIComponent(sessionId)}/movement/${encodeURIComponent(proposalId)}/${decision}`,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function getCampaignSessionTable(
@@ -1809,7 +1852,7 @@ export function joinCampaignSession(
 export interface PublicCampaignInstanceInvitation {
   campaignInstanceName: string;
   invitedName: string;
-  role: "player" | "spectator";
+  role: "gm" | "player" | "spectator";
   status: "pending";
   expiresAt: string;
 }
@@ -1827,7 +1870,7 @@ export function resolveCampaignInstanceInvitation(token: string) {
 
 export function acceptCampaignInstanceInvitation(token: string) {
   return request<{
-    user: { displayName: string; role: "player" | "spectator" };
+    user: { displayName: string; role: "gm" | "player" | "spectator" };
     campaignInstanceId: string;
     campaignInstanceName: string;
   }>("/invitations/instance/accept", {
@@ -2570,7 +2613,6 @@ export function getLocationTerrain(worldId: string, locationId: string) {
   );
 }
 
-
 export function placeCampaignInstanceActor(
   campaignDefinitionId: string,
   instanceId: string,
@@ -2596,25 +2638,92 @@ export function getParticipantSpatialBinding(
   );
 }
 
-export type ArtworkRole = "portrait" | "overheadToken" | "paperDollToken" | "item";
+export type ArtworkRole =
+  "portrait" | "overheadToken" | "paperDollToken" | "item";
 export function generateWorldArtwork(
   worldId: string,
-  input: { expectedStorageRevision: number; role: ArtworkRole; name: string; description: string; direction: string },
+  input: {
+    expectedStorageRevision: number;
+    role: ArtworkRole;
+    name: string;
+    description: string;
+    direction: string;
+  },
   idempotencyKey: string,
 ) {
   return request<{ image: Record<string, JsonValue>; storageRevision: number }>(
     `/ai/worlds/${encodeURIComponent(worldId)}/artwork-proposals`,
-    { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(input) },
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(input),
+    },
   );
 }
 
-export interface WorldRulesCollection { worldDefinitionId: string; draftId: string; storageRevision: number; rules: readonly WorldRule[] }
-export interface WorldRulesRevision { expectedDraftId: string; expectedStorageRevision: number }
-function worldRulesRequest<T>(worldId: string, suffix = '', input?: unknown, method = 'POST'): Promise<T> {
-  return request<T>('/worlds/' + encodeURIComponent(worldId) + '/rules' + suffix, input === undefined ? undefined : {method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(input)});
+export interface WorldRulesCollection {
+  worldDefinitionId: string;
+  draftId: string;
+  storageRevision: number;
+  rules: readonly WorldRule[];
 }
-export const getWorldRules = (worldId: string) => worldRulesRequest<WorldRulesCollection>(worldId);
-export const saveWorldRule = (worldId: string, input: WorldRulesRevision & {rule: WorldRule}, id?: string) => worldRulesRequest<WorldRulesCollection>(worldId, id ? '/' + encodeURIComponent(id) : '', input, id ? 'PUT' : 'POST');
-export const duplicateWorldRule = (worldId: string, id: string, input: WorldRulesRevision) => worldRulesRequest<WorldRulesCollection>(worldId, '/' + encodeURIComponent(id) + '/duplicate', input);
-export const addStarterWorldMovementRules = (worldId: string, input: WorldRulesRevision & {budgetFeet?: number}) => worldRulesRequest<WorldRulesCollection>(worldId, '/starter-movement', input);
-export const previewWorldRules = (worldId: string, input: {event: WorldRuleEvent; state: RuleStateView; entropy?: readonly RecordedRuleRoll[]}) => worldRulesRequest<WorldRuleExecution>(worldId, '/preview', input);
+export interface WorldRulesRevision {
+  expectedDraftId: string;
+  expectedStorageRevision: number;
+}
+function worldRulesRequest<T>(
+  worldId: string,
+  suffix = "",
+  input?: unknown,
+  method = "POST",
+): Promise<T> {
+  return request<T>(
+    "/worlds/" + encodeURIComponent(worldId) + "/rules" + suffix,
+    input === undefined
+      ? undefined
+      : {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+  );
+}
+export const getWorldRules = (worldId: string) =>
+  worldRulesRequest<WorldRulesCollection>(worldId);
+export const saveWorldRule = (
+  worldId: string,
+  input: WorldRulesRevision & { rule: WorldRule },
+  id?: string,
+) =>
+  worldRulesRequest<WorldRulesCollection>(
+    worldId,
+    id ? "/" + encodeURIComponent(id) : "",
+    input,
+    id ? "PUT" : "POST",
+  );
+export const duplicateWorldRule = (
+  worldId: string,
+  id: string,
+  input: WorldRulesRevision,
+) =>
+  worldRulesRequest<WorldRulesCollection>(
+    worldId,
+    "/" + encodeURIComponent(id) + "/duplicate",
+    input,
+  );
+export const addStarterWorldMovementRules = (
+  worldId: string,
+  input: WorldRulesRevision & { budgetFeet?: number },
+) =>
+  worldRulesRequest<WorldRulesCollection>(worldId, "/starter-movement", input);
+export const previewWorldRules = (
+  worldId: string,
+  input: {
+    event: WorldRuleEvent;
+    state: RuleStateView;
+    entropy?: readonly RecordedRuleRoll[];
+  },
+) => worldRulesRequest<WorldRuleExecution>(worldId, "/preview", input);

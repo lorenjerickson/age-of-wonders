@@ -94,12 +94,23 @@ export class CampaignSessionMovementService {
     session: Session,
   ): SessionMovementProposal {
     const projection = row.projection as unknown as SessionMovementProposal;
+    const savedActor = array(object(row.nextState).creatureEmbodiments).find(
+      (entry) => entry.runtimeCreatureId === projection.actorId,
+    );
+    const savedLocationId = object(savedActor?.creature).currentLocationId;
+    const locationId =
+      typeof projection.locationId === "string" && projection.locationId
+        ? projection.locationId
+        : typeof savedLocationId === "string" && savedLocationId
+          ? savedLocationId
+          : undefined;
     const valid =
       session.status === "ACTIVE" &&
       session.campaignInstance.currentSnapshotId === row.snapshotId &&
       session.campaignInstance.runtime?.revision === row.runtimeRevision;
     return {
       ...projection,
+      locationId,
       status: row.status as SessionMovementProposal["status"],
       canApprove: row.status === "pending" && valid,
       decidedAt: row.decidedAt?.toISOString(),
@@ -150,6 +161,7 @@ export class CampaignSessionMovementService {
                   ? location.name
                   : "Unnamed Location",
               position: creature.terrainPosition,
+              ...movementResources(creature),
             });
         }
         const proposals = await tx.campaignSessionMovementProposal.findMany({
@@ -160,6 +172,7 @@ export class CampaignSessionMovementService {
         return {
           status: session.status === "ACTIVE" ? "active" : "paused",
           runtimeRevision: instance.runtime!.revision,
+          snapshotNumber: instance.currentSnapshot!.snapshotNumber,
           actors,
           capturedRules: world
             .filter((r) => r.resourceType === "world-rules")
@@ -365,6 +378,7 @@ export class CampaignSessionMovementService {
             actorId: request.actorId,
             status,
             actorName,
+            locationId: creature.currentLocationId,
             locationName,
             origin: creature.terrainPosition,
             destination: request.destination,
@@ -636,4 +650,22 @@ function rethrowMovementConflict(caught: unknown): never {
     );
   }
   throw caught;
+}
+
+/** Project only named numeric gameplay resources, never arbitrary extensions or internal IDs. */
+export function movementResources(creature: Record<string, unknown>): {
+  movementRemaining?: number;
+  recordedMoves?: number;
+} {
+  const resources = object(object(creature.extensions)["aow:rules"]);
+  const remaining = resources["aow:movementRemaining"];
+  const moves = resources["aow:moves"];
+  return {
+    ...(typeof remaining === "number" && Number.isFinite(remaining)
+      ? { movementRemaining: remaining }
+      : {}),
+    ...(typeof moves === "number" && Number.isFinite(moves)
+      ? { recordedMoves: moves }
+      : {}),
+  };
 }

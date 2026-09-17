@@ -128,6 +128,8 @@ export interface CampaignInstancePreparationProjection {
   readonly campaignInstanceName: string;
   readonly runtimeRevision: number;
   readonly preparation: CampaignInstancePreparation;
+  /** Named choices from this Instance's captured World, never the live authoring draft. */
+  readonly locations: readonly { readonly id: string; readonly name: string }[];
 }
 
 export interface UpdateCampaignInstancePreparationRequest {
@@ -253,7 +255,7 @@ export interface CampaignInstanceRosterProjection {
   readonly invitations: readonly {
     readonly invitationId: CampaignInstanceInvitationId;
     readonly invitedName?: string;
-    readonly role: "player" | "spectator";
+    readonly role: "gm" | "player" | "spectator";
     readonly status: "pending" | "accepted" | "expired" | "revoked";
     readonly expiresAt: string;
     readonly delivery: readonly {
@@ -430,7 +432,7 @@ export interface CampaignInstanceCreatureEmbodimentListProjection {
 
 export interface CreateCampaignInstanceInvitationRequest {
   readonly invitedName: string;
-  readonly role: "player" | "spectator";
+  readonly role: "gm" | "player" | "spectator";
   /** Explicit existing Player selection; never inferred from contact values. */
   readonly playerId?: PlayerProfileId;
   readonly email?: string;
@@ -443,7 +445,7 @@ export interface CampaignInstanceInvitationCommandResult {
   readonly invitation: {
     readonly id: CampaignInstanceInvitationId;
     readonly invitedName: string;
-    readonly role: "player" | "spectator";
+    readonly role: "gm" | "player" | "spectator";
     readonly status: "pending" | "accepted" | "expired" | "revoked";
     readonly expiresAt: string;
   };

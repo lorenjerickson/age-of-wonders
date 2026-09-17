@@ -1313,7 +1313,12 @@ export class WorldDefinitionAuthoringService {
           if (draftAdvance.count !== 1) throw staleDraft();
           return publicationResponse({ ...revision, snapshots: [snapshot] });
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          // Valid terrain captures include chunk payloads; hashing and persisting
+          // those snapshots can exceed Prisma's five-second default.
+          timeout: 60_000,
+        },
       );
     } catch (error) {
       if (isPrismaConflict(error)) throw staleDraft();

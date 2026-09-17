@@ -535,6 +535,7 @@ function InstancePreparationForm() {
   const { instance, refresh } = useCampaignInstance();
   const [preparation, setPreparation] = useState<CampaignInstancePreparation>();
   const [startingContext, setStartingContext] = useState("");
+  const [startingLocationId, setStartingLocationId] = useState("");
   const [stagingNotes, setStagingNotes] = useState("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -548,6 +549,7 @@ function InstancePreparationForm() {
       (value) => {
         setPreparation(value);
         setStartingContext(value.preparation.startingContext ?? "");
+        setStartingLocationId(value.preparation.startingLocationId ?? "");
         setStagingNotes(value.preparation.mapVariations ?? "");
       },
       () => setError("Instance preparation could not be loaded."),
@@ -573,6 +575,7 @@ function InstancePreparationForm() {
           expectedRuntimeRevision: preparation.runtimeRevision,
           preparation: {
             ...preparation.preparation,
+            startingLocationId: startingLocationId || undefined,
             startingContext: startingContext.trim(),
             mapVariations: stagingNotes.trim(),
           },
@@ -612,6 +615,29 @@ function InstancePreparationForm() {
           className="mt-5 grid gap-5 rounded-box border border-base-300 bg-base-200 p-5"
           onSubmit={save}
         >
+          <Label>
+            Starting Location
+            <Select
+              className="mt-2 w-full"
+              value={startingLocationId}
+              disabled={busy}
+              onChange={(event) => {
+                setStartingLocationId(event.currentTarget.value);
+                setDirty(true);
+              }}
+            >
+              <option value="">Choose a starting Location</option>
+              {startingLocationId && !(preparation.locations ?? []).some(location => location.id === startingLocationId) && (
+                <option value={startingLocationId}>Unavailable captured Location — choose a replacement</option>
+              )}
+              {(preparation.locations ?? []).map(location => (
+                <option key={location.id} value={location.id}>{location.name}</option>
+              ))}
+            </Select>
+          </Label>
+          <p className="text-sm text-base-content/60">
+            The Session table opens at this Location. Choosing it does not move existing Characters or actors.
+          </p>
           <Label>
             Starting context
             <Textarea
@@ -1092,12 +1118,13 @@ export function ImportSelectionSummary({
 
 export function CampaignInstanceRosterPage() {
   const { instance } = useCampaignInstance();
+  const suffix = quickStartSuffix(useLocation().searchStr);
   const [data, setData] = useState<CampaignInstanceRoster>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [invitedName, setInvitedName] = useState("");
-  const [role, setRole] = useState<"player" | "spectator">("player");
+  const [role, setRole] = useState<"gm" | "player" | "spectator">("player");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [existingPlayers, setExistingPlayers] = useState<
@@ -1586,12 +1613,14 @@ export function CampaignInstanceRosterPage() {
                     disabled={Boolean(selectedPlayerId)}
                     onChange={(event) =>
                       setRole(
-                        event.currentTarget.value as "player" | "spectator",
+                        event.currentTarget.value as
+                          "gm" | "player" | "spectator",
                       )
                     }
                   >
                     <option value="player">Player</option>
                     <option value="spectator">Spectator</option>
+                    <option value="gm">Game Master</option>
                   </Select>
                 </Label>
                 <Label>
@@ -2076,7 +2105,7 @@ export function CampaignInstanceRosterPage() {
                 </p>
               </div>
               <RouterButtonLink
-                href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents${quickStartSuffix(useLocation().searchStr)}`}
+                href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents${suffix}`}
                 tone="outline"
               >
                 Manage Agents

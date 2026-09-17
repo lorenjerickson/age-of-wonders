@@ -25,7 +25,16 @@ import {
   type TerrainWorkPlane,
 } from "./isometricEditorModel";
 
+import {
+  createSessionSurfacePicker,
+  sessionClickWasDrag,
+  terrainViewportFocus,
+  type SessionViewportInteraction,
+} from "./sessionViewportModel";
+
 export interface IsometricViewportProps {
+  /** Full GM overview with real actor focus and declaration-only destination picking. */
+  session?: SessionViewportInteraction;
   /** Full captured GM map reference; no authoring or gameplay actor is displayed. */
   overview?: boolean;
   volume: IsometricTerrainVolume;
@@ -51,6 +60,7 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [textureStatus, setTextureStatus] = useState("");
+  const [surfaceStatus, setSurfaceStatus] = useState("");
   useEffect(() => {
     latest.current = props;
     runtime.current?.update();
@@ -87,21 +97,39 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         scene.add(terrain);
         let azimuth = Math.PI / 4,
           elevation = Math.atan(1 / Math.sqrt(2)),
-          span = latest.current.overview
-            ? Math.min(
-                180,
-                Math.max(
-                  24,
-                  Math.max(...Object.values(latest.current.volume.dimensions)) *
-                    2,
-                ),
-              )
-            : 24;
+          span =
+            latest.current.overview && !latest.current.session
+              ? Math.min(
+                  180,
+                  Math.max(
+                    24,
+                    Math.max(
+                      ...Object.values(latest.current.volume.dimensions),
+                    ) * 2,
+                  ),
+                )
+              : latest.current.session
+                ? Math.max(
+                    8,
+                    Math.min(
+                      24,
+                      Math.max(
+                        latest.current.volume.dimensions.x,
+                        latest.current.volume.dimensions.y,
+                      ) * 1.4,
+                    ),
+                  )
+                : 24;
         const raycaster = new T.Raycaster(),
           ndc = new T.Vector2();
         let drag:
           | {
               button: number;
+              pointerId: number;
+              originX: number;
+              originY: number;
+              moved: boolean;
+              touch: boolean;
               x: number;
               y: number;
               level: number;
@@ -111,6 +139,159 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
               mode: "replace" | "add" | "subtract";
             }
           | undefined;
+        let graphicsLost = false;
+        let supportPicker = createSessionSurfacePicker(latest.current.volume);
+        let sessionObjects = new T.Group();
+        scene.add(sessionObjects);
+        let actorObjects: Three.Sprite[] = [];
+        let shownSession = "";
+        let supportCycle = 0;
+        let lastSupportClick: { x: number; y: number } | undefined;
+        const disposeSession = () => {
+          sessionObjects.traverse((object) => {
+            if (object instanceof T.Sprite) {
+              object.material.map?.dispose();
+              object.material.dispose();
+            } else if (object instanceof T.Mesh || object instanceof T.Line) {
+              object.geometry.dispose();
+              const list = Array.isArray(object.material)
+                ? object.material
+                : [object.material];
+              list.forEach((material) => material.dispose());
+            }
+          });
+          scene.remove(sessionObjects);
+          actorObjects = [];
+        };
+        function updateSession() {
+          const session = latest.current.session;
+          const signature = JSON.stringify(
+            session
+              ? {
+                  actors: session.actors,
+                  focus: session.focusedActorId,
+                  destination: session.pendingDestination,
+                }
+              : null,
+          );
+          if (signature === shownSession) return;
+          drag = undefined;
+          shownSession = signature;
+          disposeSession();
+          sessionObjects = new T.Group();
+          scene.add(sessionObjects);
+          if (!session) return;
+          for (const entry of session.actors) {
+            const focused = entry.id === session.focusedActorId;
+            const canvas = document.createElement("canvas");
+            canvas.width = 512;
+            canvas.height = 192;
+            const art = canvas.getContext("2d");
+            if (!art) continue;
+            art.fillStyle = focused ? "#ffda7a" : "#b9e7ed";
+            art.beginPath();
+            art.arc(256, 128, 48, 0, Math.PI * 2);
+            art.fill();
+            art.strokeStyle = "#19252e";
+            art.lineWidth = 7;
+            art.stroke();
+            art.fillStyle = "#19252e";
+            art.textAlign = "center";
+            art.textBaseline = "middle";
+            art.font = "bold 44px sans-serif";
+            art.fillText(
+              entry.name.trim().slice(0, 1).toUpperCase() || "?",
+              256,
+              130,
+            );
+            art.fillStyle = "rgba(15,23,42,0.94)";
+            art.fillRect(6, 8, 500, 55);
+            art.fillStyle = "#ffffff";
+            art.font = "bold 34px sans-serif";
+            const label =
+              entry.name.length > 27
+                ? `${entry.name.slice(0, 26)}…`
+                : entry.name;
+            art.fillText(label, 256, 37, 485);
+            const map = new T.CanvasTexture(canvas);
+            map.colorSpace = T.SRGBColorSpace;
+            const material = new T.SpriteMaterial({
+              map,
+              depthTest: false,
+              depthWrite: false,
+            });
+            const token = new T.Sprite(material);
+            token.center.set(0.5, 0);
+            token.scale.set(4, 1.5, 1);
+            token.position.set(
+              entry.position.x,
+              entry.position.y,
+              entry.position.z,
+            );
+            token.renderOrder = focused ? 14 : 12;
+            token.userData.actorId = entry.id;
+            sessionObjects.add(token);
+            actorObjects.push(token);
+            const foot = new T.Mesh(
+              new T.RingGeometry(
+                focused ? 0.34 : 0.24,
+                focused ? 0.44 : 0.31,
+                32,
+              ),
+              new T.MeshBasicMaterial({
+                color: focused ? 0xffda7a : 0xb9e7ed,
+                side: T.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            foot.position.set(
+              entry.position.x,
+              entry.position.y,
+              entry.position.z + 0.015,
+            );
+            foot.renderOrder = 11;
+            sessionObjects.add(foot);
+          }
+          const focused = session.actors.find(
+            (a) => a.id === session.focusedActorId,
+          );
+          if (session.pendingDestination && focused) {
+            const point = session.pendingDestination;
+            const pending = new T.Mesh(
+              new T.RingGeometry(0.3, 0.4, 32),
+              new T.MeshBasicMaterial({
+                color: 0xffa64d,
+                side: T.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            pending.position.set(point.x, point.y, point.z + 0.025);
+            pending.renderOrder = 15;
+            sessionObjects.add(pending);
+            const line = new T.Line(
+              new T.BufferGeometry().setFromPoints([
+                new T.Vector3(
+                  focused.position.x,
+                  focused.position.y,
+                  focused.position.z + 0.025,
+                ),
+                new T.Vector3(point.x, point.y, point.z + 0.025),
+              ]),
+              new T.LineDashedMaterial({
+                color: 0xffa64d,
+                dashSize: 0.25,
+                gapSize: 0.15,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            line.computeLineDistances();
+            line.renderOrder = 15;
+            sessionObjects.add(line);
+          }
+        }
         const cursorGeometry = new T.EdgesGeometry(new T.BoxGeometry(1, 1, 1));
         const cursorMaterial = new T.LineBasicMaterial({
           color: 0xffda7a,
@@ -175,14 +356,20 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             }
           });
         function draw() {
-          const { actor: focus } = latest.current;
-          const target = new T.Vector3(
-            focus.x + 0.5,
-            focus.y + 0.5,
-            focus.z + 1,
+          if (disposed || graphicsLost) return;
+          const p = latest.current;
+          const focusedActor = p.session?.actors.find(
+            (actor) => actor.id === p.session?.focusedActorId,
           );
+          const focus = terrainViewportFocus(p.actor, focusedActor?.position);
+          const target = new T.Vector3(focus.x, focus.y, focus.z);
           const aspect =
             element!.clientWidth / Math.max(element!.clientHeight, 1);
+          // Keep named tokens readable in screen pixels as the GM zooms.
+          const tokenWidth = (span * 220) / Math.max(element!.clientHeight, 1);
+          actorObjects.forEach((token) =>
+            token.scale.set(tokenWidth, (tokenWidth * 192) / 512, 1),
+          );
           camera.left = (-span * aspect) / 2;
           camera.right = (span * aspect) / 2;
           camera.top = span / 2;
@@ -208,9 +395,10 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         let shownPlane: TerrainWorkPlane | undefined;
         function update() {
           const p = latest.current;
-          actor.visible = !p.overview;
-          floorMarker.visible = !p.overview;
-          grid.visible = !p.overview;
+          actor.visible = !p.overview && !p.session;
+          floorMarker.visible = !p.overview && !p.session;
+          grid.visible = !p.overview && !p.session;
+          updateSession();
           if (materialQuality !== (p.textureQuality ?? "balanced")) {
             materials.dispose();
             materialQuality = p.textureQuality ?? "balanced";
@@ -225,7 +413,8 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           }
           if (
             drag &&
-            (p.disabled ||
+            ((p.session ? false : p.disabled) ||
+              p.volume !== shownVolume ||
               p.level !== drag.level ||
               (p.plane ?? "xy") !== drag.plane)
           ) {
@@ -261,6 +450,7 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             plane !== shownPlane ||
             (p.slice && p.level !== shownLevel)
           ) {
+            supportPicker = createSessionSurfacePicker(p.volume);
             disposeGroup(terrain);
             scene.remove(terrain);
             terrain = new T.Group();
@@ -411,6 +601,42 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           }
           draw();
         }
+        function setRay(event: PointerEvent) {
+          const bounds = renderer.domElement.getBoundingClientRect();
+          if (!bounds.width || !bounds.height) return false;
+          ndc.set(
+            ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+            1 - ((event.clientY - bounds.top) / bounds.height) * 2,
+          );
+          raycaster.setFromCamera(ndc, camera);
+          return true;
+        }
+        function sessionHit(event: PointerEvent) {
+          if (!setRay(event)) return {};
+          const actorHit = raycaster
+            .intersectObjects(actorObjects, false)
+            .find((hit) => {
+              const uv = hit.uv;
+              // Ignore transparent sprite margins so nearby ground remains pickable.
+              return (
+                uv &&
+                ((uv.y > 0.66 && uv.x > 0.02 && uv.x < 0.98) ||
+                  (uv.y < 0.62 && uv.y > 0.05 && Math.abs(uv.x - 0.5) < 0.12))
+              );
+            });
+          if (actorHit)
+            return { actorId: actorHit.object.userData.actorId as string };
+          const supports = supportPicker(
+            raycaster.intersectObjects(terrain.children, false).map((hit) => ({
+              point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
+              normalZ: hit.face?.normal.z ?? -1,
+            })),
+          );
+          return {
+            point: supports[supportCycle % Math.max(1, supports.length)],
+            count: supports.length,
+          };
+        }
         function point(event: PointerEvent): TerrainAddress | undefined {
           const bounds = renderer.domElement.getBoundingClientRect();
           ndc.set(
@@ -445,7 +671,19 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             : undefined;
         }
         function move(event: PointerEvent) {
-          if (drag?.button === 2) {
+          if (drag && drag.pointerId !== event.pointerId) return;
+          if (
+            drag &&
+            sessionClickWasDrag(
+              { x: drag.originX, y: drag.originY },
+              { x: event.clientX, y: event.clientY },
+            )
+          )
+            drag.moved = true;
+          if (
+            drag?.button === 2 ||
+            (latest.current.session && drag?.touch && drag.moved)
+          ) {
             azimuth -= (event.clientX - drag.x) * 0.008;
             elevation = Math.min(
               1.396,
@@ -453,6 +691,25 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             );
             drag.x = event.clientX;
             drag.y = event.clientY;
+            draw();
+            return;
+          }
+          if (latest.current.session) {
+            cursor.visible = false;
+            if (
+              !drag &&
+              !latest.current.session.interactionDisabled &&
+              !graphicsLost
+            ) {
+              const hit = sessionHit(event);
+              setSurfaceStatus(
+                hit.actorId
+                  ? "Click to focus this actor."
+                  : hit.point
+                    ? `Candidate surface at ${Number(hit.point.z.toFixed(3))} grid units elevation${hit.count && hit.count > 1 ? "; Shift-click the same point to cycle overlapping surfaces" : ""}. Click to choose a destination for review.`
+                    : "Point at an actor or an authored support surface.",
+              );
+            }
             draw();
             return;
           }
@@ -476,25 +733,37 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           draw();
         }
         function down(event: PointerEvent) {
-          if (event.button !== 0 && event.button !== 2) return;
+          if (graphicsLost || (event.button !== 0 && event.button !== 2))
+            return;
           if (
             drag ||
-            (latest.current.disabled &&
-              event.button === 0 &&
-              !latest.current.overview)
+            ((latest.current.session
+              ? false
+              : latest.current.disabled && !latest.current.overview) &&
+              event.button === 0)
           )
             return;
           event.preventDefault();
           element!.focus();
           renderer.domElement.setPointerCapture(event.pointerId);
           drag = {
-            button: latest.current.overview ? 2 : event.button,
+            button:
+              latest.current.overview && !latest.current.session
+                ? 2
+                : event.button,
+            pointerId: event.pointerId,
+            originX: event.clientX,
+            originY: event.clientY,
+            moved: false,
+            touch: event.pointerType === "touch",
             x: event.clientX,
             y: event.clientY,
             level: latest.current.level,
             plane: latest.current.plane ?? "xy",
             start:
-              event.button === 0 && !latest.current.overview
+              event.button === 0 &&
+              !latest.current.overview &&
+              !latest.current.session
                 ? point(event)
                 : undefined,
             mode: event.altKey
@@ -507,7 +776,41 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           move(event);
         }
         function up(event: PointerEvent) {
+          if (drag && drag.pointerId !== event.pointerId) return;
           const stroke = drag;
+          if (latest.current.session) {
+            drag = undefined;
+            if (renderer.domElement.hasPointerCapture(event.pointerId))
+              renderer.domElement.releasePointerCapture(event.pointerId);
+            if (
+              stroke?.button === 0 &&
+              !stroke.moved &&
+              !sessionClickWasDrag(
+                { x: stroke.originX, y: stroke.originY },
+                { x: event.clientX, y: event.clientY },
+              ) &&
+              !graphicsLost
+            ) {
+              if (
+                event.shiftKey &&
+                lastSupportClick &&
+                !sessionClickWasDrag(lastSupportClick, {
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+              )
+                supportCycle += 1;
+              else supportCycle = 0;
+              lastSupportClick = { x: event.clientX, y: event.clientY };
+              const hit = sessionHit(event);
+              if (hit.actorId)
+                latest.current.session.onActorSelect(hit.actorId);
+              else if (hit.point && !latest.current.session.interactionDisabled)
+                latest.current.session.onDestinationPick(hit.point);
+            }
+            draw();
+            return;
+          }
           if (stroke?.button === 0) stroke.end = point(event);
           drag = undefined;
           cursor.scale.set(1, 1, 1);
@@ -570,17 +873,29 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
           if (event.key === "0") {
             azimuth = Math.PI / 4;
             elevation = Math.atan(1 / Math.sqrt(2));
-            span = latest.current.overview
-              ? Math.min(
-                  180,
-                  Math.max(
-                    24,
+            span =
+              latest.current.overview && !latest.current.session
+                ? Math.min(
+                    180,
                     Math.max(
-                      ...Object.values(latest.current.volume.dimensions),
-                    ) * 2,
-                  ),
-                )
-              : 24;
+                      24,
+                      Math.max(
+                        ...Object.values(latest.current.volume.dimensions),
+                      ) * 2,
+                    ),
+                  )
+                : latest.current.session
+                  ? Math.max(
+                      8,
+                      Math.min(
+                        24,
+                        Math.max(
+                          latest.current.volume.dimensions.x,
+                          latest.current.volume.dimensions.y,
+                        ) * 1.4,
+                      ),
+                    )
+                  : 24;
           }
           draw();
         }
@@ -596,6 +911,8 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         window.addEventListener("blur", cancel);
         const lost = (event: Event) => {
           event.preventDefault();
+          graphicsLost = true;
+          drag = undefined;
           setError(
             latest.current.overview
               ? "The map reference lost its graphics context. Retry to reopen it."
@@ -615,6 +932,14 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
             element.removeEventListener("keydown", key);
             window.removeEventListener("blur", cancel);
             canvas.removeEventListener("webglcontextlost", lost);
+            canvas.removeEventListener("pointerdown", down);
+            canvas.removeEventListener("pointermove", move);
+            canvas.removeEventListener("pointerup", up);
+            canvas.removeEventListener("pointercancel", cancel);
+            canvas.removeEventListener("lostpointercapture", cancel);
+            canvas.removeEventListener("contextmenu", context);
+            canvas.removeEventListener("wheel", wheel);
+            disposeSession();
             disposeGroup(terrain);
             materials.dispose();
             cursorGeometry.dispose();
@@ -664,24 +989,36 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
         ref={host}
         tabIndex={0}
         aria-label={
-          props.overview
-            ? "Captured terrain reference. Drag or arrow keys to orbit, plus and minus to zoom, zero to reset."
-            : "Isometric terrain editor. Right drag to orbit; left drag edits the work plane. Arrow keys orbit, plus and minus zoom, zero resets view."
+          props.session
+            ? "GM Session map. Click an actor to focus; click a support surface to propose movement. Right drag or touch drag or arrow keys orbit. Plus and minus zoom; zero resets."
+            : props.overview
+              ? "Captured terrain reference. Drag or arrow keys to orbit, plus and minus to zoom, zero to reset."
+              : "Isometric terrain editor. Right drag to orbit; left drag edits the work plane. Arrow keys orbit, plus and minus zoom, zero resets view."
         }
-        className="h-[32rem] w-full overflow-hidden rounded-box bg-slate-900 outline-offset-2"
+        className="h-[32rem] w-full touch-none overflow-hidden rounded-box bg-slate-900 outline-offset-2"
       />
       <p role="status" className="mt-2 text-sm opacity-70">
         {textureStatus}
       </p>
+      {props.session && (
+        <p role="status" className="mt-2 text-sm opacity-70">
+          {props.session.interactionDisabled
+            ? "Movement picking is unavailable while paused, refreshing, or awaiting a decision. Actor focus and camera orbit remain available."
+            : surfaceStatus ||
+              "Choose an actor, then click an authored terrain surface to propose movement."}
+        </p>
+      )}
       {textureStatus.includes("unavailable") && (
         <Button tone="outline" onClick={() => setRetry((n) => n + 1)}>
           Retry textures
         </Button>
       )}
       <p className="mt-2 text-sm opacity-70">
-        {props.overview
-          ? "Captured map reference · Drag or arrow keys to orbit · Scroll or plus/minus to zoom · Zero resets the view"
-          : "Focused on Preview actor · Right drag to pivot · Scroll to zoom · Left drag on the work plane · Esc cancels"}
+        {props.session
+          ? "GM overview · Real actor positions · Click an actor to focus · Click terrain to choose a destination · Shift-click to cycle overlapping surfaces · Right/touch drag to orbit · Dashed line is a declaration, not an approved route"
+          : props.overview
+            ? "Captured map reference · Drag or arrow keys to orbit · Scroll or plus/minus to zoom · Zero resets the view"
+            : "Focused on Preview actor · Right drag to pivot · Scroll to zoom · Left drag on the work plane · Esc cancels"}
       </p>
     </div>
   );

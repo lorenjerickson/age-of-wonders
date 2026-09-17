@@ -170,7 +170,10 @@ audits together. The result checkpoint captures recovered memory for subsequent 
 execution and current visibility evaluation remain deferred; no rule defaults are introduced.
 
 Pending work includes configurable generation controls/provenance, scalable asynchronous meshing,
-formal GPU budgets, source spatial placements, gameplay actor focus, movement, and authoritative visibility.
+formal GPU budgets, source spatial placements, Player gameplay actor focus, and authoritative visibility.
+The GM Session overview now supports real actor focus, surface destination selection, and the
+captured-rule movement preview/approval flow. This explicitly labeled full-map overview does not
+implement actor-relative vision, declared-body-height camera anchoring, or Player gameplay.
 The preview actor is an editor proxy; it does not move any authored creature. Source image metadata
 remains independent and unchanged by terrain saves.
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import {
   Alert,
@@ -19,6 +19,7 @@ import {
   createCampaignDefinition,
   forkCampaignDefinition,
   getCampaignDefinitionDraftImpact,
+  getCampaignDefinitionDraft,
   getWorldDefinition,
   listWorldDefinitions,
   previewCampaignWorldMigration,
@@ -34,23 +35,15 @@ import {
   type WorldDefinitionSummary,
 } from "./api";
 import {
-  campaignPlotTree,
-  campaignPlotParentCandidates,
   campaignPlacementSourceId,
   campaignProposalRecoveryRequested,
   campaignProposalRecoverySuffix,
   campaignRecordLabel,
   humanReferenceLabel,
-  mergeDiscoveryLines,
   mergeCampaignPlacementPayload,
-  mergeNamedComponentLines,
-  mergePlotLocationContexts,
-  mergePlotRelationships,
-  plotBreadcrumb,
   recordObject,
   reviewedRangesCoverTotal,
   type CampaignDraftRecord,
-  type CampaignPlotNode,
 } from "./campaignAuthoringModel";
 import {
   CampaignDraftRequired,
@@ -74,41 +67,6 @@ const stringValue = (value: JsonValue | undefined) =>
   typeof value === "string" ? value : "";
 const arrayValue = (value: JsonValue | undefined) =>
   Array.isArray(value) ? value : [];
-
-function namedLines(value: JsonValue | undefined) {
-  return arrayValue(value)
-    .map((entry) => stringValue(objectValue(entry).name))
-    .filter(Boolean)
-    .join("\n");
-}
-
-function namedEntries(
-  lines: string,
-  existing: JsonValue | undefined,
-  prefix: string,
-) {
-  return mergeNamedComponentLines(lines, existing, prefix);
-}
-
-function discoveryLines(value: JsonValue | undefined) {
-  return arrayValue(value)
-    .flatMap((entry) => {
-      const discovery = objectValue(entry);
-      const claim = objectValue(arrayValue(discovery.claims)[0]);
-      const kind = stringValue(claim.kind) || "rumor";
-      const statement = stringValue(claim.statement);
-      return statement
-        ? [
-            `${kind} | ${stringValue(discovery.name) || "Discovery"} | ${statement}`,
-          ]
-        : [];
-    })
-    .join("\n");
-}
-
-function discoveryEntries(lines: string, existing: JsonValue | undefined) {
-  return mergeDiscoveryLines(lines, existing);
-}
 
 export function CampaignDefinitionCreatePage() {
   const navigate = useInternalNavigate();
@@ -137,11 +95,21 @@ export function CampaignDefinitionCreatePage() {
   useEffect(() => {
     setWorld(undefined);
     setSnapshotId("");
+    setMessage("");
     if (!worldId) return;
+    let current = true;
     void getWorldDefinition(worldId).then(
-      (detail) => setWorld(detail),
-      () => setMessage("That World’s published revisions could not be loaded."),
+      (detail) => {
+        if (current) setWorld(detail);
+      },
+      () => {
+        if (current)
+          setMessage("That World’s published revisions could not be loaded.");
+      },
     );
+    return () => {
+      current = false;
+    };
   }, [worldId]);
 
   const revisionChoices = useMemo(
@@ -353,6 +321,7 @@ export function CampaignDefinitionCreatePage() {
             Cancel
           </InternalLink>
           <Button
+            type="submit"
             loading={saving}
             disabled={
               saving || (!createdCampaignId && (!snapshotId || !name.trim()))
@@ -557,596 +526,14 @@ export function CampaignDefinitionOverviewPage() {
               }}
             />
           </Label>
-          <Button>Save overview</Button>
+          <Button type="submit">Save overview</Button>
         </form>
       </CampaignDraftRequired>
     </main>
   );
 }
 
-function PlotTreeList({
-  nodes,
-  selectedId,
-  base,
-  guideSuffix,
-}: {
-  nodes: CampaignPlotNode[];
-  selectedId?: string;
-  base: string;
-  guideSuffix: string;
-}) {
-  return (
-    <ul className="space-y-1">
-      {nodes.map((node) => (
-        <li key={node.id}>
-          <InternalLink
-            href={`${base}/${encodeURIComponent(node.id)}${guideSuffix}`}
-            aria-current={node.id === selectedId ? "page" : undefined}
-            className={`block min-h-10 rounded-md px-3 py-2 text-sm ${node.id === selectedId ? "bg-primary/10 font-semibold text-primary" : "hover:bg-base-200"}`}
-          >
-            {node.name}
-            <span className="ml-2 text-xs text-base-content/55">
-              {node.children.length
-                ? `${node.children.length} subplot${node.children.length === 1 ? "" : "s"}`
-                : ""}
-            </span>
-          </InternalLink>
-          {node.children.length > 0 && (
-            <div className="ml-4 border-l border-base-300 pl-2">
-              <PlotTreeList
-                nodes={node.children}
-                selectedId={selectedId}
-                base={base}
-                guideSuffix={guideSuffix}
-              />
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function CampaignPlotsPage({ plotId }: { plotId?: string }) {
-  const { definition, draft, saveRecord, markDirty } =
-    useCampaignDefinitionAuthoring();
-  const guideSuffix = quickStartSuffix(useLocation().searchStr);
-  const navigate = useInternalNavigate();
-  const base = `/campaigns/definitions/${encodeURIComponent(definition.id)}/plots`;
-  const plots = useMemo(
-    () => campaignPlotTree(draft?.records ?? []),
-    [draft?.records],
-  );
-  const plotRecords = (draft?.records ?? []).filter(
-    ({ resourceType }) => resourceType === "plots",
-  );
-  const selected = plotId
-    ? plotRecords.find(({ sourceId }) => sourceId === plotId)
-    : undefined;
-  const selectedPayload = selected ? recordObject(selected) : {};
-  const [name, setName] = useState(
-    selected ? campaignRecordLabel(selected) : "",
-  );
-  const [description, setDescription] = useState(
-    stringValue(selectedPayload.description),
-  );
-  const [parentId, setParentId] = useState(
-    stringValue(objectValue(selectedPayload.parent).parentPlotDefinitionId),
-  );
-  const [prerequisites, setPrerequisites] = useState<Set<string>>(new Set());
-  const [dependencies, setDependencies] = useState<Set<string>>(new Set());
-  const [prerequisiteRationales, setPrerequisiteRationales] = useState<
-    Record<string, string>
-  >({});
-  const [dependencyRationales, setDependencyRationales] = useState<
-    Record<string, string>
-  >({});
-  const [objectives, setObjectives] = useState(
-    namedLines(selectedPayload.objectives),
-  );
-  const [pressures, setPressures] = useState(
-    namedLines(selectedPayload.pressures),
-  );
-  const [resistances, setResistances] = useState(
-    namedLines(selectedPayload.resistances),
-  );
-  const [discoveries, setDiscoveries] = useState(
-    discoveryLines(selectedPayload.discoveries),
-  );
-  const [locationIds, setLocationIds] = useState<Set<string>>(new Set());
-  const parentCandidates = useMemo(
-    () =>
-      selected
-        ? campaignPlotParentCandidates(plotRecords, selected.sourceId)
-        : [],
-    [plotRecords, selected],
-  );
-  const relationshipCandidates = useMemo(() => {
-    const byId = new Map(
-      plotRecords.map((record) => [record.sourceId, record]),
-    );
-    const ancestors: CampaignDraftRecord[] = [];
-    const visited = new Set<string>();
-    let nextId = parentId;
-    while (nextId && !visited.has(nextId)) {
-      visited.add(nextId);
-      const record = byId.get(nextId);
-      if (!record) break;
-      ancestors.push(record);
-      nextId = stringValue(
-        objectValue(recordObject(record).parent).parentPlotDefinitionId,
-      );
-    }
-    return ancestors;
-  }, [parentId, plotRecords]);
-
-  useEffect(() => {
-    setName(selected ? campaignRecordLabel(selected) : "");
-    setDescription(stringValue(selectedPayload.description));
-    setParentId(
-      stringValue(objectValue(selectedPayload.parent).parentPlotDefinitionId),
-    );
-    const relationships = Array.isArray(selectedPayload.prerequisites)
-      ? selectedPayload.prerequisites
-      : [];
-    setPrerequisites(
-      new Set(
-        relationships.flatMap((value) => {
-          const candidate = objectValue(value);
-          return typeof candidate.plotDefinitionId === "string"
-            ? [candidate.plotDefinitionId]
-            : [];
-        }),
-      ),
-    );
-    setPrerequisiteRationales(
-      Object.fromEntries(
-        relationships.flatMap((value) => {
-          const candidate = objectValue(value);
-          return typeof candidate.plotDefinitionId === "string" &&
-            typeof candidate.crossBranchRationale === "string"
-            ? [[candidate.plotDefinitionId, candidate.crossBranchRationale]]
-            : [];
-        }),
-      ),
-    );
-    const dependencyValues = arrayValue(selectedPayload.dependencies);
-    setDependencies(
-      new Set(
-        dependencyValues.flatMap((value) => {
-          const candidate = objectValue(value);
-          return typeof candidate.plotDefinitionId === "string"
-            ? [candidate.plotDefinitionId]
-            : [];
-        }),
-      ),
-    );
-    setDependencyRationales(
-      Object.fromEntries(
-        dependencyValues.flatMap((value) => {
-          const candidate = objectValue(value);
-          return typeof candidate.plotDefinitionId === "string" &&
-            typeof candidate.crossBranchRationale === "string"
-            ? [[candidate.plotDefinitionId, candidate.crossBranchRationale]]
-            : [];
-        }),
-      ),
-    );
-    setObjectives(namedLines(selectedPayload.objectives));
-    setPressures(namedLines(selectedPayload.pressures));
-    setResistances(namedLines(selectedPayload.resistances));
-    setDiscoveries(discoveryLines(selectedPayload.discoveries));
-    setLocationIds(
-      new Set(
-        arrayValue(selectedPayload.locationContexts).flatMap((value) => {
-          const locationId = objectValue(value).locationId;
-          return typeof locationId === "string" ? [locationId] : [];
-        }),
-      ),
-    );
-  }, [
-    selected?.sourceId,
-    selectedPayload.description,
-    selectedPayload.parent,
-    selectedPayload.prerequisites,
-    selectedPayload.dependencies,
-    selectedPayload.objectives,
-    selectedPayload.pressures,
-    selectedPayload.resistances,
-    selectedPayload.discoveries,
-    selectedPayload.locationContexts,
-  ]);
-
-  async function add(parentPlotId?: string) {
-    if (!draft) return;
-    const id = `plot:${crypto.randomUUID()}`;
-    const record: CampaignDraftRecord = {
-      resourceType: "plots",
-      sourceId: id,
-      payload: {
-        id,
-        campaignDefinitionId: definition.id,
-        parent: parentPlotId
-          ? { kind: "subplot", parentPlotDefinitionId: parentPlotId }
-          : { kind: "root" },
-        name: parentPlotId ? "New subplot" : "New Plot",
-        description: "",
-        objectives: [],
-        pressures: [],
-        resistances: [],
-        discoveries: [],
-        locationContexts: [],
-        prerequisites: [],
-        dependencies: [],
-      },
-    };
-    if (await saveRecord(record))
-      await navigate(`${base}/${encodeURIComponent(id)}${guideSuffix}`);
-  }
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!selected || !name.trim()) return;
-    await saveRecord({
-      ...selected,
-      payload: {
-        ...selectedPayload,
-        name: name.trim(),
-        description: description.trim(),
-        parent: parentId
-          ? { kind: "subplot", parentPlotDefinitionId: parentId }
-          : { kind: "root" },
-        prerequisites: mergePlotRelationships(
-          [...prerequisites],
-          selectedPayload.prerequisites,
-          prerequisiteRationales,
-        ),
-        dependencies: mergePlotRelationships(
-          [...dependencies],
-          selectedPayload.dependencies,
-          dependencyRationales,
-        ),
-        objectives: namedEntries(
-          objectives,
-          selectedPayload.objectives,
-          "objective",
-        ),
-        pressures: namedEntries(
-          pressures,
-          selectedPayload.pressures,
-          "pressure",
-        ),
-        resistances: namedEntries(
-          resistances,
-          selectedPayload.resistances,
-          "resistance",
-        ),
-        discoveries: discoveryEntries(discoveries, selectedPayload.discoveries),
-        locationContexts: mergePlotLocationContexts(
-          [...locationIds],
-          selectedPayload.locationContexts,
-        ),
-      },
-    });
-  }
-
-  const breadcrumbs = selected
-    ? plotBreadcrumb(plotRecords, selected.sourceId)
-    : [];
-  const invalidImportedDiscoveryCount = arrayValue(
-    selectedPayload.discoveries,
-  ).filter(
-    (entry) => arrayValue(objectValue(entry).claims).length === 0,
-  ).length;
-  return (
-    <main className={pageClass}>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-            Story
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold">Plots</h1>
-          <p className="mt-3 text-base-content/65">
-            Build multiple root Plots and recursively nested subplots.
-          </p>
-        </div>
-        <CampaignDraftRequired>
-          <Button onClick={() => void add()}>New root Plot</Button>
-        </CampaignDraftRequired>
-      </div>
-      <CampaignDraftRequired>
-        <div className="mt-8 grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]">
-          <nav
-            aria-label="Plot hierarchy"
-            className="rounded-box border border-base-300 bg-base-100 p-3"
-          >
-            <h2 className="px-2 pb-3 font-semibold">Plot hierarchy</h2>
-            {plots.length ? (
-              <PlotTreeList
-                nodes={plots}
-                selectedId={plotId}
-                base={base}
-                guideSuffix={guideSuffix}
-              />
-            ) : (
-              <p className="px-2 py-4 text-sm text-base-content/60">
-                No Plots yet. Create a root Plot to begin.
-              </p>
-            )}
-          </nav>
-          {selected ? (
-            <form
-              onSubmit={save}
-              className="card border border-base-300 bg-base-200"
-            >
-              <div className="card-body gap-5">
-                <nav
-                  aria-label="Plot ancestry"
-                  className="text-sm text-base-content/60"
-                >
-                  {breadcrumbs.join(" › ")}
-                </nav>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="card-title">Edit Plot</h2>
-                  <Button
-                    type="button"
-                    tone="outline"
-                    size="sm"
-                    onClick={() => void add(selected.sourceId)}
-                  >
-                    Add subplot
-                  </Button>
-                </div>
-                <Label>
-                  Name
-                  <Input
-                    required
-                    className="mt-2 w-full"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.currentTarget.value);
-                      markDirty();
-                    }}
-                  />
-                </Label>
-                <Label>
-                  Description
-                  <Textarea
-                    className="mt-2 min-h-36 w-full"
-                    value={description}
-                    onChange={(event) => {
-                      setDescription(event.currentTarget.value);
-                      markDirty();
-                    }}
-                  />
-                </Label>
-                <Label>
-                  Parent Plot
-                  <Select
-                    className="mt-2 w-full"
-                    value={parentId}
-                    onChange={(event) => {
-                      setParentId(event.currentTarget.value);
-                      markDirty();
-                    }}
-                  >
-                    <option value="">Root Plot</option>
-                    {parentCandidates.map((candidate) => (
-                      <option
-                        key={candidate.sourceId}
-                        value={candidate.sourceId}
-                      >
-                        {campaignRecordLabel(candidate)}
-                      </option>
-                    ))}
-                  </Select>
-                  <span className="mt-1 block text-xs text-base-content/55">
-                    Any Plot outside this Plot’s subtree may become its parent.
-                    Review &amp; publish validates the changed hierarchy and all
-                    affected relationships.
-                  </span>
-                </Label>
-                <Fieldset>
-                  <Legend className="font-medium">Prerequisites</Legend>
-                  <p className="mt-1 text-sm text-base-content/60">
-                    Relationships point upward to this Plot’s current parent or
-                    ancestors and remain acyclic.
-                  </p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {parentCandidates.map((candidate) => (
-                      <div key={candidate.sourceId}>
-                        <Checkbox
-                          label={campaignRecordLabel(candidate)}
-                          checked={prerequisites.has(candidate.sourceId)}
-                          onChange={(event) => {
-                            setPrerequisites((current) => {
-                              const next = new Set(current);
-                              if (event.currentTarget.checked)
-                                next.add(candidate.sourceId);
-                              else next.delete(candidate.sourceId);
-                              return next;
-                            });
-                            markDirty();
-                          }}
-                        />
-                        {prerequisites.has(candidate.sourceId) &&
-                          !relationshipCandidates.some(
-                            ({ sourceId }) => sourceId === candidate.sourceId,
-                          ) && (
-                            <Label className="mt-2 ml-7 block">
-                              Cross-branch rationale
-                              <Input
-                                required
-                                className="mt-1 w-full"
-                                value={
-                                  prerequisiteRationales[candidate.sourceId] ??
-                                  ""
-                                }
-                                onChange={(event) => {
-                                  setPrerequisiteRationales((current) => ({
-                                    ...current,
-                                    [candidate.sourceId]:
-                                      event.currentTarget.value,
-                                  }));
-                                  markDirty();
-                                }}
-                              />
-                            </Label>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </Fieldset>
-                <Fieldset>
-                  <Legend className="font-medium">Dependencies</Legend>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {parentCandidates.map((candidate) => (
-                      <div key={candidate.sourceId}>
-                        <Checkbox
-                          label={campaignRecordLabel(candidate)}
-                          checked={dependencies.has(candidate.sourceId)}
-                          onChange={(event) => {
-                            setDependencies((current) => {
-                              const next = new Set(current);
-                              if (event.currentTarget.checked)
-                                next.add(candidate.sourceId);
-                              else next.delete(candidate.sourceId);
-                              return next;
-                            });
-                            markDirty();
-                          }}
-                        />
-                        {dependencies.has(candidate.sourceId) &&
-                          !relationshipCandidates.some(
-                            ({ sourceId }) => sourceId === candidate.sourceId,
-                          ) && (
-                            <Label className="mt-2 ml-7 block">
-                              Cross-branch rationale
-                              <Input
-                                required
-                                className="mt-1 w-full"
-                                value={
-                                  dependencyRationales[candidate.sourceId] ?? ""
-                                }
-                                onChange={(event) => {
-                                  setDependencyRationales((current) => ({
-                                    ...current,
-                                    [candidate.sourceId]:
-                                      event.currentTarget.value,
-                                  }));
-                                  markDirty();
-                                }}
-                              />
-                            </Label>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </Fieldset>
-                <div className="grid gap-5 md:grid-cols-3">
-                  <Label>
-                    Objectives · one per line
-                    <Textarea
-                      className="mt-2 min-h-32 w-full"
-                      value={objectives}
-                      onChange={(event) => {
-                        setObjectives(event.currentTarget.value);
-                        markDirty();
-                      }}
-                    />
-                  </Label>
-                  <Label>
-                    Pressures · one per line
-                    <Textarea
-                      className="mt-2 min-h-32 w-full"
-                      value={pressures}
-                      onChange={(event) => {
-                        setPressures(event.currentTarget.value);
-                        markDirty();
-                      }}
-                    />
-                  </Label>
-                  <Label>
-                    Resistances · one per line
-                    <Textarea
-                      className="mt-2 min-h-32 w-full"
-                      value={resistances}
-                      onChange={(event) => {
-                        setResistances(event.currentTarget.value);
-                        markDirty();
-                      }}
-                    />
-                  </Label>
-                </div>
-                <Label>
-                  Discoveries
-                  <Textarea
-                    className="mt-2 min-h-36 w-full font-mono text-sm"
-                    value={discoveries}
-                    onChange={(event) => {
-                      setDiscoveries(event.currentTarget.value);
-                      markDirty();
-                    }}
-                    placeholder="truth | The broken seal | The archive was opened from within."
-                  />
-                  <span className="mt-1 block text-xs text-base-content/55">
-                    One per line: truth, belief, or rumor | discovery name |
-                    statement. Rumors need not resolve to truths.
-                  </span>
-                </Label>
-                {invalidImportedDiscoveryCount > 0 && (
-                  <Alert tone="warning">
-                    {invalidImportedDiscoveryCount} imported Discovery
-                    {invalidImportedDiscoveryCount === 1
-                      ? " has"
-                      : " entries have"}{" "}
-                    no claim. It is preserved, but publication remains blocked
-                    until each Discovery has a truth, belief, or rumor
-                    statement.
-                  </Alert>
-                )}
-                <Fieldset>
-                  <Legend className="font-medium">
-                    Captured-World Location contexts
-                  </Legend>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {(draft?.capturedWorldContent?.locations ?? []).map(
-                      (location) => (
-                        <Checkbox
-                          key={location.id}
-                          label={location.name || "Unnamed captured Location"}
-                          checked={locationIds.has(location.id)}
-                          onChange={(event) => {
-                            setLocationIds((current) => {
-                              const next = new Set(current);
-                              if (event.currentTarget.checked)
-                                next.add(location.id);
-                              else next.delete(location.id);
-                              return next;
-                            });
-                            markDirty();
-                          }}
-                        />
-                      ),
-                    )}
-                  </div>
-                </Fieldset>
-                <Button className="self-start">Save Plot</Button>
-              </div>
-            </form>
-          ) : (
-            <section className="rounded-box border border-dashed border-base-300 p-8">
-              <h2 className="text-xl font-semibold">Choose a Plot</h2>
-              <p className="mt-2 text-base-content/60">
-                Select a named Plot from the hierarchy to edit it.
-              </p>
-            </section>
-          )}
-        </div>
-      </CampaignDraftRequired>
-    </main>
-  );
-}
+export { CampaignPlotsPage } from "./CampaignPlotPages";
 
 interface CapturedChoice {
   id: string;
@@ -1155,6 +542,7 @@ interface CapturedChoice {
   kind?: string;
   locationId?: string;
 }
+
 function capturedChoices(
   draft: CampaignDefinitionDraft | undefined,
 ): CapturedChoice[] {
@@ -1178,8 +566,14 @@ function capturedChoices(
 }
 
 export function CampaignPlacementsPage() {
-  const { draft, saveRecord, removeRecord, markDirty } =
-    useCampaignDefinitionAuthoring();
+  const {
+    draft,
+    saveRecord,
+    removeRecord,
+    markDirty,
+    saveState,
+    discardLocalChanges,
+  } = useCampaignDefinitionAuthoring();
   const [editingId, setEditingId] = useState("");
   const [mode, setMode] = useState<"independent" | "world-decoration">(
     "independent",
@@ -1223,6 +617,16 @@ export function CampaignPlacementsPage() {
       ? campaignRecordLabel(plots.find((plot) => plot.sourceId === id)!)
       : undefined;
 
+  function allowDiscard() {
+    if (
+      (saveState === "dirty" || saveState === "error") &&
+      !window.confirm("Discard your unsaved placement changes?")
+    )
+      return false;
+    discardLocalChanges();
+    return true;
+  }
+
   function resetEditor() {
     setEditingId("");
     setMode("independent");
@@ -1235,6 +639,7 @@ export function CampaignPlacementsPage() {
   }
 
   function editPlacement(record: CampaignDraftRecord) {
+    if (!allowDiscard()) return;
     const payload = recordObject(record);
     const nextMode =
       payload.kind === "world-decoration" ? "world-decoration" : "independent";
@@ -1263,8 +668,10 @@ export function CampaignPlacementsPage() {
       )
     )
       return;
+    const preserveEditorDirty = saveState === "dirty" || saveState === "error";
     if (await removeRecord("campaign-placements", record.sourceId)) {
       if (editingId === record.sourceId) resetEditor();
+      else if (preserveEditorDirty) markDirty();
     }
   }
 
@@ -1411,7 +818,9 @@ export function CampaignPlacementsPage() {
                     type="button"
                     tone="ghost"
                     size="sm"
-                    onClick={resetEditor}
+                    onClick={() => {
+                      if (allowDiscard()) resetEditor();
+                    }}
                   >
                     Cancel editing
                   </Button>
@@ -1473,7 +882,11 @@ export function CampaignPlacementsPage() {
                         markDirty();
                       }}
                     >
-                      <option value="">Choose a Location</option>
+                      <option value="">
+                        {locations.length
+                          ? "Choose a Location"
+                          : "No captured Locations available"}
+                      </option>
                       {locations.map((choice) => (
                         <option key={choice.id} value={choice.id}>
                           {choice.name}
@@ -1501,7 +914,11 @@ export function CampaignPlacementsPage() {
                         markDirty();
                       }}
                     >
-                      <option value="">Choose captured content</option>
+                      <option value="">
+                        {content.length
+                          ? "Choose captured content"
+                          : "No captured Creatures or Items available"}
+                      </option>
                       {content.map((choice) => (
                         <option key={choice.id} value={choice.id}>
                           {choice.name} · {choice.kind || choice.resourceType}
@@ -1522,7 +939,11 @@ export function CampaignPlacementsPage() {
                       markDirty();
                     }}
                   >
-                    <option value="">Choose a World placement</option>
+                    <option value="">
+                      {worldPlacements.length
+                        ? "Choose a World placement"
+                        : "No captured World placements available"}
+                    </option>
                     {worldPlacements.map((choice) => (
                       <option key={choice.id} value={choice.id}>
                         {choice.name}
@@ -1543,10 +964,10 @@ export function CampaignPlacementsPage() {
                       label={campaignRecordLabel(plot)}
                       checked={plotIds.has(plot.sourceId)}
                       onChange={(event) => {
+                        const checked = event.currentTarget.checked;
                         setPlotIds((current) => {
                           const next = new Set(current);
-                          if (event.currentTarget.checked)
-                            next.add(plot.sourceId);
+                          if (checked) next.add(plot.sourceId);
                           else next.delete(plot.sourceId);
                           return next;
                         });
@@ -1561,6 +982,7 @@ export function CampaignPlacementsPage() {
                 saved.
               </p>
               <Button
+                type="submit"
                 disabled={
                   mode === "independent"
                     ? !locationId || !definitionId
@@ -1593,15 +1015,19 @@ export function CampaignPreparationPage() {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!draft) return;
+    const nextPreparation: Record<string, JsonValue> = {
+      ...preparation,
+      startingContext: startingContext.trim(),
+      mapVariations: mapVariations.trim(),
+    };
+    if (startingLocationId)
+      nextPreparation.startingLocationId = startingLocationId;
+    else delete nextPreparation.startingLocationId;
     await saveDraft({
       ...draft,
       content: {
         ...draft.content,
-        preparation: {
-          ...(startingLocationId ? { startingLocationId } : {}),
-          startingContext: startingContext.trim(),
-          mapVariations: mapVariations.trim(),
-        },
+        preparation: nextPreparation,
       },
     });
   }
@@ -1663,7 +1089,7 @@ export function CampaignPreparationPage() {
               }}
             />
           </Label>
-          <Button>Save preparation defaults</Button>
+          <Button type="submit">Save preparation defaults</Button>
         </form>
       </CampaignDraftRequired>
     </main>
@@ -1929,7 +1355,9 @@ export function CampaignVersionsPage() {
             />
           </Label>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button loading={busy}>Create independent fork</Button>
+            <Button type="submit" loading={busy}>
+              Create independent fork
+            </Button>
             <Button
               type="button"
               tone="ghost"
@@ -1945,16 +1373,25 @@ export function CampaignVersionsPage() {
 }
 
 export function CampaignReviewPage() {
-  const { definition, draft } = useCampaignDefinitionAuthoring();
+  const { definition, draft, canEdit, adoptDraft } =
+    useCampaignDefinitionAuthoring();
   const router = useRouter();
   const [issues, setIssues] = useState<
     Array<{ code: string; subject: string; detail: string }>
   >([]);
   const [valid, setValid] = useState(false);
   const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
   const [message, setMessage] = useState("");
+  useEffect(() => {
+    setValid(false);
+    setIssues([]);
+  }, [draft?.storageRevision]);
   async function validate() {
-    if (!draft) return;
+    if (!draft || !canEdit || pending.current) return;
+    pending.current = true;
+    setValid(false);
+    setIssues([]);
     setBusy(true);
     setMessage("");
     try {
@@ -1972,25 +1409,31 @@ export function CampaignReviewPage() {
     } catch {
       setMessage("The draft could not be validated.");
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   }
   async function publish() {
-    if (!draft || !valid) return;
+    if (!draft || !canEdit || !valid || pending.current) return;
+    pending.current = true;
     setBusy(true);
     try {
       await publishCampaignDefinitionDraft(
         definition.id,
         draft.storageRevision,
       );
+      adoptDraft(await getCampaignDefinitionDraft(definition.id));
       await router.navigate({
         to: `/campaigns/definitions/${encodeURIComponent(definition.id)}`,
       });
       await router.invalidate();
     } catch {
       setMessage(
-        "Publication failed. The previous published revision remains unchanged.",
+        "Publication could not be confirmed. Reload the Campaign to check its current revision before retrying.",
       );
+      setValid(false);
+    } finally {
+      pending.current = false;
       setBusy(false);
     }
   }
@@ -1998,6 +1441,13 @@ export function CampaignReviewPage() {
     return (
       <main className={pageClass}>
         <Alert tone="warning">There is no working draft to review.</Alert>
+      </main>
+    );
+  if (!canEdit)
+    return (
+      <main className={pageClass}>
+        <h1 className="text-4xl font-semibold">Review &amp; publish</h1>
+        <CampaignDraftRequired>{null}</CampaignDraftRequired>
       </main>
     );
   const plotCount = draft.records.filter(
@@ -2095,6 +1545,7 @@ export function CampaignWorldMigrationPage() {
   const [world, setWorld] = useState<WorldDefinitionDetail>();
   const [targetSnapshotId, setTargetSnapshotId] = useState("");
   const [preview, setPreview] = useState<CampaignMigrationPreview>();
+  const [previewInputsChanged, setPreviewInputsChanged] = useState(false);
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [conflictOffset, setConflictOffset] = useState(0);
   const [candidateOffset, setCandidateOffset] = useState(0);
@@ -2108,12 +1559,28 @@ export function CampaignWorldMigrationPage() {
   >([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [worldLoadError, setWorldLoadError] = useState("");
+  const [worldLoadAttempt, setWorldLoadAttempt] = useState(0);
   useEffect(() => {
+    let current = true;
+    setWorld(undefined);
+    setWorldLoadError("");
     if (draft)
       void getWorldDefinition(draft.capturedWorld.worldDefinitionId).then(
-        setWorld,
+        (value) => {
+          if (current) setWorld(value);
+        },
+        () => {
+          if (current)
+            setWorldLoadError(
+              "World revisions could not be loaded. Try again to review migration targets.",
+            );
+        },
       );
-  }, [draft?.capturedWorld.worldDefinitionId]);
+    return () => {
+      current = false;
+    };
+  }, [draft?.capturedWorld.worldDefinitionId, worldLoadAttempt]);
   const targets = (world?.revisions ?? [])
     .filter(
       (revision) =>
@@ -2155,8 +1622,11 @@ export function CampaignWorldMigrationPage() {
         changeOffset: nextChangeOffset,
       });
       setPreview(nextPreview);
+      setPreviewInputsChanged(false);
       setReviewedChangeRanges((current) => [
-        ...current,
+        ...(preview?.planHash === nextPreview.planHash && !previewInputsChanged
+          ? current
+          : []),
         {
           start: nextPreview.changeSummary.offset,
           end:
@@ -2169,7 +1639,9 @@ export function CampaignWorldMigrationPage() {
         },
       ]);
       setReviewedImpactRanges((current) => [
-        ...current,
+        ...(preview?.planHash === nextPreview.planHash && !previewInputsChanged
+          ? current
+          : []),
         {
           start: nextPreview.impact.offset,
           end:
@@ -2184,6 +1656,9 @@ export function CampaignWorldMigrationPage() {
         },
       ]);
     } catch {
+      setPreview(undefined);
+      setReviewedChangeRanges([]);
+      setReviewedImpactRanges([]);
       setMessage("The complete migration comparison could not be prepared.");
     } finally {
       setBusy(false);
@@ -2238,13 +1713,17 @@ export function CampaignWorldMigrationPage() {
           return { resourceType: resourceType!, sourceId: sourceId!, targetId };
         }),
       });
+      adoptDraft(await getCampaignDefinitionDraft(definition.id));
       await router.navigate({
         to: `/campaigns/definitions/${encodeURIComponent(definition.id)}/versions`,
       });
       await router.invalidate();
     } catch {
+      setPreview(undefined);
+      setReviewedChangeRanges([]);
+      setReviewedImpactRanges([]);
       setMessage(
-        "Migration did not apply. The current Campaign and captured World remain unchanged.",
+        "Migration could not be confirmed. Review Campaign versions before preparing another comparison.",
       );
       setBusy(false);
     }
@@ -2302,7 +1781,10 @@ export function CampaignWorldMigrationPage() {
       )
     : false;
   const migrationFullyReviewed =
-    Boolean(preview?.ready) && allChangesReviewed && allImpactsReviewed;
+    Boolean(preview?.ready) &&
+    !previewInputsChanged &&
+    allChangesReviewed &&
+    allImpactsReviewed;
   return (
     <main className={pageClass}>
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
@@ -2321,6 +1803,18 @@ export function CampaignWorldMigrationPage() {
         <section className="card mt-8 border border-base-300 bg-base-200">
           <div className="card-body gap-4">
             <h2 className="card-title">Prepare dry run</h2>
+            {worldLoadError && (
+              <Alert tone="error" role="alert">
+                <p>{worldLoadError}</p>
+                <Button
+                  type="button"
+                  tone="outline"
+                  onClick={() => setWorldLoadAttempt((attempt) => attempt + 1)}
+                >
+                  Retry World revisions
+                </Button>
+              </Alert>
+            )}
             <p>
               Current capture:{" "}
               <strong>
@@ -2335,6 +1829,7 @@ export function CampaignWorldMigrationPage() {
               <Select
                 className="mt-2 w-full"
                 value={targetSnapshotId}
+                disabled={busy}
                 onChange={(event) => {
                   setTargetSnapshotId(event.currentTarget.value);
                   setPreview(undefined);
@@ -2447,6 +1942,7 @@ export function CampaignWorldMigrationPage() {
                         Reconcile with target content
                         <Select
                           className="mt-2 w-full max-w-xl"
+                          disabled={busy}
                           value={
                             mappings[
                               `${item.source.resourceType}\u0000${item.source.id}`
@@ -2454,10 +1950,14 @@ export function CampaignWorldMigrationPage() {
                           }
                           onChange={(event) => {
                             const key = `${item.source!.resourceType}\u0000${item.source!.id}`;
+                            const value = event.currentTarget.value;
                             setMappings((current) => ({
                               ...current,
-                              [key]: event.currentTarget.value,
+                              [key]: value,
                             }));
+                            setPreviewInputsChanged(true);
+                            setReviewedChangeRanges([]);
+                            setReviewedImpactRanges([]);
                           }}
                         >
                           <option value="">

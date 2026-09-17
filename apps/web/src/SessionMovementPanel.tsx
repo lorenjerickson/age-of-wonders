@@ -1,218 +1,48 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
 import { Badge, Button, Input, Label, Select } from "@aow/ui";
-import type {
-  SessionMovementContext,
-  SessionMovementProposal,
-  TerrainPoint,
-} from "@aow/common";
 import {
-  ApiRequestError,
-  decideSessionMovement,
-  getSessionMovement,
-  proposeSessionMovement,
-} from "./api";
+  useSessionMovement,
+  type SessionMovementController,
+  type SessionMovementOptions,
+} from "./useSessionMovement";
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
-
-const positionLabel = (point: TerrainPoint) =>
-  `X ${point.x}, Y ${point.y}, Z ${point.z}`;
-
-export function SessionMovementPanel({
-  campaignDefinitionId,
-  campaignInstanceId,
-  sessionId,
-  onCommitted,
+import { sessionPositionLabel as positionLabel } from "./sessionMovementMapModel";
+type PanelProps = SessionMovementOptions & {
+  controller?: SessionMovementController;
+};
+export function SessionMovementPanel(props: PanelProps) {
+  return props.controller ? (
+    <SessionMovementView controller={props.controller} />
+  ) : (
+    <StandaloneMovementPanel {...props} />
+  );
+}
+function StandaloneMovementPanel(props: SessionMovementOptions) {
+  const controller = useSessionMovement(props);
+  return <SessionMovementView controller={controller} />;
+}
+function SessionMovementView({
+  controller,
 }: {
-  campaignDefinitionId: string;
-  campaignInstanceId: string;
-  sessionId: string;
-  onCommitted?: () => void;
+  controller: SessionMovementController;
 }) {
-  const [context, setContext] = useState<SessionMovementContext>();
-  const [actorId, setActorId] = useState("");
-  const [destination, setDestination] = useState({ x: "0", y: "0", z: "0" });
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const [refreshError, setRefreshError] = useState("");
-  const [notice, setNotice] = useState("");
-  const sequence = useRef(0);
-  const mutation = useRef(false);
-  const submission = useRef<{ fingerprint: string; key: string } | undefined>(
-    undefined,
-  );
-  const decisions = useRef(new Map<string, string>());
-  const actor =
-    context?.actors.find((entry) => entry.id === actorId) ??
-    (!actorId ? context?.actors[0] : undefined);
-  const resolvedActorId = actor?.id;
-  useEffect(() => {
-    if (actor)
-      setDestination({
-        x: String(actor.position.x),
-        y: String(actor.position.y),
-        z: String(actor.position.z),
-      });
-    // Position refreshes must not overwrite an edited destination.
-  }, [resolvedActorId]);
-
-  const load = useCallback(async () => {
-    const requestSequence = ++sequence.current;
-    try {
-      const result = await getSessionMovement(
-        campaignDefinitionId,
-        campaignInstanceId,
-        sessionId,
-      );
-      if (requestSequence !== sequence.current) return;
-      setContext(result);
-      setRefreshError("");
-    } catch (caught) {
-      if (requestSequence !== sequence.current) return;
-      if (
-        caught instanceof ApiRequestError &&
-        [401, 403, 404].includes(caught.status)
-      )
-        setContext(undefined);
-      setRefreshError(
-        "Movement history could not be refreshed. Refresh before making a decision.",
-      );
-    }
-  }, [campaignDefinitionId, campaignInstanceId, sessionId]);
-  useEffect(() => {
-    setContext(undefined);
-    setActorId("");
-    setError("");
-    setNotice("");
-    submission.current = undefined;
-    decisions.current.clear();
-    void load();
-    const timer = window.setInterval(() => {
-      if (!mutation.current) void load();
-    }, 15_000);
-    return () => {
-      sequence.current++;
-      window.clearInterval(timer);
-    };
-  }, [load]);
-
-  async function preview(event?: FormEvent, rebuild?: SessionMovementProposal) {
-    event?.preventDefault();
-    if (!context || mutation.current) return;
-    const targetActor = rebuild
-      ? context.actors.find((entry) => entry.id === rebuild.actorId)
-      : actor;
-    if (!targetActor) {
-      setError("Choose an available actor before previewing movement.");
-      return;
-    }
-    const point = rebuild?.destination ?? {
-      x: Number(destination.x),
-      y: Number(destination.y),
-      z: Number(destination.z),
-    };
-    if (
-      !Object.values(point).every(Number.isFinite) ||
-      (!rebuild && Object.values(destination).some((value) => !value.trim()))
-    ) {
-      setError("Enter a finite destination coordinate for each axis.");
-      return;
-    }
-    const input = {
-      actorId: targetActor.id,
-      destination: point,
-      expectedRuntimeRevision: context.runtimeRevision,
-    };
-    const fingerprint = JSON.stringify(input);
-    if (submission.current?.fingerprint !== fingerprint)
-      submission.current = { fingerprint, key: crypto.randomUUID() };
-    mutation.current = true;
-    sequence.current++;
-    setBusy("preview");
-    setError("");
-    setNotice("");
-    try {
-      const result = await proposeSessionMovement(
-        campaignDefinitionId,
-        campaignInstanceId,
-        sessionId,
-        { ...input, idempotencyKey: submission.current.key },
-      );
-      submission.current = undefined;
-      setNotice(
-        result.status === "no-op"
-          ? "The captured rules produced no gameplay change."
-          : result.status === "failed"
-            ? "The rule chain failed without applying gameplay changes."
-            : "Movement preview is ready for review. No position has changed.",
-      );
-      await load();
-    } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : "The preview could not be completed. Retry uses the same submission.",
-      );
-      if (caught instanceof ApiRequestError && caught.status === 409) {
-        submission.current = undefined;
-        await load();
-      }
-    } finally {
-      mutation.current = false;
-      setBusy("");
-    }
-  }
-
-  async function decide(
-    proposal: SessionMovementProposal,
-    decision: "approve" | "reject",
-  ) {
-    if (mutation.current) return;
-    const key = `${proposal.id}/${decision}`;
-    if (!decisions.current.has(key))
-      decisions.current.set(key, crypto.randomUUID());
-    mutation.current = true;
-    sequence.current++;
-    setBusy(key);
-    setError("");
-    setNotice("");
-    try {
-      await decideSessionMovement(
-        campaignDefinitionId,
-        campaignInstanceId,
-        sessionId,
-        proposal.id,
-        decision,
-        { idempotencyKey: decisions.current.get(key)! },
-      );
-      setNotice(
-        decision === "approve"
-          ? "The approved rule effects were committed."
-          : "The movement proposal was rejected without applying effects.",
-      );
-      await load();
-      if (decision === "approve") onCommitted?.();
-    } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError
-          ? caught.message
-          : "The decision could not be confirmed. Retry uses the same decision.",
-      );
-      if (caught instanceof ApiRequestError && caught.status === 409)
-        await load();
-    } finally {
-      mutation.current = false;
-      setBusy("");
-    }
-  }
-
-  const disabled = Boolean(
-    busy || refreshError || context?.status !== "active",
-  );
+  const {
+    context,
+    actors,
+    actor,
+    busy,
+    error,
+    refreshError,
+    notice,
+    disabled,
+    coherent,
+    destination,
+    load,
+    preview,
+    decide,
+    setActorId,
+    setDestination,
+    canReviewProposal,
+  } = controller;
   return (
     <section
       className="mt-6 rounded-box border border-base-300 bg-base-100 p-4"
@@ -235,6 +65,12 @@ export function SessionMovementPanel({
         Declare a destination, inspect the captured rule effects, then approve
         or reject. A World without applicable rules produces no movement.
       </p>
+      {!coherent && context && (
+        <p className="mt-3 text-sm" role="status">
+          The map changed. Refresh the table and movement context before
+          continuing.
+        </p>
+      )}
       {refreshError && (
         <p className="mt-3 text-sm text-error" role="alert">
           {refreshError}
@@ -253,17 +89,62 @@ export function SessionMovementPanel({
       )}
       {context && (
         <>
+          <ol
+            aria-label="Rule evaluation steps"
+            className="mt-4 grid gap-2 text-sm sm:grid-cols-3"
+          >
+            <li>1. Choose an actor and destination.</li>
+            <li>2. Preview and inspect the rule chain.</li>
+            <li>3. Approve effects, then check committed state.</li>
+          </ol>
+          <p className="mt-3 text-sm">
+            {context.status === "paused"
+              ? "Testing paused — resume the Session to continue."
+              : !actors.length
+                ? "Actor setup needed at the viewed Location."
+                : !context.capturedRules.length
+                  ? "Ready for a no-rules test: previews should leave gameplay unchanged."
+                  : "Ready to evaluate captured rules."}
+          </p>
           <p className="mt-2 text-sm opacity-65">
             {context.capturedRules.length
               ? `Captured rules: ${context.capturedRules.map((rule) => `${rule.name} revision ${rule.revision}`).join(" · ")}`
-              : "No enabled rules are captured for this Instance."}
+              : "No rules are captured for this Instance."}
           </p>
           {context.status === "paused" && (
             <p className="mt-3 text-sm">
               Resume the Session to propose or decide movement.
             </p>
           )}
-          {context.actors.length ? (
+          {actor && (
+            <section
+              aria-label="Committed actor state"
+              className="mt-4 rounded-box bg-base-200 p-4"
+            >
+              <h4 className="font-semibold">Committed state · {actor.name}</h4>
+              <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="opacity-65">Position</dt>
+                  <dd>{positionLabel(actor.position)}</dd>
+                </div>
+                <div>
+                  <dt className="opacity-65">Movement remaining</dt>
+                  <dd>
+                    {actor.movementRemaining ?? "Not initialized by rules"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="opacity-65">Recorded moves</dt>
+                  <dd>{actor.recordedMoves ?? "Not initialized by rules"}</dd>
+                </div>
+              </dl>
+              <p className="mt-2 text-xs opacity-65">
+                Previewing does not change these values. Authored resources
+                persist across Sessions; resuming does not reset them.
+              </p>
+            </section>
+          )}
+          {actors.length ? (
             <form onSubmit={(event) => void preview(event)} className="mt-4">
               <fieldset
                 disabled={disabled}
@@ -277,7 +158,7 @@ export function SessionMovementPanel({
                     onChange={(event) => setActorId(event.currentTarget.value)}
                   >
                     {!actor && <option value="">Choose an actor</option>}
-                    {context.actors.map((entry) => (
+                    {actors.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.name} · {entry.locationName}
                       </option>
@@ -330,6 +211,7 @@ export function SessionMovementPanel({
           {context.proposals.length ? (
             <ol className="mt-3 grid gap-4">
               {context.proposals.map((proposal) => {
+                const proposalOnMap = canReviewProposal(proposal);
                 const stale =
                   proposal.status === "pending" &&
                   proposal.expectedRuntimeRevision !== context.runtimeRevision;
@@ -377,7 +259,13 @@ export function SessionMovementPanel({
                         ? ` · decided ${dateLabel(proposal.decidedAt)}`
                         : ""}
                     </p>
-                    {stale && (
+                    {proposal.status === "pending" && !proposalOnMap && (
+                      <p className="mt-3 text-sm">
+                        View this actor's current Location and choose a new
+                        destination to continue.
+                      </p>
+                    )}
+                    {stale && proposalOnMap && (
                       <p className="mt-3 text-sm">
                         The runtime changed. Rebuild this preview before
                         approving.
@@ -388,7 +276,7 @@ export function SessionMovementPanel({
                         {stale ? (
                           <Button
                             tone="primary"
-                            disabled={disabled}
+                            disabled={disabled || !proposalOnMap}
                             onClick={() => void preview(undefined, proposal)}
                           >
                             Rebuild preview
@@ -396,7 +284,9 @@ export function SessionMovementPanel({
                         ) : (
                           <Button
                             tone="primary"
-                            disabled={disabled || !proposal.canApprove}
+                            disabled={
+                              disabled || !proposalOnMap || !proposal.canApprove
+                            }
                             onClick={() => void decide(proposal, "approve")}
                           >
                             Approve movement
@@ -404,7 +294,7 @@ export function SessionMovementPanel({
                         )}
                         <Button
                           tone="outline"
-                          disabled={disabled}
+                          disabled={disabled || !proposalOnMap}
                           onClick={() => void decide(proposal, "reject")}
                         >
                           Reject proposal

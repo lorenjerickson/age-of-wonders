@@ -116,7 +116,58 @@ These mechanics require additional authored rules/capabilities rather than hidde
 ## Remaining delivery
 
 Player/Spectator-safe live map projection and actor-focused gameplay rendering remain separate work.
-The current Run map stays a captured GM reference while the movement panel provides numeric
-coordinates, human-readable effect review, decisions, and history. Full combat, turn/resource-renewal
+The Run map now renders named actors in an explicit full-map GM overview. Actor selection and
+surface picking populate the shared movement declaration, with a pending destination and route
+segment; the numeric controls, human-readable effect review, decisions, and history remain
+available. Matching snapshot and runtime revisions are required before map interaction. Actors
+move only after approved server effects refresh authoritative state. No-actor maps show readiness;
+Player/Spectator access and actor-relative sight filtering remain pending. Full combat, turn/resource-renewal
 mechanics, arbitrary event sources, richer schema query catalogs, and automated execution remain
 unsupported until explicitly implemented and authored.
+
+
+## First GM game-time evaluation loop — 2026-09-16
+
+Run → Table exposes a three-step declaration/review/commit guide and the selected actor's
+**committed** position, movement remaining, and recorded moves. The latter two are optional finite
+numeric projections of the existing authored resources in `creature.extensions['aow:rules']`;
+missing values display as uninitialized. Preview does not grant an allowance, and pausing or
+resuming does not reset resources. No new persistence resource or automatic rule execution was added.
+
+To exercise the loop:
+
+1. In World → Rules, explicitly adopt the starter movement rules (or keep a rule-free World for
+   the inert control). Publish and capture/migrate that revision through the Campaign and Instance.
+2. Prepare an Instance actor at a supported position on a captured isometric Location, then start
+   or resume its Session and open Run → Table at that Location.
+3. Select the actor and a destination on the map, or enter coordinates. Preview movement; inspect
+   proposed effects and the causal explanation. Committed state must remain unchanged.
+4. Reject a proposal to check the no-change case. Preview again and approve to commit the whole
+   chain; confirm position, remaining movement, and recorded moves against the listed effects.
+   Initializer-only chains may change resources without moving the actor.
+5. Try an exhausted allowance or unsupported destination, a stale preview after another committed
+   change, and a paused Session. Inspect the explanation instead of assuming movement occurred.
+
+The rules browser smoke passed no-rule, failed-chain, reject, exactly-once approval retry,
+stale rebuild, paused controls, human labels, and committed resource readouts. Its Session HTTP
+responses are fixtures; the World editor preview executes the real common engine. The map browser
+smoke separately passed actor focus, Location filtering, surface picking, preview-before-approval,
+authoritative refresh, empty-map readiness, runtime coherence, and pause guards. Pure engine tests
+cover real authored chains, dice replay, conflicting writes, and bounded rollback.
+
+Player-safe live maps, broader event declarations/adjudication, turns/resource renewal, combat,
+and automatic execution remain subsequent slices. This first loop is GM-reviewed movement.
+
+
+All eight `campaign-session-movement.postgres.spec.ts` cases passed against a fresh disposable
+database with all 20 migrations applied: isolated preview, exactly-once commit, inert/rejected
+outcomes, paused/foreign scope, competing approvals, stale revisions, bounded failure and journal
+rollback, durable dice entropy, capture invalidation, other-actor effects, event-only chains, and
+legacy proposal coordinate resolution. The committed context is asserted to show the real
+post-approval position, 25 remaining movement, and one recorded move for the starter fixture.
+The 12 pure engine tests passed. The AI-facing domain guide was updated for the optional context
+resource fields and checked against `movement-execution-api.ts`; persisted resource mappings remain
+unchanged.
+
+Final checks: common package build, web/API typechecks, web production build (including prerender),
+and `git diff --check` passed. The disposable verification database was removed after the tests.

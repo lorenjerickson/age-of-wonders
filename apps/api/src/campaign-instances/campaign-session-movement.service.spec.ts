@@ -1,6 +1,9 @@
 import { ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { CampaignSessionMovementService } from "./campaign-session-movement.service";
+import {
+  CampaignSessionMovementService,
+  movementResources,
+} from "./campaign-session-movement.service";
 
 const scope = {
   definitionId: "campaign",
@@ -17,14 +20,12 @@ const request = {
 
 describe("movement transaction error boundary", () => {
   it("turns serialization failures during preview and decisions into actionable conflicts", async () => {
-    const transaction = jest
-      .fn()
-      .mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError("write conflict", {
-          code: "P2034",
-          clientVersion: "test",
-        }),
-      );
+    const transaction = jest.fn().mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("write conflict", {
+        code: "P2034",
+        clientVersion: "test",
+      }),
+    );
     const service = new CampaignSessionMovementService({
       $transaction: transaction,
     } as never);
@@ -42,5 +43,31 @@ describe("movement transaction error boundary", () => {
       $transaction: jest.fn().mockRejectedValue(failure),
     } as never);
     await expect(service.preview(scope, request)).rejects.toBe(failure);
+  });
+});
+
+describe("committed movement resource projection", () => {
+  it("distinguishes uninitialized values from zero and excludes arbitrary extensions", () => {
+    expect(movementResources({})).toEqual({});
+    expect(
+      movementResources({
+        extensions: {
+          "aow:rules": {
+            "aow:movementRemaining": 0,
+            "aow:moves": 3,
+            secret: "internal-id",
+          },
+        },
+      }),
+    ).toEqual({ movementRemaining: 0, recordedMoves: 3 });
+  });
+  it("does not coerce malformed resource values into playable state", () => {
+    expect(
+      movementResources({
+        extensions: {
+          "aow:rules": { "aow:movementRemaining": "30", "aow:moves": Infinity },
+        },
+      }),
+    ).toEqual({});
   });
 });

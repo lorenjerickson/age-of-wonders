@@ -12,6 +12,8 @@ import {
   type IsometricTerrainVolume,
   type IsometricTerrainManifest,
   type LocationImage,
+  plotDiscoveryClaims,
+  type PlotDiscovery,
 } from "@aow/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { isCanonicalSnapshotManifest } from "../domain/snapshot-manifest";
@@ -325,20 +327,21 @@ export function projectSessionTable(
       resistances: rows(plot.resistances).map(cue),
       discoveries: rows(plot.discoveries).map((d) => ({
         name: name(d.name, "Unnamed discovery"),
-        claims: rows(d.claims).flatMap((claim) =>
-          claim.kind === "truth" ||
-          claim.kind === "belief" ||
-          claim.kind === "rumor"
-            ? [
-                {
-                  kind: claim.kind,
-                  statement: name(claim.statement, "Claim unavailable"),
-                  revealed:
-                    Array.isArray(progress.revealedClaimIds) &&
-                    progress.revealedClaimIds.includes(claim.id),
-                },
-              ]
-            : [],
+        claims: plotDiscoveryClaims(d as unknown as PlotDiscovery).flatMap(
+          (claim) =>
+            claim.kind === "truth" ||
+            claim.kind === "belief" ||
+            claim.kind === "rumor"
+              ? [
+                  {
+                    kind: claim.kind,
+                    statement: name(claim.statement, "Claim unavailable"),
+                    revealed:
+                      Array.isArray(progress.revealedClaimIds) &&
+                      progress.revealedClaimIds.includes(claim.id),
+                  },
+                ]
+              : [],
         ),
       })),
       children: [],

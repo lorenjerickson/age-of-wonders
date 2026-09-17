@@ -329,6 +329,140 @@ describe("rich Plot editing", () => {
     });
   });
 
+  it.each(["objective", "pressure", "resistance"])(
+    "reserves retained %s entries across prepended and inserted lines",
+    (prefix) => {
+      const first = {
+        id: "first",
+        name: "First retained",
+        description: "First details",
+        extensions: { "test:rich": { value: 1 } },
+      };
+      const second = {
+        id: "second",
+        name: "Second retained",
+        description: "Second details",
+      };
+      const result = mergeNamedComponentLines(
+        "Prepended new\nFirst retained\nInserted new\nSecond retained",
+        [first, second],
+        prefix,
+      );
+      expect(result[1]).toEqual(first);
+      expect(result[3]).toEqual(second);
+      expect(result[0]!.id).not.toBe("first");
+      expect(result[2]!.id).not.toBe("second");
+      expect(result[0]!.description).toBeUndefined();
+      expect(result[2]!.description).toBeUndefined();
+      expect(
+        mergeNamedComponentLines(
+          "Renamed first\nSecond retained",
+          [first, second],
+          prefix,
+        ),
+      ).toEqual([{ ...first, name: "Renamed first" }, second]);
+      const duplicate = { ...second, name: first.name };
+      expect(
+        mergeNamedComponentLines(
+          "New\nFirst retained\nFirst retained",
+          [first, duplicate],
+          prefix,
+        ).slice(1),
+      ).toEqual([first, duplicate]);
+    },
+  );
+
+  it("reserves retained discoveries and duplicate claims before additions or renames", () => {
+    const first = {
+      id: "first",
+      name: "First clue",
+      extensions: { "test:rich": true },
+      claims: [
+        {
+          id: "first-claim",
+          kind: "truth",
+          statement: "First evidence",
+          provenance: "First source",
+        },
+        {
+          id: "hidden",
+          kind: "belief",
+          statement: "Hidden evidence",
+          provenance: "Hidden source",
+        },
+      ],
+    };
+    const second = {
+      id: "second",
+      name: "Second clue",
+      claims: [
+        {
+          id: "second-claim",
+          kind: "rumor",
+          statement: "Second evidence",
+          provenance: "Second source",
+        },
+      ],
+    };
+    const result = mergeDiscoveryLines(
+      "belief | New clue | New evidence\ntruth | First clue | First evidence\nrumor | Inserted clue | Inserted evidence\nrumor | Second clue | Second evidence",
+      [first, second],
+    );
+    expect(result[1]).toEqual(first);
+    expect(result[3]).toEqual(second);
+    expect(result[0]!.id).not.toBe("first");
+    expect(result[2]!.id).not.toBe("second");
+    const duplicate = {
+      ...second,
+      name: first.name,
+      claims: [
+        {
+          id: "duplicate-claim",
+          kind: "truth",
+          statement: "First evidence",
+          provenance: "Different source",
+        },
+      ],
+    };
+    expect(
+      mergeDiscoveryLines(
+        "truth | New clue | New evidence\ntruth | First clue | First evidence\ntruth | First clue | First evidence",
+        [first, duplicate],
+      ).slice(1),
+    ).toEqual([first, duplicate]);
+    const changed = mergeDiscoveryLines(
+      "truth | New clue | New evidence\nbelief | First clue | Changed claim\nrumor | Second clue | Second evidence",
+      [first, second],
+    );
+    expect(changed[1]!.id).toBe("first");
+    expect(changed[1]!.claims).toEqual([
+      { ...first.claims[0], kind: "belief", statement: "Changed claim" },
+      first.claims[1],
+    ]);
+  });
+
+  it("does not consume an invalid imported Discovery when adding an unrelated line", () => {
+    const invalid = { id: "invalid", name: "Unfinished clue", claims: [] };
+    const result = mergeDiscoveryLines("truth | New clue | The door was open", [
+      invalid,
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).not.toBe("invalid");
+    expect(result[1]).toEqual(invalid);
+    const repaired = mergeDiscoveryLines(
+      "belief | Unfinished clue | A witness account",
+      [invalid],
+    );
+    expect(repaired).toHaveLength(1);
+    expect(repaired[0]!.id).toBe("invalid");
+    expect(repaired[0]!.claims).toEqual([
+      expect.objectContaining({
+        kind: "belief",
+        statement: "A witness account",
+      }),
+    ]);
+  });
+
   it("retains an imported invalid empty Discovery for explicit validation instead of deleting it", () => {
     const invalid: JsonValue = {
       id: "discovery-empty",

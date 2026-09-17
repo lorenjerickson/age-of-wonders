@@ -55,24 +55,49 @@ export interface PlotResistance<
   readonly extensions?: Extensions;
 }
 
-interface DiscoveryClaimBase<Extensions extends ExtensionData = ExtensionData> {
+interface DiscoveryFacetBase<Extensions extends ExtensionData = ExtensionData> {
+  readonly id: string;
+  readonly statement: string;
+  readonly provenance?: string;
+  readonly relation: "supports" | "contradicts";
+  readonly extensions?: Extensions;
+}
+
+export interface DiscoveryTruth<
+  Extensions extends ExtensionData = ExtensionData,
+> {
   readonly id: string;
   readonly statement: string;
   readonly provenance?: string;
   readonly extensions?: Extensions;
 }
 
+export interface DiscoveryBelief<
+  Extensions extends ExtensionData = ExtensionData,
+> extends DiscoveryFacetBase<Extensions> {}
+
+export interface DiscoveryRumor<
+  Extensions extends ExtensionData = ExtensionData,
+> extends DiscoveryFacetBase<Extensions> {}
+
+interface LegacyDiscoveryClaimBase<
+  Extensions extends ExtensionData = ExtensionData,
+> {
+  readonly id: string;
+  readonly statement: string;
+  readonly provenance?: string;
+  readonly extensions?: Extensions;
+}
+
+/** @deprecated Use the discovery truth, beliefs, and rumors facets. */
 export type DiscoveryClaim<Extensions extends ExtensionData = ExtensionData> =
-  | (DiscoveryClaimBase<Extensions> & {
-      readonly kind: "truth";
-    })
-  | (DiscoveryClaimBase<Extensions> & {
+  | (LegacyDiscoveryClaimBase<Extensions> & { readonly kind: "truth" })
+  | (LegacyDiscoveryClaimBase<Extensions> & {
       readonly kind: "belief";
       readonly conflictsWithClaimIds?: readonly string[];
     })
-  | (DiscoveryClaimBase<Extensions> & {
+  | (LegacyDiscoveryClaimBase<Extensions> & {
       readonly kind: "rumor";
-      /** Optional because a false Rumor need not resolve to a Truth. */
       readonly relatedTruthClaimId?: string;
       readonly conflictsWithClaimIds?: readonly string[];
     });
@@ -82,8 +107,29 @@ export interface PlotDiscovery<
 > {
   readonly id: string;
   readonly name: string;
-  readonly claims: readonly DiscoveryClaim<Extensions>[];
+  /** The single factual proposition that anchors this discovery. */
+  readonly truth: DiscoveryTruth<Extensions>;
+  /** Claims that support or contradict the truth. */
+  readonly beliefs: readonly DiscoveryBelief<Extensions>[];
+  readonly rumors: readonly DiscoveryRumor<Extensions>[];
+  /** @deprecated Read legacy snapshots only; new writes must use the facets above. */
+  readonly claims?: readonly DiscoveryClaim<Extensions>[];
   readonly extensions?: Extensions;
+}
+
+/** Returns the legacy claim view for runtime consumers while facets migrate. */
+export function plotDiscoveryClaims(
+  discovery: PlotDiscovery,
+): Array<DiscoveryClaim & { readonly relation?: "supports" | "contradicts" }> {
+  if (discovery.claims) return [...discovery.claims];
+  return [
+    { ...discovery.truth, kind: "truth" },
+    ...discovery.beliefs.map((facet) => ({
+      ...facet,
+      kind: "belief" as const,
+    })),
+    ...discovery.rumors.map((facet) => ({ ...facet, kind: "rumor" as const })),
+  ];
 }
 
 export type PlotActorSource =

@@ -21,13 +21,16 @@ it("renders an accessible SSR shell without constructing a WebGL context", () =>
   expect(html).not.toContain("terrain:grass");
 });
 
-it("renders a captured reference without an editing surface or fabricated actor", () => {
+it("shows readiness when a captured Location has no real actors", () => {
   const html = renderToStaticMarkup(
     <CampaignSessionTerrainOverview
+      actors={[]}
+      onActorSelect={() => {}}
+      onDestinationPick={() => {}}
       volume={createTerrainVolume({ x: 10, y: 10, z: 10 }, TERRAIN_PALETTE)}
     />,
   );
-  expect(html).toContain("Captured terrain reference");
+  expect(html).toContain("Place an actor");
   expect(html).not.toContain("Preview actor");
   expect(html).not.toContain("left drag edits");
   expect(html).not.toContain("Isometric terrain editor");

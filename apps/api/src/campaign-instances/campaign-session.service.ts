@@ -1944,35 +1944,42 @@ export class CampaignSessionService {
     return result;
   }
 
-  private loadForReadiness(
+  private async loadForReadiness(
     instanceId: string,
     sessionId: string,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
-    return client.campaignInstanceSession.findFirstOrThrow({
-      where: { id: sessionId, campaignInstanceId: instanceId },
-      include: {
-        participations: {
-          where: { selected: true },
-          include: {
-            humanMembership: { include: { activeCharacter: true } },
-            agentParticipation: true,
-            presenceLeases: {
-              where: {
-                leftAt: null,
-                ejectedAt: null,
-                expiresAt: { gt: new Date() },
+    try {
+      return await client.campaignInstanceSession.findFirstOrThrow({
+        where: { id: sessionId, campaignInstanceId: instanceId },
+        include: {
+          participations: {
+            where: { selected: true },
+            include: {
+              humanMembership: { include: { activeCharacter: true } },
+              agentParticipation: true,
+              presenceLeases: {
+                where: {
+                  leftAt: null,
+                  ejectedAt: null,
+                  expiresAt: { gt: new Date() },
+                },
               },
             },
           },
+          runtimeBoundaries: {
+            orderBy: [{ eventSequence: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            select: { snapshotId: true, runtimeRevision: true },
+          },
         },
-        runtimeBoundaries: {
-          orderBy: [{ eventSequence: "desc" }, { createdAt: "desc" }],
-          take: 1,
-          select: { snapshotId: true, runtimeRevision: true },
-        },
-      },
-    });
+      });
+    } catch (error) {
+      if (isPrismaCode(error, "P2025")) {
+        throw new NotFoundException("The selected Session was not found.");
+      }
+      throw error;
+    }
   }
 
   private async appendEvent(

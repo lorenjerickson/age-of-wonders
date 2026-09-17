@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { canTransitionCampaignSessionStatus } from "@aow/common";
 import { CampaignSessionService } from "./campaign-session.service";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
@@ -1003,4 +1003,51 @@ describe("Campaign Session contracts", () => {
     expect(durationIncrement).toBe(30);
     jest.useRealTimers();
   });
+});
+
+describe("Session readiness read failures", () => {
+  it.each([
+    {
+      code: "P2025",
+      expected: new NotFoundException("The selected Session was not found."),
+    },
+    { code: "P1001", expected: { code: "P1001" } },
+  ])(
+    "maps missing Session to a neutral404 while preserving $code infrastructure failures",
+    async ({ code, expected }) => {
+      const prisma = {
+        campaignInstance: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({
+              id: "instance",
+              owner: { displayName: "Morgan" },
+            }),
+        },
+        campaignInstanceSession: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          findFirstOrThrow: jest.fn().mockRejectedValue({ code }),
+        },
+      };
+      const service = new CampaignSessionService(
+        prisma as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+      await expect(
+        service.readiness("instance", "missing-session", "gm"),
+      ).rejects.toEqual(expected);
+      expect(
+        prisma.campaignInstanceSession.findFirstOrThrow,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "missing-session", campaignInstanceId: "instance" },
+        }),
+      );
+    },
+  );
 });

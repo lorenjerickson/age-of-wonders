@@ -25,7 +25,31 @@ describe("Campaign route precedence", () => {
     ],
     [
       "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id",
-      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/objectives",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/objectives/new",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/discoveries/clue/claims",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/discoveries/clue/claims/new",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/claims/$claimId",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/locations/context/placements",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/",
+    ],
+    [
+      "/campaigns/definitions/definition-opaque-id/plots/plot-opaque-id/locations/context/placements/new",
+      "/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection/$childId/placements/$placementId",
     ],
     [
       "/campaigns/definitions/definition-opaque-id/placements",

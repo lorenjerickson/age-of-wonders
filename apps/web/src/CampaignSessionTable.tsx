@@ -12,6 +12,7 @@ import {
 } from "./api";
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
 import { ZoomableImage } from "./ZoomableImage";
+import { useSessionMovement } from "./useSessionMovement";
 import { SessionMovementPanel } from "./SessionMovementPanel";
 import { CampaignSessionTerrainOverview } from "./CampaignSessionTerrainOverview";
 
@@ -250,6 +251,20 @@ export function CampaignSessionTable({
       if (requestSequence === sequence.current) setLoading(false);
     }
   }, [campaignDefinitionId, campaignInstanceId, sessionId, locationId]);
+  const movement = useSessionMovement({
+    campaignDefinitionId,
+    campaignInstanceId,
+    sessionId,
+    focusLocationId: locationMatches ? (data?.location?.id ?? null) : null,
+    expectedRuntimeRevision: data?.runtimeRevision,
+    expectedSnapshotNumber: data?.captured.snapshotNumber,
+    blocked:
+      loading ||
+      Boolean(error) ||
+      !locationMatches ||
+      data?.status !== "active",
+    onCommitted: () => void load(),
+  });
   useEffect(() => {
     if (previousContext.current !== context) {
       previousContext.current = context;
@@ -375,6 +390,13 @@ export function CampaignSessionTable({
                     data.location.terrain ? (
                       <CampaignSessionTerrainOverview
                         volume={data.location.terrain}
+                        actors={movement.actors}
+                        focusedActorId={movement.actor?.id}
+                        onActorSelect={movement.setActorId}
+                        onDestinationPick={movement.pickDestination}
+                        pendingDestination={movement.pendingDestination}
+                        interactionDisabled={movement.disabled}
+                        coherent={movement.coherent && locationMatches}
                       />
                     ) : data.location.image ? (
                       <CapturedMapImage
@@ -445,7 +467,7 @@ export function CampaignSessionTable({
             campaignDefinitionId={campaignDefinitionId}
             campaignInstanceId={campaignInstanceId}
             sessionId={sessionId}
-            onCommitted={() => void load()}
+            controller={movement}
           />
           <section className="mt-6" aria-labelledby="session-plot-cues-heading">
             <h3

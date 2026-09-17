@@ -11,6 +11,8 @@ export interface SessionMovementDecisionRequest {
   readonly idempotencyKey: string;
 }
 export interface SessionMovementContext {
+  /** Match this capture and runtimeRevision with the displayed Session table before map interaction. */
+  readonly snapshotNumber: number;
   readonly runtimeRevision: number;
   readonly status: "active" | "paused";
   readonly actors: readonly {
@@ -19,6 +21,9 @@ export interface SessionMovementContext {
     readonly locationId: string;
     readonly locationName: string;
     readonly position: TerrainPoint;
+    /** Authored resources from committed Instance state; absent means uninitialized, never zero. */
+    readonly movementRemaining?: number;
+    readonly recordedMoves?: number;
   }[];
   readonly capturedRules: readonly {
     readonly name: string;
@@ -31,6 +36,8 @@ export interface SessionMovementProposal {
   readonly status: "pending" | "approved" | "rejected" | "no-op" | "failed";
   readonly actorId: string;
   readonly actorName: string;
+  /** Captured coordinate space; omitted only for an unresolved legacy receipt, which cannot be rebuilt. */
+  readonly locationId?: string;
   readonly locationName: string;
   readonly origin: TerrainPoint;
   readonly destination: TerrainPoint;
