@@ -335,6 +335,98 @@ describe("Campaign Session contracts", () => {
     );
   });
 
+  it.each([
+    [true, true, "ACTIVE", "ACTIVE", "ready"],
+    [false, true, "ACTIVE", "ACTIVE", "blocked"],
+    [true, false, "ACTIVE", "ACTIVE", "blocked"],
+    [true, true, "DRAFT", "ACTIVE", "blocked"],
+    [true, true, "ACTIVE", "REVOKED", "blocked"],
+  ])(
+    "GM control %s, present %s, character %s, membership %s → %s",
+    async (mode, present, characterStatus, membershipStatus, expected) => {
+      const player = {
+        id: "player",
+        participantName: "River",
+        role: "PLAYER",
+        required: true,
+        response: "INVITED",
+        presenceLeases: [],
+        agentParticipation: null,
+        humanMembership: {
+          status: membershipStatus,
+          activeCharacter: { status: characterStatus },
+        },
+      };
+      const session = {
+        id: "session-1",
+        name: "Solo exploration",
+        status: "LOBBY",
+        metadataRevision: 2,
+        gmControlsPlayers: mode,
+        participations: [
+          {
+            id: "gm",
+            participantName: "Morgan",
+            role: "GM",
+            required: true,
+            response: "ACCEPTED",
+            presenceLeases: present ? [{}] : [],
+            humanMembership: { status: "ACTIVE" },
+            agentParticipation: null,
+          },
+          player,
+          {
+            ...player,
+            id: "spectator",
+            participantName: "Observer",
+            role: "SPECTATOR",
+          },
+        ],
+      };
+      const prisma = {
+        campaignInstance: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({
+              id: "instance-1",
+              name: "Campaign",
+              status: "ACTIVE",
+              owner: { displayName: "Morgan" },
+            }),
+        },
+        campaignInstanceSession: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          findFirstOrThrow: jest.fn().mockResolvedValue(session),
+        },
+      };
+      const service = new CampaignSessionService(
+        prisma as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+      const before = JSON.stringify(session);
+      const result = await service.readiness("instance-1", "session-1", "gm-1");
+      expect(result.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ label: "River", status: expected }),
+          expect.objectContaining({ label: "Observer", status: "blocked" }),
+        ]),
+      );
+      expect(JSON.stringify(session)).toBe(before);
+      session.gmControlsPlayers = !mode;
+      const changed = await service.readiness(
+        "instance-1",
+        "session-1",
+        "gm-1",
+      );
+      expect(changed.token).not.toBe(result.token);
+    },
+  );
+
   it("keeps required Player readiness separate from optional Spectator presence", async () => {
     const prisma = {
       campaignInstance: {
@@ -1017,12 +1109,10 @@ describe("Session readiness read failures", () => {
     async ({ code, expected }) => {
       const prisma = {
         campaignInstance: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue({
-              id: "instance",
-              owner: { displayName: "Morgan" },
-            }),
+          findFirst: jest.fn().mockResolvedValue({
+            id: "instance",
+            owner: { displayName: "Morgan" },
+          }),
         },
         campaignInstanceSession: {
           findFirst: jest.fn().mockResolvedValue(null),

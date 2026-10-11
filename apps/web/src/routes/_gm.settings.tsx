@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Badge, Button, FieldError, TextInput } from "@aow/ui";
+import { Badge, Button, FieldError, TextInput, SelectField } from "@aow/ui";
 import type {
   ConfigurationHistoryProjection,
   SystemSettingArea,
@@ -22,6 +22,8 @@ export const Route = createFileRoute("/_gm/settings")({
 });
 
 function SettingsLanding() {
+  const [search, setSearch] = useState("");
+  const [areas, setAreas] = useState<SystemSettingAreaProjection[]>([]);
   const [index, setIndex] = useState<SystemSettingsIndexProjection>();
   const [selected, setSelected] = useState<SystemSettingAreaProjection>();
   const [busy, setBusy] = useState(true);
@@ -31,8 +33,11 @@ function SettingsLanding() {
     void getSystemSettings()
       .then(async (result) => {
         setIndex(result);
-        const first = result.areas[0];
-        if (first) setSelected(await getSystemSettingArea(first.area));
+        const loaded = await Promise.all(
+          result.areas.map((area) => getSystemSettingArea(area.area)),
+        );
+        setAreas(loaded);
+        setSelected(loaded[0]);
       })
       .catch((error: unknown) => {
         setMessage(
@@ -48,7 +53,10 @@ function SettingsLanding() {
     setBusy(true);
     setMessage("");
     try {
-      setSelected(await getSystemSettingArea(area));
+      setSelected(
+        areas.find((candidate) => candidate.area === area) ??
+          (await getSystemSettingArea(area)),
+      );
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -61,6 +69,14 @@ function SettingsLanding() {
   }
 
   async function refresh(next: SystemSettingStatus) {
+    setAreas((current) =>
+      current.map((area) => ({
+        ...area,
+        settings: area.settings.map((setting) =>
+          setting.key === next.key ? next : setting,
+        ),
+      })),
+    );
     setSelected((current) =>
       current
         ? {
@@ -84,15 +100,23 @@ function SettingsLanding() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
-      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        Hosted system
-      </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Settings</h1>
-      <p className="mt-4 max-w-3xl text-base leading-7 text-base-content/65">
-        Installation readiness, integrations, plugins, credentials, storage,
-        security, and operations are administered here—outside every World and
-        Campaign.
+    <main className="mx-auto max-w-6xl p-4 lg:px-10 lg:py-6">
+      <h1 className="text-3xl font-semibold">Settings</h1>
+      <div className="mt-5 flex items-end gap-2">
+        <TextInput
+          className="flex-1"
+          label="Search settings across categories"
+          placeholder="Search labels or help text…"
+          value={search}
+          onChange={(event) => setSearch(event.currentTarget.value)}
+        />
+        <Button tone="ghost" className="min-h-11" onClick={() => setSearch("")}>
+          Clear
+        </Button>
+      </div>
+      <p className="mt-3 text-sm text-base-content/60">
+        Save each setting after editing. Changes take effect immediately unless
+        a restart is indicated.
       </p>
 
       {message && (
@@ -102,8 +126,11 @@ function SettingsLanding() {
       )}
 
       {index && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
-          <nav aria-label="System settings areas" className="space-y-2">
+        <div className="mt-6 grid gap-5 xl:grid-cols-[12rem_minmax(0,1fr)]">
+          <nav
+            aria-label="System settings areas"
+            className="hidden space-y-2 xl:block"
+          >
             <p className="px-2 text-xs font-semibold tracking-wide text-base-content/50 uppercase">
               {index.installationName}
             </p>
@@ -122,33 +149,74 @@ function SettingsLanding() {
             ))}
           </nav>
 
-          <section className="rounded-box border border-base-300 bg-base-200 p-6">
-            {busy && !selected ? (
-              <p className="text-sm text-base-content/55">Loading settings…</p>
-            ) : selected ? (
-              <>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-2xl font-semibold">{selected.label}</h2>
-                    <p className="mt-2 text-sm leading-6 text-base-content/60">
-                      {selected.description}
-                    </p>
+          <div className="min-w-0">
+            <div className="mb-4 xl:hidden">
+              <SelectField
+                label="Category"
+                value={selected?.area ?? ""}
+                onChange={(event) =>
+                  void open(event.currentTarget.value as SystemSettingArea)
+                }
+              >
+                {index.areas.map((area) => (
+                  <option key={area.area} value={area.area}>
+                    {area.label}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+            {areas.map((area) => {
+              const matches = (setting: SystemSettingStatus) =>
+                !search.trim() ||
+                `${setting.label} ${setting.detail} ${area.label}`
+                  .toLowerCase()
+                  .includes(search.trim().toLowerCase());
+              const visible = search.trim()
+                ? area.settings.some(matches)
+                : selected?.area === area.area;
+              return (
+                <section
+                  key={area.area}
+                  hidden={!visible}
+                  className="mb-5 rounded-lg bg-base-200 p-4 lg:p-6"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-2xl font-semibold">{area.label}</h2>
+                      <p className="mt-2 text-sm text-base-content/60">
+                        {area.description}
+                      </p>
+                    </div>
+                    <StatusBadge status={area.status} />
                   </div>
-                  <StatusBadge status={selected.status} />
-                </div>
-                <div className="mt-6 space-y-3">
-                  {selected.settings.map((setting) => (
-                    <SettingCard
-                      key={setting.key}
-                      area={selected.area}
-                      setting={setting}
-                      onChanged={(next) => void refresh(next)}
-                    />
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </section>
+                  <div className="mt-5 space-y-4">
+                    {area.settings.map((setting) => (
+                      <div key={setting.key} hidden={!matches(setting)}>
+                        <SettingCard
+                          area={area.area}
+                          setting={setting}
+                          onChanged={(next) => void refresh(next)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+            {busy && (
+              <p role="status" className="text-sm text-base-content/60">
+                Loading settings…
+              </p>
+            )}
+            {search.trim() &&
+              !areas.some((area) =>
+                area.settings.some((setting) =>
+                  `${setting.label} ${setting.detail} ${area.label}`
+                    .toLowerCase()
+                    .includes(search.trim().toLowerCase()),
+                ),
+              ) && <p>No settings match your search.</p>}
+          </div>
         </div>
       )}
     </main>

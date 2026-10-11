@@ -56,9 +56,7 @@ describe("Location workspace", () => {
         "London",
         "Baker Street",
       ]);
-      expect(stack.at(-1)?.links.map((link) => link.label)).toEqual(
-        LOCATION_SECTIONS,
-      );
+      expect(stack.at(-1)?.links).toEqual([]);
       expect(stack.at(-2)?.label).toBe("London");
     }
   });

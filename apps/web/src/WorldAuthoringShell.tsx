@@ -1,3 +1,4 @@
+import { ShellTools } from "./AppShellTools";
 import { NavigationLiveData } from "./navigationLiveData";
 import { locationMutationInput } from "./locationWorkspaceModel";
 import { ContextualBreadcrumbs } from "./ContextualNavigation";
@@ -250,84 +251,102 @@ export function WorldContextBar() {
   }
   return (
     <>
-      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">
-            {definition.name.trim() || "Unnamed World Definition"}
-          </p>
-          <p className="text-xs text-base-content/50">
-            {draft ? draftContextLabel(draft) : "Published content · read only"}
-          </p>
-        </div>
-        {draft?.status === "stale" && (
-          <Badge tone="warning">Needs rebase</Badge>
-        )}
-        <StatusIndicator
-          tone={
-            saveState === "error" || saveState === "stale"
-              ? "error"
-              : saveState === "saving"
-                ? "warning"
+      <ShellTools>
+        <section className="flex flex-col gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">
+              {definition.name.trim() || "Unnamed World Definition"}
+            </p>
+            <p className="text-xs text-base-content/50">
+              {draft
+                ? draftContextLabel(draft)
+                : "Published content · read only"}
+            </p>
+          </div>
+          {draft?.status === "stale" && (
+            <Badge tone="warning">Needs rebase</Badge>
+          )}
+          <StatusIndicator
+            tone={
+              saveState === "error" || saveState === "stale"
+                ? "error"
+                : saveState === "saving"
+                  ? "warning"
+                  : saveState === "saved"
+                    ? "success"
+                    : "neutral"
+            }
+            pulse={saveState === "saving"}
+            label={
+              saveState === "saving"
+                ? "Saving draft"
                 : saveState === "saved"
-                  ? "success"
-                  : "neutral"
-          }
-          pulse={saveState === "saving"}
-          label={
-            saveState === "saving"
-              ? "Saving draft"
-              : saveState === "saved"
-                ? "Draft saved"
-                : saveState === "dirty"
-                  ? "Unsaved changes"
-                  : saveState === "stale"
-                    ? "Draft needs review"
-                    : saveState === "error"
-                      ? "Draft not saved"
-                      : draft
-                        ? "Working draft"
-                        : "Read only"
-          }
-        />
-        {definition.status.toLocaleLowerCase() === "archived" && (
-          <Badge tone="warning">Archived · read only</Badge>
-        )}
-        {definition.status.toLocaleLowerCase() === "archived" && (
-          <Button
-            tone="primary"
-            size="sm"
-            loading={restoring}
-            disabled={definition.metadataRevision === undefined}
-            onClick={() => void restore()}
-          >
-            Restore World
-          </Button>
-        )}
-        {!draft && canEdit && currentRevision && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="text-xs text-base-content/60">
-              {worldDraftStartLabel(currentRevision)}
-            </span>
+                  ? "Draft saved"
+                  : saveState === "dirty"
+                    ? "Unsaved changes"
+                    : saveState === "stale"
+                      ? "Draft needs review"
+                      : saveState === "error"
+                        ? "Draft not saved"
+                        : draft
+                          ? "Working draft"
+                          : "Read only"
+            }
+          />
+          {definition.status.toLocaleLowerCase() === "archived" && (
+            <Badge tone="warning">Archived · read only</Badge>
+          )}
+          {definition.status.toLocaleLowerCase() === "archived" && (
             <Button
               tone="primary"
               size="sm"
-              loading={starting}
-              onClick={() => void startEditing()}
+              loading={restoring}
+              disabled={definition.metadataRevision === undefined}
+              onClick={() => void restore()}
             >
-              Start editing
+              Restore World
             </Button>
-          </div>
-        )}
-        {draft && canEdit && (
+          )}
+          {!draft && canEdit && currentRevision && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="text-xs text-base-content/60">
+                {worldDraftStartLabel(currentRevision)}
+              </span>
+              <Button
+                tone="primary"
+                size="sm"
+                loading={starting}
+                onClick={() => void startEditing()}
+              >
+                Start editing
+              </Button>
+            </div>
+          )}
+          {draft && canEdit && (
+            <RouterButtonLink
+              href={`/worlds/${encodeURIComponent(definition.id)}/versions/draft/review${guideSuffix}`}
+              tone="primary"
+              size="sm"
+            >
+              Review &amp; publish
+            </RouterButtonLink>
+          )}
           <RouterButtonLink
-            href={`/worlds/${encodeURIComponent(definition.id)}/versions/draft/review${guideSuffix}`}
-            tone="primary"
-            size="sm"
+            href={`/worlds/${encodeURIComponent(definition.id)}/versions${guideSuffix}`}
+            tone="outline"
+            className="min-h-11"
           >
-            Review &amp; publish
+            Version history
           </RouterButtonLink>
-        )}
-      </header>
+          <RouterButtonLink
+            href={`/worlds/${encodeURIComponent(definition.id)}/characters${guideSuffix}`}
+            tone="ghost"
+            className="min-h-11"
+          >
+            Character definitions
+          </RouterButtonLink>
+        </section>
+      </ShellTools>
       <ContextualBreadcrumbs />
       {message && (
         <Alert tone="error" className="m-4" aria-live="polite">

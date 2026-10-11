@@ -79,6 +79,7 @@ import { Route as PlayerPlayInstancesCampaignInstanceIdCharactersCharacterIdRout
 import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdIndexRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.index'
 import { Route as GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.plots.$plotDefinitionId.$collection'
 import { Route as GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport } from './routes/_gm.campaigns.definitions.$campaignDefinitionId.versions.draft.review'
+import { Route as GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRouteImport } from './routes/_gm.campaigns.instances.$campaignInstanceId.roster.characters.$characterId'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.connections'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.creatures'
 import { Route as GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRouteImport } from './routes/_gm.worlds.$worldId.atlas.locations.$locationId.discoveries'
@@ -500,6 +501,14 @@ const GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute =
         GmCampaignsDefinitionsCampaignDefinitionIdVersionsRoute,
     } as any,
   )
+const GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute =
+  GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRouteImport.update(
+    {
+      id: '/characters/$characterId',
+      path: '/characters/$characterId',
+      getParentRoute: () => GmCampaignsInstancesCampaignInstanceIdRosterRoute,
+    } as any,
+  )
 const GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute =
   GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRouteImport.update({
     id: '/connections',
@@ -685,6 +694,7 @@ export interface FileRoutesByFullPath {
   '/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren
   '/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/campaigns/instances/$campaignInstanceId/roster/characters/$characterId': typeof GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute
   '/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
   '/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
   '/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
@@ -755,6 +765,7 @@ export interface FileRoutesByTo {
   '/worlds/$worldId/characters/$definitionKind': typeof GmWorldsWorldIdCharactersDefinitionKindIndexRoute
   '/play/instances/$campaignInstanceId/characters': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/campaigns/instances/$campaignInstanceId/roster/characters/$characterId': typeof GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute
   '/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
   '/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
   '/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
@@ -840,6 +851,7 @@ export interface FileRoutesById {
   '/_player/play/instances/$campaignInstanceId/characters/': typeof PlayerPlayInstancesCampaignInstanceIdCharactersIndexRoute
   '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection': typeof GmCampaignsDefinitionsCampaignDefinitionIdPlotsPlotDefinitionIdCollectionRouteWithChildren
   '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review': typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRoute
+  '/_gm/campaigns/instances/$campaignInstanceId/roster/characters/$characterId': typeof GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/connections': typeof GmWorldsWorldIdAtlasLocationsLocationIdConnectionsRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures': typeof GmWorldsWorldIdAtlasLocationsLocationIdCreaturesRoute
   '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries': typeof GmWorldsWorldIdAtlasLocationsLocationIdDiscoveriesRoute
@@ -926,6 +938,7 @@ export interface FileRouteTypes {
     | '/play/instances/$campaignInstanceId/characters/'
     | '/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
     | '/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/campaigns/instances/$campaignInstanceId/roster/characters/$characterId'
     | '/worlds/$worldId/atlas/locations/$locationId/connections'
     | '/worlds/$worldId/atlas/locations/$locationId/creatures'
     | '/worlds/$worldId/atlas/locations/$locationId/discoveries'
@@ -996,6 +1009,7 @@ export interface FileRouteTypes {
     | '/worlds/$worldId/characters/$definitionKind'
     | '/play/instances/$campaignInstanceId/characters'
     | '/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/campaigns/instances/$campaignInstanceId/roster/characters/$characterId'
     | '/worlds/$worldId/atlas/locations/$locationId/connections'
     | '/worlds/$worldId/atlas/locations/$locationId/creatures'
     | '/worlds/$worldId/atlas/locations/$locationId/discoveries'
@@ -1080,6 +1094,7 @@ export interface FileRouteTypes {
     | '/_player/play/instances/$campaignInstanceId/characters/'
     | '/_gm/campaigns/definitions/$campaignDefinitionId/plots/$plotDefinitionId/$collection'
     | '/_gm/campaigns/definitions/$campaignDefinitionId/versions/draft/review'
+    | '/_gm/campaigns/instances/$campaignInstanceId/roster/characters/$characterId'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/connections'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/creatures'
     | '/_gm/worlds/$worldId/atlas/locations/$locationId/discoveries'
@@ -1600,6 +1615,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsDraftReviewRouteImport
       parentRoute: typeof GmCampaignsDefinitionsCampaignDefinitionIdVersionsRoute
     }
+    '/_gm/campaigns/instances/$campaignInstanceId/roster/characters/$characterId': {
+      id: '/_gm/campaigns/instances/$campaignInstanceId/roster/characters/$characterId'
+      path: '/characters/$characterId'
+      fullPath: '/campaigns/instances/$campaignInstanceId/roster/characters/$characterId'
+      preLoaderRoute: typeof GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRouteImport
+      parentRoute: typeof GmCampaignsInstancesCampaignInstanceIdRosterRoute
+    }
     '/_gm/worlds/$worldId/atlas/locations/$locationId/connections': {
       id: '/_gm/worlds/$worldId/atlas/locations/$locationId/connections'
       path: '/connections'
@@ -2019,6 +2041,7 @@ const GmCampaignsDefinitionsCampaignDefinitionIdRouteWithChildren =
 interface GmCampaignsInstancesCampaignInstanceIdRosterRouteChildren {
   GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute: typeof GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute
   GmCampaignsInstancesCampaignInstanceIdRosterIndexRoute: typeof GmCampaignsInstancesCampaignInstanceIdRosterIndexRoute
+  GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute: typeof GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute
 }
 
 const GmCampaignsInstancesCampaignInstanceIdRosterRouteChildren: GmCampaignsInstancesCampaignInstanceIdRosterRouteChildren =
@@ -2027,6 +2050,8 @@ const GmCampaignsInstancesCampaignInstanceIdRosterRouteChildren: GmCampaignsInst
       GmCampaignsInstancesCampaignInstanceIdRosterAgentsRoute,
     GmCampaignsInstancesCampaignInstanceIdRosterIndexRoute:
       GmCampaignsInstancesCampaignInstanceIdRosterIndexRoute,
+    GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute:
+      GmCampaignsInstancesCampaignInstanceIdRosterCharactersCharacterIdRoute,
   }
 
 const GmCampaignsInstancesCampaignInstanceIdRosterRouteWithChildren =

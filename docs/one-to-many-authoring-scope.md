@@ -35,7 +35,10 @@ Selecting a child record advances the contextual navigation frame. Breadcrumbs r
 actual parent ancestry, including recursive parents, on direct entry and reload. A dedicated child collection list is a real navigation frame and appears in the breadcrumb
 ancestry between its owning record and a selected child. Ordinary section tabs do not become
 artificial ownership ancestors. Names must resolve
-without exposing internal identifiers. The same frame works in the mobile drawer.
+without exposing internal identifiers. Record ancestry and destination navigation are distinct:
+World library records retain the owning World's destinations in the sidebar/mobile drawer, while
+property groups use local tabs inside the selected record view. Child collection lists and links
+still open the corresponding records; scalar property groups never become sidebar destinations.
 
 An owned child object is different from a scalar list or a reference selection. Stable child
 identity, independently editable fields, nested children, ordering, provenance, or removal impact

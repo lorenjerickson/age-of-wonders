@@ -47,6 +47,7 @@ export interface SkillProficiencyModifier extends ModifierGrantBase {
 export type ModifierGrantDefinition = RolledFlatModifier | RollDiceModifier | SkillProficiencyModifier;
 
 export type ModifierGrantSource =
+  | { readonly kind: "background"; readonly definitionId: DefinitionId }
   | { readonly kind: "skill"; readonly definitionId: DefinitionId }
   | { readonly kind: "profession"; readonly definitionId: DefinitionId; readonly expertise: NamespacedKey }
   | { readonly kind: "equipment"; readonly definitionId: DefinitionId; readonly itemInstanceId: ItemInstanceId }
@@ -98,7 +99,7 @@ export function isGrantedModifier(value: unknown): value is GrantedModifier {
   if (!object(value) || !text(value.id) || !text(value.grantedByEventId) || typeof value.active !== "boolean" || !isModifierGrantDefinition(value.definition) || !object(value.resolution)) return false;
   const source = value.source;
   if (!object(source) || !text(source.definitionId)) return false;
-  if (source.kind !== "skill" && !(source.kind === "profession" && key(source.expertise)) && !(source.kind === "equipment" && text(source.itemInstanceId)) && !(source.kind === "other" && text(source.instanceId))) return false;
+  if (source.kind !== "background" && source.kind !== "skill" && !(source.kind === "profession" && key(source.expertise)) && !(source.kind === "equipment" && text(source.itemInstanceId)) && !(source.kind === "other" && text(source.instanceId))) return false;
   if (value.definition.kind !== "rolled-flat") return value.resolution.kind === "per-check" && Object.keys(value.resolution).length === 1;
   const { rolls, value: total } = value.resolution;
   if (value.resolution.kind !== "flat" || !Array.isArray(rolls) || rolls.length !== value.definition.dice.length) return false;
@@ -143,4 +144,10 @@ export function skillModifierGrantIssue(components: unknown): string | undefined
   if (components.modifierGrants === undefined) return undefined;
   const issue = professionModifierGrantIssue({ expertiseLevels: [{ benefits: { modifierGrants: components.modifierGrants } }] });
   return issue?.replaceAll("Profession", "Skill").replace("across expertise tiers", "within the Skill");
+}
+
+/** Backgrounds use the same bounded grant recipes as profession benefits. */
+export function backgroundModifierGrantIssue(components: unknown): string | undefined {
+  if (!object(components) || components.modifierGrants === undefined) return undefined;
+  return professionModifierGrantIssue({ expertiseLevels: [{ benefits: { modifierGrants: components.modifierGrants } }] })?.replaceAll("Profession", "Background");
 }

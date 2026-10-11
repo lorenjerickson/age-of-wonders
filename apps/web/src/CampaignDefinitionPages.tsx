@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import {
+  Disclosure,
   Alert,
   Badge,
   Button,
@@ -58,7 +59,7 @@ import {
 import { quickStartSuffix } from "./quickStartModel";
 import { campaignReturnSuffix } from "./worldAuthoringModel";
 
-const pageClass = "mx-auto max-w-6xl px-6 py-12 lg:px-10";
+const pageClass = "mx-auto w-full max-w-none px-4 py-6 sm:p-8";
 const objectValue = (
   value: JsonValue | undefined,
 ): Record<string, JsonValue> =>
@@ -77,6 +78,7 @@ export function CampaignDefinitionCreatePage() {
   const [snapshotId, setSnapshotId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [rootPlotName, setRootPlotName] = useState("");
   const [aiDirection, setAiDirection] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -133,7 +135,7 @@ export function CampaignDefinitionCreatePage() {
       );
       return;
     }
-    if (!snapshotId || !name.trim()) return;
+    if (!snapshotId || !name.trim() || !rootPlotName.trim()) return;
     setSaving(true);
     setMessage("");
     let createdId = "";
@@ -151,11 +153,37 @@ export function CampaignDefinitionCreatePage() {
       });
       createdId = created.id;
       setCreatedCampaignId(created.id);
-      if (proposal) {
+      {
+        const rootId = `plot:${crypto.randomUUID()}`;
+        const initialContent = proposal?.draftProposal.content ?? {
+          ...created.draft.content,
+          gmPremise: description.trim(),
+          plotDefinitionIds: [rootId],
+        };
+        const initialRecords = proposal?.draftProposal.records ?? [
+          {
+            resourceType: "plots",
+            sourceId: rootId,
+            payload: {
+              id: rootId,
+              campaignDefinitionId: created.id,
+              name: rootPlotName.trim(),
+              description: description.trim(),
+              parent: { kind: "root" },
+              objectives: [],
+              pressures: [],
+              resistances: [],
+              discoveries: [],
+              locationContexts: [],
+              prerequisites: [],
+              dependencies: [],
+            },
+          },
+        ];
         const proposedDraft = {
           ...created.draft,
-          content: proposal.draftProposal.content,
-          records: proposal.draftProposal.records.map((record) => ({
+          content: initialContent,
+          records: initialRecords.map((record) => ({
             ...record,
             payload:
               record.resourceType === "plots"
@@ -207,27 +235,34 @@ export function CampaignDefinitionCreatePage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         Campaign Definition · New
       </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-        Create Campaign Definition
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+        Create campaign
       </h1>
       <p className="mt-4 max-w-3xl text-base-content/65">
-        Choose an exact published World revision. The Campaign receives an
-        isolated captured snapshot; future World changes require an explicit
-        migration.
+        Begin with a world and an overarching plot.
       </p>
       {message && (
         <Alert tone="error" className="mt-6" role="alert">
           {message}
         </Alert>
       )}
-      <form className="mt-8 space-y-7" onSubmit={submit}>
-        <section className="card border border-base-300 bg-base-200">
-          <div className="card-body gap-5">
-            <h2 className="card-title">1. Captured World</h2>
+      <form className="mt-6 mx-auto max-w-4xl space-y-5" onSubmit={submit}>
+        <Label>
+          Campaign name *
+          <Input
+            className="mt-2 w-full"
+            required
+            maxLength={120}
+            value={name}
+            onChange={(event) => setName(event.currentTarget.value)}
+          />
+        </Label>
+        <section>
+          <div className="space-y-5">
             <Label>
               World
               <Select
-                className="mt-2 w-full max-w-xl"
+                className="mt-2 w-full"
                 required
                 value={worldId}
                 onChange={(event) => setWorldId(event.currentTarget.value)}
@@ -246,7 +281,7 @@ export function CampaignDefinitionCreatePage() {
             <Label>
               Published revision
               <Select
-                className="mt-2 w-full max-w-xl"
+                className="mt-2 w-full"
                 required
                 disabled={!world}
                 value={snapshotId}
@@ -270,33 +305,33 @@ export function CampaignDefinitionCreatePage() {
             )}
           </div>
         </section>
-        <section className="card border border-base-300 bg-base-200">
-          <div className="card-body gap-5">
-            <h2 className="card-title">2. Campaign identity</h2>
-            <Label>
-              Name
-              <Input
-                className="mt-2 w-full"
-                required
-                maxLength={120}
-                value={name}
-                onChange={(event) => setName(event.currentTarget.value)}
-              />
-            </Label>
-            <Label>
-              Description
-              <Textarea
-                className="mt-2 min-h-28 w-full"
-                maxLength={4000}
-                value={description}
-                onChange={(event) => setDescription(event.currentTarget.value)}
-              />
-            </Label>
-          </div>
-        </section>
-        <section className="card border border-base-300 bg-base-200">
-          <div className="card-body gap-4">
-            <h2 className="card-title">3. Optional AI starting point</h2>
+        <p className="rounded-box border border-base-300 p-3 text-sm text-base-content/65">
+          This version is captured for this campaign. Later world edits do not
+          change it.
+        </p>
+        <Label>
+          Overarching plot *
+          <Input
+            className="mt-2 w-full"
+            required
+            value={rootPlotName}
+            onChange={(event) => setRootPlotName(event.currentTarget.value)}
+          />
+        </Label>
+        <Label>
+          GM premise
+          <Textarea
+            className="mt-2 min-h-28 w-full"
+            maxLength={4000}
+            value={description}
+            onChange={(event) => setDescription(event.currentTarget.value)}
+          />
+        </Label>
+        <Disclosure
+          className="rounded-box border border-base-300 p-4"
+          summary="Optional AI starting point"
+        >
+          <div className="space-y-4">
             <p className="text-sm text-base-content/60">
               AI can propose draft Plots and placements grounded in the selected
               snapshot. The proposal is reviewed and saved through the same
@@ -312,7 +347,7 @@ export function CampaignDefinitionCreatePage() {
               />
             </Label>
           </div>
-        </section>
+        </Disclosure>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <InternalLink
             className="btn btn-outline"
@@ -324,10 +359,12 @@ export function CampaignDefinitionCreatePage() {
             type="submit"
             loading={saving}
             disabled={
-              saving || (!createdCampaignId && (!snapshotId || !name.trim()))
+              saving ||
+              (!createdCampaignId &&
+                (!snapshotId || !name.trim() || !rootPlotName.trim()))
             }
           >
-            {createdCampaignId ? "Open existing draft" : "Create working draft"}
+            {createdCampaignId ? "Open existing draft" : "Create campaign"}
           </Button>
         </div>
       </form>
@@ -404,14 +441,14 @@ export function CampaignDefinitionOverviewPage() {
       window.sessionStorage.removeItem(`campaign-proposal:${definition.id}`);
       setProposalRecovery(false);
       setProposalRecoveryMessage(
-        "The AI proposal was applied to the working draft.",
+        "The starting content was applied to the working draft.",
       );
       await navigate(
         `${location.pathname}${quickStartSuffix(location.searchStr)}`,
       );
     } catch {
       setProposalRecoveryMessage(
-        "The proposal could not be recovered. The Campaign draft is safe; continue authoring it manually.",
+        "The starting content could not be recovered. The Campaign draft is safe; continue authoring it manually.",
       );
     }
   }
@@ -420,7 +457,7 @@ export function CampaignDefinitionOverviewPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         Campaign Definition · Authoring
       </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Overview</h1>
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight">Overview</h1>
       <p className="mt-4 max-w-3xl text-base-content/65">
         Author reusable Campaign material without changing the captured World or
         any played Campaign Instance.
@@ -428,9 +465,9 @@ export function CampaignDefinitionOverviewPage() {
       {proposalRecovery && (
         <Alert tone="warning" className="mt-6" role="alert">
           <p>
-            The Campaign Definition was created, but its AI proposal was not
-            applied. Retrying updates this existing draft; it does not create
-            another Campaign.
+            The Campaign Definition was created, but its starting content was
+            not applied. Retrying updates this existing draft; it does not
+            create another Campaign.
           </p>
           {canEdit && (
             <Button
@@ -440,7 +477,7 @@ export function CampaignDefinitionOverviewPage() {
               className="mt-3"
               onClick={() => void retryProposal()}
             >
-              Retry applying proposal
+              Retry applying starting content
             </Button>
           )}
         </Alert>
@@ -730,7 +767,7 @@ export function CampaignPlacementsPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         World context
       </p>
-      <h1 className="mt-3 text-4xl font-semibold">Placements</h1>
+      <h1 className="mt-3 text-3xl font-semibold">Placements</h1>
       <p className="mt-3 max-w-3xl text-base-content/65">
         Campaign placements add context to the captured World snapshot without
         modifying World data.
@@ -1036,7 +1073,7 @@ export function CampaignPreparationPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         World context
       </p>
-      <h1 className="mt-3 text-4xl font-semibold">Preparation defaults</h1>
+      <h1 className="mt-3 text-3xl font-semibold">Preparation defaults</h1>
       <p className="mt-3 max-w-3xl text-base-content/65">
         Define reusable starting context and staging guidance for future
         Campaign Instances.
@@ -1201,7 +1238,7 @@ export function CampaignVersionsPage() {
           <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
             Lifecycle
           </p>
-          <h1 className="mt-3 text-4xl font-semibold">Versions</h1>
+          <h1 className="mt-3 text-3xl font-semibold">Versions</h1>
           <p className="mt-3 text-base-content/65">
             Published Campaign revisions and their exact captured World
             provenance.
@@ -1446,7 +1483,7 @@ export function CampaignReviewPage() {
   if (!canEdit)
     return (
       <main className={pageClass}>
-        <h1 className="text-4xl font-semibold">Review &amp; publish</h1>
+        <h1 className="text-3xl font-semibold">Review definition</h1>
         <CampaignDraftRequired>{null}</CampaignDraftRequired>
       </main>
     );
@@ -1461,26 +1498,34 @@ export function CampaignReviewPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         Lifecycle
       </p>
-      <h1 className="mt-3 text-4xl font-semibold">Review &amp; publish</h1>
+      <h1 className="mt-3 text-3xl font-semibold">Review definition</h1>
       <p className="mt-3 max-w-3xl text-base-content/65">
         Publication creates an immutable Campaign revision with the exact
         captured World snapshot. Existing Campaign Instances do not change.
       </p>
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <ReviewFact
-          label="Captured World"
-          value={`${draft.capturedWorld.worldName || draft.capturedWorld.name || "Unavailable World"} revision ${draft.capturedWorld.revisionNumber}`}
-        />
-        <ReviewFact label="Plots" value={String(plotCount)} />
-        <ReviewFact
-          label="Campaign placements"
-          value={String(placementCount)}
-        />
-        <ReviewFact
-          label="Exact Campaign model releases"
-          value={String(arrayValue(draft.content.modelSchemaReleaseIds).length)}
-        />
-      </div>
+      <section className="mt-5 rounded-box border border-base-300 p-4">
+        <h2 className="text-lg font-semibold">Story review</h2>
+        <p className="mt-2 text-sm text-base-content/65">
+          {plotCount} plots · {placementCount} placements
+        </p>
+        <p className="mt-2 text-sm text-base-content/65">
+          Optional subplots are allowed. Review goals, discoveries, and
+          connections before publishing.
+        </p>
+      </section>
+      <section className="mt-5 rounded-box border border-base-300 p-4">
+        <h2 className="text-lg font-semibold">References</h2>
+        <p className="mt-2 text-sm text-base-content/65">
+          Captured world:{" "}
+          {draft.capturedWorld.worldName ||
+            draft.capturedWorld.name ||
+            "Unavailable World"}
+          , revision {draft.capturedWorld.revisionNumber}.
+        </p>
+        <p className="mt-2 text-sm text-base-content/65">
+          Validate the complete draft to check all linked content.
+        </p>
+      </section>
       <div className="mt-8 flex flex-wrap gap-3">
         <Button tone="outline" loading={busy} onClick={() => void validate()}>
           Validate complete draft
@@ -1490,9 +1535,12 @@ export function CampaignReviewPage() {
           loading={busy}
           onClick={() => void publish()}
         >
-          Publish Campaign revision
+          Publish revision
         </Button>
       </div>
+      <p className="mt-5 rounded-box border border-base-300 p-3 text-sm text-base-content/65">
+        Publishing prepares a reusable definition. Sessions are handled later.
+      </p>
       {message && (
         <Alert
           tone={valid ? "success" : "warning"}
@@ -1528,17 +1576,6 @@ export function CampaignReviewPage() {
     </main>
   );
 }
-function ReviewFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-box border border-base-300 bg-base-200 p-4">
-      <p className="text-xs font-semibold uppercase text-base-content/60">
-        {label}
-      </p>
-      <p className="mt-2 font-semibold">{value}</p>
-    </div>
-  );
-}
-
 export function CampaignWorldMigrationPage() {
   const { definition, draft, adoptDraft } = useCampaignDefinitionAuthoring();
   const router = useRouter();
@@ -1790,7 +1827,7 @@ export function CampaignWorldMigrationPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         Lifecycle
       </p>
-      <h1 className="mt-3 text-4xl font-semibold">World migration</h1>
+      <h1 className="mt-3 text-3xl font-semibold">World migration</h1>
       <p className="mt-3 max-w-3xl text-base-content/65">
         Compare and adopt one complete direct-lineage World revision. Individual
         changes cannot be selected.

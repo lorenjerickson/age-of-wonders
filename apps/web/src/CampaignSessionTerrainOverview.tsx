@@ -45,7 +45,7 @@ export function CampaignSessionTerrainOverview({
       </p>
     );
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <p className="border-b border-base-300 px-4 py-3 text-sm">
         GM overview · full captured map. Focus: {focus.name}.{" "}
         {interactionDisabled
@@ -53,6 +53,8 @@ export function CampaignSessionTerrainOverview({
           : "Click an actor to focus it, then click a surface to choose a destination for review."}
       </p>
       <IsometricTerrainViewport
+        className="flex min-h-0 flex-1 flex-col"
+        viewportClassName="min-h-0 flex-1"
         overview
         volume={volume}
         level={0}

@@ -10,19 +10,11 @@ export type PrimaryNavigationItem = (typeof PRIMARY_NAVIGATION)[number] & {
   readonly active: boolean;
 };
 
-export interface WorldNavigationChild {
-  readonly label: string;
-  readonly href?: string;
-  readonly note?: string;
-}
-
-export interface WorldNavigationGroup {
-  readonly key: "atlas" | "bestiary" | "items" | "characters" | "rules";
+export interface WorldNavigationItem {
+  readonly key: string;
   readonly label: string;
   readonly href: string;
   readonly active: boolean;
-  readonly expanded: boolean;
-  readonly children: readonly WorldNavigationChild[];
 }
 
 export function primaryNavigationForPath(
@@ -45,74 +37,39 @@ export function primaryNavigationForPath(
   }));
 }
 
+/** World destinations are peers; record facets belong in content tabs. */
 export function worldNavigationForPath(
   worldId: string,
   pathname: string,
-): readonly WorldNavigationGroup[] {
-  const encodedWorldId = encodeURIComponent(worldId);
-  const base = `/worlds/${encodedWorldId}`;
-  const nestedSection = pathname.split("/").filter(Boolean)[2];
-  const activeKey =
-    nestedSection === "atlas"
-      ? "atlas"
-      : nestedSection === "bestiary"
-        ? "bestiary"
-        : nestedSection === "item-compendium"
-          ? "items"
-          : nestedSection === "characters"
-            ? "characters"
-            : nestedSection === "rules"
-              ? "rules"
-              : undefined;
-
-  const groups: ReadonlyArray<
-    Omit<WorldNavigationGroup, "active" | "expanded">
-  > = [
+): readonly WorldNavigationItem[] {
+  const base = `/worlds/${encodeURIComponent(worldId)}`;
+  const current = pathname.replace(/\/$/, "");
+  return [
+    { key: "overview", label: "Overview", path: "" },
+    { key: "locations", label: "Locations", path: "/atlas" },
+    { key: "bestiary", label: "Bestiary", path: "/bestiary" },
+    { key: "items", label: "Items", path: "/item-compendium" },
+    { key: "skills", label: "Skills", path: "/characters/skills" },
     {
-      key: "atlas",
-      label: "Atlas",
-      href: `${base}/atlas`,
-      children: [{ label: "Locations & maps", href: `${base}/atlas` }],
+      key: "professions",
+      label: "Professions",
+      path: "/characters/professions",
     },
     {
-      key: "bestiary",
-      label: "Bestiary",
-      href: `${base}/bestiary`,
-      children: [{ label: "Creatures", href: `${base}/bestiary` }],
+      key: "backgrounds",
+      label: "Backgrounds",
+      path: "/characters/backgrounds",
     },
-    {
-      key: "items",
-      label: "Item Compendium",
-      href: `${base}/item-compendium`,
-      children: [
-        {
-          label: "Items, objects & hazards",
-          href: `${base}/item-compendium`,
-        },
-      ],
-    },
-    {
-      key: "characters",
-      label: "Characters",
-      href: `${base}/characters`,
-      children: [
-        { label: "Skills", href: `${base}/characters/skills` },
-        { label: "Professions", href: `${base}/characters/professions` },
-        { label: "Backgrounds", href: `${base}/characters/backgrounds` },
-        { label: "Models & taxonomies", href: `${base}/characters/models` },
-      ],
-    },
-    {
-      key: "rules",
-      label: "Rules",
-      href: `${base}/rules`,
-      children: [{ label: "Rules design", note: "Deferred" }],
-    },
-  ];
-
-  return groups.map((group) => ({
-    ...group,
-    active: group.key === activeKey,
-    expanded: group.key === activeKey,
+    { key: "models", label: "Models & taxonomies", path: "/characters/models" },
+    { key: "rules", label: "Codex", path: "/rules" },
+    { key: "versions", label: "Versions", path: "/versions" },
+  ].map(({ key, label, path }) => ({
+    key,
+    label,
+    href: `${base}${path}`,
+    active:
+      current === `${base}${path}` ||
+      (path !== "" && current.startsWith(`${base}${path}/`)) ||
+      (key === "models" && current.startsWith(`${base}/characters/model/`)),
   }));
 }

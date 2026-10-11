@@ -1,5 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button, FieldError, Select, SelectField, TextInput } from "@aow/ui";
+import {
+  Button,
+  FieldError,
+  Select,
+  SelectField,
+  TextInput,
+  Disclosure,
+} from "@aow/ui";
 import type {
   PlayerDetailProjection,
   PlayerDirectoryProjection,
@@ -19,6 +26,7 @@ const STANDINGS: readonly PlayerServerStanding[] = [
 ];
 
 function PlayersLanding() {
+  const [editing, setEditing] = useState(false);
   const [directory, setDirectory] = useState<PlayerDirectoryProjection>();
   const [selected, setSelected] = useState<PlayerDetailProjection>();
   const [search, setSearch] = useState("");
@@ -26,12 +34,12 @@ function PlayersLanding() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
-  async function load() {
+  async function load(query = search) {
     setMessage("");
     try {
       setDirectory(
         await listPlayers({
-          q: search.trim() || undefined,
+          q: query.trim() || undefined,
           standing: standing === "all" ? undefined : standing,
           limit: 100,
         }),
@@ -53,6 +61,7 @@ function PlayersLanding() {
     setMessage("");
     try {
       setSelected(await getPlayer(playerId));
+      setEditing(true);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Player could not be loaded.",
@@ -82,45 +91,65 @@ function PlayersLanding() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
-      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        People
-      </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Players</h1>
-      <p className="mt-4 max-w-3xl text-base leading-7 text-base-content/65">
-        Server-wide profiles and standing live here. Invitations, memberships,
-        Characters, and attendance remain in their Campaign Instance or Session.
-      </p>
+    <main className="mx-auto max-w-6xl p-4 lg:px-10 lg:py-6">
+      <h1 className="text-3xl font-semibold">
+        {editing ? "Participant profile" : "Participants"}
+      </h1>
+      {editing && (
+        <Button
+          tone="ghost"
+          className="mt-4 min-h-11"
+          onClick={() => setEditing(false)}
+        >
+          ← Back to participants
+        </Button>
+      )}
 
       <form
-        className="mt-8 grid gap-4 rounded-box border border-base-300 bg-base-200 p-5 md:grid-cols-[1fr_13rem_auto] md:items-end"
+        hidden={editing}
+        className="mt-6 flex flex-wrap items-end gap-3"
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
           void load();
         }}
       >
         <TextInput
-          label="Search by name"
+          className="min-w-48 flex-1"
+          label="Search participants"
+          placeholder="Search participants…"
           maxLength={120}
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
         />
-        <SelectField
-          label="Standing"
-          value={standing}
-          onChange={(event) =>
-            setStanding(event.currentTarget.value as typeof standing)
-          }
-        >
-          <option value="all">All standings</option>
-          {STANDINGS.map((value) => (
-            <option key={value} value={value}>
-              {title(value)}
-            </option>
-          ))}
-        </SelectField>
+        <Disclosure summary="Filters" className="w-full order-last">
+          <SelectField
+            label="Standing"
+            value={standing}
+            onChange={(event) =>
+              setStanding(event.currentTarget.value as typeof standing)
+            }
+          >
+            <option value="all">All standings</option>
+            {STANDINGS.map((value) => (
+              <option key={value} value={value}>
+                {title(value)}
+              </option>
+            ))}
+          </SelectField>
+        </Disclosure>
         <Button type="submit" tone="primary">
-          Apply
+          Search
+        </Button>
+        <Button
+          type="button"
+          tone="ghost"
+          className="min-h-11"
+          onClick={() => {
+            setSearch("");
+            void load("");
+          }}
+        >
+          Clear
         </Button>
       </form>
 
@@ -130,12 +159,12 @@ function PlayersLanding() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
-        <section className="overflow-hidden rounded-box border border-base-300 bg-base-100">
+      <div className="mt-6">
+        <section hidden={editing}>
           <div className="border-b border-base-300 px-5 py-4 text-sm text-base-content/55">
             {directory
-              ? `${directory.total} ${directory.total === 1 ? "Player" : "Players"}`
-              : "Loading Players…"}
+              ? `${directory.total} registered`
+              : "Loading participants…"}
           </div>
           {directory?.items.length === 0 && (
             <p className="px-5 py-10 text-center text-base-content/55">
@@ -143,14 +172,27 @@ function PlayersLanding() {
               a Player accepts an Instance invitation.
             </p>
           )}
-          <ul className="divide-y divide-base-300">
+          <ul className="space-y-3">
             {directory?.items.map((player) => (
               <li
                 key={player.playerId}
-                className="flex items-center justify-between gap-4 px-5 py-4"
+                className="flex flex-wrap items-center gap-4 rounded-lg bg-base-200 px-4 py-5"
               >
-                <div>
-                  <p className="font-semibold">{player.displayName}</p>
+                <div
+                  aria-hidden="true"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary"
+                >
+                  {player.displayName
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((word) => word[0])
+                    .join("")}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words font-semibold">
+                    {player.displayName}
+                  </p>
                   <p className="mt-1 text-sm text-base-content/55">
                     {title(player.standing)} · {player.membershipCount}{" "}
                     {player.membershipCount === 1
@@ -173,7 +215,10 @@ function PlayersLanding() {
           </ul>
         </section>
 
-        <section className="rounded-box border border-base-300 bg-base-200 p-5">
+        <section
+          hidden={!editing}
+          className="rounded-lg bg-base-200 p-4 lg:p-6"
+        >
           {!selected ? (
             <p className="text-sm leading-6 text-base-content/55">
               Select a Player to review contact methods, identity-provider
@@ -181,10 +226,10 @@ function PlayersLanding() {
             </p>
           ) : (
             <div>
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold tracking-wide text-primary uppercase">
-                    Player profile
+                    Participant profile
                   </p>
                   <h2 className="mt-1 text-2xl font-semibold">
                     {selected.displayName}

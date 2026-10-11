@@ -1,0 +1,132 @@
+.session-workspace {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+}
+.session-workspace-bar {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.session-workspace .btn {
+  min-height: 44px;
+  height: auto;
+}
+.session-workspace-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.session-map-viewport {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.session-role-dock {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+}
+.session-dock-heading {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 16px;
+}
+.session-dock-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+.session-dock-scroll > * + * {
+  margin-top: 16px;
+}
+.session-dock-utilities {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--color-base-300);
+}
+.session-dock-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: #0003;
+}
+.session-workspace[data-open-dock="gm"] .session-role-dock-gm,
+.session-workspace[data-open-dock="players"] .session-role-dock-players {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: min(320px, calc(100% - 24px));
+  z-index: 21;
+}
+.session-role-dock-gm {
+  left: 0;
+}
+.session-role-dock-players {
+  right: 0;
+}
+@media (min-width: 80rem) {
+  .session-workspace-body {
+    grid-template-columns: 360px minmax(0, 1fr) 360px;
+  }
+  .session-map-viewport {
+    grid-column: 2;
+  }
+  .session-role-dock {
+    display: flex;
+    flex-direction: column;
+    grid-row: 1;
+  }
+  .session-role-dock-gm {
+    grid-column: 1;
+  }
+  .session-role-dock-players {
+    grid-column: 3;
+  }
+  .session-dock-trigger,
+  .session-dock-scrim {
+    display: none;
+  }
+}
+
+@media (min-width: 80rem) {
+  .session-workspace-participant .session-workspace-body {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+  .session-workspace-participant .session-map-viewport {
+    grid-column: 1;
+  }
+  .session-workspace-participant .session-role-dock-players {
+    grid-column: 2;
+  }
+}
+
+.session-dock-heading {
+  padding-top: max(6px, env(safe-area-inset-top));
+}
+.session-dock-utilities {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+.session-dock-scroll > label {
+  display: block;
+}

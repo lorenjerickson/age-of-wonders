@@ -35,21 +35,31 @@ export function putDiscoveryClaims(
   claims: ChildRecord[],
 ): ChildRecord {
   const truth = claims.find((claim) => childText(claim.kind) === "truth");
-  const { claims: _legacyClaims, ...withoutLegacyClaims } = discovery;
+  const withoutLegacyClaims = { ...discovery };
+  delete withoutLegacyClaims.claims;
   return {
     ...withoutLegacyClaims,
     truth: truth
       ? (() => {
-          const { kind: _kind, ...value } = truth;
+          const value = { ...truth };
+          delete value.kind;
           return value;
         })()
       : { id: childText(childObject(discovery.truth).id), statement: "" },
     beliefs: claims
       .filter((claim) => childText(claim.kind) === "belief")
-      .map(({ kind: _kind, ...value }) => value),
+      .map((claim) => {
+        const value = { ...claim };
+        delete value.kind;
+        return value;
+      }),
     rumors: claims
       .filter((claim) => childText(claim.kind) === "rumor")
-      .map(({ kind: _kind, ...value }) => value),
+      .map((claim) => {
+        const value = { ...claim };
+        delete value.kind;
+        return value;
+      }),
   };
 }
 /** Replace by stable identity without rebuilding untouched children or extension payloads. */

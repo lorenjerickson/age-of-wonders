@@ -42,7 +42,7 @@ describe("character creation model", () => {
       selectionsComplete({
         backgroundId: "background-1",
         professionId: "profession-1",
-        heritageIds: ["heritage-1"],
+        heritageIds: [],
       }),
     ).toBe(true);
     expect(

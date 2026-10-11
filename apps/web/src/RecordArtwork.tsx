@@ -26,9 +26,11 @@ export function CreatureArtwork({
   payload,
   name,
   renderControls,
+  compact = false,
 }: {
   payload: unknown;
   name: string;
+  compact?: boolean;
   renderControls?: (
     role: "portrait" | "overheadToken" | "paperDollToken",
     label: string,
@@ -39,15 +41,26 @@ export function CreatureArtwork({
   return (
     <section
       aria-label="Creature artwork"
-      className="grid gap-4 sm:grid-cols-3"
+      className={compact ? "grid gap-4" : "grid gap-4 sm:grid-cols-3"}
     >
       {creatureImageViews.map(([key, label]) => (
-        <figure key={key}>
-          <MediaImage image={images[key]} name={`${name} · ${label}`} />
+        <figure
+          key={key}
+          className={
+            compact ? "rounded-box border border-base-300 p-3" : undefined
+          }
+        >
+          <MediaImage
+            image={images[key]}
+            name={`${name} · ${label}`}
+            className={compact ? "float-left mr-3 w-16" : undefined}
+          />
           <figcaption className="mt-2 text-sm text-base-content/65">
             {label}
           </figcaption>
-          {renderControls?.(key, label, Boolean(images[key]))}
+          <div className={compact ? "clear-both pt-3" : undefined}>
+            {renderControls?.(key, label, Boolean(images[key]))}
+          </div>
         </figure>
       ))}
     </section>

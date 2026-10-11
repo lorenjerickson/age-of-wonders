@@ -39,7 +39,7 @@ import { createRoot } from 'react-dom/client';
 import { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet, Link } from '@tanstack/react-router';
 import * as InstancePages from './CampaignInstancePages';
 import * as DefinitionPages from './CampaignDefinitionPages';
-import { CharacterCreationPage } from './CharacterCreationPage';
+import { CharacterCreationPage, CharacterDraftEditor } from './CharacterCreationPage';
 import { CampaignInstanceProvider, CampaignInstanceContextBar } from './CampaignInstanceWorkspace';
 import { CampaignDefinitionAuthoringProvider, CampaignDefinitionContextBar } from './CampaignDefinitionAuthoringShell';
 import './index.css';
@@ -51,6 +51,7 @@ const root=createRootRoute({component:()=> <><nav aria-label="View regression">{
 const instanceRoute=createRoute({getParentRoute:()=>root,path:'/campaigns/instances/instance',component:()=> <CampaignInstanceProvider instance={instance}><CampaignInstanceContextBar/><Outlet/></CampaignInstanceProvider>});
 const definitionRoute=createRoute({getParentRoute:()=>root,path:'/campaigns/definitions/campaign',component:()=> <CampaignDefinitionAuthoringProvider definition={definition} initialDraft={draft}><CampaignDefinitionContextBar/><Outlet/></CampaignDefinitionAuthoringProvider>});
 const instanceChildren=instanceViews.map(([path,name])=>createRoute({getParentRoute:()=>instanceRoute,path:path||'/',component:()=>{const Page=(InstancePages as any)[name];return <Page/>}}));
+instanceChildren.push(createRoute({getParentRoute:()=>instanceRoute,path:"roster/characters/$characterId",component:()=> <CharacterDraftEditor campaignInstanceId="instance" campaignDefinitionId="campaign" characterId="character"/>}));
 const definitionChildren=definitionViews.map(([path,name])=>createRoute({getParentRoute:()=>definitionRoute,path:path||'/',component:()=>{const Page=(DefinitionPages as any)[name];return <Page/>}}));
 definitionChildren.push(createRoute({getParentRoute:()=>definitionRoute,path:'plots/new',component:()=> <DefinitionPages.CampaignPlotsPage plotId="new"/>}));
 const creation=[createRoute({getParentRoute:()=>root,path:'/campaigns/instances/new',component:InstancePages.CampaignInstanceCreatePage}),createRoute({getParentRoute:()=>root,path:'/campaigns/definitions/new',component:DefinitionPages.CampaignDefinitionCreatePage}),createRoute({getParentRoute:()=>root,path:'/play/instances/instance/characters',component:()=> <CharacterCreationPage campaignInstanceId="instance"/>})];
@@ -204,7 +205,7 @@ const roster = {
       playerName: "Mira",
       playerMembershipId: "member",
       status: "active",
-      sheetStatus: "approved",
+      sheetStatus: "in-progress",
       readiness: "ready",
     },
   ],
@@ -232,11 +233,99 @@ await withFixture(async (url) => {
   await page.route("**/fixture", (r) =>
     r.fulfill({ json: { instance, definition, draft } }),
   );
+  let openingPreparation = {
+    startingContext: "Meet at the quay.",
+    mapVariations: "",
+  };
+  let openingRevision = 1;
+  let invitationSubmission;
+  let characterSubmission;
+  let editedCharacter = {
+    characterId: "character",
+    name: "Tamsin",
+    revision: 1,
+    status: "in-progress",
+    heritageDefinitionIds: [],
+    attributeRolls: [],
+    attributeAssignments: {},
+    startingEquipmentIds: [],
+    imageAssetIds: {},
+  };
+  let portraitCalls = 0;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
     requests.push(path);
     let value;
-    if (path.endsWith("/roster")) {
+    if (path.endsWith("/character-options")) {
+      value = {
+        backgrounds: [],
+        professions: [{ id: "scholar", name: "Scholar" }],
+        heritages: [],
+        attributes: [
+          { id: "might", name: "Might" },
+          { id: "agility", name: "Agility" },
+        ],
+        attributeRollCount: 4,
+        equipmentSlots: [{ id: "hand", name: "Hand" }],
+        startingEquipment: [
+          {
+            id: "lamp",
+            name: "Investigator lamp",
+            compatibleSlotSets: [["hand"]],
+          },
+        ],
+      };
+    } else if (path.endsWith("/characters/character/draft/attribute-rolls")) {
+      assert.equal(
+        route.request().postDataJSON().expectedRevision,
+        editedCharacter.revision,
+      );
+      editedCharacter = {
+        ...editedCharacter,
+        revision: editedCharacter.revision + 1,
+        attributeRolls: [80, 70, 60, 50],
+        attributeAssignments: {},
+      };
+      value = editedCharacter;
+    } else if (path.endsWith("/characters/character/draft/artwork")) {
+      assert.ok(route.request().headers()["idempotency-key"]);
+      portraitCalls++;
+      value = { assetId: `generated-${route.request().postDataJSON().role}` };
+    } else if (
+      path.includes("/media/generated-") &&
+      path.endsWith("/download")
+    ) {
+      value = {
+        url:
+          "data:image/svg+xml," +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="purple"/></svg>',
+          ),
+      };
+    } else if (path.endsWith("/characters/character/draft")) {
+      if (route.request().method() === "PATCH") {
+        const body = route.request().postDataJSON();
+        assert.equal(body.expectedRevision, editedCharacter.revision);
+        editedCharacter = {
+          ...editedCharacter,
+          ...body,
+          revision: editedCharacter.revision + 1,
+        };
+      }
+      value = editedCharacter;
+    } else if (
+      path.endsWith("/invitations") &&
+      route.request().method() === "POST"
+    ) {
+      invitationSubmission = route.request().postDataJSON();
+      value = {};
+    } else if (
+      path.endsWith("/characters") &&
+      route.request().method() === "POST"
+    ) {
+      characterSubmission = route.request().postDataJSON();
+      value = {};
+    } else if (path.endsWith("/roster")) {
       await new Promise((r) => setTimeout(r, 100));
       value = roster;
     } else if (path === "/players") value = { items: [], total: 0 };
@@ -244,15 +333,22 @@ await withFixture(async (url) => {
       value = { readyToActivate: true, checks: [] };
     else if (path.endsWith("/continuation"))
       value = { enabled: false, kind: "plan-session", label: "Plan Session" };
-    else if (path.endsWith("/runtime/preparation"))
+    else if (path.endsWith("/runtime/preparation")) {
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON();
+        assert.equal(body.expectedRuntimeRevision, openingRevision);
+        openingPreparation = body.preparation;
+        openingRevision++;
+      }
       value = {
-        runtimeRevision: 1,
-        preparation: {
-          startingContext: "Meet at the quay.",
-          mapVariations: "",
-        },
+        runtimeRevision: openingRevision,
+        preparation: openingPreparation,
+        locations: [
+          { id: "location", name: "Old Quay" },
+          { id: "yard", name: "Scotland Yard" },
+        ],
       };
-    else if (path.endsWith("/agents/available")) value = { items: [] };
+    } else if (path.endsWith("/agents/available")) value = { items: [] };
     else if (path.endsWith("/plots")) value = { runtimeRevision: 1, roots: [] };
     else if (path.endsWith("/placements"))
       value = { runtimeRevision: 1, items: [], replacementOptions: [] };
@@ -323,7 +419,7 @@ await withFixture(async (url) => {
     ["Definition versions", "Versions", ""],
     ["Definition versions/migrate", "World migration", ""],
     ["Create Instance", "Create Campaign Instance", ""],
-    ["Create Definition", "Create Campaign Definition", ""],
+    ["Create Definition", "Create campaign", ""],
     ["Player Characters", "", "Create another character"],
   ];
   const covered = [];
@@ -366,6 +462,33 @@ await withFixture(async (url) => {
       }
       if (ready) await page.getByText(ready, { exact: true }).first().waitFor();
       await page.waitForTimeout(180);
+      if (label === "Instance overview") {
+        const starting = page.getByRole("combobox", {
+          name: "Starting Location",
+          exact: true,
+        });
+        await starting.selectOption("yard");
+        await page
+          .getByRole("button", {
+            name: "Save Instance preparation",
+            exact: true,
+          })
+          .click();
+        await page
+          .getByText("Instance preparation saved.", { exact: true })
+          .waitFor();
+        assert.equal(openingPreparation.startingLocationId, "yard");
+        assert.equal(openingPreparation.startingContext, "Meet at the quay.");
+        const nav = page.getByRole("navigation", { name: "View regression" });
+        await nav
+          .getByRole("link", { name: "Instance roster", exact: true })
+          .click();
+        await nav
+          .getByRole("link", { name: "Instance overview", exact: true })
+          .click();
+        await starting.waitFor();
+        assert.equal(await starting.inputValue(), "yard");
+      }
       if (label === "Definition versions/migrate") {
         await page
           .getByText(
@@ -392,11 +515,153 @@ await withFixture(async (url) => {
       )
         throw new Error(label + " shows a load failure");
       if (label === "Instance roster") {
+        await page
+          .getByRole("textbox", { name: "Name", exact: true })
+          .fill("Fixture Invitee");
+        await page
+          .getByRole("textbox", { name: "Email", exact: true })
+          .fill("fixture@example.invalid");
+        await page
+          .getByRole("button", { name: "Send invitation", exact: true })
+          .click();
+        await page.waitForFunction(() =>
+          [...document.querySelectorAll("input")].some(
+            (input) => input.type === "email" && input.value === "",
+          ),
+        );
+        assert.equal(invitationSubmission.invitedName, "Fixture Invitee");
+        await page
+          .getByRole("textbox", { name: "Character name", exact: true })
+          .fill("Opening investigator");
+        await page
+          .getByRole("combobox", { name: "Player", exact: true })
+          .selectOption("member");
+        await page
+          .getByRole("button", { name: "Create draft", exact: true })
+          .click();
+        await page.waitForResponse(
+          (response) =>
+            response.request().method() === "GET" &&
+            response.url().endsWith("/roster"),
+        );
+        assert.equal(characterSubmission.name, "Opening investigator");
+        assert.equal(characterSubmission.playerMembershipId, "member");
         await page.getByText("Tamsin", { exact: true }).waitFor();
         await page.screenshot({
           path: "/tmp/aow-campaign-roster.png",
           fullPage: true,
         });
+        await page
+          .getByRole("link", { name: "Edit Character", exact: true })
+          .click();
+        await page
+          .getByRole("heading", {
+            name: "Name your character and tell their story",
+            exact: true,
+          })
+          .waitFor();
+        await page
+          .getByRole("textbox", { name: "Biography", exact: true })
+          .fill("An investigator at Scotland Yard.");
+        await page
+          .getByRole("button", { name: "Save for later", exact: true })
+          .click();
+        await page
+          .getByText("Choices saved. You can safely return later.")
+          .waitFor();
+        assert.equal(
+          editedCharacter.biography,
+          "An investigator at Scotland Yard.",
+        );
+        await page
+          .getByRole("button", { name: "4. Attributes", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "Generate rolls", exact: true })
+          .click();
+        await page
+          .getByRole("combobox", { name: "Might", exact: true })
+          .selectOption("80");
+        await page
+          .getByRole("combobox", { name: "Agility", exact: true })
+          .selectOption("70");
+        await page
+          .getByRole("button", { name: "5. Equipment", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "Equip · Hand", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "6. Artwork", exact: true })
+          .click();
+        await page
+          .getByRole("textbox", { name: "Shared art direction", exact: true })
+          .fill("Victorian investigator in a dark coat");
+        for (const label of ["portrait", "overhead token", "side-on token"]) {
+          await page
+            .getByRole("button", { name: `Generate ${label}`, exact: true })
+            .click();
+          await page
+            .getByRole("button", { name: `Use ${label}`, exact: true })
+            .waitFor();
+          assert.deepEqual(editedCharacter.imageAssetIds, {});
+          await page
+            .getByRole("button", { name: `Use ${label}`, exact: true })
+            .click();
+        }
+        await page
+          .getByRole("button", { name: "Save for later", exact: true })
+          .click();
+        await page
+          .getByText("Choices saved. You can safely return later.")
+          .waitFor();
+        assert.deepEqual(editedCharacter.attributeAssignments, {
+          might: 80,
+          agility: 70,
+        });
+        assert.deepEqual(editedCharacter.startingEquipmentIds, ["lamp"]);
+        assert.deepEqual(editedCharacter.imageAssetIds, {
+          portrait: "generated-portrait",
+          overheadToken: "generated-overheadToken",
+          paperDollToken: "generated-paperDollToken",
+        });
+        assert.deepEqual(editedCharacter.equipmentAssignments, {
+          lamp: ["hand"],
+        });
+        assert.equal(portraitCalls, 3);
+        await page
+          .getByRole("link", { name: "← All characters", exact: true })
+          .click();
+        await page
+          .getByRole("link", { name: "Edit Character", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "4. Attributes", exact: true })
+          .click();
+        assert.equal(
+          await page
+            .getByRole("combobox", { name: "Might", exact: true })
+            .inputValue(),
+          "80",
+        );
+        await page
+          .getByRole("button", { name: "5. Equipment", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "Unequip", exact: true })
+          .waitFor();
+        await page
+          .getByRole("button", { name: "6. Artwork", exact: true })
+          .click();
+        assert.equal(
+          await page
+            .getByRole("button", { name: "Submit for review", exact: true })
+            .isDisabled(),
+          true,
+        );
+        await page
+          .getByRole("link", { name: "← All characters", exact: true })
+          .click();
         // Exercise the real roster link across the child route boundary.
         await page
           .getByRole("link", { name: "Manage Agents", exact: true })

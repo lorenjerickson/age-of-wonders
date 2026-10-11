@@ -25,6 +25,10 @@ type AgentSessionParticipant =
   UpdateCampaignSessionParticipantsRequest["agentParticipants"][number];
 
 export class CreateCampaignSessionDto implements CreateCampaignSessionRequest {
+  @IsOptional()
+  @IsBoolean()
+  gmControlsPlayers?: boolean;
+
   @IsString()
   @MinLength(8)
   @MaxLength(200)
@@ -64,6 +68,10 @@ export class CreateCampaignSessionDto implements CreateCampaignSessionRequest {
 }
 
 export class UpdateCampaignSessionDto implements UpdateCampaignSessionRequest {
+  @IsOptional()
+  @IsBoolean()
+  gmControlsPlayers?: boolean;
+
   @IsInt()
   @Min(1)
   expectedMetadataRevision!: number;

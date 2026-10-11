@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="220" height="140" viewBox="0 0 220 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="World map / Schematic placeholder" clip-path="url(#clip0_0_4)">
+<path id="Vector" d="M220 0H0V140H220V0Z" fill="white"/>
+<path id="Vector_2" d="M10.4762 90L26.1905 35L57.619 20L75.9524 45L107.381 30L123.095 67L108.952 110L72.8095 121L47.1429 95L10.4762 90ZM150.333 25L176.524 18L199.571 49L189.619 112L158.714 120L139.857 77L150.333 25Z" fill="#EEEEEE" stroke="#888888"/>
+<path id="Vector_3" d="M28.8095 74L50.2857 51L78.0476 78L106.857 61M152.952 85L165 51L185.952 69" stroke="#999999" stroke-dasharray="5 4"/>
+<path id="Vector_4" d="M46.619 90L51.3333 75L56.0476 90M58.6667 82L63.3809 67L68.0952 82M160.286 99L165 84L169.714 99" stroke="#888888"/>
+</g>
+<defs>
+<clipPath id="clip0_0_4">
+<rect width="220" height="140" fill="white"/>
+</clipPath>
+</defs>
+</svg>

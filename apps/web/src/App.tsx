@@ -3,21 +3,16 @@ import {
   type LiveNavigationWorld,
   type LiveNavigationCampaign,
 } from "./navigationLiveData";
-import {
-  type KeyboardEvent,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import {
   Alert,
   Badge,
   Button,
-  Label,
   StatusIndicator,
-  StructuralCheckbox,
+  Input,
+  Field,
+  Dialog,
 } from "@aow/ui";
 import {
   checkHealth,
@@ -32,11 +27,16 @@ import { RouterButtonLink } from "./navigation";
 import {
   ContextualSidebar,
   ContextualBreadcrumbs,
+  CurrentDestination,
+  PrimaryNavigation,
 } from "./ContextualNavigation";
 import { QuickStartGuide } from "./QuickStart";
 import { quickStartActivity, quickStartKeyFromSearch } from "./quickStartModel";
 import type { ReadSection } from "./server/readModels";
 import { statusLabel } from "./campaignLibraryModel";
+import "./AppShell.css";
+import { ShellToolsTarget } from "./shellToolsContext";
+import { useSidebarResize } from "./useSidebarResize";
 
 export function AppShell({
   children,
@@ -57,18 +57,27 @@ export function AppShell({
   const segments = pathname.split("/").filter(Boolean);
   const locationWorkspaceActive =
     segments[0] === "campaigns" && segments[2] === "locations";
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [toolsVisible, setToolsVisible] = useState(
+    !pathname.startsWith("/worlds") && pathname !== "/settings",
+  );
+  const sidebar = useSidebarResize(toolsVisible);
+  const sidebarHidden = pathname === "/" || pathname === "/worlds";
+  const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
+  const [desktopTools, setDesktopTools] = useState<HTMLElement | null>(null);
+  const [mobileTools, setMobileTools] = useState<HTMLElement | null>(null);
+  const [drawer, setDrawer] = useState<"navigation" | "context" | null>(null);
   const [activeSession, setActiveSession] =
     useState<Awaited<ReturnType<typeof getGmActiveSession>>["session"]>();
   const [auth0, setAuth0] =
     useState<
       Awaited<ReturnType<typeof getMyAuthenticationProviders>>["auth0"]
     >();
-  const drawerTrigger = useRef<HTMLLabelElement>(null);
-  const drawerPanel = useRef<HTMLElement>(null);
-  const guideTrigger = useRef<HTMLButtonElement>(null);
-  const guidePanel = useRef<HTMLElement>(null);
+  const drawerPanel = useRef<HTMLDialogElement>(null);
+  const drawerHeading = useRef<HTMLHeadingElement>(null);
+  const drawerTrigger = useRef<HTMLButtonElement | null>(null);
+  const runWorkspace = /^\/campaigns\/instances\/[^/]+\/run\/[^/]+/.test(
+    pathname,
+  );
 
   useEffect(() => {
     if (!gmAccess) return;
@@ -98,66 +107,66 @@ export function AppShell({
   }, [pathname]);
 
   useEffect(() => {
-    if (!drawerOpen) return;
-    drawerPanel.current
-      ?.querySelector<HTMLElement>("a[href], button:not([disabled])")
-      ?.focus();
-  }, [drawerOpen]);
+    setDrawer(null);
+  }, [pathname, location.searchStr]);
 
-  function closeDrawer() {
-    setDrawerOpen(false);
-    requestAnimationFrame(() => drawerTrigger.current?.focus());
+  useEffect(() => {
+    // The portal container is stable: moving it preserves mounted editor state.
+    const target = document.createElement("div");
+    setToolsTarget(target);
+    return () => target.remove();
+  }, []);
+  useEffect(() => {
+    const destination = drawer === "context" ? mobileTools : desktopTools;
+    if (toolsTarget && destination) destination.appendChild(toolsTarget);
+  }, [drawer, desktopTools, mobileTools, toolsTarget]);
+
+  useEffect(() => {
+    const panel = drawerPanel.current;
+    if (drawer && panel && !panel.open) {
+      panel.showModal();
+      drawerHeading.current?.focus();
+    } else if (!drawer && panel?.open) {
+      panel.close();
+      drawerTrigger.current?.focus();
+    }
+  }, [drawer]);
+
+  function openDrawer(
+    kind: "navigation" | "context",
+    trigger: HTMLButtonElement,
+  ) {
+    drawerTrigger.current = trigger;
+    setDrawer(kind);
   }
 
-  function handleDrawerKeys(event: KeyboardEvent<HTMLElement>) {
-    if (!drawerOpen) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeDrawer();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = drawerPanel.current?.querySelectorAll<HTMLElement>(
-      "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])",
-    );
-    if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  function closeGuide() {
-    setGuideOpen(false);
-    requestAnimationFrame(() => guideTrigger.current?.focus());
-  }
-
-  function handleGuideKeys(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeGuide();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = guidePanel.current?.querySelectorAll<HTMLElement>(
-      "a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])",
-    );
-    if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
+  const account = auth0?.configured ? (
+    auth0.linked ? (
+      <p className="text-sm text-success">Auth0 connected</p>
+    ) : (
+      <a
+        className="btn btn-outline min-h-11"
+        href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(pathname)}`}
+      >
+        Connect Auth0
+      </a>
+    )
+  ) : null;
+  const sessionContext =
+    activeSession && !runWorkspace ? (
+      <section className="rounded-lg border border-base-300 bg-base-200 p-4">
+        <h3 className="font-semibold">{activeSession.sessionName}</h3>
+        <p className="my-3 text-sm text-base-content/70">
+          {activeSession.campaignInstanceName} · {activeSession.status}
+        </p>
+        <RouterButtonLink
+          href={`/campaigns/instances/${encodeURIComponent(activeSession.campaignInstanceId)}/run/${encodeURIComponent(activeSession.sessionId)}`}
+          tone="primary"
+        >
+          {activeSession.label} Session
+        </RouterButtonLink>
+      </section>
+    ) : null;
 
   return (
     <NavigationLiveData.Provider
@@ -168,194 +177,197 @@ export function AppShell({
         setCampaign: setNavigationCampaign,
       }}
     >
-      <div className="drawer h-dvh overflow-hidden lg:drawer-open">
-        <StructuralCheckbox
-          id="app-drawer"
-          checked={drawerOpen}
-          onChange={(event) => setDrawerOpen(event.target.checked)}
-        />
-        <div
-          className={`drawer-content app-browse-frame h-dvh min-w-0 w-full ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
-        >
-          <Label
-            ref={drawerTrigger}
-            htmlFor="app-drawer"
-            aria-label="Open navigation"
-            aria-expanded={drawerOpen}
-            aria-controls="app-navigation-panel"
-            className="btn btn-square btn-ghost btn-sm fixed top-3 left-3 z-50 bg-base-200/75 shadow-lg backdrop-blur-xl lg:hidden"
-          >
-            <span aria-hidden="true">☰</span>
-          </Label>
-          <div
-            className={
-              guide
-                ? "min-h-full xl:grid xl:grid-cols-[minmax(0,1fr)_20rem]"
-                : "min-h-full"
-            }
-          >
-            <div className="min-w-0">
-              {activeSession && !pathname.includes("/run/") && (
-                <div className="border-b border-warning/25 bg-warning/10 px-6 py-3 lg:px-10">
-                  <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm">
-                      <strong>{activeSession.sessionName}</strong> in{" "}
-                      {activeSession.campaignInstanceName} is{" "}
-                      {activeSession.status}.
-                    </p>
-                    <RouterButtonLink
-                      href={`/campaigns/instances/${encodeURIComponent(activeSession.campaignInstanceId)}/run/${encodeURIComponent(activeSession.sessionId)}`}
-                      tone="primary"
-                      size="sm"
-                    >
-                      {activeSession.label} Session
-                    </RouterButtonLink>
-                  </div>
-                </div>
-              )}
-              {pathname !== "/" &&
-                !(
-                  segments[0] === "worlds" &&
-                  segments[1] &&
-                  segments[1] !== "new"
-                ) &&
-                !(
-                  segments[0] === "campaigns" &&
-                  segments[2] &&
-                  segments[2] !== "new"
-                ) && (
-                  <>
-                    <header className="border-b border-base-300 px-6 py-4 pl-16 font-semibold lg:px-10">
-                      GM Workspace
-                    </header>
-                    <ContextualBreadcrumbs />
-                  </>
-                )}
-              {children}
-            </div>
-            {guide && (
-              <div className="hidden xl:block">
-                <QuickStartGuide activityKey={guide.key} />
-              </div>
-            )}
-          </div>
-          {guide && (
-            <Button
-              ref={guideTrigger}
-              tone="primary"
-              className="fixed right-4 bottom-4 z-30 min-h-11 shadow-xl xl:hidden"
-              aria-expanded={guideOpen}
-              aria-controls="quick-start-mobile-guide"
-              onClick={() => setGuideOpen(true)}
-            >
-              Quick Start guide
-            </Button>
-          )}
-          {guide && guideOpen && (
-            <div
-              className="fixed inset-0 z-50 flex justify-end bg-black/50 xl:hidden"
-              onMouseDown={(event) => {
-                if (event.currentTarget === event.target) closeGuide();
-              }}
-            >
-              <section
-                ref={guidePanel}
-                id="quick-start-mobile-guide"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Quick Start guide"
-                className="h-full w-full max-w-sm overflow-y-auto bg-base-100 shadow-2xl"
-                onKeyDown={handleGuideKeys}
+      <ShellToolsTarget.Provider value={toolsTarget}>
+        {runWorkspace ? (
+          children
+        ) : (
+          <div className="application-shell bg-base-100 text-base-content">
+            <header className="shell-desktop-header border-b border-base-300 bg-base-200">
+              <RouterButtonLink
+                href="/"
+                tone="ghost"
+                className="text-lg font-semibold"
               >
-                <div className="sticky top-0 z-10 flex justify-end border-b border-base-300 bg-base-100 p-2">
-                  <Button autoFocus tone="ghost" onClick={closeGuide}>
-                    Close guide
+                Age of Wonders
+              </RouterButtonLink>
+              <PrimaryNavigation
+                gmAccess={gmAccess}
+                systemAdministrator={systemAdministrator}
+              />
+              <Button
+                tone="ghost"
+                className="ml-auto min-h-11"
+                aria-expanded={toolsVisible}
+                onClick={() => setToolsVisible(!toolsVisible)}
+              >
+                Tools
+              </Button>
+            </header>
+            <header className="shell-mobile-header border-b border-base-300 bg-base-200">
+              <Button
+                tone="outline"
+                className="min-h-11"
+                aria-haspopup="dialog"
+                aria-controls="shell-drawer"
+                onClick={(event) =>
+                  openDrawer("navigation", event.currentTarget)
+                }
+              >
+                Menu
+              </Button>
+              <CurrentDestination />
+              <Button
+                tone="outline"
+                className="min-h-11"
+                aria-haspopup="dialog"
+                aria-controls="shell-drawer"
+                onClick={(event) => openDrawer("context", event.currentTarget)}
+              >
+                More
+              </Button>
+            </header>
+            <div
+              className={`shell-workspace${sidebar.resizing ? " shell-workspace-resizing" : ""}`}
+            >
+              <aside
+                id="shell-secondary-navigation"
+                hidden={sidebarHidden}
+                style={{ flexBasis: sidebar.width }}
+                className="shell-sidebar border-r border-base-300 bg-base-200"
+              >
+                <ContextualSidebar
+                  gmAccess={gmAccess}
+                  systemAdministrator={systemAdministrator}
+                  onNavigate={() => setDrawer(null)}
+                />
+                <div className="mt-6 border-t border-base-300 pt-4">
+                  {account}
+                </div>
+              </aside>
+              <div
+                {...sidebar.separatorProps}
+                hidden={sidebarHidden}
+                className="shell-sidebar-resizer"
+              />
+              <div
+                className={`shell-content app-browse-frame ${locationWorkspaceActive ? "overflow-hidden" : "overflow-y-auto"}`}
+              >
+                {pathname !== "/" &&
+                  !(
+                    segments[0] === "worlds" &&
+                    segments[1] &&
+                    segments[1] !== "new"
+                  ) &&
+                  !(
+                    segments[0] === "campaigns" &&
+                    segments[2] &&
+                    segments[2] !== "new"
+                  ) && <ContextualBreadcrumbs />}
+                {children}
+              </div>
+              <section
+                hidden={!toolsVisible}
+                className="shell-guide border-l border-base-300 bg-base-200"
+                aria-label="Contextual tools"
+              >
+                <div className="flex items-center justify-between p-5">
+                  <h2 className="text-lg font-semibold">Tools</h2>
+                  <Button tone="ghost" onClick={() => setToolsVisible(false)}>
+                    Hide ›
                   </Button>
                 </div>
-                <QuickStartGuide activityKey={guide.key} />
+                <div ref={setDesktopTools} className="px-5 pb-5" />
+                {guide ? (
+                  <QuickStartGuide activityKey={guide.key} />
+                ) : (
+                  <div className="space-y-4 p-5">
+                    {sessionContext}
+                    <RouterButtonLink href="/quick-start" tone="outline">
+                      Quick Start
+                    </RouterButtonLink>
+                  </div>
+                )}
               </section>
             </div>
-          )}
-        </div>
-        <div
-          id="app-navigation-panel"
-          className="drawer-side z-40"
-          role={drawerOpen ? "dialog" : undefined}
-          aria-modal={drawerOpen || undefined}
-          aria-label={drawerOpen ? "Application navigation" : undefined}
-        >
-          <Label
-            htmlFor="app-drawer"
-            aria-label="Close navigation"
-            className="drawer-overlay"
-            onClick={closeDrawer}
-          />
-          <aside
-            ref={drawerPanel}
-            onKeyDown={handleDrawerKeys}
-            className="flex h-dvh w-64 flex-col overflow-y-auto border-r border-base-300/70 bg-base-200/80 p-3 text-base-content shadow-xl backdrop-blur-xl"
-          >
-            <Button
-              tone="ghost"
-              size="sm"
-              className="mb-2 min-h-11 self-end lg:hidden"
-              onClick={closeDrawer}
+            <Dialog
+              ref={drawerPanel}
+              id="shell-drawer"
+              className="shell-drawer bg-base-100 text-base-content"
+              aria-labelledby="shell-drawer-title"
+              onCancel={() => setDrawer(null)}
+              onClose={() => setDrawer(null)}
             >
-              Close navigation
-            </Button>
-            <ContextualSidebar
-              gmAccess={gmAccess}
-              systemAdministrator={systemAdministrator}
-              onNavigate={() => setDrawerOpen(false)}
-            />
-            <div className="border-t border-base-300/70 px-3 py-3">
-              {auth0?.configured &&
-                (auth0.linked ? (
-                  <p className="mb-2 text-xs text-success">Auth0 connected</p>
+              <div className="shell-drawer-header border-b border-base-300 bg-base-100">
+                <h2
+                  ref={drawerHeading}
+                  tabIndex={-1}
+                  id="shell-drawer-title"
+                  className="text-xl font-semibold"
+                >
+                  {drawer === "navigation" ? "Navigation" : "Tools & context"}
+                </h2>
+                <Button
+                  tone="outline"
+                  className="min-h-11"
+                  onClick={() => setDrawer(null)}
+                >
+                  Close
+                </Button>
+              </div>
+              <div
+                className="shell-drawer-content"
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("a[href]"))
+                    setDrawer(null);
+                }}
+              >
+                {drawer === "navigation" ? (
+                  <>
+                    <p className="mb-4 text-sm text-base-content/70">
+                      Current destination: <CurrentDestination />
+                    </p>
+                    <PrimaryNavigation
+                      gmAccess={gmAccess}
+                      systemAdministrator={systemAdministrator}
+                      onNavigate={() => setDrawer(null)}
+                    />
+                    <ContextualSidebar
+                      gmAccess={gmAccess}
+                      systemAdministrator={systemAdministrator}
+                      onNavigate={() => setDrawer(null)}
+                    />
+                  </>
                 ) : (
-                  <a
-                    className="btn btn-outline btn-sm mb-2 w-full"
-                    href={`/api/auth/auth0/link?returnTo=${encodeURIComponent(pathname)}`}
-                  >
-                    Connect Auth0
-                  </a>
-                ))}
-              <p className="text-xs leading-5 text-base-content/35">
-                Author Worlds, prepare Campaigns, and continue play.
-              </p>
-            </div>
-          </aside>
-        </div>
-      </div>
-    </NavigationLiveData.Provider>
-  );
-}
-
-function Header({ healthy }: { healthy?: boolean }) {
-  return (
-    <header className="navbar border-b border-base-300 px-0 pb-6">
-      <RouterButtonLink
-        href="/"
-        tone="ghost"
-        className="h-auto flex-col items-start gap-0 px-0"
-      >
-        <p className="text-xs font-semibold tracking-[0.28em] text-amber-300 uppercase">
-          Age of Wonders
-        </p>
-        <p className="mt-2 text-lg font-medium text-zinc-100 transition group-hover:text-white">
-          World studio
-        </p>
-      </RouterButtonLink>
-      <div className="ml-auto">
-        {healthy !== undefined && (
-          <StatusIndicator
-            tone={healthy ? "success" : "error"}
-            label={healthy ? "Workspace ready" : "Services unavailable"}
-            className="py-3 text-xs"
-          />
+                  <div className="space-y-6">
+                    <div ref={setMobileTools} />
+                    {sessionContext}
+                    {guide ? (
+                      <QuickStartGuide activityKey={guide.key} />
+                    ) : (
+                      <section>
+                        <h3 className="font-semibold">Quick Start</h3>
+                        <p className="my-3 text-sm text-base-content/70">
+                          Guided activities for preparing your World and
+                          Campaign.
+                        </p>
+                        <RouterButtonLink
+                          href="/quick-start"
+                          tone="outline"
+                          onClick={() => setDrawer(null)}
+                        >
+                          Open Quick Start
+                        </RouterButtonLink>
+                      </section>
+                    )}
+                    {account}
+                  </div>
+                )}
+              </div>
+            </Dialog>
+          </div>
         )}
-      </div>
-    </header>
+      </ShellToolsTarget.Provider>
+    </NavigationLiveData.Provider>
   );
 }
 
@@ -368,6 +380,8 @@ export function LandingPage({
   initialWorlds: ReadSection<WorldDefinitionList>;
   initialInstances: ReadSection<CampaignInstanceList>;
 }) {
+  const [worldSearch, setWorldSearch] = useState("");
+  const [campaignSearch, setCampaignSearch] = useState("");
   const [healthy, setHealthy] = useState(initialHealthy ?? false);
   const [continuations, setContinuations] = useState<
     Record<string, CampaignInstanceContinuation | undefined>
@@ -413,145 +427,175 @@ export function LandingPage({
   }, [initialInstances]);
 
   return (
-    <main className="min-h-screen bg-base-100 text-base-content">
-      <div className="mx-auto min-h-screen max-w-6xl px-6 py-10 lg:px-10">
-        <Header healthy={healthy} />
-        <ContextualBreadcrumbs />
-        <section className="grid gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-          <div>
-            <p className="text-sm font-medium text-amber-300">
-              Your next realm
-            </p>
-            <h1 className="mt-4 max-w-xl text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
-              Build a world worth returning to.
-            </h1>
-            <p className="mt-5 max-w-lg text-lg leading-8 text-zinc-400">
-              Begin with a spark. The worldbuilder will turn it into a living
-              setting you can refine, connect, and bring into play.
-            </p>
+    <main className="bg-base-100 text-base-content">
+      <div className="mx-auto max-w-6xl p-4 lg:p-10">
+        <header className="mb-8 space-y-3">
+          <p className="text-xs uppercase tracking-wide text-base-content/60">
+            Your workspace
+          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-3xl font-semibold">Home</h1>
+            <StatusIndicator
+              tone={healthy ? "success" : "error"}
+              label={healthy ? "Workspace ready" : "Services unavailable"}
+            />
           </div>
-          <article className="card border border-primary/20 bg-primary/[0.07] shadow-xl">
-            <div className="card-body">
-              <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-                Learn by doing
-              </p>
-              <h2 className="card-title text-2xl">Quick Start</h2>
-              <p className="leading-7 text-base-content/65">
-                Complete guided tasks inside the real World, Campaign, and
-                Players workspaces.
-              </p>
-              <RouterButtonLink
-                href="/quick-start"
-                tone="primary"
-                className="mt-3"
-              >
-                Open Quick Start
-              </RouterButtonLink>
-            </div>
-          </article>
-        </section>
-
-        <section
-          className="border-t border-white/10 pt-10"
-          aria-labelledby="world-choice-heading"
-        >
-          <h2 id="world-choice-heading" className="text-2xl font-semibold">
-            Choose a World
-          </h2>
-          <p className="mt-2 text-base-content/60">
-            World selection is deliberate; the dashboard does not infer a
-            current World.
+          <p className="text-sm text-base-content/60">
+            Your Worlds and Campaigns, ready to continue.
           </p>
-          {!initialWorlds.ok ? (
-            <Alert tone="error" className="mt-5">
-              {initialWorlds.message}
-            </Alert>
-          ) : (
-            <p className="mt-5 text-sm text-base-content/60">
-              {initialWorlds.data.total} World{" "}
-              {initialWorlds.data.total === 1 ? "Definition" : "Definitions"}{" "}
-              available.
-            </p>
-          )}
-          <RouterButtonLink href="/worlds" tone="outline" className="mt-5">
-            Choose a World Definition
-          </RouterButtonLink>
-        </section>
-
-        <section className="py-10" aria-labelledby="continue-heading">
+        </header>
+        <section className="space-y-4" aria-labelledby="continue-heading">
           <h2 id="continue-heading" className="text-2xl font-semibold">
-            Continue Campaigns
+            Your campaigns
           </h2>
-          <p className="mt-2 max-w-3xl text-base-content/60">
-            Every active Campaign Instance appears here. Continue remains
-            unavailable until an Instance has an explicit resumable Session
-            relationship.
-          </p>
+          <div className="flex items-end gap-2">
+            <Field className="flex-1" label="Search campaigns">
+              <Input
+                value={campaignSearch}
+                onChange={(event) => setCampaignSearch(event.target.value)}
+                placeholder="Search campaigns…"
+              />
+            </Field>
+            <Button
+              tone="ghost"
+              className="min-h-11"
+              onClick={() => setCampaignSearch("")}
+            >
+              Clear
+            </Button>
+          </div>
           {!initialInstances.ok ? (
             <Alert tone="error" className="mt-5">
               {initialInstances.message}
             </Alert>
           ) : activeInstances.length ? (
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              {activeInstances.map((instance, index) => (
-                <article
-                  key={instance.id}
-                  className="card border border-base-300 bg-base-200"
-                >
-                  <div className="card-body">
-                    <div className="flex items-start justify-between gap-4">
-                      <h3 className="card-title">
-                        {instance.name.trim() || "Unnamed Campaign Instance"}
-                      </h3>
-                      <Badge outline>{statusLabel(instance.status)}</Badge>
-                    </div>
-                    <div className="card-actions mt-4 items-center">
-                      <RouterButtonLink
-                        href={`/campaigns/instances/${encodeURIComponent(instance.id)}`}
-                        tone="outline"
-                        size="sm"
-                      >
-                        Manage Instance
-                      </RouterButtonLink>
-                      {continuations[instance.id]?.enabled ? (
+            <div className="mt-4 grid gap-3">
+              {activeInstances
+                .filter((instance) =>
+                  instance.name
+                    .toLowerCase()
+                    .includes(campaignSearch.toLowerCase()),
+                )
+                .map((instance, index) => (
+                  <article
+                    key={instance.id}
+                    className="card border border-base-300 bg-base-200"
+                  >
+                    <div className="card-body">
+                      <div className="flex items-start justify-between gap-4">
+                        <h3 className="card-title">
+                          {instance.name.trim() || "Unnamed Campaign Instance"}
+                        </h3>
+                        <Badge outline>{statusLabel(instance.status)}</Badge>
+                      </div>
+                      <div className="card-actions mt-4 items-center">
                         <RouterButtonLink
-                          href={
-                            continuations[instance.id]?.session
-                              ? `/campaigns/instances/${encodeURIComponent(instance.id)}/${continuations[instance.id]?.kind === "continue" || continuations[instance.id]?.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuations[instance.id]!.session!.id)}`
-                              : `/campaigns/instances/${encodeURIComponent(instance.id)}/sessions`
-                          }
-                          tone="primary"
+                          href={`/campaigns/instances/${encodeURIComponent(instance.id)}`}
+                          tone="outline"
                           size="sm"
-                          aria-describedby={`continue-campaign-${index}`}
                         >
-                          {continuations[instance.id]?.label}
+                          Manage Instance
                         </RouterButtonLink>
-                      ) : (
-                        <Button
-                          disabled
-                          size="sm"
-                          aria-describedby={`continue-campaign-${index}`}
-                        >
-                          {continuations[instance.id]?.label ?? "Continue"}
-                        </Button>
-                      )}
+                        {continuations[instance.id]?.enabled ? (
+                          <RouterButtonLink
+                            href={
+                              continuations[instance.id]?.session
+                                ? `/campaigns/instances/${encodeURIComponent(instance.id)}/${continuations[instance.id]?.kind === "continue" || continuations[instance.id]?.kind === "resume" ? "run" : "sessions"}/${encodeURIComponent(continuations[instance.id]!.session!.id)}`
+                                : `/campaigns/instances/${encodeURIComponent(instance.id)}/sessions`
+                            }
+                            tone="primary"
+                            size="sm"
+                            aria-describedby={`continue-campaign-${index}`}
+                          >
+                            {continuations[instance.id]?.label}
+                          </RouterButtonLink>
+                        ) : (
+                          <Button
+                            disabled
+                            size="sm"
+                            aria-describedby={`continue-campaign-${index}`}
+                          >
+                            {continuations[instance.id]?.label ?? "Continue"}
+                          </Button>
+                        )}
+                      </div>
+                      <p
+                        id={`continue-campaign-${index}`}
+                        className="text-xs text-base-content/50"
+                      >
+                        {continuations[instance.id]?.detail ??
+                          "Checking resumable Sessions…"}
+                      </p>
                     </div>
-                    <p
-                      id={`continue-campaign-${index}`}
-                      className="text-xs text-base-content/50"
-                    >
-                      {continuations[instance.id]?.detail ??
-                        "Checking resumable Sessions…"}
-                    </p>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ))}
             </div>
           ) : (
             <p className="mt-5 text-sm text-base-content/55">
               No active Campaign Instances are available.
             </p>
           )}
+        </section>
+        <section
+          className="mt-8 space-y-4"
+          aria-labelledby="home-worlds-heading"
+        >
+          <h2 id="home-worlds-heading" className="text-2xl font-semibold">
+            Your worlds
+          </h2>
+          <div className="flex items-end gap-2">
+            <Field className="flex-1" label="Search worlds">
+              <Input
+                value={worldSearch}
+                onChange={(event) => setWorldSearch(event.target.value)}
+                placeholder="Search worlds…"
+              />
+            </Field>
+            <Button
+              tone="ghost"
+              className="min-h-11"
+              onClick={() => setWorldSearch("")}
+            >
+              Clear
+            </Button>
+          </div>
+          {!initialWorlds.ok ? (
+            <Alert tone="error">{initialWorlds.message}</Alert>
+          ) : (
+            <div className="grid gap-3">
+              {initialWorlds.data.items
+                .filter((world) =>
+                  world.name.toLowerCase().includes(worldSearch.toLowerCase()),
+                )
+                .map((world) => (
+                  <article
+                    key={world.id}
+                    className="flex min-h-24 flex-wrap items-center justify-between gap-4 rounded-lg border border-base-300 bg-base-200 p-5"
+                  >
+                    <div>
+                      <h3 className="font-semibold">
+                        {world.name || "Unnamed World"}
+                      </h3>
+                      <p className="mt-1 text-sm text-base-content/60">
+                        World author · {statusLabel(world.status)}
+                      </p>
+                    </div>
+                    <RouterButtonLink
+                      href={`/worlds/${encodeURIComponent(world.id)}`}
+                      tone="outline"
+                    >
+                      Open World
+                    </RouterButtonLink>
+                  </article>
+                ))}
+              {!initialWorlds.data.items.length && (
+                <p className="text-base-content/60">No Worlds yet.</p>
+              )}
+            </div>
+          )}
+          <RouterButtonLink href="/worlds" tone="ghost">
+            Browse Worlds
+          </RouterButtonLink>
         </section>
       </div>
     </main>

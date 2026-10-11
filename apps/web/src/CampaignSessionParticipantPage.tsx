@@ -1,3 +1,4 @@
+import { SessionWorkspace } from "./SessionWorkspace";
 import type { ParticipantSpatialBinding } from "@aow/common";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, StatusIndicator } from "@aow/ui";
@@ -115,30 +116,27 @@ export function CampaignSessionParticipantPage({
 
   if (busy && !session) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-neutral text-neutral-content">
+      <main className="grid min-h-dvh place-items-center bg-neutral text-base-content">
         <StatusIndicator tone="info" pulse label="Opening Session…" />
       </main>
     );
   }
 
   return (
-    <main className="min-h-dvh bg-neutral px-5 py-8 text-neutral-content lg:px-10">
-      <div className="mx-auto grid max-w-6xl gap-6">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-content/15 pb-5">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
-              {session?.campaignInstanceName ?? "Campaign Instance"}
+    <main>
+      <SessionWorkspace
+        title={session?.sessionName ?? "Session"}
+        participantLabel={
+          spatial?.status === "awaiting-visibility"
+            ? spatial.actor.name
+            : "Context"
+        }
+        players={
+          <>
+            <p>
+              {session?.campaignInstanceName ?? "Campaign"} ·{" "}
+              {session?.role ?? "Participant"}
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">
-              {session?.sessionName ?? "Session"}
-            </h1>
-            {session && (
-              <p className="mt-2 text-neutral-content/60">
-                Participating as {session.role} · {session.status}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
             {auth0?.configured && !auth0.linked && (
               <a
                 className="btn btn-outline"
@@ -157,88 +155,100 @@ export function CampaignSessionParticipantPage({
                   {present ? "Leave Session" : sessionAction(session.status)}
                 </Button>
               )}
-          </div>
-        </header>
-
-        {message && <Alert tone="error">{message}</Alert>}
-        {presenceError && <Alert tone="error">{presenceError}</Alert>}
-        {session?.role === "player" && session.status === "active" && (
-          <section className="rounded-box border border-neutral-content/15 p-5">
-            <h2 className="text-xl font-semibold">Your map actor</h2>
-            <p className="mt-2">
-              {spatial?.status === "awaiting-visibility"
-                ? `${spatial.actor.name} is bound to your Character. The map is waiting for authoritative visibility.`
-                : spatial?.status === "unavailable" &&
-                    spatial.reason === "no-active-character"
-                  ? "Activate a Character before entering the map."
-                  : "Your actor needs a valid map placement before the map can open."}
-            </p>
-          </section>
-        )}
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-          <section className="rounded-box border border-neutral-content/15 bg-neutral-focus/35 p-5">
-            <h2 className="text-xl font-semibold">Session activity</h2>
-            <div className="mt-4 grid gap-3" aria-live="polite">
-              {events?.items.length ? (
-                events.items.map((event) => (
-                  <article
-                    key={event.sequence}
-                    className="rounded-box border border-neutral-content/10 p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium">{event.summary}</p>
-                      <time className="text-xs text-neutral-content/50">
-                        {new Date(event.occurredAt).toLocaleString()}
-                      </time>
-                    </div>
-                    {event.actorName && (
-                      <p className="mt-1 text-sm text-neutral-content/60">
-                        {event.actorName}
-                      </p>
-                    )}
-                  </article>
-                ))
-              ) : (
-                <p className="text-neutral-content/55">
-                  Session activity will appear here when play begins.
+            {message && <Alert tone="error">{message}</Alert>}
+            {presenceError && <Alert tone="error">{presenceError}</Alert>}
+            {session?.role === "player" && session.status === "active" && (
+              <section className="rounded-box border border-base-300/15 p-5">
+                <h2 className="text-xl font-semibold">Your map actor</h2>
+                <p className="mt-2">
+                  {spatial?.status === "awaiting-visibility"
+                    ? `${spatial.actor.name} is bound to your Character. The map is waiting for authoritative visibility.`
+                    : spatial?.status === "unavailable" &&
+                        spatial.reason === "no-active-character"
+                      ? "Activate a Character before entering the map."
+                      : "Your actor needs a valid map placement before the map can open."}
                 </p>
-              )}
-            </div>
-          </section>
+              </section>
+            )}
 
-          <aside className="rounded-box border border-neutral-content/15 bg-neutral-focus/35 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Participants</h2>
-              <Badge tone={present ? "success" : "neutral"}>
-                {present ? "You are present" : "Not joined"}
-              </Badge>
-            </div>
-            <ul className="mt-4 grid gap-3">
-              {session?.participants.map((participant, index) => (
-                <li
-                  key={`${participant.name}-${participant.role}-${index}`}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span>
-                    {participant.name}
-                    <span className="ml-2 text-xs text-neutral-content/50">
-                      {participant.role}
+            <section className="rounded-box border border-base-300/15 bg-base-200 p-5">
+              <h2 className="text-xl font-semibold">Session activity</h2>
+              <div className="mt-4 grid gap-3" aria-live="polite">
+                {events?.items.length ? (
+                  events.items.map((event) => (
+                    <article
+                      key={event.sequence}
+                      className="rounded-box border border-base-300/10 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium">{event.summary}</p>
+                        <time className="text-xs text-base-content/50">
+                          {new Date(event.occurredAt).toLocaleString()}
+                        </time>
+                      </div>
+                      {event.actorName && (
+                        <p className="mt-1 text-sm text-base-content/60">
+                          {event.actorName}
+                        </p>
+                      )}
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-base-content/55">
+                    Session activity will appear here when play begins.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <aside className="rounded-box border border-base-300/15 bg-base-200 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">Participants</h2>
+                <Badge tone={present ? "success" : "neutral"}>
+                  {present ? "You are present" : "Not joined"}
+                </Badge>
+              </div>
+              <ul className="mt-4 grid gap-3">
+                {session?.participants.map((participant, index) => (
+                  <li
+                    key={`${participant.name}-${participant.role}-${index}`}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span>
+                      {participant.name}
+                      <span className="ml-2 text-xs text-base-content/50">
+                        {participant.role}
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${participant.present ? "bg-success" : "bg-neutral-content/20"}`}
-                    aria-hidden="true"
-                  />
-                  <span className="sr-only">
-                    {participant.present ? "Present" : "Not present"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </aside>
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${participant.present ? "bg-success" : "bg-neutral-content/20"}`}
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">
+                      {participant.present ? "Present" : "Not present"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          </>
+        }
+      >
+        <div className="grid h-full place-items-center p-6 text-center">
+          <div className="max-w-md">
+            <h2 className="text-xl font-semibold">
+              {session?.status === "paused"
+                ? "Session paused"
+                : "Waiting for the scene"}
+            </h2>
+            <p className="mt-3 opacity-70">
+              {session?.status === "active"
+                ? "A map is not available for your view yet. Your Session activity and participants are available in Context."
+                : "Join the Session to follow the table. Open Context for participants and activity."}
+            </p>
+          </div>
         </div>
-      </div>
+      </SessionWorkspace>
     </main>
   );
 }

@@ -160,12 +160,21 @@ Create a shared visual specification and three production-ready image prompts un
   offset. Show the tops of the head, shoulders, and equipment. No three-quarter, isometric, or
   oblique view; no horizon or perspective foreshortening.
   Show the entire footprint, including wings, tails, limbs, weapons, and carried objects. Use a
-  transparent or clean flat background, even lighting, no perspective tilt, no circular token ring,
+  fully transparent background, even lighting, no perspective tilt, no circular token ring,
   no text, and no UI.
 - `paperDollToken` requests a compact orthographic side/profile view for a multi-level map viewed
   from the side. Show the entire creature from its lowest contact point to its highest extremity,
-  with a clear ground line, readable silhouette, transparent or clean flat background, no dramatic
+  with feet naturally aligned but no drawn ground line, a readable silhouette, a fully transparent background, no dramatic
   perspective, no frame, no text, and no UI.
+
+Both token roles are strictly isolated map-position markers. Show only the creature and explicitly
+described worn or held equipment, never a scene or profession-themed vignette. Do not invent accessories
+from occupation or backstory: a blacksmith token must not contain anvils, forges, furnaces, workbenches,
+scattered tools, coals, sparks, or workshop decoration. A specifically described held hammer is allowed.
+Exclude detached props, terrain, floors, ground lines, bases, pedestals, shadows, decorative effects,
+smoke, glow, frames, and symbols. Keep transparent padding around the complete silhouette. Repeat these
+restrictions in both token `negativePrompt` and standalone `imageGenerationPrompt`; they override scene
+or prop suggestions in the shared brief. Portrait scene composition must not leak into token briefs.
 
 Each brief must include `purpose`, `view`, `composition`, `background`, `lighting`, `style`,
 `desiredWidth`, `desiredHeight`, `aspectRatio`, `negativePrompt`, and one standalone

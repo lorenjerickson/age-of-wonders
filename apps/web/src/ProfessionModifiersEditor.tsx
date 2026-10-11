@@ -8,7 +8,8 @@ export type ModifierEdit = { levelIndex: number; index: number | null; grant: Re
 type Option = { key: string; name: string };
 type TargetOption = Option & { target: Record<string, JsonValue> };
 
-export function ProfessionModifiersEditor({ levels, onChange, startingRank, ranks, attributes, skills, statistics, disabled, editing, onEditingChange }: {
+export function ProfessionModifiersEditor({ subject = "Profession", levels, onChange, startingRank, ranks, attributes, skills, statistics, disabled, editing, onEditingChange }: {
+  subject?: "Profession" | "Background";
   editing: ModifierEdit | null;
   onEditingChange: (editing: ModifierEdit | null) => void;
   levels: ProfessionModifierLevel[];
@@ -31,18 +32,18 @@ export function ProfessionModifiersEditor({ levels, onChange, startingRank, rank
     ? t.target.kind === "skill-check" : kind === "roll-dice"
       ? t.target.kind === "roll" || t.target.kind === "skill-check" : true);
   return <Fieldset disabled={disabled} className="space-y-6 rounded-box border border-base-300 p-5">
-    <Legend>Profession modifiers</Legend>
-    <p className="text-sm text-base-content/65">Modifiers add together, even when they affect the same target. Add or update them in this list, then Save Profession to save all changes.</p>
+    <Legend>{subject} modifiers</Legend>
+    <p className="text-sm text-base-content/65">Modifiers add together, even when they affect the same target. Add or update them in this list, then Save {subject} to save all changes.</p>
     {levels.map((level, levelIndex) => {
       const grants = levelModifierGrants(level);
       const rank = levelIndex === 0 ? startingRank : String(level.tier ?? "");
-      const rankName = ranks.find(r => r.key === rank)?.name ?? (levelIndex === 0 ? "Starting rank" : `Rank ${levelIndex + 1}`);
+      const rankName = subject === "Background" ? "Backstory benefits" : ranks.find(r => r.key === rank)?.name ?? (levelIndex === 0 ? "Starting rank" : `Rank ${levelIndex + 1}`);
       const update = (_index: number, changes: Record<string, JsonValue>) => {
         if (editing) onEditingChange({ ...editing, grant: { ...editing.grant, ...changes } });
       };
       return <section key={levelIndex} className="space-y-4" aria-label={`${rankName} modifiers`}>
         <h2 className="text-lg font-semibold">{rankName}</h2>
-        {!grants.length && <p className="text-sm text-base-content/60">No modifiers at this rank.</p>}
+        {!grants.length && <p className="text-sm text-base-content/60">{subject === "Background" ? "No backstory modifiers yet." : "No modifiers at this rank."}</p>}
         {grants.length > 0 && <ul className="divide-y divide-base-300 rounded-box border border-base-300" aria-label={`${rankName} modifier list`}>
           {grants.map((grant, index) => {
             const target = modifierObject(grant.target);

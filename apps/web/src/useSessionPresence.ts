@@ -19,6 +19,9 @@ export function createSessionPresenceLease(api: LeaseApi) {
   let listener: ((state: PresenceState) => void) | undefined;
   let refresh: (() => void | Promise<void>) | undefined;
   let heartbeatPending = false;
+  let activationPending = false;
+  let automatic = false;
+  let wantsPresence = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   let disposal: ReturnType<typeof setTimeout> | undefined;
   const publish = (next: PresenceState) => {
@@ -28,7 +31,14 @@ export function createSessionPresenceLease(api: LeaseApi) {
   function execute(operation: keyof LeaseApi, reconnect = false) {
     const result = tail.then(async () => {
       try {
-        await api[operation]();
+        try {
+          await api[operation]();
+        } catch (caught) {
+          if (operation !== "heartbeat" || !automatic || !wantsPresence)
+            throw caught;
+          // GM-controlled play reconnects using the GM's own authenticated identity.
+          await api.join();
+        }
         publish({ present: operation !== "leave", error: "" });
         // Refresh failures are owned by the page and must not revoke a valid lease.
         void Promise.resolve()
@@ -50,26 +60,48 @@ export function createSessionPresenceLease(api: LeaseApi) {
     return result;
   }
   return {
-    join: () => execute("join"),
-    leave: () => execute("leave"),
+    join: () => {
+      wantsPresence = true;
+      return execute("join");
+    },
+    leave: () => {
+      wantsPresence = false;
+      return execute("leave");
+    },
     attach(
       nextListener: (state: PresenceState) => void,
       nextRefresh: () => void | Promise<void>,
       reconnect: boolean,
       onDispose: () => void,
+      autoJoin = false,
     ) {
+      if (autoJoin && !automatic) wantsPresence = true;
+      automatic = autoJoin;
       if (disposal) clearTimeout(disposal);
       disposal = undefined;
       listener = nextListener;
       refresh = nextRefresh;
       listener(state);
       if (timer) clearInterval(timer);
-      if (reconnect && !state.present)
-        void execute("heartbeat", true).catch(() => undefined);
+      if (!state.present) {
+        if (automatic && wantsPresence && !activationPending) {
+          activationPending = true;
+          void execute(reconnect ? "heartbeat" : "join")
+            .catch(() => undefined)
+            .finally(() => {
+              activationPending = false;
+            });
+        } else if (!automatic && reconnect)
+          void execute("heartbeat", true).catch(() => undefined);
+      }
       timer = setInterval(() => {
-        if (!state.present || heartbeatPending) return;
+        if (
+          (!state.present && !(automatic && wantsPresence)) ||
+          heartbeatPending
+        )
+          return;
         heartbeatPending = true;
-        void execute("heartbeat")
+        void execute(state.present ? "heartbeat" : "join")
           .catch(() => undefined)
           .finally(() => {
             heartbeatPending = false;
@@ -84,6 +116,7 @@ export function createSessionPresenceLease(api: LeaseApi) {
         // Same-tick route/StrictMode remounts retain the lease. A true departure
         // releases only this controller's connection after queued work settles.
         disposal = setTimeout(() => {
+          wantsPresence = false;
           onDispose();
           void execute("leave").catch(() => undefined);
         }, 0);
@@ -95,15 +128,17 @@ export function createSessionPresenceLease(api: LeaseApi) {
 type Lease = ReturnType<typeof createSessionPresenceLease>;
 const leases = new Map<string, Lease>();
 
-/** Restores existing presence by heartbeat; joining is always an explicit action. */
+/** Normal participants join explicitly; GM-controlled play opts into automatic presence. */
 export function useSessionPresence({
   campaignInstanceId,
   sessionId,
   onRefresh,
+  autoJoin = false,
 }: {
   campaignInstanceId: string;
   sessionId: string;
   onRefresh: () => void | Promise<void>;
+  autoJoin?: boolean;
 }) {
   const [state, setState] = useState<PresenceState>({
     present: false,
@@ -161,12 +196,13 @@ export function useSessionPresence({
           /* memory-only lease */
         }
       },
+      autoJoin,
     );
     return () => {
       leaseRef.current = undefined;
       detach();
     };
-  }, [campaignInstanceId, sessionId]);
+  }, [campaignInstanceId, sessionId, autoJoin]);
   return {
     ...state,
     join: () =>

@@ -148,6 +148,53 @@ function fixture(activeSession: { name: string } | null = null) {
 }
 
 describe("CampaignInstanceMigrationsService", () => {
+  it.each(["unused", "revealed", "realized", "extension", "target"])(
+    "retires removed Plot authoring details only when unused (%s)",
+    async (usage) => {
+      const setup = fixture();
+      const plot = { name: "Harbor plot", objectives: [], discoveries: [], locationContexts: [] };
+      const source = revisionManifest("campaign-definition-revision", "campaign-revision-1", 1, [{
+        resourceType: "plots", sourceId: "plot-1", payload: {
+          ...plot,
+          discoveries: [{ claims: [{ id: "claim-old", statement: "Old clue" }] }],
+          locationContexts: [{ id: "context-old", locationId: "old-location" }],
+        },
+      }]);
+      const target = revisionManifest("campaign-definition-revision", "campaign-revision-2", 2, [{
+        resourceType: "plots", sourceId: "plot-1", payload: {
+          ...plot, ...(usage === "target" ? { extensions: { linkedClaim: "claim-old" } } : {}),
+        },
+      }]);
+      setup.instance.currentSnapshot.campaignDefinitionSnapshot.manifest = source;
+      setup.target.manifest = target;
+      setup.target.contentHash = target.contentHash;
+      setup.target.campaignDefinitionRevision.contentHash = target.records[0].contentHash;
+      setup.runtimeState.plotProgress = [{
+        campaignInstanceId: "instance-1", plotDefinitionId: "plot-1", status: "not-started", objectiveProgress: [],
+        ...(usage === "revealed" ? { revealedClaimIds: ["claim-old"] } : {}),
+        ...(usage === "realized" ? { locationRealizations: [{ plotLocationContextId: "context-old", actors: [], items: [] }] } : {}),
+      }];
+      if (usage === "extension") setup.runtimeState.preparation.extensions = { linkedClaim: "claim-old" };
+      const before = JSON.stringify(setup.runtimeState);
+      const result = await new CampaignInstanceMigrationsService(setup.prisma as never).preview("instance-1", "gm-1", {
+        sourceSnapshotId: "instance-snapshot-1" as never,
+        targetCampaignDefinitionSnapshotId: "campaign-snapshot-2" as never,
+        expectedRuntimeRevision: 3,
+        mappings: [{ resourceType: "locations", sourceId: "old-location", targetId: "new-location" }],
+      });
+      expect(result.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ typeLabel: "plot-claims", change: "removed" }),
+        expect.objectContaining({ typeLabel: "plot-location-contexts", change: "removed" }),
+      ]));
+      expect(result.ready).toBe(usage === "unused");
+      if (usage !== "unused") expect(result.conflicts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ resourceType: usage === "realized" ? "plot-location-contexts" : "plot-claims", mappingRequired: true }),
+      ]));
+      expect(JSON.stringify(setup.runtimeState)).toBe(before);
+      expect(setup.instance.currentSnapshot.campaignDefinitionSnapshot.manifest).toEqual(source);
+    },
+  );
+
   it("rewrites every captured canonical runtime reference without changing local IDs or prose", () => {
     const campaign = revisionManifest("campaign-definition-revision", "campaign-revision-1", 1, [
       { resourceType: "plots", sourceId: "old-plot", payload: { name: "Plot" } },

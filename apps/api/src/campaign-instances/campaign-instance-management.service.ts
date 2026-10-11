@@ -1914,8 +1914,14 @@ function runtimeItem(
   };
 }
 
-
-function preparationLocations(instance: {currentSnapshot: {worldDefinitionSnapshot: {manifest: unknown}} | null}) {
-  return snapshotRecords(instance.currentSnapshot?.worldDefinitionSnapshot.manifest, "locations")
-    .map(record => ({id: record.sourceId, name: humanName(record.payload, "Unnamed captured Location")}));
+function preparationLocations(instance: {
+  currentSnapshot: { worldDefinitionSnapshot: { manifest: unknown } } | null;
+}) {
+  return snapshotRecords(
+    instance.currentSnapshot?.worldDefinitionSnapshot.manifest,
+    "locations",
+  ).map((record) => ({
+    id: record.sourceId,
+    name: humanName(record.payload, "Unnamed captured Location"),
+  }));
 }

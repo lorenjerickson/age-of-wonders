@@ -1192,6 +1192,7 @@ model CampaignInstanceSession {
   name                   String
   status                 CampaignInstanceSessionStatus     @default(PLANNED)
   metadataRevision       Int                               @default(1)
+  gmControlsPlayers      Boolean                           @default(false)
   planningNotes          String?
   creationKeyHash        String?
   createdByUserId        String?
@@ -1463,6 +1464,7 @@ model CampaignInstanceCharacterDraft {
   attributeRolls         Json                                 @default("[]")
   attributeAssignments   Json                                 @default("{}")
   startingEquipmentIds   Json                                 @default("[]")
+  equipmentAssignments   Json                                 @default("{}")
   biography              String?
   imageAssetIds          Json                                 @default("{}")
   submittedAt            DateTime?

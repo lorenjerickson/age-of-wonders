@@ -1,3 +1,4 @@
+import { Fieldset } from "@aow/ui";
 import {
   useCallback,
   useEffect,
@@ -17,6 +18,7 @@ import {
   getCampaignSessionSummary,
   issueCampaignSessionInvitations,
   updateCampaignSessionSummary,
+  updateCampaignSession,
   type CampaignSessionDetail,
   type CampaignSessionEvents,
   type CampaignSessionReadiness,
@@ -62,6 +64,7 @@ export function CampaignSessionPage({
     revision: 0,
   });
   const loadSequence = useRef(0);
+  const loadsPending = useRef(0);
   const mutationPending = useRef(false);
   const navigate = useInternalNavigate();
   const suffix = quickStartSuffix(useLocation().searchStr);
@@ -70,6 +73,7 @@ export function CampaignSessionPage({
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
+    loadsPending.current++;
     try {
       if (!campaignDefinitionId) {
         throw new Error("Campaign Definition context is unavailable.");
@@ -120,18 +124,23 @@ export function CampaignSessionPage({
       }
       return false;
     } finally {
+      loadsPending.current--;
       if (sequence === loadSequence.current) setLoading(false);
     }
   }, [campaignDefinitionId, instance.id, sessionId]);
 
   const refresh = useCallback(async () => {
-    if (mutationPending.current) return;
+    if (mutationPending.current || loadsPending.current > 0) return;
     await load();
   }, [load]);
   const presence = useSessionPresence({
     campaignInstanceId: instance.id,
     sessionId,
     onRefresh: refresh,
+    autoJoin: Boolean(
+      session?.gmControlsPlayers &&
+      ["lobby", "active", "paused"].includes(session.status),
+    ),
   });
 
   useEffect(() => {
@@ -238,6 +247,37 @@ export function CampaignSessionPage({
         caught instanceof ApiRequestError
           ? caught.message
           : "The Session action could not be completed.",
+      );
+      await recoverConflict(caught);
+    } finally {
+      mutationPending.current = false;
+      setBusy("");
+    }
+  }
+
+  async function toggleGmControl() {
+    if (!session || !campaignDefinitionId || mutationPending.current) return;
+    mutationPending.current = true;
+    loadSequence.current++;
+    setBusy("control-mode");
+    setError("");
+    try {
+      await updateCampaignSession(
+        campaignDefinitionId,
+        instance.id,
+        session.id,
+        {
+          expectedMetadataRevision: session.metadataRevision,
+          gmControlsPlayers: !session.gmControlsPlayers,
+        },
+      );
+      await load();
+      setNotice("Session control mode updated.");
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.message
+          : "The control mode could not be updated.",
       );
       await recoverConflict(caught);
     } finally {
@@ -372,6 +412,63 @@ export function CampaignSessionPage({
     }
   }
 
+  if (operational && session && campaignDefinitionId) {
+    return (
+      <main aria-label="Run Session">
+        <CampaignSessionTable
+          campaignDefinitionId={campaignDefinitionId}
+          campaignInstanceId={instance.id}
+          sessionId={session.id}
+          sessionName={session.name}
+          controls={
+            <>
+              <Badge outline>{statusLabel(session.status)}</Badge>
+              <AsyncErrorSummary
+                error={refreshError || error || presence.error}
+              />
+              <p role="status">{notice}</p>
+              <Button
+                tone="outline"
+                disabled={Boolean(busy)}
+                onClick={() => void load()}
+              >
+                Refresh Session
+              </Button>
+              <Fieldset
+                disabled={Boolean(busy) || Boolean(refreshError)}
+                className="grid gap-3"
+              >
+                <Button tone="outline" onClick={() => void joinLobby()}>
+                  {presence.present ? "Leave presence" : "Rejoin Session"}
+                </Button>
+                {session.status === "active" && (
+                  <Button tone="primary" onClick={() => void act("pause")}>
+                    Pause Session
+                  </Button>
+                )}
+                {session.status === "paused" && (
+                  <>
+                    <p>Play is paused. Review readiness before resuming.</p>
+                    <Button
+                      tone="primary"
+                      disabled={!readiness?.ready}
+                      onClick={() => void act("resume")}
+                    >
+                      Resume Session
+                    </Button>
+                  </>
+                )}
+              </Fieldset>
+              <RouterButtonLink tone="outline" href={recordHref}>
+                Session management
+              </RouterButtonLink>
+            </>
+          }
+        />
+      </main>
+    );
+  }
+
   return (
     <main
       className={
@@ -397,7 +494,7 @@ export function CampaignSessionPage({
         <Button
           tone="outline"
           disabled={Boolean(busy)}
-          onClick={() => void refresh()}
+          onClick={() => void load()}
         >
           Refresh Session
         </Button>
@@ -442,7 +539,7 @@ export function CampaignSessionPage({
       {session &&
         readiness &&
         (!operational || ["active", "paused"].includes(session.status)) && (
-          <fieldset
+          <Fieldset
             aria-label={operational ? "Run Session" : "Session management"}
             disabled={Boolean(busy) || Boolean(refreshError)}
             className={`mt-8 grid min-w-0 gap-6 ${operational ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
@@ -629,6 +726,32 @@ export function CampaignSessionPage({
               <h2 id="participants-heading" className="text-2xl font-semibold">
                 Participants
               </h2>
+              <div className="mt-4 rounded-box border border-base-300 p-4">
+                <p className="font-semibold">
+                  {session.gmControlsPlayers
+                    ? "GM controls all players"
+                    : "Players control their characters"}
+                </p>
+                <p className="mt-2 text-sm text-base-content/65">
+                  {session.gmControlsPlayers
+                    ? "Opening this lobby connects you as GM and covers player readiness. Each selected player still needs an active Character. Use the session table to select and operate their actors; actions are recorded as GM actions."
+                    : "Players accept their invitations and join the lobby themselves. For solo testing, the GM can operate all selected players and their characters."}
+                </p>
+                {(session.status === "planned" ||
+                  session.status === "lobby") && (
+                  <Button
+                    className="mt-3"
+                    tone="outline"
+                    loading={busy === "control-mode"}
+                    disabled={Boolean(busy) || Boolean(refreshError)}
+                    onClick={() => void toggleGmControl()}
+                  >
+                    {session.gmControlsPlayers
+                      ? "Return control to players"
+                      : "GM controls all players"}
+                  </Button>
+                )}
+              </div>
               <ul
                 className={`mt-4 grid gap-3 ${operational ? "" : "md:grid-cols-2"}`}
               >
@@ -644,7 +767,11 @@ export function CampaignSessionPage({
                     <p className="mt-2 text-sm">
                       {participant.required ? "Required" : "Optional"} ·{" "}
                       {statusLabel(participant.response)} ·{" "}
-                      {participant.present ? "Present" : "Not present"}
+                      {participant.controlledByGm
+                        ? "Controlled by GM"
+                        : participant.present
+                          ? "Present"
+                          : "Not present"}
                     </p>
                     <p className="mt-1 text-xs text-base-content/60">
                       {participant.readinessDetail}
@@ -784,7 +911,7 @@ export function CampaignSessionPage({
                 </form>
               </section>
             )}
-          </fieldset>
+          </Fieldset>
         )}
     </main>
   );

@@ -4,7 +4,7 @@ import {
 } from "./campaignPlotReferencesModel";
 import { useState, type FormEvent } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
-import { Alert, Button, Input, Select } from "@aow/ui";
+import { Alert, Button, Input, Label, Select } from "@aow/ui";
 import { validatePlotHierarchy, type PlotDefinition } from "@aow/common";
 import type { JsonValue } from "./api";
 import {
@@ -328,7 +328,7 @@ function References({
               });
             }}
           >
-            <label className="block">
+            <Label className="block">
               Campaign placement
               <Select
                 required
@@ -355,7 +355,7 @@ function References({
                   </option>
                 ))}
               </Select>
-            </label>
+            </Label>
             {!eligiblePlacements.length && (
               <p>
                 No Campaign placements support this Plot at this Location.{" "}
@@ -439,7 +439,7 @@ function References({
           className="max-w-2xl space-y-5"
           onSubmit={(event) => void save(event)}
         >
-          <label className="block">
+          <Label className="block">
             {collection === "locations" ? "Location" : "Plot"}
             <Select
               className="mt-2 w-full"
@@ -461,10 +461,10 @@ function References({
                 </option>
               ))}
             </Select>
-          </label>
+          </Label>
           {collection !== "locations" && (
             <div>
-              <label className="block">
+              <Label className="block">
                 Cross-branch rationale
                 <Input
                   className="mt-2 w-full"
@@ -475,7 +475,7 @@ function References({
                     context.markDirty();
                   }}
                 />
-              </label>
+              </Label>
               <p className="text-sm" id="rationale-help">
                 Required for a Plot outside the parent or ancestor chain.
               </p>

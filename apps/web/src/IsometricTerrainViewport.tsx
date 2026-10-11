@@ -33,6 +33,9 @@ import {
 } from "./sessionViewportModel";
 
 export interface IsometricViewportProps {
+  /** Container and canvas sizing for embedded full-height Session maps. */
+  className?: string;
+  viewportClassName?: string;
   /** Full GM overview with real actor focus and declaration-only destination picking. */
   session?: SessionViewportInteraction;
   /** Full captured GM map reference; no authoring or gameplay actor is displayed. */
@@ -969,7 +972,7 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
     };
   }, [retry]);
   return (
-    <div>
+    <div className={props.className}>
       {error && (
         <Alert tone="warning">
           {error}{" "}
@@ -995,7 +998,7 @@ export function IsometricTerrainViewport(props: IsometricViewportProps) {
               ? "Captured terrain reference. Drag or arrow keys to orbit, plus and minus to zoom, zero to reset."
               : "Isometric terrain editor. Right drag to orbit; left drag edits the work plane. Arrow keys orbit, plus and minus zoom, zero resets view."
         }
-        className="h-[32rem] w-full touch-none overflow-hidden rounded-box bg-slate-900 outline-offset-2"
+        className={`${props.viewportClassName ?? "h-[32rem]"} w-full touch-none overflow-hidden rounded-box bg-slate-900 outline-offset-2`}
       />
       <p role="status" className="mt-2 text-sm opacity-70">
         {textureStatus}

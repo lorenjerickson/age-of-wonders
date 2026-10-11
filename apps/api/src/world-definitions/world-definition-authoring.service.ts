@@ -2,7 +2,7 @@ import { locationMapIssue } from "@aow/common";
 import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
 import type { UploadTerrainChunkDto, SaveLocationTerrainDto } from "./dto/location-terrain.dto";
 import { TERRAIN_CHUNK_RESOURCE, validateUploadedTerrainChunk, captureTerrainRecords, resolveTerrainManifest } from "./terrain-snapshot";
-import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
+import { backgroundModifierGrantIssue, professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   BadRequestException,
   ConflictException,
@@ -1018,11 +1018,11 @@ export class WorldDefinitionAuthoringService {
       if (
         record.resourceType !== "definitions" ||
         !isObject(record.payload) ||
-        !["profession", "skill"].includes(String(record.payload.kind))
+        !["profession", "skill", "background"].includes(String(record.payload.kind))
       )
         continue;
       const issue =
-        record.payload.kind === "skill"
+        record.payload.kind === "background" ? backgroundModifierGrantIssue(record.payload.components) : record.payload.kind === "skill"
           ? skillModifierGrantIssue(record.payload.components)
           : professionModifierGrantIssue(record.payload.components);
       if (issue) throw new BadRequestException(issue);

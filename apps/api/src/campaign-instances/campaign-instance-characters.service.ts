@@ -719,6 +719,7 @@ function importedCharacterDraftData(
   heritageDefinitionIds: Prisma.InputJsonArray;
   attributeAssignments: Prisma.InputJsonObject;
   startingEquipmentIds: Prisma.InputJsonArray;
+  equipmentAssignments?: Prisma.InputJsonObject;
   biography?: string;
   imageAssetIds: Prisma.InputJsonObject;
 } {
@@ -738,6 +739,7 @@ function importedCharacterDraftData(
     heritageDefinitionIds: jsonStringArray(value.heritageDefinitionIds),
     attributeAssignments: jsonNumberRecord(value.attributeAssignments),
     startingEquipmentIds: jsonStringArray(value.startingEquipmentDefinitionIds),
+    equipmentAssignments: value.equipmentAssignments && typeof value.equipmentAssignments === "object" && !Array.isArray(value.equipmentAssignments) ? value.equipmentAssignments : {},
     ...(typeof value.biography === "string"
       ? { biography: value.biography }
       : {}),

@@ -11,6 +11,30 @@ physical phenomenon, biological capability, scientific process, or technology, e
 in the setting misunderstand it. Folkloric terms may appear in names, aliases, beliefs, and quoted
 descriptions, but never as authoritative mechanical causation.
 
+## Generic domain foundation
+
+`packages/domain` provides a separate, type-only foundation for future entity contracts.
+It does not yet replace `packages/common/src/types` or define persisted resources. Do not
+generate these contracts as application resource JSON.
+
+- `Command<Name, Params, Initiator, Context, Metadata>` is an action payload with required
+  `initiator`, `name`, `params`, and `context`, plus optional additional `metadata`.
+  Names use `<scope>.commands.<action>`; commands are data, not entity methods.
+- `DomainEvent<Name, Context, Initiator>` has required `initiator`, `name`, and `context`.
+  Names use `<scope>.events.<event>`; each event specifies the mapped context required by handlers.
+- `DomainEntity<State, Commands, Events, HandledEvents>` describes state, accepted command
+  payload unions, emitted event payload unions, and handler subscriptions. Handled events default
+  to emitted events but may include other entities' events. This is a type contract, not a runtime
+  object or queue format. Use literal-name payload unions to preserve name/payload correlation.
+- `EventHandlers<Events>` associates each event name with optional handler lists receiving that
+  event's precise envelope. Input mapping is a design-time concern; mapping and dispatch are not
+  implemented by this package.
+- `StatePath<State>` and `StatePathValue<State, Path>` describe dotted paths and their value
+  types over nested key/value state. Arrays and functions are leaves; optional or null intermediate
+  objects produce possibly undefined values. These types do not implement runtime dereferencing.
+
+The existing resource table, serialization examples, and subsystem contracts below remain unchanged.
+
 ## Model conventions
 
 ### Definitions and state
@@ -1740,6 +1764,49 @@ active destination Player membership. Import creates a new `in-progress` destina
 new Character identity and provenance; it never moves, links, synchronizes, or auto-approves the
 copy. The unscoped `/character-drafts` HTTP API has been removed.
 
+The owning GM can also edit an in-progress draft beneath
+`/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/draft`,
+including rolling Attributes and submitting for review. These operations authorize the actual GM,
+retain the Player membership binding, and use the same revision and immutable-review checks as
+Player editing. GM edits record the GM as audit actor. Partial saves may omit required choices.
+Submission and approval require Background, Profession, valid Attribute allocation and three distinct
+image assets. Heritage is no longer required or offered by the creator; existing optional Heritage
+fields remain readable for compatibility, and `CharacterState.heritage` is optional.
+
+`BackgroundComponents.modifierGrants` authors bounded `ModifierGrantDefinition` recipes for backstory
+benefits. The World Background editor offers permanent rolled-once increases, per-check dice and
+Skill proficiency grants using the same editor/validation as Profession benefits. Grant IDs are unique
+within the Background. `ModifierGrantSource` accepts `{kind: "background", definitionId}` for explicit
+provenance. These are grant recipes, not already applied numeric bonuses: acquisition/runtime grant
+execution must retain rolled-once outcomes and use idempotent events. Background choice previews show
+the captured recipes without adding unrolled dice to the base Attribute scores.
+
+`equipmentAssignments` is an optional Item-definition-to-slot-key map in Character creation API,
+draft state and activated sheet output. It persists in `CampaignInstanceCharacterDraft.equipmentAssignments`
+as JSON (empty object for existing drafts). Every assigned Item must be in `startingEquipmentIds`,
+its occupied slot set must match one captured compatible set, and all slots must be captured and
+unoccupied by another Item. Multi-slot sets are atomic; Items without assignments are carried.
+Activation and one-way import retain the map. This is creation equipment intent; it does not create
+runtime Item instance IDs. No new domain resource mapping is introduced.
+
+Character options expose captured equipment slots, Item compatible slot sets and image references,
+Background modifier recipes, and the owning World Definition link. Legacy Item slot spellings are
+resolved to captured equipment-slot keys. Missing captured definitions require publication and
+explicit capture migration; never substitute live World data into a Character sheet.
+
+The draft API/persistence field `imageAssetIds` accepts `portrait`, `overheadToken`, and
+`paperDollToken` references to image assets owned by the actor or scoped to that Character draft.
+`paperDollToken` is labeled Side-on token in the UI. The GM action at `.../draft/artwork` takes one of
+these roles (legacy `.../draft/portrait` defaults to portrait). Portraits use an opaque 1024×1536 image;
+overhead and side-on tokens use transparent 1024×1024 images with distinct camera requirements shared
+with Creature generation. Both token roles are strictly isolated map-position markers: only the body
+and explicitly described worn/held equipment, with transparent pixels outside their silhouette.
+Occupation and backstory must not invent props or decoration (a blacksmith does not get an anvil,
+forge, workshop, or sparks). Exclude detached props, scenery, ground lines, bases, shadows, and effects.
+These constraints override scene suggestions in authored briefs. Each generated asset has `character-draft` scope and Character ID as scope ID.
+Generation returns a preview without changing the draft; explicit selection and revision-checked save
+attach it. The shared process-local idempotency/rate gate and generation audit apply to all roles.
+
 Invitation acceptance never claims a profile by heuristically matching recipient contact data. An
 invitation is bound to a known User only when the GM explicitly selects that Player profile;
 contacts can detect a collision but never select identity. Otherwise acceptance creates a new User
@@ -2945,6 +3012,10 @@ Instance scope. Migration preview and apply use the same transformation; restore
 are preserved; missing progress for an already captured source Plot is not repaired. Explicit
 Plot/Objective mappings retain their existing progress, and the complete result must pass target
 capture validation before adoption. No actor embodiment or placement is fabricated by migration.
+Removed Plot claims and Location contexts may be retired without a replacement only when neither
+current runtime nor any target capture payload references their local or scoped identifiers. The
+preview still lists these removals; prior snapshots and checkpoints preserve historical resolution.
+Referenced removals continue to require explicit mappings. Restore does not use this exception.
 
 
 ### Instance opening Location choices
@@ -2956,3 +3027,21 @@ revision; out-of-capture references remain invalid. The chosen Location is the S
 initial view, not a movement command or an automatic actor placement. Definition preparation
 supplies defaults on new Instance creation; existing Instances retain their own preparation.
 No persisted resource mapping changes are introduced by this projection.
+
+
+### GM-controlled Session play
+
+`CampaignInstanceSession.gmControlsPlayers` is a persisted Boolean, default false. The
+owning GM can set it through Session create/update while planned or in the lobby;
+it is fixed once play starts. Session detail exposes `gmControlsPlayers`; participant
+projections expose `controlledByGm` for selected Players. In this mode, an accepted,
+active GM with a live presence lease covers Player acceptance/presence readiness.
+Active Instance membership and active Character requirements still apply. Spectators
+and Agents keep their normal gates. No Player login, response, presence lease, or
+attendance is fabricated. Existing GM actor controls evaluate captured runtime rules
+and record the GM as the actor. Turning the mode off restores normal Player readiness.
+The mode participates in the readiness token; revision checks protect mode updates.
+The GM Session page automatically establishes and renews the GM’s own presence while this
+mode is enabled in a lobby, active Session, or paused Session. Expired connections are
+rejoined; an explicit Leave stops automatic reconnection until the GM joins again or
+reopens the page. Normal Player presence still requires explicit joining.

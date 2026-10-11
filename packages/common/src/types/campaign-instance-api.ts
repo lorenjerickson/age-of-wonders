@@ -308,6 +308,8 @@ export interface CampaignSessionParticipantProjection {
   readonly lastLeftAt?: string;
   readonly totalPresentSeconds: number;
   readonly present: boolean;
+  /** The owning GM operates this player; this does not imply human presence. */
+  readonly controlledByGm?: boolean;
   readonly ready: boolean;
   readonly readinessDetail: string;
   readonly observeCapabilities: readonly NamespacedKey[];
@@ -315,6 +317,8 @@ export interface CampaignSessionParticipantProjection {
 }
 
 export interface CampaignSessionDetailProjection extends CampaignInstanceSessionProjection {
+  /** Selected players are operated by the present GM. Defaults to false. */
+  readonly gmControlsPlayers?: boolean;
   readonly campaignInstanceId: CampaignInstanceId;
   readonly campaignInstanceName: string;
   readonly planningNotes?: string;
@@ -331,6 +335,8 @@ export interface CampaignSessionDetailProjection extends CampaignInstanceSession
 }
 
 export interface CreateCampaignSessionRequest {
+  /** Selected players are operated by the present GM. Defaults to false. */
+  readonly gmControlsPlayers?: boolean;
   readonly idempotencyKey: string;
   readonly name: string;
   readonly scheduledFor?: string;
@@ -342,6 +348,8 @@ export interface CreateCampaignSessionRequest {
 }
 
 export interface UpdateCampaignSessionRequest {
+  /** Selected players are operated by the present GM. Defaults to false. */
+  readonly gmControlsPlayers?: boolean;
   readonly expectedMetadataRevision: number;
   readonly name?: string;
   readonly scheduledFor?: string | null;
@@ -484,6 +492,7 @@ export interface PlayerCampaignInstanceCharacterDraftProjection {
   readonly heritageDefinitionIds: readonly DefinitionId[];
   readonly attributeRolls: readonly number[];
   readonly attributeAssignments: Readonly<Record<string, number>>;
+  readonly equipmentAssignments?: Readonly<Record<string, readonly string[]>>;
   readonly startingEquipmentIds: readonly DefinitionId[];
   readonly biography?: string;
   readonly imageAssetIds: Readonly<Record<string, string>>;
@@ -518,22 +527,28 @@ export interface UpdatePlayerCampaignInstanceCharacterDraftRequest {
   readonly professionDefinitionId?: DefinitionId;
   readonly heritageDefinitionIds?: readonly DefinitionId[];
   readonly attributeAssignments?: Readonly<Record<string, number>>;
+  readonly equipmentAssignments?: Readonly<Record<string, readonly string[]>>;
   readonly startingEquipmentIds?: readonly DefinitionId[];
   readonly biography?: string;
   readonly imageAssetIds?: Readonly<Record<string, string>>;
 }
 
 export interface PlayerCharacterCreationOptionsProjection {
+  readonly worldDefinitionId?: string;
   readonly backgrounds: readonly CharacterCreationOptionProjection[];
   readonly professions: readonly CharacterCreationOptionProjection[];
   readonly heritages: readonly CharacterCreationOptionProjection[];
   readonly attributes: readonly CharacterAttributeOptionProjection[];
+  readonly equipmentSlots?: readonly { readonly id: string; readonly name: string }[];
   readonly startingEquipment: readonly CharacterCreationOptionProjection[];
   readonly maximumHeritages: number;
   readonly attributeRollCount: number;
 }
 
 export interface CharacterCreationOptionProjection {
+  readonly compatibleSlotSets?: readonly (readonly string[])[];
+  readonly modifierGrants?: readonly import("./modifiers").ModifierGrantDefinition[];
+  readonly imageAssetId?: string;
   readonly id: DefinitionId;
   readonly name: string;
   readonly description?: string;

@@ -77,7 +77,7 @@ export function creatureAttributesForEditor(
 ): Record<string, number> {
   const object = (value: unknown): Record<string, unknown> =>
     value !== null && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
+      ? (value as Record<string, unknown>)
       : {};
   const components = object(payload.components);
   if (components.attributes !== undefined)
@@ -90,8 +90,11 @@ export function creatureAttributesForEditor(
       ? name
       : `aow:attribute-${name === "will" ? "wisdom" : name}`;
     const score = typeof value === "number" ? value : object(value).score;
-    if (options.some((option) => option.key === key) &&
-        typeof score === "number" && Number.isFinite(score))
+    if (
+      options.some((option) => option.key === key) &&
+      typeof score === "number" &&
+      Number.isFinite(score)
+    )
       result[key] = score;
   }
   return result;
@@ -423,7 +426,7 @@ export function creatureEmbodimentPolicyForSave(
   return { ...withoutMaximum, strategy };
 }
 
-function locationParentId(record: WorldDraftRecord) {
+export function locationParentId(record: WorldDraftRecord) {
   const payload = recordPayload(record);
   const placement = payload.placement;
   const placementRecord = placement as Record<string, unknown>;

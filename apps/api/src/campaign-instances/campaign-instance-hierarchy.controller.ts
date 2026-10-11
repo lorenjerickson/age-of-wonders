@@ -26,7 +26,11 @@ import { CampaignInstanceMigrationsService } from "./campaign-instance-migration
 import { CampaignInstancesService } from "./campaign-instances.service";
 import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
 import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
-import { ReviewCampaignInstanceCharacterDto } from "./dto/campaign-instance-character-draft.dto";
+import {
+  ReviewCampaignInstanceCharacterDto,
+  UpdatePlayerCampaignInstanceCharacterDraftDto,
+  ExpectedPlayerCharacterDraftRevisionDto,
+} from "./dto/campaign-instance-character-draft.dto";
 import {
   ApplyCampaignInstanceMigrationDto,
   ApplyCampaignInstanceRestoreDto,
@@ -404,6 +408,92 @@ export class CampaignInstanceHierarchyController {
       characterId,
       request.user!.id,
       dto,
+    );
+  }
+
+  @Get(":campaignInstanceId/character-options")
+  async gmCharacterOptions(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.options(
+      campaignInstanceId,
+      request.user!.id,
+      true,
+    );
+  }
+
+  @Get(":campaignInstanceId/characters/:characterId/draft")
+  async gmCharacterGet(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.get(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      true,
+    );
+  }
+
+  @Patch(":campaignInstanceId/characters/:characterId/draft")
+  async gmCharacterUpdate(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: UpdatePlayerCampaignInstanceCharacterDraftDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.update(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto,
+      true,
+    );
+  }
+
+  @Post(":campaignInstanceId/characters/:characterId/draft/attribute-rolls")
+  async gmCharacterRollAttributes(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedPlayerCharacterDraftRevisionDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.rollAttributes(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto.expectedRevision,
+      true,
+    );
+  }
+
+  @Post(
+    ":campaignInstanceId/characters/:characterId/draft/actions/submit-for-review",
+  )
+  async gmCharacterSubmitForReview(
+    @Param("campaignDefinitionId") campaignDefinitionId: string,
+    @Param("campaignInstanceId") campaignInstanceId: string,
+    @Param("characterId") characterId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ExpectedPlayerCharacterDraftRevisionDto,
+  ) {
+    await this.scope(campaignDefinitionId, campaignInstanceId, request);
+    return this.characterDraftsService.submitForReview(
+      campaignInstanceId,
+      characterId,
+      request.user!.id,
+      dto.expectedRevision,
+      true,
     );
   }
 

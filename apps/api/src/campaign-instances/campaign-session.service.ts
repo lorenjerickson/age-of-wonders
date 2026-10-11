@@ -1030,6 +1030,7 @@ export class CampaignSessionService {
               campaignInstanceId: instanceId,
               name: cleanRequired(dto.name, "Session name"),
               planningNotes: cleanOptional(dto.planningNotes),
+              gmControlsPlayers: dto.gmControlsPlayers ?? false,
               scheduledFor: dto.scheduledFor
                 ? new Date(dto.scheduledFor)
                 : null,
@@ -1128,8 +1129,12 @@ export class CampaignSessionService {
         id: sessionId,
         campaignInstanceId: instanceId,
         metadataRevision: dto.expectedMetadataRevision,
+        status: { in: ["PLANNED", "LOBBY"] },
       },
       data: {
+        ...(dto.gmControlsPlayers !== undefined
+          ? { gmControlsPlayers: dto.gmControlsPlayers }
+          : {}),
         ...(dto.name !== undefined
           ? { name: cleanRequired(dto.name, "Session name") }
           : {}),
@@ -2293,7 +2298,17 @@ function readinessChecks(
       ? `${conflictingSessionName} must pause or conclude before this Session can start or resume.`
       : "No other Session is active on this server.",
   });
+  const gmPresent = session.participations.some(
+    (p) =>
+      p.role === "GM" &&
+      p.response === "ACCEPTED" &&
+      p.humanMembership?.status === "ACTIVE" &&
+      p.presenceLeases.length > 0,
+  );
   for (const participant of session.participations) {
+    const controlledByGm = Boolean(
+      session.gmControlsPlayers && participant.role === "PLAYER",
+    );
     if (!participant.required) continue;
     const present = participant.presenceLeases.length > 0;
     const activeHuman =
@@ -2311,17 +2326,23 @@ function readinessChecks(
       activeHuman &&
       characterReady &&
       agentReady &&
-      participant.response === "ACCEPTED" &&
-      (participant.role === "AGENT" || present);
+      (controlledByGm
+        ? gmPresent
+        : participant.response === "ACCEPTED" &&
+          (participant.role === "AGENT" || present));
     checks.push({
       key: `participant-${participant.id}`,
       label: participant.participantName || "Required participant",
       status: ready ? "ready" : "blocked",
       detail: ready
-        ? `${participant.participantName} is ready.`
-        : participant.role === "AGENT"
-          ? `${participant.participantName} must remain authorized for this Session.`
-          : `${participant.participantName} must accept, be present, and have any required active Character.`,
+        ? controlledByGm
+          ? `${participant.participantName} is controlled by the GM.`
+          : `${participant.participantName} is ready.`
+        : controlledByGm
+          ? `${participant.participantName} needs an active membership, an active Character, and the GM present.`
+          : participant.role === "AGENT"
+            ? `${participant.participantName} must remain authorized for this Session.`
+            : `${participant.participantName} must accept, be present, and have any required active Character.`,
     });
   }
   checks.push({
@@ -2341,6 +2362,7 @@ function readinessToken(
   return digest(
     JSON.stringify({
       sessionRevision: session.metadataRevision,
+      gmControlsPlayers: session.gmControlsPlayers ?? false,
       snapshot: instance.currentSnapshotId,
       runtimeRevision: instance.runtime?.revision,
       participants: session.participations.map((p) => [
@@ -2358,7 +2380,15 @@ function projectDetail(
   instanceName: string,
   row: Awaited<ReturnType<CampaignSessionService["loadForReadiness"]>>,
 ) {
+  const gmPresent = row.participations.some(
+    (p) =>
+      p.role === "GM" &&
+      p.response === "ACCEPTED" &&
+      p.humanMembership?.status === "ACTIVE" &&
+      p.presenceLeases.length > 0,
+  );
   return {
+    gmControlsPlayers: row.gmControlsPlayers ?? false,
     id: row.id,
     name: row.name,
     campaignInstanceId: row.campaignInstanceId,
@@ -2382,9 +2412,16 @@ function projectDetail(
     participantCount: row.participations.length,
     participants: row.participations.map((participant) => {
       const present = participant.presenceLeases.length > 0;
+      const controlledByGm = Boolean(
+        row.gmControlsPlayers && participant.role === "PLAYER",
+      );
       const ready =
-        participant.response === "ACCEPTED" &&
-        (!participant.required || present) &&
+        (!participant.humanMembership ||
+          participant.humanMembership.status === "ACTIVE") &&
+        (controlledByGm
+          ? gmPresent
+          : participant.response === "ACCEPTED" &&
+            (!participant.required || present)) &&
         (participant.role !== "PLAYER" ||
           participant.humanMembership?.activeCharacter?.status === "ACTIVE");
       return {
@@ -2402,9 +2439,12 @@ function projectDetail(
         lastLeftAt: participant.leftAt?.toISOString(),
         totalPresentSeconds: participant.totalPresentSeconds,
         present,
+        controlledByGm,
         ready,
         readinessDetail: ready
-          ? "Ready"
+          ? controlledByGm
+            ? "Controlled by GM"
+            : "Ready"
           : participant.required
             ? "Action required before start"
             : "Optional participant",

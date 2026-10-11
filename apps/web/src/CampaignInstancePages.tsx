@@ -1,3 +1,4 @@
+import type { LocationId } from "@aow/common";
 import { ActorPlacementForm } from "./ActorPlacementForm";
 import {
   useEffect,
@@ -563,7 +564,7 @@ function InstancePreparationForm() {
   });
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!preparation) return;
+    if (!preparation || busy) return;
     setBusy(true);
     setError("");
     setStatus("");
@@ -575,7 +576,7 @@ function InstancePreparationForm() {
           expectedRuntimeRevision: preparation.runtimeRevision,
           preparation: {
             ...preparation.preparation,
-            startingLocationId: startingLocationId || undefined,
+            startingLocationId: (startingLocationId as LocationId) || undefined,
             startingContext: startingContext.trim(),
             mapVariations: stagingNotes.trim(),
           },
@@ -627,16 +628,24 @@ function InstancePreparationForm() {
               }}
             >
               <option value="">Choose a starting Location</option>
-              {startingLocationId && !(preparation.locations ?? []).some(location => location.id === startingLocationId) && (
-                <option value={startingLocationId}>Unavailable captured Location — choose a replacement</option>
-              )}
-              {(preparation.locations ?? []).map(location => (
-                <option key={location.id} value={location.id}>{location.name}</option>
+              {startingLocationId &&
+                !(preparation.locations ?? []).some(
+                  (location) => location.id === startingLocationId,
+                ) && (
+                  <option value={startingLocationId}>
+                    Unavailable captured Location — choose a replacement
+                  </option>
+                )}
+              {(preparation.locations ?? []).map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
               ))}
             </Select>
           </Label>
           <p className="text-sm text-base-content/60">
-            The Session table opens at this Location. Choosing it does not move existing Characters or actors.
+            The Session table opens at this Location. Choosing it does not move
+            existing Characters or actors.
           </p>
           <Label>
             Starting context
@@ -661,6 +670,7 @@ function InstancePreparationForm() {
             />
           </Label>
           <Button
+            type="submit"
             className="justify-self-start"
             loading={busy}
             disabled={!dirty}
@@ -983,12 +993,13 @@ export function CampaignInstancePlacementsPage() {
                       value={
                         replacementSelections[placement.realizationId] ?? ""
                       }
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
                         setReplacementSelections((current) => ({
                           ...current,
-                          [placement.realizationId]: event.currentTarget.value,
-                        }))
-                      }
+                          [placement.realizationId]: value,
+                        }));
+                      }}
                     >
                       <option value="">Choose a replacement</option>
                       <optgroup label="Existing Instance entities">
@@ -1643,7 +1654,11 @@ export function CampaignInstanceRosterPage() {
                     onChange={(event) => setPhone(event.currentTarget.value)}
                   />
                 </Label>
-                <Button tone="primary" loading={busy === "invite"}>
+                <Button
+                  type="submit"
+                  tone="primary"
+                  loading={busy === "invite"}
+                >
                   Send invitation
                 </Button>
               </div>
@@ -1786,7 +1801,11 @@ export function CampaignInstanceRosterPage() {
                     ))}
                 </Select>
               </Label>
-              <Button tone="primary" loading={busy === "create-character"}>
+              <Button
+                type="submit"
+                tone="primary"
+                loading={busy === "create-character"}
+              >
                 Create draft
               </Button>
             </form>
@@ -2021,7 +2040,11 @@ export function CampaignInstanceRosterPage() {
                   className="rounded-box border border-base-300 bg-base-200 p-4"
                 >
                   <p className="font-semibold">
-                    {character.name || "Unnamed Character"}
+                    <InternalLink
+                      href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
+                    >
+                      {character.name || "Unnamed Character"}
+                    </InternalLink>
                   </p>
                   <p className="mt-1 text-sm">
                     Player: {character.playerName || "Player unavailable"}
@@ -2031,6 +2054,15 @@ export function CampaignInstanceRosterPage() {
                     {statusLabel(character.sheetStatus)}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <RouterButtonLink
+                      href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
+                      size="sm"
+                      tone="primary"
+                    >
+                      {character.sheetStatus === "in-progress"
+                        ? "Edit Character"
+                        : "View Character"}
+                    </RouterButtonLink>
                     <Button
                       type="button"
                       size="sm"
@@ -2594,15 +2626,16 @@ export function CampaignInstanceSessionsPage() {
                           key={entry.membershipId}
                           label={`${entry.displayName} · ${statusLabel(entry.role)}`}
                           checked={selected.has(entry.membershipId)}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
                             setSelected((current) => {
                               const next = new Set(current);
-                              if (event.currentTarget.checked)
+                              if (checked)
                                 next.add(entry.membershipId);
                               else next.delete(entry.membershipId);
                               return next;
-                            })
-                          }
+                            });
+                          }}
                         />
                       ))}
                   </Fieldset>

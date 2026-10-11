@@ -1,3 +1,4 @@
+import { Fieldset } from "@aow/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { Badge, Button, Input, Label } from "@aow/ui";
@@ -420,9 +421,9 @@ export function WorldRulesPage() {
                       );
                   }}
                 >
-                  <fieldset disabled={Boolean(busy) || !canEdit}>
+                  <Fieldset disabled={Boolean(busy) || !canEdit}>
                     <WorldRuleEditor rule={editor} onChange={setEditor} />
-                  </fieldset>
+                  </Fieldset>
                   {validation && !validation.valid && (
                     <ul className="mt-4 text-sm text-error" role="alert">
                       {validation.issues.map((issue, index) => (

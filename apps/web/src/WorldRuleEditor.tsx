@@ -1,3 +1,4 @@
+import { Fieldset, Legend } from "@aow/ui";
 import { Button, Input, Label, Select, Textarea } from "@aow/ui";
 import type {
   WorldRule,
@@ -87,8 +88,8 @@ function ExpressionEditor({
     />
   );
   return (
-    <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
-      <legend className="px-1 text-sm font-medium">{label}</legend>
+    <Fieldset className="min-w-0 rounded-box border border-base-300 p-3">
+      <Legend className="px-1 text-sm font-medium">{label}</Legend>
       <Label>
         Value source
         <Select
@@ -323,7 +324,7 @@ function ExpressionEditor({
           </>
         )}
       </div>
-    </fieldset>
+    </Fieldset>
   );
 }
 const predicates: Record<WorldRulePredicate["kind"], WorldRulePredicate> = {
@@ -350,7 +351,7 @@ function ConditionEditor({
       </p>
     );
   return (
-    <fieldset className="grid min-w-0 gap-3 rounded-box border border-base-300 p-3">
+    <Fieldset className="grid min-w-0 gap-3 rounded-box border border-base-300 p-3">
       <Label>
         Condition
         <Select
@@ -469,7 +470,7 @@ function ConditionEditor({
           />
         </>
       )}
-    </fieldset>
+    </Fieldset>
   );
 }
 function defaultRuleEffect(kind: WorldRuleEffect["kind"]): WorldRuleEffect {
@@ -602,7 +603,7 @@ function EffectEditor({
             </>
           )}
           {Object.entries(value.context).map(([key, expression], index) => (
-            <fieldset
+            <Fieldset
               className="grid gap-2 rounded-box border border-base-300 p-3"
               key={index}
             >
@@ -647,7 +648,7 @@ function EffectEditor({
               >
                 Remove context field
               </Button>
-            </fieldset>
+            </Fieldset>
           ))}
           <Button
             size="sm"

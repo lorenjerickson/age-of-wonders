@@ -19,6 +19,7 @@ type CharacterCreationOption = {
   id: string;
   name: string;
   description?: string;
+  compatibleSlotSets?: string[][];
 };
 
 type CharacterAttributeOption = {
@@ -30,11 +31,13 @@ type CharacterAttributeOption = {
 
 type CharacterCreationContext = {
   campaignInstanceSnapshotId: string;
+  worldDefinitionId?: string;
   backgrounds: CharacterCreationOption[];
   professions: CharacterCreationOption[];
   heritages: CharacterCreationOption[];
   attributes: CharacterAttributeOption[];
   startingEquipment: CharacterCreationOption[];
+  equipmentSlots: { id: string; name: string }[];
   maximumHeritages: number;
   attributeRollCount: number;
 };
@@ -107,11 +110,17 @@ export class CampaignInstanceCharacterDraftsService {
     return this.get(campaignInstanceId, characterId, userId);
   }
 
-  async get(campaignInstanceId: string, characterId: string, userId: string) {
+  async get(
+    campaignInstanceId: string,
+    characterId: string,
+    userId: string,
+    asGm = false,
+  ) {
     const draft = await this.ownedDraft(
       campaignInstanceId,
       characterId,
       userId,
+      asGm,
     );
     return draftProjection(draft, draft.campaignInstance.name);
   }
@@ -121,18 +130,68 @@ export class CampaignInstanceCharacterDraftsService {
     characterId: string,
     userId: string,
     dto: UpdatePlayerCampaignInstanceCharacterDraftDto,
+    asGm = false,
   ) {
     const draft = await this.ownedDraft(
       campaignInstanceId,
       characterId,
       userId,
+      asGm,
     );
     if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
       throw new BadRequestException(
         "A Character sheet under review or already approved is immutable.",
       );
     }
-    await this.validateDefinitionSelections(campaignInstanceId, userId, dto);
+    await this.validateDefinitionSelections(
+      campaignInstanceId,
+      userId,
+      dto,
+      asGm,
+    );
+    if (dto.imageAssetIds !== undefined) {
+      const roles = Object.keys(dto.imageAssetIds);
+      if (
+        roles.some(
+          (role) =>
+            !["portrait", "overheadToken", "paperDollToken"].includes(role),
+        ) ||
+        Object.values(dto.imageAssetIds).some(
+          (value) => typeof value !== "string" || !value,
+        )
+      )
+        throw new BadRequestException("Choose valid Character artwork.");
+      for (const id of Object.values(dto.imageAssetIds)) {
+        const asset = await this.prisma.mediaAsset.findFirst({
+          where: {
+            id,
+            mediaType: "images",
+            OR: [
+              { createdByUserId: userId },
+              { scopeType: "character-draft", scopeId: characterId },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!asset)
+          throw new BadRequestException(
+            "The selected Character artwork is unavailable.",
+          );
+      }
+    }
+    if (
+      dto.equipmentAssignments !== undefined ||
+      dto.startingEquipmentIds !== undefined
+    ) {
+      const context = await this.creationContext(campaignInstanceId);
+      const issue = characterEquipmentIssue(
+        dto.equipmentAssignments ?? draft.equipmentAssignments ?? {},
+        dto.startingEquipmentIds ?? stringArray(draft.startingEquipmentIds),
+        context.startingEquipment,
+        context.equipmentSlots,
+      );
+      if (issue) throw new BadRequestException(issue);
+    }
     const name = dto.name?.trim();
     if (dto.name !== undefined && !name) {
       throw new BadRequestException("A Character name is required.");
@@ -144,6 +203,7 @@ export class CampaignInstanceCharacterDraftsService {
           campaignInstanceId,
           playerMembershipId: draft.playerMembershipId,
           revision: dto.expectedRevision,
+          status: CharacterDraftStatus.IN_PROGRESS,
         },
         data: {
           ...(name === undefined ? {} : { name }),
@@ -152,6 +212,7 @@ export class CampaignInstanceCharacterDraftsService {
           heritageDefinitionIds: dto.heritageDefinitionIds,
           attributeAssignments: dto.attributeAssignments,
           startingEquipmentIds: dto.startingEquipmentIds,
+          equipmentAssignments: dto.equipmentAssignments,
           biography: dto.biography?.trim(),
           imageAssetIds: dto.imageAssetIds,
           revision: { increment: 1 },
@@ -162,6 +223,17 @@ export class CampaignInstanceCharacterDraftsService {
           "Character sheet changed; reload and retry.",
         );
       }
+      if (asGm)
+        await tx.campaignInstanceAuditEvent.create({
+          data: {
+            campaignInstanceId,
+            actorUserId: userId,
+            action: "instance.character.edited-by-gm",
+            subjectName: name ?? draft.name ?? "Character",
+            subjectType: "Character",
+            detail: { playerName: draft.playerMembership.displayName },
+          },
+        });
       if (name !== undefined) {
         await tx.campaignInstanceCharacterAssociation.updateMany({
           where: {
@@ -173,7 +245,7 @@ export class CampaignInstanceCharacterDraftsService {
         });
       }
     });
-    return this.get(campaignInstanceId, characterId, userId);
+    return this.get(campaignInstanceId, characterId, userId, asGm);
   }
 
   async rollAttributes(
@@ -181,11 +253,13 @@ export class CampaignInstanceCharacterDraftsService {
     characterId: string,
     userId: string,
     expectedRevision: number,
+    asGm = false,
   ) {
     const draft = await this.ownedDraft(
       campaignInstanceId,
       characterId,
       userId,
+      asGm,
     );
     if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
       throw new BadRequestException(
@@ -203,6 +277,7 @@ export class CampaignInstanceCharacterDraftsService {
           campaignInstanceId,
           playerMembershipId: draft.playerMembershipId,
           revision: expectedRevision,
+          status: CharacterDraftStatus.IN_PROGRESS,
         },
         data: {
           attributeRolls: rolls,
@@ -214,7 +289,7 @@ export class CampaignInstanceCharacterDraftsService {
     if (updated.count !== 1) {
       throw new ConflictException("Character sheet changed; reload and retry.");
     }
-    return this.get(campaignInstanceId, characterId, userId);
+    return this.get(campaignInstanceId, characterId, userId, asGm);
   }
 
   async submitForReview(
@@ -222,11 +297,13 @@ export class CampaignInstanceCharacterDraftsService {
     characterId: string,
     userId: string,
     expectedRevision: number,
+    asGm = false,
   ) {
     const draft = await this.ownedDraft(
       campaignInstanceId,
       characterId,
       userId,
+      asGm,
     );
     if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
       throw new ConflictException(
@@ -275,18 +352,21 @@ export class CampaignInstanceCharacterDraftsService {
         },
       });
     });
-    return this.get(campaignInstanceId, characterId, userId);
+    return this.get(campaignInstanceId, characterId, userId, asGm);
   }
 
-  async options(campaignInstanceId: string, userId: string) {
-    await this.playerMembership(campaignInstanceId, userId);
+  async options(campaignInstanceId: string, userId: string, asGm = false) {
+    if (asGm) await this.gmInstance(campaignInstanceId, userId);
+    else await this.playerMembership(campaignInstanceId, userId);
     const creation = await this.creationContext(campaignInstanceId);
     return {
+      worldDefinitionId: creation.worldDefinitionId,
       backgrounds: creation.backgrounds,
       professions: creation.professions,
       heritages: creation.heritages,
       attributes: creation.attributes,
       startingEquipment: creation.startingEquipment,
+      equipmentSlots: creation.equipmentSlots,
       maximumHeritages: creation.maximumHeritages,
       attributeRollCount: creation.attributeRollCount,
     };
@@ -474,6 +554,7 @@ export class CampaignInstanceCharacterDraftsService {
         heritageDefinitionIds: stringArray(draft.heritageDefinitionIds),
         attributeAssignments: numberRecord(draft.attributeAssignments),
         startingEquipmentDefinitionIds: stringArray(draft.startingEquipmentIds),
+        equipmentAssignments: draft.equipmentAssignments ?? {},
         ...(draft.biography ? { biography: draft.biography } : {}),
         imageAssetIds: stringRecord(draft.imageAssetIds),
         approvedAt: approvedAt.toISOString(),
@@ -485,6 +566,7 @@ export class CampaignInstanceCharacterDraftsService {
     campaignInstanceId: string,
     userId: string,
     dto: UpdatePlayerCampaignInstanceCharacterDraftDto,
+    asGm = false,
   ) {
     if (
       dto.backgroundDefinitionId === undefined &&
@@ -495,7 +577,8 @@ export class CampaignInstanceCharacterDraftsService {
     ) {
       return;
     }
-    await this.playerMembership(campaignInstanceId, userId);
+    if (asGm) await this.gmInstance(campaignInstanceId, userId);
+    else await this.playerMembership(campaignInstanceId, userId);
     const allowed = await this.creationContext(campaignInstanceId);
     const selections = [
       ["background", dto.backgroundDefinitionId, allowed.backgrounds],
@@ -567,6 +650,7 @@ export class CampaignInstanceCharacterDraftsService {
                 manifest: true,
                 worldDefinitionRevision: {
                   select: {
+                    worldDefinitionId: true,
                     modelSchemaSelections: {
                       orderBy: { selectionOrder: "asc" },
                       select: {
@@ -668,16 +752,59 @@ export class CampaignInstanceCharacterDraftsService {
           minimum: 0,
           maximum: 100,
         }));
+    const equipmentSlots = modelElements
+      .filter(
+        (revision) => revision.element.semanticRole === "aow:equipment-slot",
+      )
+      .map((revision) => ({
+        id: revision.element.key,
+        name: attributeOption(revision).name,
+      }));
+    const startingEquipment = byKind("item").map((item) => ({
+      ...item,
+      compatibleSlotSets: (item.compatibleSlotSets ?? [])
+        .map((set) =>
+          set.map(
+            (key) =>
+              equipmentSlots.find(
+                (slot) => slot.id === key || slot.id.endsWith(`-slot-${key}`),
+              )?.id ?? key,
+          ),
+        )
+        .filter((set) =>
+          set.every((key) => equipmentSlots.some((slot) => slot.id === key)),
+        ),
+    }));
     return {
+      worldDefinitionId:
+        snapshot.worldDefinitionSnapshot.worldDefinitionRevision
+          .worldDefinitionId,
       campaignInstanceSnapshotId: snapshot.id,
       backgrounds: byKind("background"),
       professions: byKind("profession"),
       heritages: byKind("heritage"),
       attributes: effectiveAttributes,
-      startingEquipment: byKind("item"),
+      startingEquipment,
+      equipmentSlots,
       maximumHeritages: 1,
       attributeRollCount: effectiveAttributes.length + 2,
     };
+  }
+
+  private async gmInstance(campaignInstanceId: string, userId: string) {
+    const instance = await this.prisma.campaignInstance.findFirst({
+      where: {
+        id: campaignInstanceId,
+        ownerUserId: userId,
+        status: { notIn: ["ARCHIVED", "CONCLUDED"] },
+      },
+      select: { id: true },
+    });
+    if (!instance)
+      throw new NotFoundException(
+        "The editable Campaign Instance was not found.",
+      );
+    return instance;
   }
 
   private async gmDraft(
@@ -707,7 +834,12 @@ export class CampaignInstanceCharacterDraftsService {
     campaignInstanceId: string,
     characterId: string,
     userId: string,
+    asGm = false,
   ) {
+    if (asGm) {
+      await this.gmInstance(campaignInstanceId, userId);
+      return this.gmDraft(campaignInstanceId, characterId, userId);
+    }
     const draft = await this.prisma.campaignInstanceCharacterDraft.findFirst({
       where: {
         characterId,
@@ -776,6 +908,7 @@ type CharacterDraftRow = {
   attributeRolls: Prisma.JsonValue;
   attributeAssignments: Prisma.JsonValue;
   startingEquipmentIds: Prisma.JsonValue;
+  equipmentAssignments?: Prisma.JsonValue;
   biography: string | null;
   imageAssetIds: Prisma.JsonValue;
   submittedAt: Date | null;
@@ -806,6 +939,7 @@ function draftProjection(
     attributeRolls: numberArray(draft.attributeRolls),
     attributeAssignments: numberRecord(draft.attributeAssignments),
     startingEquipmentIds: stringArray(draft.startingEquipmentIds),
+    equipmentAssignments: draft.equipmentAssignments ?? {},
     ...(draft.biography ? { biography: draft.biography } : {}),
     imageAssetIds: stringRecord(draft.imageAssetIds),
     ...(draft.submittedAt
@@ -828,7 +962,29 @@ function optionProjection(sourceId: string, payload: Record<string, unknown>) {
     (typeof payload.description === "string" && payload.description.trim()) ||
     (typeof identity.description === "string" && identity.description.trim()) ||
     undefined;
-  return { id: sourceId, name, ...(description ? { description } : {}) };
+  const components = isObject(payload.components) ? payload.components : {};
+  const equippable = isObject(components.equippable)
+    ? components.equippable
+    : {};
+  const compatibleSlotSets = Array.isArray(equippable.compatibleSlotSets)
+    ? equippable.compatibleSlotSets.filter(
+        (set): set is string[] =>
+          Array.isArray(set) && set.every((s) => typeof s === "string"),
+      )
+    : [];
+  const image = isObject(payload.image) ? payload.image : {};
+  return {
+    id: sourceId,
+    name,
+    ...(description ? { description } : {}),
+    ...(payload.kind === "item" ? { compatibleSlotSets } : {}),
+    ...(Array.isArray(components.modifierGrants)
+      ? { modifierGrants: components.modifierGrants }
+      : {}),
+    ...(typeof image.assetId === "string"
+      ? { imageAssetId: image.assetId }
+      : {}),
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -965,19 +1121,25 @@ function validateCompleteDraft(
       "Choose an available Profession.",
     );
   }
-  const heritages = stringArray(draft.heritageDefinitionIds);
+  const equipmentIssue = characterEquipmentIssue(
+    draft.equipmentAssignments ?? {},
+    stringArray(draft.startingEquipmentIds),
+    creation.startingEquipment,
+    creation.equipmentSlots,
+  );
+  if (equipmentIssue)
+    add("equipment-invalid", "equipmentAssignments", equipmentIssue);
+  const art = stringRecord(draft.imageAssetIds);
+  const roles = ["portrait", "overheadToken", "paperDollToken"];
   if (
-    heritages.length !== 1 ||
-    heritages.some(
-      (id) => !creation.heritages.some((option) => option.id === id),
-    )
-  ) {
+    roles.some((role) => !art[role]) ||
+    new Set(roles.map((role) => art[role])).size !== 3
+  )
     add(
-      "heritage-required",
-      "heritageDefinitionIds",
-      "Choose one available Heritage.",
+      "artwork-required",
+      "imageAssetIds",
+      "Attach three distinct images: portrait, overhead token, and side-on token.",
     );
-  }
   const rolls = numberArray(draft.attributeRolls);
   if (
     rolls.length !== creation.attributeRollCount ||
@@ -1050,4 +1212,41 @@ function validateCompleteDraft(
     );
   }
   return issues;
+}
+
+export function characterEquipmentIssue(
+  assignments: unknown,
+  selected: readonly string[],
+  items: readonly CharacterCreationOption[],
+  slots: readonly { id: string; name: string }[],
+): string | undefined {
+  if (!isObject(assignments)) return "Equipment assignments must be an object.";
+  const occupied = new Set<string>();
+  for (const [id, assigned] of Object.entries(assignments)) {
+    const item = items.find((item) => item.id === id);
+    if (
+      !selected.includes(id) ||
+      !item ||
+      !Array.isArray(assigned) ||
+      !assigned.length ||
+      !assigned.every((s) => typeof s === "string")
+    )
+      return "Choose a carried Item and valid equipment slots.";
+    if (
+      new Set(assigned).size !== assigned.length ||
+      !item.compatibleSlotSets?.some(
+        (set) =>
+          set.length === assigned.length &&
+          set.every((s) => assigned.includes(s)),
+      )
+    )
+      return "This Item does not fit the selected equipment slots.";
+    for (const slot of assigned) {
+      if (!slots.some((s) => s.id === slot))
+        return "An equipment slot is unavailable in this capture.";
+      if (occupied.has(slot))
+        return "Two Items cannot occupy the same equipment slot.";
+      occupied.add(slot);
+    }
+  }
 }

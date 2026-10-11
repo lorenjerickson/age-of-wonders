@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   contextualBreadcrumbs,
   contextualNavigationStack,
+  contextualSidebarFrame,
 } from "./contextualNavigationModel";
 
 const data = {
@@ -16,7 +17,7 @@ const data = {
 };
 const mapPath = "/worlds/secret-world/atlas/locations/secret-location/map";
 describe("contextual navigation stack", () => {
-  it("reconstructs the Location sidebar on direct Map entry and pops back to each parent", () => {
+  it("reconstructs Location ancestry while keeping property groups out of the sidebar", () => {
     const stack = contextualNavigationStack(mapPath, data);
     expect(stack.map((frame) => frame.label)).toEqual([
       "GM Workspace",
@@ -33,11 +34,23 @@ describe("contextual navigation stack", () => {
         stack.slice(0, index + 1).map(({ label, href }) => ({ label, href })),
       );
     }
-    expect(stack.at(-1)?.links).toContainEqual({ label: "Map", href: mapPath });
+    expect(stack.at(-1)?.links).toEqual([]);
+    expect(contextualSidebarFrame(stack).label).toBe("Age of Wonders");
     expect(
       contextualBreadcrumbs(mapPath, stack).map((crumb) => crumb.label),
     ).toEqual(stack.map((frame) => frame.label));
   });
+  it.each(["bestiary/creatures", "item-compendium/items", "characters/skills"])(
+    "keeps the owning World navigation when opening a record in %s",
+    (library) => {
+      const stack = contextualNavigationStack(
+        `/worlds/secret-world/${library}/secret-record`,
+        data,
+      );
+      expect(contextualSidebarFrame(stack).kind).toBe("World");
+      expect(stack.at(-1)?.href).toContain("secret-record");
+    },
+  );
   it("keeps World sections in the World sidebar without adding the selected section to breadcrumbs", () => {
     const stack = contextualNavigationStack(
       "/worlds/secret-world/bestiary",
@@ -48,9 +61,24 @@ describe("contextual navigation stack", () => {
       contextualBreadcrumbs("/worlds/secret-world/bestiary", stack).at(-1)
         ?.label,
     ).toBe("Age of Wonders");
-    expect(stack.at(-1)?.groups?.find((group) => group.active)?.label).toBe(
+    expect(stack.at(-1)?.links.find((link) => link.active)?.label).toBe(
       "Bestiary",
     );
+  });
+  it("keeps model facets in the same World context", () => {
+    const stack = contextualNavigationStack(
+      "/worlds/secret-world/characters/model/attributes/effective",
+      data,
+    );
+    expect(stack.at(-1)?.kind).toBe("World");
+    expect(stack.at(-1)?.links.find((link) => link.active)?.label).toBe(
+      "Models & taxonomies",
+    );
+    expect(stack.map(({ label }) => label)).toEqual([
+      "GM Workspace",
+      "Worlds",
+      "Age of Wonders",
+    ]);
   });
   it("never uses unknown URL identifiers as labels", () => {
     for (const path of [

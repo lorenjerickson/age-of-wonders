@@ -1,5 +1,5 @@
+import { ShellTools } from "./AppShellTools";
 import { NavigationLiveData } from "./navigationLiveData";
-import { campaignPlotNavigation } from "./campaignPlotNavigationModel";
 import { ContextualBreadcrumbs } from "./ContextualNavigation";
 import {
   createContext,
@@ -10,7 +10,15 @@ import {
   type ReactNode,
 } from "react";
 import { useBlocker, useLocation, useRouter } from "@tanstack/react-router";
-import { Alert, Badge, Button, StatusIndicator } from "@aow/ui";
+import {
+  Disclosure,
+  Input,
+  Fieldset,
+  Alert,
+  Badge,
+  Button,
+  StatusIndicator,
+} from "@aow/ui";
 import {
   ApiRequestError,
   restoreCampaignDefinition,
@@ -21,12 +29,14 @@ import {
 } from "./api";
 import {
   campaignDefinitionNavigationForPath,
+  campaignPlotTree,
+  type CampaignPlotNode,
   campaignDraftWithoutRecord,
   campaignDraftWithRecord,
   type CampaignDraftRecord,
 } from "./campaignAuthoringModel";
 import { InternalLink, RouterButtonLink } from "./navigation";
-import { quickStartStorageKey, quickStartSuffix } from "./quickStartModel";
+import { quickStartSuffix } from "./quickStartModel";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "stale" | "error";
 
@@ -263,72 +273,81 @@ export function CampaignDefinitionContextBar() {
   const worldName = world?.worldName ?? world?.name;
   return (
     <>
-      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-100/95 px-6 py-3 pl-16 backdrop-blur lg:px-10">
-        <div className="min-w-0 basis-full sm:flex-1">
-          <p className="truncate font-semibold" title={name}>
-            {name}
-          </p>
-          <p className="text-xs text-base-content/60">
-            {draft
-              ? `${draft.baseRevisionId ? "Working draft" : "Initial draft"} · ${worldName || "Unavailable captured World"} revision ${world?.revisionNumber ?? "unavailable"}`
-              : currentRevision
-                ? `Published Campaign revision ${currentRevision.revisionNumber} · read only`
-                : "Unpublished · read only"}
-          </p>
-        </div>
-        {draft?.status === "stale" && (
-          <Badge tone="warning">Needs rebase</Badge>
-        )}
-        <StatusIndicator
-          tone={
-            saveState === "error" || saveState === "stale"
-              ? "error"
-              : saveState === "saving"
-                ? "warning"
+      <ShellTools>
+        <header
+          data-campaign-context
+          className="flex flex-col items-start gap-3 p-4"
+        >
+          <div className="min-w-0 basis-full sm:flex-1">
+            <p className="truncate font-semibold" title={name}>
+              {name}
+            </p>
+            <p className="text-xs text-base-content/60">
+              {draft
+                ? `${draft.baseRevisionId ? "Working draft" : "Initial draft"} · ${worldName || "Unavailable captured World"} revision ${world?.revisionNumber ?? "unavailable"}`
+                : currentRevision
+                  ? `Published Campaign revision ${currentRevision.revisionNumber} · read only`
+                  : "Unpublished · read only"}
+            </p>
+          </div>
+          {draft?.status === "stale" && (
+            <Badge tone="warning">Needs rebase</Badge>
+          )}
+          <StatusIndicator
+            tone={
+              saveState === "error" || saveState === "stale"
+                ? "error"
+                : saveState === "saving"
+                  ? "warning"
+                  : saveState === "saved"
+                    ? "success"
+                    : "neutral"
+            }
+            pulse={saveState === "saving"}
+            label={
+              saveState === "saving"
+                ? "Saving draft"
                 : saveState === "saved"
-                  ? "success"
-                  : "neutral"
-          }
-          pulse={saveState === "saving"}
-          label={
-            saveState === "saving"
-              ? "Saving draft"
-              : saveState === "saved"
-                ? "Draft saved"
-                : saveState === "dirty"
-                  ? "Unsaved changes"
-                  : saveState === "stale"
-                    ? "Draft needs review"
-                    : saveState === "error"
-                      ? "Draft not saved"
-                      : draft
-                        ? "Working draft"
-                        : "Read only"
-          }
-        />
-        {definition.status.toLowerCase() === "archived" && (
-          <Badge tone="warning">Archived · read only</Badge>
-        )}
-        {definition.status.toLowerCase() === "archived" && (
-          <Button size="sm" loading={busy} onClick={() => void restore()}>
-            Restore Definition
-          </Button>
-        )}
-        {!draft && canEdit && definition.currentRevisionId && (
-          <Button size="sm" loading={busy} onClick={() => void startEditing()}>
-            Start editing
-          </Button>
-        )}
-        {draft && canEdit && (
-          <RouterButtonLink
-            href={`/campaigns/definitions/${encodeURIComponent(definition.id)}/versions/draft/review${guideSuffix}`}
-            tone="primary"
-            size="sm"
-          >
-            Review &amp; publish
-          </RouterButtonLink>
-        )}
-      </header>
+                  ? "Draft saved"
+                  : saveState === "dirty"
+                    ? "Unsaved changes"
+                    : saveState === "stale"
+                      ? "Draft needs review"
+                      : saveState === "error"
+                        ? "Draft not saved"
+                        : draft
+                          ? "Working draft"
+                          : "Read only"
+            }
+          />
+          {definition.status.toLowerCase() === "archived" && (
+            <Badge tone="warning">Archived · read only</Badge>
+          )}
+          {definition.status.toLowerCase() === "archived" && (
+            <Button size="sm" loading={busy} onClick={() => void restore()}>
+              Restore Definition
+            </Button>
+          )}
+          {!draft && canEdit && definition.currentRevisionId && (
+            <Button
+              size="sm"
+              loading={busy}
+              onClick={() => void startEditing()}
+            >
+              Start editing
+            </Button>
+          )}
+          {draft && canEdit && (
+            <RouterButtonLink
+              href={`/campaigns/definitions/${encodeURIComponent(definition.id)}/versions/draft/review${guideSuffix}`}
+              tone="primary"
+              size="sm"
+            >
+              Review &amp; publish
+            </RouterButtonLink>
+          )}
+        </header>
+      </ShellTools>
       <ContextualBreadcrumbs
         data={{
           campaignName: definition.name,
@@ -368,172 +387,110 @@ export function CampaignDefinitionSecondaryNavigation({
 }) {
   const location = useLocation();
   const authoring = useContext(CampaignAuthoringContext);
-  const plotNavigation = campaignPlotNavigation(
-    location.pathname,
-    authoring?.draft?.records,
-  );
+  const suffix = quickStartSuffix(location.searchStr);
+  const base = `/campaigns/definitions/${encodeURIComponent(campaignDefinitionId)}`;
+  const [query, setQuery] = useState("");
+  const tree = campaignPlotTree(authoring?.draft?.records ?? []);
   const groups = campaignDefinitionNavigationForPath(
     campaignDefinitionId,
     location.pathname,
   );
-  const guideSuffix = quickStartSuffix(location.searchStr);
-  const activeKey = groups.find(({ active }) => active)?.key;
-  const storageKey = `${quickStartStorageKey(gmScope)}.campaign-definition-navigation.${encodeURIComponent(campaignDefinitionId)}`;
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () => new Set(activeKey ? [activeKey] : []),
-  );
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(
-        localStorage.getItem(storageKey) ?? "[]",
-      );
-      if (Array.isArray(saved))
-        setExpanded(new Set(saved.filter((key) => typeof key === "string")));
-    } catch {
-      /* preference storage is optional */
-    }
-  }, [storageKey]);
-  useEffect(() => {
-    if (activeKey) setExpanded((current) => new Set([...current, activeKey]));
-  }, [activeKey]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify([...expanded]));
-    } catch {
-      /* navigation remains usable */
-    }
-  }, [expanded, storageKey]);
-
-  const base = `/campaigns/definitions/${encodeURIComponent(campaignDefinitionId)}`;
+  function outline(nodes: readonly CampaignPlotNode[], depth = 0): ReactNode {
+    return nodes.map((node) => (
+      <li key={node.id}>
+        {(!query || node.name.toLowerCase().includes(query.toLowerCase())) && (
+          <InternalLink
+            className={`flex min-h-11 items-center rounded-box border border-base-300 px-3 py-2 text-sm ${location.pathname.includes(`/plots/${encodeURIComponent(node.id)}`) ? "bg-primary/10 text-primary" : "hover:bg-base-200"}`}
+            href={`${base}/plots/${encodeURIComponent(node.id)}${suffix}`}
+          >
+            {depth > 0 && (
+              <span className="mr-2 text-base-content/40" aria-hidden="true">
+                ↳
+              </span>
+            )}
+            {node.name}
+          </InternalLink>
+        )}
+        {node.children.length > 0 && (
+          <ul className="mt-2 space-y-2">
+            {outline(node.children, depth + 1)}
+          </ul>
+        )}
+      </li>
+    ));
+  }
   return (
-    <aside className="border-b border-base-300 bg-base-100/70 p-4 lg:min-h-full lg:border-r lg:border-b-0 lg:p-5">
-      <div className="mb-5 min-w-0 px-2">
-        <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-          Campaign Definition
-        </p>
-        <p className="mt-2 truncate text-lg font-semibold" title={campaignName}>
-          {campaignName}
-        </p>
-        <p className="mt-1 text-xs text-base-content/60">Authoring workspace</p>
-      </div>
-      <nav aria-label={`${campaignName} overview`} className="mb-3 px-1">
-        <ul className="menu gap-1 p-0">
-          <li>
-            <InternalLink
-              href={`${base}${guideSuffix}`}
-              aria-current={location.pathname === base ? "page" : undefined}
-            >
-              Overview
-            </InternalLink>
-          </li>
-        </ul>
+    <aside
+      data-campaign-navigation
+      className="hidden border-r border-base-300 bg-base-100 p-4 lg:block"
+      data-gm-scope={gmScope}
+    >
+      <p
+        className="mb-4 truncate text-sm font-semibold uppercase"
+        title={campaignName}
+      >
+        {campaignName}
+      </p>
+      <nav aria-label={`${campaignName} authoring`} className="space-y-2">
+        {[
+          ["Plots", "/plots"],
+          ["Story library", "/placements"],
+          ["Campaign settings", ""],
+        ].map(([label, path]) => (
+          <InternalLink
+            key={label}
+            className={`flex min-h-11 items-center rounded-box border border-base-300 px-3 text-sm ${location.pathname === `${base}${path}` ? "bg-primary/10 text-primary" : "hover:bg-base-200"}`}
+            href={`${base}${path}${suffix}`}
+            aria-current={
+              location.pathname === `${base}${path}` ? "page" : undefined
+            }
+          >
+            {label}
+          </InternalLink>
+        ))}
       </nav>
-      <Button
-        tone="outline"
-        className="mb-3 min-h-11 w-full justify-between lg:hidden"
-        aria-expanded={mobileOpen}
-        aria-controls="campaign-definition-navigation campaign-plot-navigation"
-        onClick={() => setMobileOpen((open) => !open)}
+      <h2 className="mt-6 text-xs font-semibold uppercase">Plot outline</h2>
+      <Input
+        className="input mt-3 min-h-11 w-full"
+        type="search"
+        aria-label="Search plots"
+        placeholder="Search plots…"
+        value={query}
+        onChange={(event) => setQuery(event.currentTarget.value)}
+      />
+      <nav aria-label="Plot outline">
+        <ul className="mt-3 space-y-2">{outline(tree)}</ul>
+      </nav>
+      <InternalLink
+        className="btn btn-outline mt-3 min-h-11 w-full"
+        href={`${base}/plots/new${suffix}`}
       >
-        Campaign navigation{" "}
-        <span aria-hidden="true">{mobileOpen ? "−" : "+"}</span>
-      </Button>
-      <nav
-        id="campaign-definition-navigation"
-        aria-label={`${campaignName} authoring`}
-        className={mobileOpen ? "block" : "hidden lg:block"}
+        + Add plot
+      </InternalLink>
+      <Disclosure
+        className="mt-5 border-t border-base-300 pt-3"
+        summary="Campaign tools"
       >
-        <ul className="space-y-1">
-          {groups.map((group) => {
-            const open = expanded.has(group.key);
-            const contentId = `campaign-navigation-${group.key}`;
-            return (
-              <li key={group.key} className="rounded-box">
-                <div
-                  className={`flex items-center rounded-lg ${group.active ? "bg-primary/10 text-primary" : "hover:bg-base-200"}`}
-                >
+        <nav aria-label="Additional campaign tools">
+          <ul className="space-y-2">
+            {groups
+              .flatMap((group) => group.children)
+              .map((child) => (
+                <li key={child.href}>
                   <InternalLink
-                    href={`${group.children[0]?.href ?? base}${guideSuffix}`}
-                    className="min-w-0 flex-1 px-3 py-2 text-sm font-semibold"
+                    className="flex min-h-11 items-center px-3 text-sm"
+                    href={`${child.href}${suffix}`}
                   >
-                    {group.label}
+                    {child.label}
                   </InternalLink>
-                  <Button
-                    tone="ghost"
-                    size="xs"
-                    className="mr-1"
-                    aria-expanded={open}
-                    aria-controls={contentId}
-                    aria-label={`${open ? "Collapse" : "Expand"} ${group.label} navigation`}
-                    onClick={() =>
-                      setExpanded((current) => {
-                        const next = new Set(current);
-                        if (next.has(group.key)) next.delete(group.key);
-                        else next.add(group.key);
-                        return next;
-                      })
-                    }
-                  >
-                    <span aria-hidden="true">{open ? "−" : "+"}</span>
-                  </Button>
-                </div>
-                {open && (
-                  <ul id={contentId} className="mt-1 space-y-1 px-2 pb-2">
-                    {group.children.map((child) => (
-                      <li key={child.label}>
-                        <InternalLink
-                          href={`${child.href}${guideSuffix}`}
-                          aria-current={
-                            location.pathname === child.href ||
-                            location.pathname.startsWith(`${child.href}/`)
-                              ? "page"
-                              : undefined
-                          }
-                          className="block rounded-md px-3 py-1.5 text-sm text-base-content/65 hover:bg-base-200 hover:text-base-content"
-                        >
-                          {child.label}
-                        </InternalLink>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-      {plotNavigation && (
-        <nav
-          id="campaign-plot-navigation"
-          aria-label={`${plotNavigation.label} Plot navigation`}
-          className={`mt-5 border-t border-base-300 pt-4 ${mobileOpen ? "block" : "hidden lg:block"}`}
-        >
-          <p className="px-3 text-sm font-semibold">{plotNavigation.label}</p>
-          <ul className="menu mt-2 gap-1 p-0">
-            {plotNavigation.links.map((link) => (
-              <li key={link.href}>
-                <InternalLink
-                  href={`${link.href}${guideSuffix}`}
-                  aria-current={
-                    location.pathname === link.href ||
-                    (link.href !== plotNavigation.href &&
-                      location.pathname.startsWith(`${link.href}/`))
-                      ? "page"
-                      : undefined
-                  }
-                >
-                  {link.label}
-                </InternalLink>
-              </li>
-            ))}
+                </li>
+              ))}
           </ul>
         </nav>
-      )}
+      </Disclosure>
       <InternalLink
-        className="link mt-5 inline-block px-2 text-sm"
-        href={`/campaigns${guideSuffix}`}
+        className="link mt-4 inline-flex min-h-11 items-center text-sm"
+        href={`/campaigns${suffix}`}
       >
         Back to Campaigns
       </InternalLink>
@@ -547,9 +504,9 @@ export function CampaignDraftRequired({ children }: { children: ReactNode }) {
   const guideSuffix = quickStartSuffix(useLocation().searchStr);
   if (draft && canEdit)
     return (
-      <fieldset className="min-w-0" disabled={saveState === "saving"}>
+      <Fieldset className="min-w-0" disabled={saveState === "saving"}>
         {children}
-      </fieldset>
+      </Fieldset>
     );
   if (draft?.status === "stale") {
     return (

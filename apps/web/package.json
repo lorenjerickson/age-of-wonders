@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0",
     "smoke:ssr": "node scripts/ssr-smoke.mjs",
+    "smoke:record-tabs": "node scripts/record-tabs-smoke.mjs",
     "start": "node .output/server/index.mjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit --pretty false",

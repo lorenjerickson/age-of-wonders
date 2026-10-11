@@ -4,13 +4,7 @@ import {
   plotObject,
   plotLabel,
 } from "./campaignPlotNavigationModel";
-import {
-  locationAncestry,
-  locationHref,
-  locationSectionHref,
-  LOCATION_SECTIONS,
-  type LocationSection,
-} from "./locationWorkspaceModel";
+import { locationAncestry, locationHref } from "./locationWorkspaceModel";
 import type { WorldDraftRecord } from "./api";
 import {
   PRIMARY_NAVIGATION,
@@ -22,6 +16,7 @@ import { campaignInstanceNavigationForPath } from "./campaignInstanceModel";
 export interface NavigationLink {
   label: string;
   href: string;
+  active?: boolean;
 }
 export interface SidebarFrame extends NavigationLink {
   kind: string;
@@ -127,11 +122,9 @@ export function contextualNavigationStack(
       return stack;
     }
     push(data.worldName?.trim() || "World", "World", path(2), [
-      { label: "Overview", href: path(2) },
-      { label: "Versions", href: `${path(2)}/versions` },
+      ...worldNavigationForPath(parts[1], pathname),
     ]);
-    stack.at(-1)!.groups = worldNavigationForPath(parts[1], pathname);
-    // Atlas is a World navigation section, while a Location owns the next sidebar.
+    // Record ancestry is separate from the owning World's destination navigation.
     if (parts[2] === "atlas" && parts[3] === "locations" && parts[4]) {
       const ancestry = locationAncestry(
         (data.records ?? []) as WorldDraftRecord[],
@@ -149,14 +142,7 @@ export function contextualNavigationStack(
             navigationRecordName(data, record.sourceId, "Location"),
             "Location",
             locationHref(parts[1], record.sourceId),
-            LOCATION_SECTIONS.map((label) => ({
-              label,
-              href: locationSectionHref(
-                parts[1],
-                record.sourceId,
-                label.toLowerCase() as LocationSection,
-              ),
-            })),
+            [],
           );
         }
       }
@@ -164,7 +150,7 @@ export function contextualNavigationStack(
     }
     // Library tabs stay in their owning World; individual records drill down.
     if (parts[2] === "characters" && parts[3] === "model" && parts[5]) {
-      push(labels[parts[4]] ?? "Model", "Model", path(6));
+      // Schema and vocabulary routes are content facets of Models & taxonomies.
       return stack;
     }
     if (
@@ -303,6 +289,14 @@ export function contextualNavigationStack(
   for (let index = 1; index < parts.length; index++)
     push(labels[parts[index]] ?? "Details", "Details", path(index + 1));
   return stack;
+}
+
+/** World record property groups belong to the record view, never its sidebar. */
+export function contextualSidebarFrame(stack: SidebarFrame[]): SidebarFrame {
+  return (
+    stack.find((frame) => frame.kind === "World" && frame.links.length > 1) ??
+    stack.at(-1)!
+  );
 }
 
 export function contextualBreadcrumbs(

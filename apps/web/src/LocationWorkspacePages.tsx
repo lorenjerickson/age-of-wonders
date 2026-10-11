@@ -3,6 +3,7 @@ import { useBlocker, useLocation } from "@tanstack/react-router";
 import {
   Alert,
   Button,
+  Disclosure,
   Field,
   Fieldset,
   Input,
@@ -48,10 +49,7 @@ export function LocationSectionPage({
       </main>
     );
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
-      <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-        Location · {recordName(record, "Unnamed Location")}
-      </p>
+    <main className="mx-auto max-w-6xl p-4 lg:px-8 lg:py-7">
       <DraftRequired>
         {section === "description" ? (
           <LocationDescription key={locationId} record={record} />
@@ -99,9 +97,9 @@ function LocationForm({
   });
   return (
     <>
-      <h1 className="mt-3 text-3xl font-semibold">{title}</h1>
+      <h2 className="mt-6 text-xl font-semibold">{title}</h2>
       <form
-        className="mt-8 space-y-6"
+        className="mt-4 space-y-6 rounded-box border border-base-300 bg-base-200 p-5"
         onSubmit={async (event) => {
           event.preventDefault();
           if (!valid) return;
@@ -125,7 +123,7 @@ function LocationForm({
             loading={busy}
             disabled={!dirty || !valid}
           >
-            Save {title}
+            Save changes
           </Button>
         </Fieldset>
         {saved && !dirty && (
@@ -157,7 +155,7 @@ function LocationDescription({ record }: { record: WorldDraftRecord }) {
   return (
     <LocationForm
       record={record}
-      title="Description"
+      title="Overview"
       valid={!!name.trim() && !!kind.trim()}
       fields={{
         name: name.trim(),
@@ -201,44 +199,48 @@ function LocationDescription({ record }: { record: WorldDraftRecord }) {
           onChange={(event) => setDescription(event.target.value)}
         />
       </Field>
-      <Field
-        label="GM-facing description"
-        help="Private notes and secrets for the GM."
-      >
-        <Textarea
-          className="mt-2 w-full"
-          rows={8}
-          maxLength={20000}
-          value={gmDescription}
-          onChange={(event) => setGmDescription(event.target.value)}
-        />
-      </Field>
-      <Field label="Location kind">
-        <Input
-          className="mt-2 w-full"
-          required
-          maxLength={120}
-          disabled={root}
-          value={kind}
-          onChange={(event) => setKind(event.target.value)}
-        />
-      </Field>
-      <Field label="Profile summary">
-        <Textarea
-          className="mt-2 w-full"
-          rows={3}
-          maxLength={2000}
-          value={summary}
-          onChange={(event) => setSummary(event.target.value)}
-        />
-      </Field>
-      <Field label="Tags" help="Separate tags with commas.">
-        <Input
-          className="mt-2 w-full"
-          value={tags}
-          onChange={(event) => setTags(event.target.value)}
-        />
-      </Field>
+      <Disclosure summary="Additional details">
+        <div className="space-y-6">
+          <Field
+            label="GM-facing description"
+            help="Private notes and secrets for the GM."
+          >
+            <Textarea
+              className="mt-2 w-full"
+              rows={8}
+              maxLength={20000}
+              value={gmDescription}
+              onChange={(event) => setGmDescription(event.target.value)}
+            />
+          </Field>
+          <Field label="Location kind">
+            <Input
+              className="mt-2 w-full"
+              required
+              maxLength={120}
+              disabled={root}
+              value={kind}
+              onChange={(event) => setKind(event.target.value)}
+            />
+          </Field>
+          <Field label="Profile summary">
+            <Textarea
+              className="mt-2 w-full"
+              rows={3}
+              maxLength={2000}
+              value={summary}
+              onChange={(event) => setSummary(event.target.value)}
+            />
+          </Field>
+          <Field label="Tags" help="Separate tags with commas.">
+            <Input
+              className="mt-2 w-full"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+            />
+          </Field>
+        </div>
+      </Disclosure>
     </LocationForm>
   );
 }

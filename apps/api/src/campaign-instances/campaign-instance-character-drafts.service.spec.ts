@@ -1,6 +1,9 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
-import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
+import {
+  characterEquipmentIssue,
+  CampaignInstanceCharacterDraftsService,
+} from "./campaign-instance-character-drafts.service";
 
 const worldManifest = buildSnapshotManifest(1, [
   {
@@ -66,7 +69,12 @@ function completeDraft(overrides: Record<string, unknown> = {}) {
     ...draft(),
     backgroundDefinitionId: "background-scout",
     professionDefinitionId: "profession-ranger",
-    heritageDefinitionIds: ["heritage-riverfolk"],
+    heritageDefinitionIds: [],
+    imageAssetIds: {
+      portrait: "portrait",
+      overheadToken: "overhead",
+      paperDollToken: "side",
+    },
     attributeRolls: [91, 82, 73, 64, 55, 46, 37, 28, 19, 10],
     attributeAssignments: {
       "aow:attribute-might": 91,
@@ -100,6 +108,7 @@ function harness() {
   };
   const prisma = {
     campaignInstance: {
+      findFirst: jest.fn().mockResolvedValue({ id: "instance-1" }),
       findUnique: jest.fn().mockResolvedValue({
         currentSnapshot: {
           id: "instance-snapshot-1",
@@ -115,6 +124,7 @@ function harness() {
         },
       }),
     },
+    mediaAsset: { findFirst: jest.fn().mockResolvedValue({ id: "portrait" }) },
     modelSchemaRelease: { findMany: jest.fn().mockResolvedValue([]) },
     modelElementRevision: { findMany: jest.fn().mockResolvedValue([]) },
     campaignInstanceHumanMembership: {
@@ -216,6 +226,7 @@ describe("CampaignInstanceCharacterDraftsService", () => {
         },
       ],
       startingEquipment: [],
+      equipmentSlots: [],
       maximumHeritages: 1,
       attributeRollCount: 10,
     });
@@ -402,7 +413,23 @@ describe("CampaignInstanceCharacterDraftsService", () => {
     expect(tx.campaignInstanceCharacterDraft.updateMany).not.toHaveBeenCalled();
   });
 
-  it("submits a complete snapshot-conformant draft for GM review", async () => {
+  it("requires distinct artwork while allowing a sheet without Heritage", async () => {
+    const { service, prisma } = harness();
+    prisma.campaignInstanceCharacterDraft.findFirst.mockResolvedValue(
+      completeDraft({
+        imageAssetIds: {
+          portrait: "same",
+          overheadToken: "same",
+          paperDollToken: "same",
+        },
+      }),
+    );
+    await expect(
+      service.submitForReview("instance-1", "character-1", "player-1", 1),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("submits a complete snapshot-conformant draft without Heritage for GM review", async () => {
     const { service, prisma, tx } = harness();
     prisma.campaignInstanceCharacterDraft.findFirst.mockResolvedValue(
       completeDraft(),
@@ -455,5 +482,119 @@ describe("CampaignInstanceCharacterDraftsService", () => {
         ownerMembershipId: "membership-1",
       },
     });
+  });
+});
+
+describe("GM Character authoring", () => {
+  it("checks owner scope and records GM attribution without requiring Player impersonation", async () => {
+    const { service, prisma, tx } = harness();
+    await service.update(
+      "instance-1",
+      "character-1",
+      "gm-1",
+      {
+        expectedRevision: 1,
+        name: "Prepared Character",
+        heritageDefinitionIds: [],
+        attributeAssignments: { "aow:attribute-might": 40 },
+        imageAssetIds: { portrait: "portrait" },
+      },
+      true,
+    );
+    expect(prisma.campaignInstance.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ ownerUserId: "gm-1" }) as unknown,
+      }),
+    );
+    expect(
+      prisma.campaignInstanceHumanMembership.findFirst,
+    ).not.toHaveBeenCalled();
+    expect(tx.campaignInstanceAuditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actorUserId: "gm-1",
+          action: "instance.character.edited-by-gm",
+        }) as unknown,
+      }),
+    );
+    expect(tx.campaignInstanceCharacterDraft.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          revision: 1,
+          status: "IN_PROGRESS",
+        }) as unknown,
+      }),
+    );
+  });
+  it("rejects foreign owners and submitted sheets before mutation", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.campaignInstance.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.get("instance-1", "character-1", "foreign", true),
+    ).rejects.toThrow("not found");
+    prisma.campaignInstanceCharacterDraft.findFirst.mockResolvedValueOnce({
+      ...draft(),
+      status: "READY_FOR_REVIEW",
+    });
+    await expect(
+      service.update(
+        "instance-1",
+        "character-1",
+        "gm-1",
+        { expectedRevision: 1, name: "Changed" },
+        true,
+      ),
+    ).rejects.toThrow("immutable");
+    expect(tx.campaignInstanceCharacterDraft.updateMany).not.toHaveBeenCalled();
+  });
+  it("rejects unavailable art and still validates required choices on submission", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.mediaAsset.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.update(
+        "instance-1",
+        "character-1",
+        "gm-1",
+        { expectedRevision: 1, imageAssetIds: { portrait: "foreign" } },
+        true,
+      ),
+    ).rejects.toThrow("unavailable");
+    await expect(
+      service.submitForReview("instance-1", "character-1", "gm-1", 1, true),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.campaignInstanceCharacterDraft.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("Character equipment assignments", () => {
+  const slots = [
+    { id: "head", name: "Head" },
+    { id: "hands", name: "Hands" },
+  ];
+  const items = [
+    { id: "hat", name: "Hat", compatibleSlotSets: [["head"]] },
+    { id: "helm", name: "Helm", compatibleSlotSets: [["head"]] },
+  ];
+  it("accepts carried items and compatible occupied slots", () => {
+    expect(
+      characterEquipmentIssue({ hat: ["head"] }, ["hat", "helm"], items, slots),
+    ).toBeUndefined();
+    expect(characterEquipmentIssue({}, ["hat"], items, slots)).toBeUndefined();
+  });
+  it("rejects incompatible, overlapping, and unowned assignments", () => {
+    expect(
+      characterEquipmentIssue({ hat: ["hands"] }, ["hat"], items, slots),
+    ).toContain("does not fit");
+    expect(
+      characterEquipmentIssue(
+        { hat: ["head"], helm: ["head"] },
+        ["hat", "helm"],
+        items,
+        slots,
+      ),
+    ).toContain("same equipment slot");
+    expect(
+      characterEquipmentIssue({ hat: ["head"] }, [], items, slots),
+    ).toContain("carried Item");
   });
 });

@@ -372,22 +372,34 @@ Players
 Settings
 ```
 
-The left navigation presents a stack of contextual sidebars, with only the current frame visible.
-GM Workspace owns the primary destinations above; Worlds and Campaigns have library frames, and
-selected Worlds, Campaign Definitions, Instances, and individual records have their own frames.
-A link at the top names the preceding context (for example, “Back to GM Workspace” or “Back to
-Worlds”) and navigates to it. Breadcrumbs beneath the page header expose the full ancestry and let
+Navigation maintains a stack of contextual ancestry frames. GM Workspace owns the primary
+destinations above; Worlds and Campaigns have library frames, and selected Worlds, Campaign
+Definitions, Instances, and individual records add their own named context. The left sidebar shows
+one destination frame at a time; a record's property tabs do not create a new destination frame.
+A link at the top names the preceding destination context (for example, “Back to GM Workspace” or
+“Back to Worlds”) and navigates to it. Breadcrumbs beneath the page header expose the full ancestry and let
 the GM pop several levels at once. The URL reconstructs this hierarchy on direct entry, refresh,
 and browser history navigation; it does not depend on having visited the parent first. Mobile uses
-the same current frame in the navigation drawer.
+the same destination navigation in the navigation drawer.
 
-World Atlas is a section of the World frame. A selected Location has six sidebar sections:
-**Description**, **Map**, **Discoveries**, **Creatures**, **Items**, and **Connections**. Each section
-opens a distinct editing experience, while the Location remains the active sidebar. Breadcrumbs
-identify sidebar ancestry only, never the selected section. Location ancestry follows the captured
+Navigation between records is distinct from navigation within a record. In World authoring, the
+sidebar retains the owning World's destinations when a Location, Creature, Item, or other library
+record is selected. The record's property groups appear as tabs inside its content view, beneath
+the record title; they never replace the sidebar with a list of properties. Selecting another
+record changes record context and breadcrumb ancestry. Selecting a property tab keeps the current
+record and ancestry. On mobile, the shared tab row scrolls horizontally within the record content,
+with at least 44 px touch targets; global destinations remain in the compact navigation drawer.
+Tabs support keyboard focus and selection, with an explicitly associated content panel.
+
+World Atlas is a section of the World frame. A selected Location has six local property tabs:
+**Description**, **Map**, **Discoveries**, **Creatures**, **Items**, and **Connections**. Each tab
+opens a distinct editing experience. Existing Location URLs remain directly addressable and retain
+browser history and unsaved-change protection when switching tabs. Creature and Item property tabs
+retain their mounted form values while switching groups; validation reveals the relevant tab.
+Breadcrumbs identify record ancestry only, never the selected property group. Location ancestry follows the captured
 containment relationships from the World root Location through each child, even on direct entry or
 after reparenting. Connections exposes the parent and child Locations; selecting a child advances
-the Location stack. Map edits existing Location-owned image and scene data, with a preview, an
+record context. Map edits existing Location-owned image and scene data, with a preview, an
 existing-media picker, upload, and explicit generation followed by Save Map. Description separates
 player-facing prose from private GM notes; Discoveries authors truths, rumors, and beliefs.
 
@@ -624,7 +636,7 @@ Worlds
     │   ├── authoring draft
     │   ├── published revisions
     │   └── downstream migration availability
-    ├── Atlas
+    ├── Locations
     │   ├── Location hierarchy
     │   │   └── Location
     │   │       ├── Overview
@@ -644,25 +656,25 @@ Worlds
     │   ├── creature builder: identity, heritage, profession, equipment,
     │   │   art, attributes, speeds, skills, and supporting rules
     │   └── creature taxonomies (advanced)
-    ├── Item Compendium
+    ├── Items
     │   ├── browse and search items
     │   ├── weapons, armor, consumables, tools, accessories, and containers
     │   ├── loot, currency, utility items, and materials
     │   ├── objects, traps, and hazards as Item families
     │   └── item families, properties, and taxonomies (advanced)
-    ├── Characters
-    │   ├── Heritages
-    │   ├── Skills
-    │   ├── Professions
-    │   ├── Backgrounds
-    │   └── Character model & taxonomies (advanced)
-    │       ├── attributes and value rules
-    │       ├── equipment slots and applicability
-    │       ├── movement and character vocabularies
-    │       ├── custom fields and relationships
-    │       └── schema versions and migrations
-    └── Rules
-        └── reserved fifth grouping; detailed information architecture deferred
+    ├── Skills
+    ├── Professions
+    │   └── Overview and Modifiers tabs
+    ├── Backgrounds
+    │   └── Overview and Modifiers tabs
+    ├── Models & taxonomies
+    │   ├── Overview
+    │   ├── Schema structure
+    │   ├── Attributes
+    │   ├── Equipment slots
+    │   └── Profession ranks
+    └── Codex
+        └── World rules authoring
 ```
 
 The map belongs to its Location as the diagram specifies. A runtime scene can stage an encounter on
@@ -679,35 +691,23 @@ exploration. The shared terrain foundation, Location-owned manifest/chunk captur
 are implemented. World authoring exposes the full source geometry only to its owning GM. Spatial
 Instance actor setup, Player Character binding, shared 3D sight facts, internal redacted projections, and observer exploration snapshot helpers are implemented. Transactional exploration storage is implemented. Checkpoint capture and predecessor-checkpoint exploration recovery are implemented. Authoritative rules evaluation and gameplay integration remain pending. Versioned built-in PBR texture sets and device quality controls are implemented; custom material assets remain pending. Vertical work planes and normal-only smoothing are implemented. Door/window authoring and procedural presentation are implemented.
 
-Within a selected World workspace reached through the primary **Worlds** destination, **Atlas**,
-**Bestiary**, **Item Compendium**, **Characters**, and **Rules** are the five secondary navigation
-groups. “Item Compendium” is preferred to unqualified “Compendium”: it communicates a broad source
-library without implying runtime possession, while still covering equipment, consumables, loot,
-currency, materials, environmental objects, traps, and hazards.
+Within a selected World workspace reached through **Worlds**, secondary navigation is a flat
+list: **Overview**, **Locations**, **Bestiary**, **Items**, **Skills**, **Professions**,
+**Backgrounds**, **Models & taxonomies**, **Codex**, and **Versions**. Each destination directly
+opens its editor or library. The selected destination stays highlighted when viewing its records.
+Existing Atlas, Item Compendium, Characters, and Rules URL segments retain their route contracts;
+the visible labels and flat presentation do not change aggregate ownership. Objects, traps, and
+hazards remain Item families or capabilities, not separate top-level libraries.
 
-The World workspace secondary navigation may present these five groups as an expandable accordion.
-Each group remains a navigable landing page and has a separate disclosure control that reveals its
-subcategories without navigating. The current group opens automatically; inactive groups remain
-collapsed by default, and the GM's expansion choices persist within the workspace. This keeps the
-five-category mental model visible while revealing detailed libraries only when requested. The same
-pattern may be reused in Campaign and Settings workspaces where it reduces long navigation lists.
+Multiple facets of a record or model workspace appear as tabs in the content area, following the
+Location property-tab pattern. Switching local form tabs preserves unsaved values. Single-facet
+editors do not need artificial tabs. Contextual model links remain available in applicable editors.
 
-These names are navigation groupings, not new aggregate owners. Atlas presents Locations; Bestiary
-presents Creature definitions; Item Compendium presents Item definitions; Characters gathers the
-reusable vocabularies and models used to construct creatures and player characters. Rules reserves
-a fifth first-class destination, but its internal concepts, inheritance, ownership, and workflows
-remain deferred for a dedicated exploration. Objects, traps, and hazards are Item families or
-capabilities rather than peer top-level libraries.
-
-Progressive disclosure keeps each landing page focused on browse/search, recent work, and a primary
-create action. Taxonomies, schema versions, migration tools, bulk operations, and other model-level
-controls appear under an **Advanced** disclosure and through contextual **Edit model** actions.
-Applicable editors link directly to the relevant definition, so a GM can add an Attribute,
-Equipment Slot, Item family, Location kind, or field without navigating a general-purpose schema
-registry. Cross-library search and contextual references remain available without exposing every
-library in the World secondary navigation. Accordion disclosure is keyboard-operable, exposes its
-expanded state to assistive technology, keeps the active destination visible, and becomes the same
-hierarchical drawer—not a flattened list—on narrow screens.
+The desktop secondary panel is horizontally resizable by dragging its divider or using the keyboard
+(Left/Right, Home/End). Its preferred width persists locally, defaults to 224 px, and is bounded to
+200–400 px with an additional viewport bound to preserve content space. Mobile exposes the same
+flat destinations in the navigation drawer, with a single compact navigation row and touch targets
+of at least 44 px. Closing the drawer preserves the current editor and its state.
 
 ### Campaign authoring
 
@@ -1035,22 +1035,17 @@ explanation.
   trigger reselection or remediation without exposing opaque identifiers.
 - **IA-042:** Quick Start can recommend a next activity but cannot silently navigate, create
   records, choose among multiple eligible records, or mark an unmet requirement complete.
-- **IA-043:** Within a selected World reached through the primary Worlds destination, authoring
-  presents five stable secondary navigation groups: **Atlas**, **Bestiary**, **Item Compendium**,
-  **Characters**, and **Rules**. These are progressive-disclosure groupings, not new ownership
-  boundaries.
-- **IA-044:** Characters groups Heritages, Skills, Professions, Backgrounds, and character-focused
-  model/taxonomy tools. Item Compendium includes Objects, Traps, and Hazards as Item families or
-  capabilities rather than separate top-level libraries.
-- **IA-045:** The World workspace's secondary navigation supports an accordion presentation. A
-  group label opens its landing page, a distinct disclosure control expands its subcategories, the
-  active group expands automatically, and collapse never changes the current route.
-- **IA-046:** Accordion state is keyboard- and assistive-technology accessible, retains the active
-  destination, persists for the GM within the workspace, and preserves the same hierarchy in the
-  narrow-screen navigation drawer.
-- **IA-047:** Landing pages emphasize browse/search, recent work, and one primary creation action.
-  Schema, taxonomy, migration, and bulk-management controls use an Advanced disclosure and
-  contextual deep links rather than competing for primary navigation attention.
+- **IA-043:** World secondary navigation is a flat list of Overview, Locations, Bestiary, Items,
+  Skills, Professions, Backgrounds, Models & taxonomies, Codex, and Versions. These destinations
+  do not introduce new ownership boundaries.
+- **IA-044:** Skills, Professions, Backgrounds, and Models & taxonomies are direct World
+  destinations. Items includes Objects, Traps, and Hazards as Item families or capabilities.
+- **IA-045:** World records with multiple facets expose those facets as content tabs. The secondary
+  navigation retains the owning World destinations and highlights the active library.
+- **IA-046:** The desktop secondary panel supports pointer and keyboard horizontal resizing with a
+  persisted, bounded width. Mobile uses the same flat destinations in the compact navigation drawer.
+- **IA-047:** Landing pages emphasize browse/search and a primary creation action. Model facets use
+  content tabs; contextual model links remain available from applicable editors.
 - **IA-048:** An Installation supports multiple World Definition lineages. Worlds provides explicit
   create, import, duplicate/fork, archive, restore, browse, search, and selection workflows with
   human-readable readiness, revision, and downstream-usage summaries.
@@ -1071,7 +1066,7 @@ explanation.
   required compatible dependencies, never a selectable list of changes.
 - **IA-054:** Quick Start adopts a newly released Activity Definition immediately, reevaluates
   completion, maps compatible progress, and visibly reopens changed or newly required steps.
-- **IA-055:** Rules remains a visible fifth World secondary-navigation group, but its internal
+- **IA-055:** Rules is exposed through the visible Codex World destination; its internal
   execution semantics follow the event-driven rules architecture below. Detailed authoring UI and
   runtime contracts are developed in the dedicated Rules design.
 - **IA-056:** Plugin authoring and release versioning occur outside every Installation, World, and
@@ -1413,9 +1408,12 @@ conflated with the current same-named character resource. The diagram seeds prof
 with Novice → Apprentice → Journeyman → Master → Grand Master. “Tradesman” is a profession family,
 not a tier in that starter ladder; authorized model authors may define additional ladders or tiers.
 
-Background and Heritage remain reusable World content used to compose Creatures/Characters. The
-diagram places heritage on Creature and Background directly under World; this does not require
-embedding their reusable definitions in every creature record.
+Background is the reusable World definition that connects Character backstory to mechanical modifiers.
+As clarified on 2026-09-17, Character creation requires a Background, not a Heritage. Historical Heritage
+content remains compatible optional data and is not a creation gate. Background grants use the shared
+modifier recipes with explicit source provenance. Character creation presents a sheet with captured
+Attributes, Profession, backstory, paper-doll equipment assignments and three distinct art roles:
+portrait, overhead token, and side-on token (`paperDollToken` in the implemented domain contract).
 
 Profession completely replaces the current Class/Subclass concept. Existing Class/Subclass content
 requires explicit migration into Profession definitions, specializations, and proficiency ranks;
@@ -2177,3 +2175,12 @@ updated `packages/common/src/types`, persistence where applicable, and
 `apps/api/src/ai/prompts/domain-model.md` together. Remaining accepted but unimplemented areas are
 tracked as gaps in `docs/README.md`; this architecture must not be mistaken for proof that every
 acceptance criterion is already implemented.
+
+
+### GM-controlled Session exploration
+
+A Session may be configured before play for the owning GM to control all selected
+Players and their Characters. The GM joins under their own identity; their live presence
+covers Player lobby readiness. Players still need active memberships and active Characters.
+This mode preserves actual invitation responses and attendance, does not impersonate users,
+and attributes runtime actions to the GM. Normal Player control remains the default.

@@ -356,6 +356,10 @@ await withFixture(async (url) => {
   try {
     await page.goto(url);
     await page.locator("canvas").waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Move a creature$/ })
+      .click();
     const initial = await select().inputValue();
     if (!["secret-tamsin", "secret-orrin"].includes(initial))
       throw new Error("Initial focus was not a current-map actor");

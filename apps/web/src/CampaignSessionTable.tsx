@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Details, Summary } from "@aow/ui";
+import { SessionWorkspace } from "./SessionWorkspace";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type {
   CampaignSessionTableProjection,
   CampaignSessionTablePlot,
@@ -11,7 +19,6 @@ import {
   getMediaDownloadUrl,
 } from "./api";
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
-import { ZoomableImage } from "./ZoomableImage";
 import { useSessionMovement } from "./useSessionMovement";
 import { SessionMovementPanel } from "./SessionMovementPanel";
 import { CampaignSessionTerrainOverview } from "./CampaignSessionTerrainOverview";
@@ -44,10 +51,10 @@ function CapturedMapImage({
   }, [image.assetId]);
   const result = preview?.assetId === image.assetId ? preview : undefined;
   return result?.url && !result.failed ? (
-    <ZoomableImage
+    <img
       src={result.url}
       alt={image.altText?.trim() || `${name} map`}
-      className="max-h-[36rem] min-h-64 w-full object-contain"
+      className="h-full min-h-64 w-full object-contain"
       onError={() => setPreview({ assetId: image.assetId, failed: true })}
     />
   ) : (
@@ -71,8 +78,8 @@ function PlotCue({
 }) {
   return (
     <li className="min-w-0 rounded-box border border-base-300 bg-base-100 p-4">
-      <details open>
-        <summary className="cursor-pointer font-semibold">
+      <Details open>
+        <Summary className="cursor-pointer font-semibold">
           {plot.name.trim() || "Unnamed Plot"}{" "}
           <Badge className="ml-2" outline>
             {statusLabel(plot.status)}
@@ -82,7 +89,7 @@ function PlotCue({
               At viewed Location
             </span>
           )}
-        </summary>
+        </Summary>
         <div className="mt-3 grid gap-4 text-sm">
           {plot.description && (
             <p className="whitespace-pre-wrap opacity-75">{plot.description}</p>
@@ -183,7 +190,7 @@ function PlotCue({
             </section>
           )}
         </div>
-      </details>
+      </Details>
     </li>
   );
 }
@@ -192,13 +199,18 @@ export function CampaignSessionTable({
   campaignDefinitionId,
   campaignInstanceId,
   sessionId,
+  sessionName = "Session",
+  controls,
 }: {
   campaignDefinitionId: string;
   campaignInstanceId: string;
   sessionId: string;
+  sessionName?: string;
+  controls?: ReactNode;
 }) {
   const [data, setData] = useState<CampaignSessionTableProjection>();
   const [locationId, setLocationId] = useState<string>();
+  const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const sequence = useRef(0);
@@ -281,54 +293,38 @@ export function CampaignSessionTable({
   }, [context, load]);
 
   return (
-    <section
-      className="rounded-box border border-base-300 bg-base-200 p-5 text-base-content lg:col-span-2 lg:p-6"
-      aria-labelledby="session-table-heading"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 id="session-table-heading" className="text-2xl font-semibold">
-            Table
-          </h2>
-          <p className="mt-1 text-sm opacity-60">
-            Captured campaign context for the GM.
-          </p>
-        </div>
-        <Button tone="outline" size="sm" onClick={() => void load()}>
-          Refresh table
-        </Button>
-      </div>
-      {error && (
-        <p className="mt-4 text-sm text-error" role="alert">
-          {error}
-        </p>
-      )}
-      {loading && !data && (
-        <p className="mt-6 text-sm opacity-65" role="status">
-          Opening the table…
-        </p>
-      )}
-      {data && (
+    <SessionWorkspace
+      title={sessionName}
+      gm={
         <>
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm opacity-70">
-            <p>
-              {data.captured.campaign.name || "Captured Campaign"} revision{" "}
-              {data.captured.campaign.revisionNumber} ·{" "}
-              {data.captured.world.name || "Captured World"} revision{" "}
-              {data.captured.world.revisionNumber}
+          {controls}
+          <Button tone="outline" onClick={() => void load()}>
+            Refresh table
+          </Button>
+          {error && (
+            <p role="alert" className="text-error">
+              {error}
             </p>
-            <p>
-              {data.campaignTime
-                ? `Campaign clock: ${dateLabel(data.campaignTime)}`
-                : "Campaign clock not set"}
-            </p>
-          </div>
-          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-            <section
-              className="min-w-0 rounded-box border border-base-300 bg-base-100 p-4"
-              aria-label="Captured Location map"
-            >
-              <Label htmlFor="session-table-location" className="font-medium">
+          )}
+          {loading && <p role="status">Refreshing the table…</p>}
+          {data && (
+            <>
+              {locationMatches && data.location && (
+                <section>
+                  <h2 className="text-xl font-semibold">
+                    {data.location.name || "Unnamed Location"}
+                  </h2>
+                  {data.location.description && (
+                    <p className="mt-2 text-sm opacity-70">
+                      {data.location.description}
+                    </p>
+                  )}
+                </section>
+              )}
+              <Label
+                htmlFor="session-table-location"
+                className="block font-medium"
+              >
                 Viewing Location
               </Label>
               <Select
@@ -339,6 +335,7 @@ export function CampaignSessionTable({
                 onChange={(event) => {
                   setLoading(true);
                   setLocationId(event.currentTarget.value);
+                  setZoom(1);
                 }}
               >
                 {!data.locations.length && (
@@ -353,158 +350,190 @@ export function CampaignSessionTable({
               <p className="mt-2 text-xs opacity-60">
                 Viewing a Location does not move the party.
               </p>
-              {locationMatches && data.focus === "starting-location" && (
-                <p className="mt-1 text-xs opacity-60">
-                  Initially showing the prepared starting Location.
-                </p>
-              )}
-              {locationMatches && data.focus === "first-available" && (
-                <p className="mt-1 text-xs opacity-60">
-                  No starting Location is set; showing the first captured
-                  Location.
-                </p>
-              )}
-              {loading && (
-                <p className="mt-3 text-sm opacity-60" role="status">
-                  Updating viewed Location…
-                </p>
-              )}
-              {!locationMatches ? (
-                <p className="mt-6 text-sm opacity-65">
-                  {loading
-                    ? "Loading the selected Location…"
-                    : "The selected Location is unavailable. Select another Location or refresh the table."}
-                </p>
-              ) : data.location ? (
-                <div className="mt-4">
-                  <h3 className="text-lg font-semibold">
-                    {data.location.name || "Unnamed Location"}
+
+              <Details>
+                <Summary className="min-h-11 cursor-pointer font-semibold">
+                  Move a creature
+                </Summary>
+                <SessionMovementPanel
+                  campaignDefinitionId={campaignDefinitionId}
+                  campaignInstanceId={campaignInstanceId}
+                  sessionId={sessionId}
+                  controller={movement}
+                />
+              </Details>
+              <Details>
+                <Summary className="min-h-11 cursor-pointer font-semibold">
+                  Plot cues & discoveries
+                </Summary>
+                <section
+                  className="mt-6"
+                  aria-labelledby="session-plot-cues-heading"
+                >
+                  <h3
+                    id="session-plot-cues-heading"
+                    className="text-xl font-semibold"
+                  >
+                    Plot cues & discoveries
                   </h3>
-                  {data.location.description && (
-                    <p className="mt-2 whitespace-pre-wrap text-sm opacity-70">
-                      {data.location.description}
+                  <p className="mt-1 text-sm opacity-60">
+                    GM context, including unrevealed claims and current Instance
+                    progress.
+                  </p>
+                  {data.plots.length ? (
+                    <ul className="mt-4 grid gap-4">
+                      {data.plots.map((plot) => (
+                        <PlotCue
+                          key={plot.key}
+                          plot={plot}
+                          showFocus={locationMatches}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 text-sm opacity-65">
+                      No Plots were captured for this campaign.
                     </p>
                   )}
-                  <div className="mt-4 overflow-hidden rounded-box border border-base-300">
-                    {data.location.mapStatus === "isometric" &&
-                    data.location.terrain ? (
-                      <CampaignSessionTerrainOverview
-                        volume={data.location.terrain}
-                        actors={movement.actors}
-                        focusedActorId={movement.actor?.id}
-                        onActorSelect={movement.setActorId}
-                        onDestinationPick={movement.pickDestination}
-                        pendingDestination={movement.pendingDestination}
-                        interactionDisabled={movement.disabled}
-                        coherent={movement.coherent && locationMatches}
-                      />
-                    ) : data.location.image ? (
-                      <CapturedMapImage
-                        key={data.location.image.assetId}
-                        image={data.location.image}
-                        name={data.location.name}
-                      />
-                    ) : (
-                      <p className="grid min-h-64 place-items-center p-8 text-center text-sm opacity-65">
-                        {data.location.mapUnavailableReason ||
-                          "No map was captured for this Location."}
+                </section>
+              </Details>
+              <Details>
+                <Summary className="min-h-11 cursor-pointer">
+                  Campaign context
+                </Summary>
+                <p>
+                  {data.captured.campaign.name || "Captured Campaign"} ·
+                  Revision {data.captured.campaign.revisionNumber}
+                </p>
+                <p>
+                  {data.captured.world.name || "Captured World"} · Revision{" "}
+                  {data.captured.world.revisionNumber}
+                </p>
+                {data.campaignTime && <p>{dateLabel(data.campaignTime)}</p>}
+                {data.unavailable.map((message, index) => (
+                  <p key={index}>{message}</p>
+                ))}
+              </Details>
+            </>
+          )}
+        </>
+      }
+      players={
+        data ? (
+          <>
+            {data.party.length ? (
+              <ul className="mt-4 grid gap-3">
+                {data.party.map((actor) => (
+                  <li
+                    key={actor.key}
+                    className="rounded-box border border-base-300 p-3"
+                  >
+                    <p className="font-medium">
+                      {actor.name || "Unnamed actor"}
+                    </p>
+                    <p className="mt-1 text-xs opacity-60">
+                      {actor.kind === "character" ? "Character" : "Actor"}
+                      {actor.playerName ? ` · ${actor.playerName}` : ""}
+                    </p>
+                    <p className="mt-2 text-sm">
+                      {actor.locationName || "Location not set"}
+                    </p>
+                    {locationMatches && actor.atFocusedLocation && (
+                      <p className="mt-1 text-xs text-secondary">
+                        At viewed Location
                       </p>
                     )}
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-6 text-sm opacity-65">
-                  No captured Location is available for this table.
-                </p>
-              )}
-            </section>
-            <aside
-              className="rounded-box border border-base-300 bg-base-100 p-4"
-              aria-labelledby="session-party-heading"
-            >
-              <h3 id="session-party-heading" className="text-lg font-semibold">
-                Characters and actors
-              </h3>
-              {data.party.length ? (
-                <ul className="mt-4 grid gap-3">
-                  {data.party.map((actor) => (
-                    <li
-                      key={actor.key}
-                      className="rounded-box border border-base-300 p-3"
-                    >
-                      <p className="font-medium">
-                        {actor.name || "Unnamed actor"}
-                      </p>
-                      <p className="mt-1 text-xs opacity-60">
-                        {actor.kind === "character" ? "Character" : "Actor"}
-                        {actor.playerName ? ` · ${actor.playerName}` : ""}
-                      </p>
-                      <p className="mt-2 text-sm">
-                        {actor.locationName || "Location not set"}
-                      </p>
-                      {locationMatches && actor.atFocusedLocation && (
-                        <p className="mt-1 text-xs text-secondary">
-                          At viewed Location
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-4 text-sm opacity-65">
-                  No Characters or actors have been prepared for this Instance.
-                </p>
-              )}
-              <div className="mt-5 border-t border-base-300 pt-4">
-                <h3 className="font-semibold">Encounter & adjudication</h3>
-                <p className="mt-2 text-sm opacity-65">
-                  {data.encounter.detail}
-                </p>
-              </div>
-            </aside>
-          </div>
-          <SessionMovementPanel
-            campaignDefinitionId={campaignDefinitionId}
-            campaignInstanceId={campaignInstanceId}
-            sessionId={sessionId}
-            controller={movement}
-          />
-          <section className="mt-6" aria-labelledby="session-plot-cues-heading">
-            <h3
-              id="session-plot-cues-heading"
-              className="text-xl font-semibold"
-            >
-              Plot cues & discoveries
-            </h3>
-            <p className="mt-1 text-sm opacity-60">
-              GM context, including unrevealed claims and current Instance
-              progress.
-            </p>
-            {data.plots.length ? (
-              <ul className="mt-4 grid gap-4">
-                {data.plots.map((plot) => (
-                  <PlotCue
-                    key={plot.key}
-                    plot={plot}
-                    showFocus={locationMatches}
-                  />
+                  </li>
                 ))}
               </ul>
             ) : (
               <p className="mt-4 text-sm opacity-65">
-                No Plots were captured for this campaign.
+                No Characters or actors have been prepared for this Instance.
               </p>
             )}
-          </section>
-          {data.unavailable.length > 0 && (
-            <div className="mt-4 text-sm opacity-65" role="status">
-              {data.unavailable.map((message, index) => (
-                <p key={index}>{message}</p>
-              ))}
+            <div className="mt-5 border-t border-base-300 pt-4">
+              <h3 className="font-semibold">Encounter & adjudication</h3>
+              <p className="mt-2 text-sm opacity-65">{data.encounter.detail}</p>
             </div>
+          </>
+        ) : (
+          <p>Opening the table…</p>
+        )
+      }
+      utilities={
+        <>
+          <Button
+            tone="outline"
+            aria-label="Zoom out"
+            disabled={zoom <= 1}
+            onClick={() => setZoom((value) => Math.max(1, value - 0.25))}
+          >
+            −
+          </Button>
+          <Button
+            tone="outline"
+            aria-label="Zoom in"
+            disabled={zoom >= 3}
+            onClick={() => setZoom((value) => Math.min(3, value + 0.25))}
+          >
+            +
+          </Button>
+          <Button tone="outline" className="flex-1" onClick={() => setZoom(1)}>
+            Fit map
+          </Button>
+        </>
+      }
+    >
+      {data ? (
+        <>
+          {!locationMatches ? (
+            <p className="mt-6 text-sm opacity-65">
+              {loading
+                ? "Loading the selected Location…"
+                : "The selected Location is unavailable. Select another Location or refresh the table."}
+            </p>
+          ) : data.location ? (
+            <div style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}>
+              <div className="h-full overflow-hidden">
+                {data.location.mapStatus === "isometric" &&
+                data.location.terrain ? (
+                  <CampaignSessionTerrainOverview
+                    volume={data.location.terrain}
+                    actors={movement.actors}
+                    focusedActorId={movement.actor?.id}
+                    onActorSelect={movement.setActorId}
+                    onDestinationPick={movement.pickDestination}
+                    pendingDestination={movement.pendingDestination}
+                    interactionDisabled={movement.disabled}
+                    coherent={movement.coherent && locationMatches}
+                  />
+                ) : data.location.image ? (
+                  <CapturedMapImage
+                    key={data.location.image.assetId}
+                    image={data.location.image}
+                    name={data.location.name}
+                  />
+                ) : (
+                  <p className="grid min-h-64 place-items-center p-8 text-center text-sm opacity-65">
+                    {data.location.mapUnavailableReason ||
+                      "No map was captured for this Location."}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-6 text-sm opacity-65">
+              No captured Location is available for this table.
+            </p>
           )}
         </>
+      ) : (
+        <p className="p-6" role="status">
+          {error
+            ? "Map unavailable. Open GM context to retry."
+            : "Opening the map…"}
+        </p>
       )}
-    </section>
+    </SessionWorkspace>
   );
 }

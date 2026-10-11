@@ -1,5 +1,5 @@
 import { ContextualBreadcrumbs } from "../ContextualNavigation";
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
 import { CampaignUnavailable } from "../CampaignDetailPanels";
 import {
   CampaignInstanceContextBar,
@@ -19,6 +19,7 @@ export const Route = createFileRoute(
 
 function CampaignInstanceLayout() {
   const result = Route.useLoaderData();
+  const running = useLocation().pathname.includes("/run/");
   if (!result.found)
     return (
       <>
@@ -30,7 +31,7 @@ function CampaignInstanceLayout() {
     <CampaignInstanceProvider instance={result.instance}>
       <div className="min-h-full">
         <div className="min-w-0">
-          <CampaignInstanceContextBar />
+          {!running && <CampaignInstanceContextBar />}
           <Outlet />
         </div>
       </div>

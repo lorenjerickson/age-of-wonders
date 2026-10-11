@@ -1,5 +1,5 @@
 import { locationMapIssue } from "@aow/common";
-import { professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
+import { backgroundModifierGrantIssue, professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
 import {
   isCreatureInstanceEmbodimentPolicy,
   type ModelConformance,
@@ -302,6 +302,7 @@ export function canonicalWorldRecordIssue(
     return undefined;
   }
   if (resourceType !== "definitions" || !isObject(payload)) return undefined;
+  if (payload.kind === "background") return backgroundModifierGrantIssue(payload.components);
   if (payload.kind === "skill") return skillModifierGrantIssue(payload.components);
   if (payload.kind === "profession") return professionModifierGrantIssue(payload.components);
   if (payload.kind !== "creature" && payload.kind !== "item") return undefined;

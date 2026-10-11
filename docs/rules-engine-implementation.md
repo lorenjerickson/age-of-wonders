@@ -171,3 +171,80 @@ unchanged.
 
 Final checks: common package build, web/API typechecks, web production build (including prerender),
 and `git diff --check` passed. The disposable verification database was removed after the tests.
+
+## Campaign beginning before movement exploration — 2026-09-16
+
+The user clarified that game-time exploration should begin with the Campaign's GM, Players,
+Characters, and designated opening Location. A movement-testing panel alone is insufficient.
+The Darkness Within's authored introduction still opens beneath Scotland Yard. Definition
+preparation and the new-Instance copy path retained `startingLocationId`, but this migrated
+Instance had empty preparation and no human memberships, including its owner as GM.
+
+The local development Instance was explicitly repaired: its owner Loren Erickson now has an
+active GM membership, Test Player — Ada and Test Player — Theo have active Player profiles and
+Instance memberships, and missing Instance preparation now selects captured Scotland Yard.
+Existing plot progress, historical Sessions, snapshots, and authored content were retained.
+`apps/api/src/cli/seed-campaign-opening.ts` provides an explicit Instance/Location dry run and
+`--apply` path, is restricted to development, validates the captured runtime, uses a serializable
+transaction and revision check, and records an audit event. A repeated apply returned unchanged.
+It creates no credentials, Characters, active Session, or simulated attendance. These are test
+roster entries for GM setup, not authenticated real Players.
+
+Instance Overview now exposes a named Starting Location selector from its captured World; both
+preparation read/save projections include `locations`. The existing revision/ownership/runtime
+validation remains authoritative, and selecting an opening does not move actors. The preparation,
+invitation, and Character draft buttons were also corrected to submit their forms. Local email
+and SMS providers were confirmed to be `capture`; no external delivery was attempted or configured.
+
+Verification: 279 web tests, 10 Instance-management tests, common build, web/API typechecks, and
+`smoke:campaigns` passed. The browser fixture exercises opening selection/save/remount, invitation
+submission with mocked delivery, and Character draft submission, alongside 16 Campaign views.
+API tests verify human-readable captured choices and rejection of out-of-capture starting Locations.
+The AI-facing guide was updated for the projection; persisted domain resource mappings are unchanged.
+
+Remaining: assign/create Characters for the test roster, stage the opening scene, and establish the
+Player entry experience. Captured Scotland Yard has legacy scene/image content without isometric
+terrain; the current movement evaluator cannot be tested there until the appropriate spatial
+representation is authored and captured. Do not silently replace the narrative opening with the
+unrelated isometric test Location. Real email invitations and Player authentication remain deferred.
+
+
+### GM Character authoring follow-through (2026-09-16)
+
+Roster Character names now open the same draft editor used by Players, with owner-authorized GM
+API routes. GM authoring supports partial saves, captured Background/Profession/Heritage choices,
+server-generated Attribute rolls and assignment, starting Item selections, biography, and generated
+portrait preview with explicit attachment on save. Submitted and approved sheets remain locked.
+Portrait generation uses the configured provider through the shared paid-request gate; test coverage
+uses a mocked provider and incurs no image generation charges.
+
+The Darkness Within capture contains Items and Professions but no Background or Heritage definitions.
+The editor identifies missing choices and permits partial work, but final review remains blocked until
+its capture includes those definitions. Starting Item selection is creation output, not runtime slot
+equipment. Runtime inventory materialization/equipping remains a separate game-time requirement.
+
+Verification: browser regression exercises roster-to-editor navigation, partial save, Attribute rolls,
+starting equipment, mocked portrait preview/attachment, and persistence across remount. API tests cover
+GM ownership, review immutability, image ownership, stale portrait requests and idempotent retries.
+The AI-facing domain guide was compared with common Character draft/sheet types and updated for the
+GM authoring and Media scope conventions; no common persisted Character fields were added.
+
+
+### Backgrounds and character sheet (2026-09-17)
+
+Supersedes the preceding Character authoring limitations: Heritage is no longer required. World
+Backgrounds now author shared modifier grant recipes; the sheet previews the captured Background
+benefits. The GM editor has a character-sheet layout, Attribute score boxes, biography, slot-based
+paper-doll equipment selection with carried inventory, and separate portrait/overhead/side-on artwork
+preview and attachment. Submission requires three distinct assets. Equipment assignments persist in
+the draft and activated sheet, survive import, and reject incompatible or overlapping slots.
+
+The local development database uses schema push rather than migration history. The single additive
+`20260917060000_character_equipment_assignments` SQL change was applied directly there, with the
+migration retained for migration-managed deployments. Existing draft data was preserved.
+
+This is authoring and sheet output: Background grant execution and runtime Item instance materialization
+still belong to the runtime compiler. No rolled-once Background benefits are fabricated in the editor.
+New World Backgrounds must be published and explicitly adopted by the Campaign capture before selection.
+The AI-facing domain model guide and canonical architecture were updated against the common source
+contracts; the existing resource mapping remains unchanged.

@@ -1,3 +1,4 @@
+import { Fieldset, Details, Summary } from "@aow/ui";
 import { Badge, Button, Input, Label, Select } from "@aow/ui";
 import {
   useSessionMovement,
@@ -146,7 +147,7 @@ function SessionMovementView({
           )}
           {actors.length ? (
             <form onSubmit={(event) => void preview(event)} className="mt-4">
-              <fieldset
+              <Fieldset
                 disabled={disabled}
                 className="grid gap-4 sm:grid-cols-3"
               >
@@ -199,7 +200,7 @@ function SessionMovementView({
                     Preview movement
                   </Button>
                 </div>
-              </fieldset>
+              </Fieldset>
             </form>
           ) : (
             <p className="mt-4 text-sm opacity-65">
@@ -243,16 +244,16 @@ function SessionMovementView({
                         </ul>
                       </div>
                     )}
-                    <details className="mt-3 text-sm">
-                      <summary className="cursor-pointer font-medium">
+                    <Details className="mt-3 text-sm">
+                      <Summary className="cursor-pointer font-medium">
                         Causal explanation
-                      </summary>
+                      </Summary>
                       <ol className="mt-2 list-decimal space-y-1 pl-5">
                         {proposal.trace.map((line, index) => (
                           <li key={index}>{line}</li>
                         ))}
                       </ol>
-                    </details>
+                    </Details>
                     <p className="mt-3 text-xs opacity-55">
                       {dateLabel(proposal.createdAt)}
                       {proposal.decidedAt

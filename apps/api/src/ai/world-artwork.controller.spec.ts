@@ -18,15 +18,13 @@ const request = { user: { id: "gm" }, ip: "local" } as Request &
   AuthenticatedRequest;
 function setup() {
   const getActiveDraft = jest.fn().mockResolvedValue({ storageRevision: 2 });
-  const generateImage = jest
-    .fn()
-    .mockResolvedValue({
-      buffer: Buffer.from("image"),
-      mimeType: "image/webp",
-      width: 1024,
-      height: 1024,
-      responseId: "response",
-    });
+  const generateImage = jest.fn().mockResolvedValue({
+    buffer: Buffer.from("image"),
+    mimeType: "image/webp",
+    width: 1024,
+    height: 1024,
+    responseId: "response",
+  });
   const upload = jest.fn().mockResolvedValue({ key: "upload" });
   const createForWorld = jest.fn().mockResolvedValue({ id: "asset" });
   const record = jest.fn().mockResolvedValue({ id: "audit" });
@@ -102,3 +100,23 @@ it("rejects stale and inaccessible Worlds before paid generation", async () => {
   ).rejects.toBeInstanceOf(NotFoundException);
   expect(s.generateImage).not.toHaveBeenCalled();
 });
+
+it.each(["overheadToken", "paperDollToken"] as const)(
+  "overrides blacksmith scene directions for %s regeneration",
+  async (role) => {
+    const s = setup();
+    await s.controller.generate("world", request, `blacksmith-${role}`, {
+      ...dto,
+      role,
+      name: "Blacksmith",
+      direction: "At an anvil beside a forge with sparks and tools",
+    });
+    const prompt = (s.generateImage.mock.calls as unknown as [string, unknown][])[0][0];
+    expect(prompt.indexOf("must not include an anvil, forge")).toBeGreaterThan(
+      prompt.indexOf("At an anvil"),
+    );
+    expect(prompt).toContain(
+      "These token-purpose and isolation constraints override conflicting scene",
+    );
+  },
+);

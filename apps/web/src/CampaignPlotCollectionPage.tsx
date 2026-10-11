@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useLocation } from "@tanstack/react-router";
 import {
+  Fieldset,
+  Legend,
   Alert,
   Button,
   Checkbox,
@@ -246,13 +248,13 @@ function CollectionScreen({
       </Alert>
     );
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-none px-4 py-6 sm:p-8">
       <h1 className="text-3xl font-semibold">
         {editingId
           ? `${editingId === "new" ? "Add" : "Edit"} ${itemLabel}`
           : title}
       </h1>
-      <p className="mt-2 text-sm text-slate-400">
+      <p className="mt-2 text-sm text-base-content/65">
         {childText(payload.name)}
         {claimsPage ? ` · ${childText(discovery?.name)}` : ""}
       </p>
@@ -272,14 +274,26 @@ function CollectionScreen({
         )}
         {!editingId ? (
           <>
-            <RouterButtonLink className="mt-6" href={`${list}/new${suffix}`}>
-              Add {itemLabel}
-            </RouterButtonLink>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <RouterButtonLink
+                className="min-h-11"
+                href={`${list}/new${suffix}`}
+              >
+                + Add {itemLabel}
+              </RouterButtonLink>
+              <RouterButtonLink
+                className="min-h-11"
+                tone="outline"
+                href={`/campaigns/definitions/${encodeURIComponent(definition.id)}/plots/${encodeURIComponent(plotId)}${suffix}`}
+              >
+                Back to plot
+              </RouterButtonLink>
+            </div>
             <ul className="mt-6 space-y-3">
               {entries.map((entry) => (
                 <li
                   key={childText(entry.id)}
-                  className="rounded border border-slate-700 p-4"
+                  className="rounded border border-base-300 p-4"
                 >
                   <InternalLink
                     href={`${list}/${encodeURIComponent(childText(entry.id))}${suffix}`}
@@ -288,13 +302,19 @@ function CollectionScreen({
                       `Unnamed ${itemLabel}`}
                   </InternalLink>
                   {claimsPage && <p>{childText(entry.kind)}</p>}
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-base-content/65">
                     {childText(entry.description)}
                   </p>
+                  <InternalLink
+                    className="btn btn-outline mt-3 mr-2 min-h-11"
+                    href={`${list}/${encodeURIComponent(childText(entry.id))}${suffix}`}
+                  >
+                    Edit {itemLabel}
+                  </InternalLink>
                   <Button
-                    tone="outline"
+                    tone="ghost"
                     size="sm"
-                    className="mt-3"
+                    className="mt-3 min-h-11"
                     onClick={() => void remove(entry)}
                   >
                     Delete {itemLabel}
@@ -307,7 +327,7 @@ function CollectionScreen({
             )}
           </>
         ) : (
-          <form className="mt-6 space-y-5" onSubmit={submit}>
+          <form className="mt-6 max-w-4xl space-y-5" onSubmit={submit}>
             {claimsPage ? (
               <>
                 <Label>
@@ -393,8 +413,8 @@ function CollectionScreen({
                   </Label>
                 )}
                 {form.kind !== "truth" && (
-                  <fieldset>
-                    <legend>Conflicting claims</legend>
+                  <Fieldset>
+                    <Legend>Conflicting claims</Legend>
                     {Array.isArray(form.conflictsWithClaimIds) &&
                       form.conflictsWithClaimIds
                         .filter(
@@ -452,7 +472,7 @@ function CollectionScreen({
                           {label}
                         </Label>
                       ))}
-                  </fieldset>
+                  </Fieldset>
                 )}
               </>
             ) : (

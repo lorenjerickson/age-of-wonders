@@ -49,6 +49,6 @@ import { WorldDraftProposalService } from "./world-draft-proposal.service";
     PaidAiRequestGate,
     WorldDraftProposalService,
   ],
-  exports: [OpenAiService],
+  exports: [OpenAiService, PaidAiRequestGate, GenerationAuditService],
 })
 export class AiModule {}

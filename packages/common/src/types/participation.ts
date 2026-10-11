@@ -503,6 +503,8 @@ export interface CharacterCreationDraft {
   readonly attributeAssignments?: PartialAttributeCollection<AttributeScore>;
   /** Draft imagery may be partial; a complete CharacterState requires all three CreatureImages. */
   readonly images?: Partial<CreatureImages>;
+  /** Captured Item definition to occupied slot keys; omitted items remain carried. */
+  readonly equipmentAssignments?: Readonly<Record<string, readonly string[]>>;
   readonly startingEquipmentDefinitionIds?: readonly DefinitionId[];
   readonly biography?: string;
   readonly playerDeclaredCompleteAt?: string;
@@ -528,6 +530,8 @@ export interface CampaignInstanceCharacterSheet {
   readonly heritageDefinitionIds: readonly DefinitionId[];
   /** Keys are captured, extensible Attribute model identities—not a closed built-in enum. */
   readonly attributeAssignments: Readonly<Record<string, AttributeScore>>;
+  /** Captured Item definition to occupied slot keys; omitted items remain carried. */
+  readonly equipmentAssignments?: Readonly<Record<string, readonly string[]>>;
   readonly startingEquipmentDefinitionIds: readonly DefinitionId[];
   readonly biography?: string;
   readonly imageAssetIds: Readonly<Record<string, MediaAssetId>>;

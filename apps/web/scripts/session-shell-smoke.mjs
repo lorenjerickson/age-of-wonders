@@ -199,7 +199,17 @@ await withFixture(async (url) => {
           ],
         },
       });
-    if (path.endsWith("/movement")) return route.fulfill({json:{snapshotNumber:1,runtimeRevision:1,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
+    if (path.endsWith("/movement"))
+      return route.fulfill({
+        json: {
+          snapshotNumber: 1,
+          runtimeRevision: 1,
+          status: status === "paused" ? "paused" : "active",
+          actors: [],
+          capturedRules: [],
+          proposals: [],
+        },
+      });
     if (path.endsWith("/table"))
       return route.fulfill({
         json: {
@@ -355,7 +365,7 @@ await withFixture(async (url) => {
       .click();
     await routeIs("/run/session");
     await page
-      .getByRole("heading", { name: "Participants", exact: true })
+      .getByRole("heading", { name: "Players and actors", exact: true })
       .waitFor();
     if (
       await page
@@ -445,6 +455,9 @@ await withFixture(async (url) => {
     if (await refreshWarning.count())
       throw new Error("Explicit refresh did not clear the warning");
     await page.screenshot({ path: "/tmp/aow-session-run.png", fullPage: true });
+    await page
+      .getByRole("link", { name: "Session management", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Conclude Session", exact: true })
       .click();

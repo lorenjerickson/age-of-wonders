@@ -1,12 +1,20 @@
+import { RecordTabs, recordTabId } from "./RecordTabs";
+import { ShellTools } from "./AppShellTools";
 import { ArtworkGenerator } from "./ArtworkGenerator";
-import { ProfessionModifiersEditor, type ModifierEdit } from "./ProfessionModifiersEditor";
-import { professionModifierLevels, professionModifiersValid } from "./professionModifierModel";
+import {
+  ProfessionModifiersEditor,
+  type ModifierEdit,
+} from "./ProfessionModifiersEditor";
+import {
+  levelModifierGrants,
+  professionModifierLevels,
+  professionModifiersValid,
+} from "./professionModifierModel";
 import { useEditorSave } from "./useEditorSave";
 import { MediaImage } from "./MediaImage";
 import { CreatureArtwork, RecordThumbnail } from "./RecordArtwork";
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -55,6 +63,7 @@ import {
 import { DraftRequired, useWorldAuthoring } from "./WorldAuthoringShell";
 import {
   hierarchyRows,
+  locationParentId,
   adoptedLegacyModelKey,
   creatureAttributesForEditor,
   attributeNumberConfig,
@@ -408,70 +417,119 @@ export function CreatureEmbodimentPolicyFields({
 }
 
 export function WorldOverviewPage() {
-  const { definition, draft, canEdit } = useWorldAuthoring();
+  const { definition, draft } = useWorldAuthoring();
   const base = `/worlds/${encodeURIComponent(definition.id)}`;
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
+  const locations = hierarchyRows(draft?.records ?? []);
+  const findings = (draft?.records ?? []).filter(
+    (record) =>
+      (["locations", "creatures"].includes(record.resourceType) ||
+        (record.resourceType === "definitions" &&
+          ["creature", "item"].includes(String(recordPayload(record).kind)))) &&
+      !recordDescription(record)?.trim(),
+  );
+  const issues = locations.filter((row) => row.issue);
+  const count = findings.length + issues.length;
+  const [checked, setChecked] = useState(false);
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
-      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        World Definition · Authoring
+    <main className="mx-auto max-w-6xl p-4 lg:px-8 lg:py-7">
+      <h1 className="text-3xl font-semibold">
+        {definition.name.trim() || "Unnamed World"}
+      </h1>
+      <p className="mt-2 text-sm text-base-content/60">
+        {draft ? "Draft" : "Published"} ·{" "}
+        {draft?.revisionName || "Current version"}
       </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Overview</h1>
-      <p className="mt-5 max-w-3xl text-lg leading-8 text-base-content/65">
-        {definition.description?.trim() ||
-          "Review this World’s authoring readiness and choose a focused library."}
-      </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <section className="card border border-base-300 bg-base-200">
-          <div className="card-body">
-            <h2 className="card-title">Working context</h2>
-            <p>
-              {!canEdit
-                ? "Archived World · read only"
-                : draft
-                  ? draft.revisionName || "Unnamed working revision"
-                  : "Published content is read only"}
-            </p>
-            <p className="text-sm text-base-content/55">
-              {draft
-                ? `${draft.records.length} draft records`
-                : "Open Versions to review publication history."}
-            </p>
-          </div>
+      <section className="mt-6 flex flex-col gap-6 rounded-box border border-base-300 bg-base-200 p-5 sm:flex-row">
+        <img
+          src="/wireframes/world-map.svg"
+          alt=""
+          className="h-32 w-auto max-w-full shrink-0 self-center opacity-60 invert sm:max-w-52"
+        />
+        <div>
+          <h2 className="text-xl font-semibold">World overview</h2>
+          <p className="mt-3 text-sm leading-6 text-base-content/70">
+            {definition.description?.trim() ||
+              "Add locations, creatures, and items to bring this World to life."}
+          </p>
+        </div>
+      </section>
+      <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+        <section className="rounded-box border border-base-300 bg-base-200 p-5">
+          <h2 className="text-xl font-semibold">Domain health</h2>
+          <p className="mt-4 font-semibold">
+            {count ? "Needs attention" : "No authoring gaps found"}
+          </p>
+          <p className="mt-3 text-2xl font-semibold">
+            {count} {count === 1 ? "finding" : "findings"}
+          </p>
+          <p className="mt-3 text-sm">
+            {findings.length} missing descriptions
+            <br />
+            {issues.length} location hierarchy issues
+          </p>
+          <Button
+            className="mt-5 min-h-11 w-full"
+            tone="outline"
+            onClick={() => setChecked(true)}
+          >
+            Review findings
+          </Button>
+          <p className="mt-3 text-xs text-base-content/60">
+            {checked
+              ? "Checked against the current working draft."
+              : "Checks descriptions and the location hierarchy. Publication validates the complete revision."}
+          </p>
         </section>
-        <section className="card border border-base-300 bg-base-200">
-          <div className="card-body">
-            <h2 className="card-title">Authoring libraries</h2>
-            <nav
-              aria-label="World authoring destinations"
-              className="grid gap-2"
+        <section className="rounded-box border border-base-300 bg-base-200 p-5">
+          <h2 className="text-xl font-semibold">Recommended next steps</h2>
+          <p className="mt-2 text-sm text-base-content/60">
+            For {definition.name} · continue authoring
+          </p>
+          <nav
+            aria-label="World authoring destinations"
+            className="mt-5 grid gap-4"
+          >
+            {(checked ? findings : findings.slice(0, 3)).map((record) => (
+              <InternalLink
+                key={record.sourceId}
+                className="link min-h-11 text-sm"
+                href={`${base}/${record.resourceType === "locations" ? "atlas/locations" : record.resourceType === "creatures" || recordPayload(record).kind === "creature" ? "bestiary/creatures" : "item-compendium/items"}/${encodeURIComponent(record.sourceId)}${guideSuffix}`}
+              >
+                Describe {recordName(record, "this record")} →
+              </InternalLink>
+            ))}
+            {checked &&
+              issues.map((row) => (
+                <p key={row.record.sourceId} className="text-sm text-warning">
+                  {row.name}: {row.issue}
+                </p>
+              ))}
+            <InternalLink
+              className="link min-h-11 text-sm"
+              href={`${base}/atlas${guideSuffix}`}
             >
-              <InternalLink
-                className="link"
-                href={`${base}/atlas${guideSuffix}`}
-              >
-                Open Atlas
-              </InternalLink>
-              <InternalLink
-                className="link"
-                href={`${base}/bestiary${guideSuffix}`}
-              >
-                Open Bestiary
-              </InternalLink>
-              <InternalLink
-                className="link"
-                href={`${base}/item-compendium${guideSuffix}`}
-              >
-                Open Item Compendium
-              </InternalLink>
-              <InternalLink
-                className="link"
-                href={`${base}/characters${guideSuffix}`}
-              >
-                Open Characters
-              </InternalLink>
-            </nav>
-          </div>
+              Browse Locations →
+            </InternalLink>
+            <InternalLink
+              className="link min-h-11 text-sm"
+              href={`${base}/bestiary${guideSuffix}`}
+            >
+              Open Bestiary →
+            </InternalLink>
+            <InternalLink
+              className="link min-h-11 text-sm"
+              href={`${base}/item-compendium${guideSuffix}`}
+            >
+              Browse Items →
+            </InternalLink>
+            <InternalLink
+              className="link min-h-11 text-sm"
+              href={`${base}/characters${guideSuffix}`}
+            >
+              Character definitions →
+            </InternalLink>
+          </nav>
         </section>
       </div>
     </main>
@@ -714,38 +772,136 @@ export function WorldImpactReviewPage({
 
 export function AtlasPage() {
   const { definition, draft } = useWorldAuthoring();
-  const rows = hierarchyRows(draft?.records ?? []);
+  const locations = recordsForLibrary(draft?.records ?? [], "locations");
+  const root = locations.find(
+    (record) => record.sourceId === draft?.content.rootLocationId,
+  );
+  const [scope, setScope] = useState<string | undefined>();
+  const [query, setQuery] = useState("");
+  const [showPath, setShowPath] = useState(false);
+  const current = locations.find((record) => record.sourceId === scope) ?? root;
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
+  const base = `/worlds/${encodeURIComponent(definition.id)}/atlas/locations`;
+  const visible = locations.filter((record) =>
+    query.trim()
+      ? `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+          .toLocaleLowerCase()
+          .includes(query.toLocaleLowerCase())
+      : record.sourceId !== current?.sourceId &&
+        locationParentId(record) === current?.sourceId,
+  );
+  const ancestors: WorldDraftRecord[] = [];
+  let ancestor = current;
+  while (
+    ancestor &&
+    !ancestors.some((record) => record.sourceId === ancestor?.sourceId)
+  ) {
+    ancestors.unshift(ancestor);
+    const parent = locationParentId(ancestor);
+    ancestor = locations.find((record) => record.sourceId === parent);
+  }
   return (
     <LibraryPage
-      eyebrow="Atlas"
-      title="Locations"
-      description="Author the World’s containment hierarchy. Connections remain a separate relationship."
-      createHref={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/new`}
+      eyebrow="Locations"
+      title={current ? recordName(current, "World map") : "World map"}
+      description={
+        current
+          ? (recordDescription(current) ?? "Browse contained locations.")
+          : "Browse the places in this World."
+      }
+      createHref={`${base}/new${current ? `?parentLocationId=${encodeURIComponent(current.sourceId)}` : ""}`}
     >
       <DraftRequired>
-        {rows.length ? (
-          <ul className="mt-6 space-y-2">
-            {rows.map((row) => (
-              <li
-                key={row.record.sourceId}
-                style={{ paddingInlineStart: `${row.depth * 1.25}rem` }}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            tone="outline"
+            className="min-h-11"
+            onClick={() => {
+              setScope(undefined);
+              setQuery("");
+            }}
+          >
+            World map
+          </Button>
+          <Button
+            tone="outline"
+            className="min-h-11"
+            aria-expanded={showPath}
+            onClick={() => setShowPath(!showPath)}
+          >
+            Full location path
+          </Button>
+        </div>
+        {showPath && (
+          <nav aria-label="Location path" className="mt-3 flex flex-wrap gap-2">
+            {ancestors.map((record) => (
+              <Button
+                key={record.sourceId}
+                tone="ghost"
+                className="min-h-11"
+                onClick={() => {
+                  setScope(record.sourceId);
+                  setQuery("");
+                }}
               >
-                <InternalLink
-                  className="flex min-h-11 items-center justify-between rounded-box border border-base-300 bg-base-200 px-4"
-                  href={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/${encodeURIComponent(row.record.sourceId)}${guideSuffix}`}
-                >
-                  <span className="flex items-center gap-3 py-2">
-                    <RecordThumbnail payload={recordPayload(row.record)} name={row.name} className="w-20 shrink-0" onlyIfPresent />
-                    <span>{row.name}</span>
-                  </span>
-                  {row.issue && <Badge tone="warning">{row.issue}</Badge>}
-                </InternalLink>
+                {recordName(record, "Location")}
+              </Button>
+            ))}
+          </nav>
+        )}
+        <Field label="Search all locations" className="mt-5">
+          <Input
+            type="search"
+            className="min-h-11 w-full"
+            placeholder="Search all locations…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </Field>
+        <p className="mt-4 text-sm font-semibold">
+          {visible.length} {query ? "matching" : "contained"} locations
+        </p>
+        {visible.length ? (
+          <ul className="mt-4 space-y-4">
+            {visible.map((record) => (
+              <li
+                key={record.sourceId}
+                className="rounded-box border border-base-300 bg-base-200 p-4"
+              >
+                <h2 className="font-semibold">
+                  {recordName(record, "Unnamed Location")}
+                </h2>
+                <p className="mt-1 text-sm text-base-content/65">
+                  {recordDescription(record) || "No description yet."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    tone="outline"
+                    className="min-h-11"
+                    onClick={() => {
+                      setScope(record.sourceId);
+                      setQuery("");
+                    }}
+                  >
+                    Browse places
+                  </Button>
+                  <RouterButtonLink
+                    tone="outline"
+                    className="min-h-11"
+                    href={`${base}/${encodeURIComponent(record.sourceId)}${guideSuffix}`}
+                  >
+                    Edit location
+                  </RouterButtonLink>
+                </div>
               </li>
             ))}
           </ul>
         ) : (
-          <Empty label="No Locations yet" />
+          <Empty
+            label={
+              query ? "No matching locations" : "No contained locations yet"
+            }
+          />
         )}
       </DraftRequired>
     </LibraryPage>
@@ -754,18 +910,37 @@ export function AtlasPage() {
 
 export function BestiaryPage() {
   const { definition, draft } = useWorldAuthoring();
-  const creatures = recordsForLibrary(draft?.records ?? [], "creatures");
+  const [query, setQuery] = useState("");
+  const creatures = recordsForLibrary(draft?.records ?? [], "creatures").filter(
+    (record) =>
+      `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()),
+  );
   return (
     <LibraryPage
       eyebrow="Bestiary"
-      title="Creatures"
-      description="Reusable source creatures in this working World revision."
+      title="Bestiary"
+      description="Creatures in this World"
       createHref={`/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/new`}
     >
       <DraftRequired>
+        <Field label="Search creatures" className="mt-5">
+          <Input
+            type="search"
+            placeholder="Search by name or description"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="min-h-11 w-full"
+          />
+        </Field>
+        <p className="mt-4 text-sm text-base-content/60">
+          {creatures.length} creatures
+        </p>
         {creatures.length ? (
           <CardGrid
             records={creatures}
+            list
             showImages
             href={(record) =>
               `/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/${encodeURIComponent(record.sourceId)}`
@@ -782,31 +957,111 @@ export function BestiaryPage() {
 export function ItemCompendiumPage() {
   const { definition, draft } = useWorldAuthoring();
   const [query, setQuery] = useState("");
-  const items = useMemo(
-    () =>
-      recordsForLibrary(draft?.records ?? [], "items").filter((record) =>
-        recordName(record, "")
-          .toLocaleLowerCase()
-          .includes(query.toLocaleLowerCase()),
-      ),
-    [draft, query],
-  );
+  const [category, setCategory] = useState("");
+  const [quality, setQuality] = useState("");
+  const [rarity, setRarity] = useState("");
+  const allItems = recordsForLibrary(draft?.records ?? [], "items");
+  const facets = (record: WorldDraftRecord) => {
+    const payload = recordPayload(record);
+    const components = objectValue(payload.components);
+    return {
+      category: String(components.category ?? payload.category ?? ""),
+      quality: String(components.quality ?? payload.quality ?? ""),
+      rarity: String(components.rarity ?? payload.rarity ?? ""),
+    };
+  };
+  const options = (key: "category" | "quality" | "rarity") =>
+    [
+      ...new Set(allItems.map((record) => facets(record)[key]).filter(Boolean)),
+    ].sort();
+  const items = allItems.filter((record) => {
+    const values = facets(record);
+    return (
+      `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()) &&
+      (!category || values.category === category) &&
+      (!quality || values.quality === quality) &&
+      (!rarity || values.rarity === rarity)
+    );
+  });
   return (
     <LibraryPage
       eyebrow="Item Compendium"
-      title="Items, objects & hazards"
-      description="Browse every Item family without splitting Objects, Traps, or Hazards into peer libraries."
+      title="Items"
+      description="Item templates and artifacts in this World"
       createHref={`/worlds/${encodeURIComponent(definition.id)}/item-compendium/items/new`}
     >
+      <ShellTools>
+        <div className="mt-6 grid gap-4">
+          <Field label="Type">
+            <Select
+              className="w-full min-h-11"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">All types</option>
+              {options("category").map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("-", " ")}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Quality">
+            <Select
+              className="w-full min-h-11"
+              value={quality}
+              onChange={(event) => setQuality(event.target.value)}
+            >
+              <option value="">All qualities</option>
+              {options("quality").map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("-", " ")}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Rarity">
+            <Select
+              className="w-full min-h-11"
+              value={rarity}
+              onChange={(event) => setRarity(event.target.value)}
+            >
+              <option value="">All rarities</option>
+              {options("rarity").map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("-", " ")}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button
+            tone="outline"
+            className="min-h-11"
+            onClick={() => {
+              setCategory("");
+              setQuality("");
+              setRarity("");
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
+      </ShellTools>
       <DraftRequired>
-        <Field label="Search Items" className="mt-6 max-w-md">
+        <Field label="Search Items" className="mt-6">
           <Input
             type="search"
+            placeholder="Search by name or description"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="mt-2 w-full"
           />
         </Field>
+        <p className="mt-4 text-sm text-base-content/60">
+          {items.length} items
+        </p>
         {items.length ? (
           <CardGrid
             records={items}
@@ -828,31 +1083,37 @@ function LibraryPage({
   title,
   description,
   createHref,
+  createLabel,
   children,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   createHref: string;
+  createLabel?: string;
   children: ReactNode;
 }) {
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const { canEdit, draft } = useWorldAuthoring();
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
+    <main className="mx-auto max-w-6xl p-4 lg:px-8 lg:py-7">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-            {eyebrow}
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-            {title}
-          </h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
           <p className="mt-3 max-w-2xl text-base-content/60">{description}</p>
         </div>
         {canEdit && draft ? (
-          <RouterButtonLink href={`${createHref}${guideSuffix}`} tone="primary">
-            Create
+          <RouterButtonLink
+            href={`${createHref}${createHref.includes("?") ? guideSuffix.replace(/^\?/, "&") : guideSuffix}`}
+            tone="primary"
+          >
+            + Add{" "}
+            {createLabel ??
+              (eyebrow === "Bestiary"
+                ? "creature"
+                : eyebrow === "Item Compendium"
+                  ? "item"
+                  : "location")}
           </RouterButtonLink>
         ) : (
           <Button disabled>Archived · read only</Button>
@@ -866,29 +1127,31 @@ function CardGrid({
   records,
   href,
   showImages = false,
+  list = false,
 }: {
   records: WorldDraftRecord[];
   href: (record: WorldDraftRecord) => string;
   showImages?: boolean;
+  list?: boolean;
 }) {
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   return (
-    <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className={`mt-6 grid gap-4 ${list ? "" : "md:grid-cols-2"}`}>
       {records.map((record) => (
         <InternalLink
           key={`${record.resourceType}:${record.sourceId}`}
           href={`${href(record)}${guideSuffix}`}
-          className="card border border-base-300 bg-base-200"
+          className="flex min-h-24 items-center gap-3 rounded-box border border-base-300 bg-base-200 p-3"
         >
           {showImages && (
             <RecordThumbnail
               payload={recordPayload(record)}
               name={recordName(record, "Unnamed record")}
-              className="m-3 mb-0"
+              className="w-16 shrink-0"
             />
           )}
-          <div className="card-body">
-            <h2 className="card-title">
+          <div className="min-w-0">
+            <h2 className="font-semibold">
               {recordName(record, "Unnamed record")}
             </h2>
             <p className="line-clamp-2 text-sm text-base-content/55">
@@ -915,9 +1178,22 @@ export function DraftRecordEditor({
   kind: "locations" | "creatures" | "items";
   sourceId?: string;
 }) {
+  const [editorSection, setEditorSection] = useState("Overview");
+  const editorSections =
+    kind === "creatures"
+      ? [
+          "Overview",
+          "Attributes",
+          "Abilities",
+          "Movement",
+          "Equipment",
+          "Artwork",
+        ]
+      : ["Overview", "Equipment", "Artwork"];
   const { definition, draft, adoptDraft, canEdit, markDirty } =
     useWorldAuthoring();
   const navigate = useInternalNavigate();
+  const libraryHref = `/worlds/${encodeURIComponent(definition.id)}/${kind === "locations" ? "atlas" : kind === "creatures" ? "bestiary" : "item-compendium"}`;
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const existing = recordsForLibrary(draft?.records ?? [], kind).find(
     (record) => record.sourceId === sourceId,
@@ -1516,7 +1792,7 @@ export function DraftRecordEditor({
       </main>
     );
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
+    <main className="mx-auto max-w-5xl p-4 lg:px-8 lg:py-7">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         {kind === "locations"
           ? "Atlas"
@@ -1524,11 +1800,24 @@ export function DraftRecordEditor({
             ? "Bestiary"
             : "Item Compendium"}
       </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight">
         {existing
-          ? `Edit ${kind === "items" ? "Item" : kind === "locations" ? "Location" : "Creature"}`
+          ? recordName(existing, "Unnamed record")
           : `Create ${kind === "items" ? "Item" : kind === "locations" ? "Location" : "Creature"}`}
       </h1>
+      {kind !== "locations" && (
+        <RecordTabs
+          label={`${kind === "creatures" ? "Creature" : "Item"} properties`}
+          idPrefix="world-record"
+          panelId="world-record-editor"
+          tabs={editorSections.map((section) => ({
+            id: section,
+            label: section,
+          }))}
+          activeTab={editorSection}
+          onTabChange={setEditorSection}
+        />
+      )}
       <DraftRequired>
         {!existing && (
           <AiCreationChoice
@@ -1552,257 +1841,308 @@ export function DraftRecordEditor({
           />
         )}
         <form
+          id="world-record-editor"
+          role={kind !== "locations" ? "tabpanel" : undefined}
+          aria-labelledby={
+            kind !== "locations"
+              ? recordTabId("world-record", editorSection)
+              : undefined
+          }
+          tabIndex={kind !== "locations" ? 0 : undefined}
+          onInvalidCapture={(event) => {
+            const input = event.target as HTMLInputElement;
+            const section = input.closest<HTMLElement>("[data-editor-section]")
+              ?.dataset.editorSection;
+            if (section && section !== editorSection) {
+              event.preventDefault();
+              setEditorSection(section);
+              requestAnimationFrame(() => input.focus());
+            }
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             void editorSave.run(() => submit(event));
           }}
           className="mt-8 grid gap-5"
         >
-          <Field label="Name" required>
-            <Input
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="mt-2 w-full"
-            />
-          </Field>
-          <Field label="Description">
-            <Textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={5}
-              className="mt-2 w-full"
-            />
-          </Field>
-          {proposalPending && (
-            <Alert aria-live="polite">
-              Proposal context is locked until the request finishes.
-            </Alert>
-          )}
-          {proposalIsStale && (
-            <Alert tone="warning" aria-live="polite">
-              This proposal belongs to an earlier working-draft revision.
-              Prepare a new proposal before applying it.
-            </Alert>
-          )}
-          {kind === "locations" && (
-            <Disclosure summary="Location profile" className="p-4">
-              <div className="mt-4 grid gap-5">
-                <Field label="Profile summary">
-                  <Textarea
-                    value={profileSummary}
-                    onChange={(event) => setProfileSummary(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Discovery tags" help="Separate tags with commas.">
-                  <Input
-                    value={profileTags}
-                    onChange={(event) => setProfileTags(event.target.value)}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                {existing && (
-                  <InternalLink
-                    className="link"
-                    href={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/${encodeURIComponent(existing.sourceId)}/map${guideSuffix}`}
-                  >
-                    Edit Map &amp; scene
-                  </InternalLink>
-                )}
-              </div>
-            </Disclosure>
-          )}
-          {kind === "locations" && !isRootLocation && (
-            <Field label="Location kind">
+          <div
+            data-editor-section="Overview"
+            hidden={kind !== "locations" && editorSection !== "Overview"}
+            className="space-y-5"
+          >
+            <h2 className="text-xl font-semibold">Overview</h2>
+            <Field label="Name" required>
               <Input
-                value={subtype}
-                onChange={(event) => setSubtype(event.target.value)}
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
                 className="mt-2 w-full"
               />
             </Field>
-          )}
-          {kind === "items" && (
-            <Field label="Item family" required>
-              <Select
-                required
-                value={subtype}
-                onChange={(event) => setSubtype(event.target.value)}
+            <Field label="Description">
+              <Textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={5}
                 className="mt-2 w-full"
-              >
-                <option value="" disabled>
-                  Choose an Item family
-                </option>
-                {(models?.itemFamilies ?? []).map((family) => (
-                  <option key={family.key} value={family.key}>
-                    {family.name}
-                  </option>
-                ))}
-              </Select>
+              />
             </Field>
-          )}
-          {kind === "items" && (
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Category" required>
+            {proposalPending && (
+              <Alert aria-live="polite">
+                Proposal context is locked until the request finishes.
+              </Alert>
+            )}
+            {proposalIsStale && (
+              <Alert tone="warning" aria-live="polite">
+                This proposal belongs to an earlier working-draft revision.
+                Prepare a new proposal before applying it.
+              </Alert>
+            )}
+            {kind === "locations" && (
+              <Disclosure summary="Location profile" className="p-4">
+                <div className="mt-4 grid gap-5">
+                  <Field label="Profile summary">
+                    <Textarea
+                      value={profileSummary}
+                      onChange={(event) =>
+                        setProfileSummary(event.target.value)
+                      }
+                      rows={3}
+                      className="mt-2 w-full"
+                    />
+                  </Field>
+                  <Field
+                    label="Discovery tags"
+                    help="Separate tags with commas."
+                  >
+                    <Input
+                      value={profileTags}
+                      onChange={(event) => setProfileTags(event.target.value)}
+                      className="mt-2 w-full"
+                    />
+                  </Field>
+                  {existing && (
+                    <InternalLink
+                      className="link"
+                      href={`/worlds/${encodeURIComponent(definition.id)}/atlas/locations/${encodeURIComponent(existing.sourceId)}/map${guideSuffix}`}
+                    >
+                      Edit Map &amp; scene
+                    </InternalLink>
+                  )}
+                </div>
+              </Disclosure>
+            )}
+            {kind === "locations" && !isRootLocation && (
+              <Field label="Location kind">
                 <Input
-                  required
-                  value={itemCategory}
-                  onChange={(event) => setItemCategory(event.target.value)}
+                  value={subtype}
+                  onChange={(event) => setSubtype(event.target.value)}
                   className="mt-2 w-full"
                 />
               </Field>
-              <Field label="Quality" required>
+            )}
+            {kind === "items" && (
+              <Field label="Item family" required>
                 <Select
-                  value={itemQuality}
-                  onChange={(event) => setItemQuality(event.target.value)}
+                  required
+                  value={subtype}
+                  onChange={(event) => setSubtype(event.target.value)}
                   className="mt-2 w-full"
                 >
-                  <option value="ramshackle">Ramshackle</option>
-                  <option value="standard">Standard</option>
-                  <option value="fine">Fine</option>
-                  <option value="exquisite">Exquisite</option>
+                  <option value="" disabled>
+                    Choose an Item family
+                  </option>
+                  {(models?.itemFamilies ?? []).map((family) => (
+                    <option key={family.key} value={family.key}>
+                      {family.name}
+                    </option>
+                  ))}
                 </Select>
               </Field>
-            </div>
-          )}
-          {kind === "items" && Boolean(initialImage.assetId) && (
-            <MediaImage
-              image={initialImage}
-              name={name || "Item image"}
-              className="max-w-xs"
-            />
-          )}
-          {kind === "items" && draft && (
-            <ArtworkGenerator
-              worldId={definition.id}
-              storageRevision={draft.storageRevision}
-              role="item"
-              label="Item image"
-              name={name}
-              description={description}
-              direction={`Category: ${itemCategory}. Quality: ${itemQuality}.`}
-              hasImage={Boolean(initialImage.assetId)}
-              disabled={
-                !canEdit ||
-                artworkBusy ||
-                editorSave.saving ||
-                draft.status === "stale"
-              }
-              onBusyChange={setArtworkBusy}
-              onApply={(image) => {
-                setItemArtwork(image);
-                setItemImageFile(undefined);
-                setItemImageAltText(String(image.altText ?? ""));
-              }}
-            />
-          )}
-          {kind === "items" && (
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field
-                label={initialImage.assetId ? "Replace image" : "Image"}
-                required={!initialImage.assetId}
-                help="Item Definitions require a square catalog image."
-              >
-                <Input
-                  type="file"
-                  accept="image/*"
-                  required={!initialImage.assetId}
-                  onChange={(event) => {
-                    setItemImageFile(event.target.files?.[0]);
-                    setItemArtwork(undefined);
-                  }}
-                  className="mt-2 w-full"
-                />
-              </Field>
-              <Field label="Image description" required>
-                <Input
-                  required
-                  value={itemImageAltText}
-                  onChange={(event) => setItemImageAltText(event.target.value)}
-                  className="mt-2 w-full"
-                />
-              </Field>
-            </div>
-          )}
-          {kind === "creatures" && (
-            <CreatureArtwork
-              payload={{
-                ...initial,
-                components: {
-                  ...initialComponents,
-                  art: {
-                    ...initialArt,
-                    images: {
-                      ...objectValue(initial.images),
-                      ...objectValue(initialArt.images),
-                      ...creatureArtwork,
-                    },
-                  },
-                },
-              }}
-              name={name || "Creature"}
-              renderControls={(role, label, hasImage) =>
-                draft && (
-                  <ArtworkGenerator
-                    worldId={definition.id}
-                    storageRevision={draft.storageRevision}
-                    role={role}
-                    label={label}
-                    name={name}
-                    description={description}
-                    direction={artDirection}
-                    hasImage={hasImage}
-                    disabled={
-                      !canEdit ||
-                      artworkBusy ||
-                      editorSave.saving ||
-                      draft.status === "stale"
-                    }
-                    onBusyChange={setArtworkBusy}
-                    onApply={(image) =>
-                      setCreatureArtwork((current) => ({
-                        ...current,
-                        [role]: image,
-                      }))
-                    }
-                  />
-                )
-              }
-            />
-          )}
-          {kind === "creatures" && (
-            <Alert>
-              Creature type selection isn’t available yet. You can still edit
-              and save this creature.
-            </Alert>
-          )}
-          {kind === "creatures" && (
-            <CreatureEmbodimentPolicyFields
-              strategy={embodimentStrategy}
-              maximum={embodimentMaximum}
-              legacy={!initial.instanceEmbodimentPolicy && Boolean(existing)}
-              onStrategyChange={setEmbodimentStrategy}
-              onMaximumChange={setEmbodimentMaximum}
-            />
-          )}
-          {kind === "creatures" && (
-            <Disclosure
-              summary="Art, movement, and progression"
-              className="p-4"
-            >
-              <div className="mt-4 grid gap-5">
-                <Field
-                  label="Art direction"
-                  help="Describe the portrait and token treatment. Existing image references are preserved."
-                >
-                  <Textarea
-                    value={artDirection}
-                    onChange={(event) => setArtDirection(event.target.value)}
-                    rows={3}
+            )}
+            {kind === "items" && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field label="Category" required>
+                  <Input
+                    required
+                    value={itemCategory}
+                    onChange={(event) => setItemCategory(event.target.value)}
                     className="mt-2 w-full"
                   />
                 </Field>
+                <Field label="Quality" required>
+                  <Select
+                    value={itemQuality}
+                    onChange={(event) => setItemQuality(event.target.value)}
+                    className="mt-2 w-full"
+                  >
+                    <option value="ramshackle">Ramshackle</option>
+                    <option value="standard">Standard</option>
+                    <option value="fine">Fine</option>
+                    <option value="exquisite">Exquisite</option>
+                  </Select>
+                </Field>
+              </div>
+            )}
+          </div>
+          <div
+            data-editor-section="Artwork"
+            hidden={editorSection !== "Artwork"}
+            className="space-y-5"
+          >
+            <h2 className="text-xl font-semibold">Artwork</h2>
+            {kind === "creatures" && (
+              <Field
+                label="Art direction"
+                help="Describe the portrait and token treatment. Existing image references are preserved."
+              >
+                <Textarea
+                  value={artDirection}
+                  onChange={(event) => setArtDirection(event.target.value)}
+                  rows={3}
+                  className="mt-2 w-full"
+                />
+              </Field>
+            )}
+
+            {kind === "items" && Boolean(initialImage.assetId) && (
+              <MediaImage
+                image={initialImage}
+                name={name || "Item image"}
+                className="max-w-xs"
+              />
+            )}
+            {kind === "items" && draft && (
+              <ArtworkGenerator
+                worldId={definition.id}
+                storageRevision={draft.storageRevision}
+                role="item"
+                label="Item image"
+                name={name}
+                description={description}
+                direction={`Category: ${itemCategory}. Quality: ${itemQuality}.`}
+                hasImage={Boolean(initialImage.assetId)}
+                disabled={
+                  !canEdit ||
+                  artworkBusy ||
+                  editorSave.saving ||
+                  draft.status === "stale"
+                }
+                onBusyChange={setArtworkBusy}
+                onApply={(image) => {
+                  setItemArtwork(image);
+                  setItemImageFile(undefined);
+                  setItemImageAltText(String(image.altText ?? ""));
+                }}
+              />
+            )}
+            {kind === "items" && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  label={initialImage.assetId ? "Replace image" : "Image"}
+                  required={!initialImage.assetId}
+                  help="Item Definitions require a square catalog image."
+                >
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    required={!initialImage.assetId}
+                    onChange={(event) => {
+                      setItemImageFile(event.target.files?.[0]);
+                      setItemArtwork(undefined);
+                    }}
+                    className="mt-2 w-full"
+                  />
+                </Field>
+                <Field label="Image description" required>
+                  <Input
+                    required
+                    value={itemImageAltText}
+                    onChange={(event) =>
+                      setItemImageAltText(event.target.value)
+                    }
+                    className="mt-2 w-full"
+                  />
+                </Field>
+              </div>
+            )}
+            {kind === "creatures" && (
+              <CreatureArtwork
+                compact
+                payload={{
+                  ...initial,
+                  components: {
+                    ...initialComponents,
+                    art: {
+                      ...initialArt,
+                      images: {
+                        ...objectValue(initial.images),
+                        ...objectValue(initialArt.images),
+                        ...creatureArtwork,
+                      },
+                    },
+                  },
+                }}
+                name={name || "Creature"}
+                renderControls={(role, label, hasImage) =>
+                  draft && (
+                    <ArtworkGenerator
+                      worldId={definition.id}
+                      storageRevision={draft.storageRevision}
+                      role={role}
+                      label={label}
+                      name={name}
+                      description={description}
+                      direction={artDirection}
+                      hasImage={hasImage}
+                      disabled={
+                        !canEdit ||
+                        artworkBusy ||
+                        editorSave.saving ||
+                        draft.status === "stale"
+                      }
+                      onBusyChange={setArtworkBusy}
+                      onApply={(image) =>
+                        setCreatureArtwork((current) => ({
+                          ...current,
+                          [role]: image,
+                        }))
+                      }
+                    />
+                  )
+                }
+              />
+            )}
+          </div>
+          <div
+            data-editor-section="Overview"
+            hidden={editorSection !== "Overview"}
+            className="space-y-5"
+          >
+            {kind === "creatures" && (
+              <Alert>
+                Creature type selection isn’t available yet. You can still edit
+                and save this creature.
+              </Alert>
+            )}
+            {kind === "creatures" && (
+              <CreatureEmbodimentPolicyFields
+                strategy={embodimentStrategy}
+                maximum={embodimentMaximum}
+                legacy={!initial.instanceEmbodimentPolicy && Boolean(existing)}
+                onStrategyChange={setEmbodimentStrategy}
+                onMaximumChange={setEmbodimentMaximum}
+              />
+            )}
+          </div>
+          {kind === "creatures" && (
+            <div>
+              <div
+                data-editor-section="Movement"
+                hidden={editorSection !== "Movement"}
+                className="space-y-5"
+              >
+                <h2 className="text-xl font-semibold">Movement</h2>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Field label="Movement mode">
                     <Input
@@ -1830,6 +2170,13 @@ export function DraftRecordEditor({
                     />
                   </Field>
                 </div>
+              </div>
+              <div
+                data-editor-section="Abilities"
+                hidden={editorSection !== "Abilities"}
+                className="space-y-5"
+              >
+                <h2 className="text-xl font-semibold">Abilities</h2>
                 <Fieldset>
                   <Legend className="font-semibold">Skills</Legend>
                   {skillOptions.length ? (
@@ -1891,13 +2238,13 @@ export function DraftRecordEditor({
                   />
                 </Field>
               </div>
-            </Disclosure>
+            </div>
           )}
           {kind !== "locations" && !conformance && (
             <Alert tone="warning">
-              The effective {kind === "creatures" ? "Creature" : "Item"}
-              concept is unavailable. Select a complete Model release before
-              saving this Definition.
+              The effective {kind === "creatures" ? "Creature" : "Item"} concept
+              is unavailable. Select a complete Model release before saving this
+              Definition.
             </Alert>
           )}
           {kind === "locations" && needsParent && (
@@ -1930,83 +2277,108 @@ export function DraftRecordEditor({
               choose a parent.
             </Alert>
           )}
-          {kind === "creatures" && (
-            <Fieldset className="rounded-box border border-base-300 p-4">
-              <Legend className="px-2 font-semibold">
-                Attributes from effective model
-              </Legend>
-              {models?.attributes.length ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {models.attributes.map((attribute) => {
-                    const config = attributeNumberConfig(attribute);
-                    return (
-                      <Field key={attribute.key} label={attribute.name}>
-                        <Input
-                          type="number"
-                          min={config.minimum}
-                          max={config.maximum}
-                          value={
-                            attributes[attribute.key] ?? config.defaultValue
-                          }
-                          onChange={(event) =>
-                            setAttributes((current) => ({
-                              ...current,
-                              [attribute.key]: Number(event.target.value),
-                            }))
-                          }
-                          className="mt-1 w-full"
-                        />
-                      </Field>
-                    );
-                  })}
+          <div
+            data-editor-section="Attributes"
+            hidden={editorSection !== "Attributes"}
+          >
+            {kind === "creatures" && (
+              <Fieldset className="rounded-box border border-base-300 p-4">
+                <Legend className="px-2 font-semibold">
+                  Attributes from effective model
+                </Legend>
+                {models?.attributes.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {models.attributes.map((attribute) => {
+                      const config = attributeNumberConfig(attribute);
+                      return (
+                        <Field key={attribute.key} label={attribute.name}>
+                          <Input
+                            type="number"
+                            min={config.minimum}
+                            max={config.maximum}
+                            value={
+                              attributes[attribute.key] ?? config.defaultValue
+                            }
+                            onChange={(event) =>
+                              setAttributes((current) => ({
+                                ...current,
+                                [attribute.key]: Number(event.target.value),
+                              }))
+                            }
+                            className="mt-1 w-full"
+                          />
+                        </Field>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-base-content/55">
+                    No effective Attribute release is available. Add one under
+                    Characters → Model &amp; Taxonomies.
+                  </p>
+                )}
+              </Fieldset>
+            )}
+          </div>
+          <div
+            data-editor-section="Equipment"
+            hidden={editorSection !== "Equipment"}
+          >
+            {(kind === "creatures" || kind === "items") && (
+              <Fieldset className="rounded-box border border-base-300 p-4">
+                <Legend className="px-2 font-semibold">
+                  {kind === "items"
+                    ? "Compatible Equipment Slots"
+                    : "Available Equipment Slots"}
+                </Legend>
+                {models?.equipmentSlots.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {models.equipmentSlots.map((slot) => (
+                      <Checkbox
+                        key={slot.key}
+                        label={slot.name}
+                        checked={slots.includes(slot.key)}
+                        onChange={(event) =>
+                          setSlotSets((current) => {
+                            const compound = current.filter(
+                              (set) => set.length > 1,
+                            );
+                            const singleton = current.filter(
+                              (set) => set.length === 1 && set[0] !== slot.key,
+                            );
+                            return event.target.checked
+                              ? [...compound, ...singleton, [slot.key]]
+                              : [...compound, ...singleton];
+                          })
+                        }
+                        wrapperClassName="min-h-11 items-center gap-3"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-base-content/55">
+                    No effective Equipment Slot release is available.
+                  </p>
+                )}
+              </Fieldset>
+            )}
+          </div>
+          <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-base-300 bg-base-100 py-4">
+            {kind === "items" &&
+              editorSection !== "Artwork" &&
+              (!itemImageAltText.trim() ||
+                (!initialImage.assetId && !itemImageFile)) && (
+                <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <p>Add the required item image and description in Artwork.</p>
+                  <Button
+                    tone="outline"
+                    className="min-h-11"
+                    onClick={() => setEditorSection("Artwork")}
+                  >
+                    Open Artwork
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-base-content/55">
-                  No effective Attribute release is available. Add one under
-                  Characters → Model &amp; Taxonomies.
-                </p>
               )}
-            </Fieldset>
-          )}
-          {(kind === "creatures" || kind === "items") && (
-            <Fieldset className="rounded-box border border-base-300 p-4">
-              <Legend className="px-2 font-semibold">
-                {kind === "items"
-                  ? "Compatible Equipment Slots"
-                  : "Available Equipment Slots"}
-              </Legend>
-              {models?.equipmentSlots.length ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {models.equipmentSlots.map((slot) => (
-                    <Checkbox
-                      key={slot.key}
-                      label={slot.name}
-                      checked={slots.includes(slot.key)}
-                      onChange={(event) =>
-                        setSlotSets((current) => {
-                          const compound = current.filter(
-                            (set) => set.length > 1,
-                          );
-                          const singleton = current.filter(
-                            (set) => set.length === 1 && set[0] !== slot.key,
-                          );
-                          return event.target.checked
-                            ? [...compound, ...singleton, [slot.key]]
-                            : [...compound, ...singleton];
-                        })
-                      }
-                      wrapperClassName="min-h-11 items-center gap-3"
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-base-content/55">
-                  No effective Equipment Slot release is available.
-                </p>
-              )}
-            </Fieldset>
-          )}
-          <div className="flex items-center gap-3">
             <Button
               type="submit"
               tone="primary"
@@ -2034,6 +2406,13 @@ export function DraftRecordEditor({
                     ? "Save changes"
                     : "Create in working draft"}
             </Button>
+            <RouterButtonLink
+              href={`${libraryHref}${guideSuffix}`}
+              tone="ghost"
+              className="min-h-11"
+            >
+              Cancel
+            </RouterButtonLink>
             {saved && (
               <span aria-live="polite" className="text-sm text-success">
                 Draft record saved.
@@ -2269,7 +2648,8 @@ export function WorldLocationPlacements({
             const payload = recordPayload(record);
             const position = objectValue(payload.mapPosition);
             const sourceRecord = [...creatures, ...items].find(
-              (candidate) => candidate.sourceId === worldPlacementSourceId(record),
+              (candidate) =>
+                candidate.sourceId === worldPlacementSourceId(record),
             );
             return (
               <article
@@ -2279,7 +2659,12 @@ export function WorldLocationPlacements({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     {sourceRecord && (
-                      <RecordThumbnail payload={recordPayload(sourceRecord)} name={labelForSource(record)} className="mb-3 w-28" onlyIfPresent />
+                      <RecordThumbnail
+                        payload={recordPayload(sourceRecord)}
+                        name={labelForSource(record)}
+                        className="mb-3 w-28"
+                        onlyIfPresent
+                      />
                     )}
                     <h3 className="font-semibold">
                       {recordName(record, "Unnamed World placement")}
@@ -2570,6 +2955,7 @@ export function CharacterDefinitionsPage({
       title={title}
       description={`Create and revise ${title.toLocaleLowerCase()} within this World Definition.`}
       createHref={`${base}/new`}
+      createLabel={kind}
     >
       {records.length ? (
         <CardGrid
@@ -2595,6 +2981,8 @@ export function CharacterDefinitionEditor({
   const { definition, draft, saveRecord, canEdit, markDirty } =
     useWorldAuthoring();
   const navigate = useInternalNavigate();
+  const [facet, setFacet] = useState("overview");
+  const hasModifiers = kind === "profession" || kind === "background";
   const newRecordId = useRef<string | undefined>(undefined);
   const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const existing = (draft?.records ?? []).find(
@@ -2623,9 +3011,22 @@ export function CharacterDefinitionEditor({
       ? initialRanks[0]
       : (draft?.effectiveModels?.professionRanks?.[0]?.key ?? ""),
   );
-  const [modifierLevels, setModifierLevels] = useState(() => professionModifierLevels(components as Record<string, JsonValue>));
+  const [modifierLevels, setModifierLevels] = useState(() =>
+    kind === "background"
+      ? [
+          {
+            rank: 0,
+            benefits: {
+              modifierGrants: (components.modifierGrants ?? []) as JsonValue,
+            },
+          },
+        ]
+      : professionModifierLevels(components as Record<string, JsonValue>),
+  );
   const [modifierEdit, setModifierEdit] = useState<ModifierEdit | null>(null);
-  const modifiersValid = kind !== "profession" || professionModifiersValid(modifierLevels);
+  const modifiersValid =
+    !["profession", "background"].includes(kind) ||
+    professionModifiersValid(modifierLevels);
   const conformance = draft ? definitionConformance(draft, kind) : undefined;
   const snapshot = JSON.stringify({
     name,
@@ -2649,7 +3050,16 @@ export function CharacterDefinitionEditor({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !canEdit || !name.trim() || !conformance || !modifiersValid || modifierEdit) return;
+    if (
+      !draft ||
+      !canEdit ||
+      !name.trim() ||
+      (kind === "profession" && !startingProfessionRank) ||
+      !conformance ||
+      !modifiersValid ||
+      modifierEdit
+    )
+      return;
     const id =
       existing?.sourceId ?? (newRecordId.current ??= crypto.randomUUID());
     const generated = characterOptionDefinition({
@@ -2664,9 +3074,18 @@ export function CharacterDefinitionEditor({
       description: description.trim(),
       defaultAttribute: defaultAttribute || undefined,
       startingProfessionRank: startingProfessionRank || undefined,
-      existingComponents: kind === "profession"
-        ? { ...components as Record<string, JsonValue>, expertiseLevels: modifierLevels }
-        : components as Record<string, JsonValue>,
+      existingComponents:
+        kind === "profession"
+          ? {
+              ...(components as Record<string, JsonValue>),
+              expertiseLevels: modifierLevels,
+            }
+          : kind === "background"
+            ? {
+                ...(components as Record<string, JsonValue>),
+                modifierGrants: levelModifierGrants(modifierLevels[0]),
+              }
+            : (components as Record<string, JsonValue>),
     });
     const didSave = await saveRecord({
       resourceType: "definitions",
@@ -2719,79 +3138,169 @@ export function CharacterDefinitionEditor({
           release before saving.
         </Alert>
       )}
+      {hasModifiers && (
+        <RecordTabs
+          label={`${title} properties`}
+          idPrefix="character-definition"
+          panelId="character-definition-editor"
+          tabs={[
+            { id: "overview", label: "Overview" },
+            { id: "modifiers", label: "Modifiers" },
+          ]}
+          activeTab={facet}
+          onTabChange={setFacet}
+        />
+      )}
       <DraftRequired>
         <form
+          id="character-definition-editor"
+          role={hasModifiers ? "tabpanel" : undefined}
+          aria-labelledby={
+            hasModifiers
+              ? recordTabId("character-definition", facet)
+              : undefined
+          }
+          tabIndex={hasModifiers ? 0 : undefined}
+          onInvalidCapture={(event) => {
+            const input = event.target as HTMLInputElement;
+            const invalidFacet = input.closest<HTMLElement>(
+              "[data-definition-facet]",
+            )?.dataset.definitionFacet;
+            if (hasModifiers && invalidFacet && invalidFacet !== facet) {
+              event.preventDefault();
+              setFacet(invalidFacet);
+              requestAnimationFrame(() => {
+                input.focus();
+                input.reportValidity();
+              });
+            }
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             void editorSave.run(() => submit(event));
           }}
           className="mt-8 grid gap-5"
         >
-          <Field label="Name" required>
-            <Input
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="mt-2 w-full"
-            />
-          </Field>
-          <Field label="Description">
-            <Textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={5}
-              className="mt-2 w-full"
-            />
-          </Field>
-          {kind === "skill" && (
-            <Field label="Default Attribute">
-              <Select
-                value={defaultAttribute}
-                onChange={(event) => setDefaultAttribute(event.target.value)}
-                className="mt-2 w-full"
-              >
-                <option value="">No default Attribute</option>
-                {(draft?.effectiveModels?.attributes ?? []).map((attribute) => (
-                  <option key={attribute.key} value={attribute.key}>
-                    {attribute.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          {kind === "profession" && (
-            <Field label="Starting Profession Rank" required>
-              <Select
+          <div
+            data-definition-facet="overview"
+            hidden={hasModifiers && facet !== "overview"}
+            className={
+              hasModifiers && facet !== "overview" ? "hidden" : "grid gap-5"
+            }
+          >
+            <Field label="Name" required>
+              <Input
                 required
-                value={startingProfessionRank}
-                onChange={(event) =>
-                  setStartingProfessionRank(event.target.value)
-                }
+                value={name}
+                onChange={(event) => setName(event.target.value)}
                 className="mt-2 w-full"
-              >
-                <option value="" disabled>
-                  Choose a Profession Rank
-                </option>
-                {(draft?.effectiveModels?.professionRanks ?? []).map((rank) => (
-                  <option key={rank.key} value={rank.key}>
-                    {rank.name}
-                  </option>
-                ))}
-              </Select>
+              />
             </Field>
+            <Field label={kind === "background" ? "Backstory" : "Description"}>
+              <Textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={5}
+                className="mt-2 w-full"
+              />
+            </Field>
+            {kind === "skill" && (
+              <Field label="Default Attribute">
+                <Select
+                  value={defaultAttribute}
+                  onChange={(event) => setDefaultAttribute(event.target.value)}
+                  className="mt-2 w-full"
+                >
+                  <option value="">No default Attribute</option>
+                  {(draft?.effectiveModels?.attributes ?? []).map(
+                    (attribute) => (
+                      <option key={attribute.key} value={attribute.key}>
+                        {attribute.name}
+                      </option>
+                    ),
+                  )}
+                </Select>
+              </Field>
+            )}
+          </div>
+          <div
+            data-definition-facet="modifiers"
+            hidden={!hasModifiers || facet !== "modifiers"}
+            className={
+              !hasModifiers || facet !== "modifiers" ? "hidden" : "grid gap-5"
+            }
+          >
+            {kind === "profession" && (
+              <Field label="Starting Profession Rank" required>
+                <Select
+                  required
+                  value={startingProfessionRank}
+                  onChange={(event) =>
+                    setStartingProfessionRank(event.target.value)
+                  }
+                  className="mt-2 w-full"
+                >
+                  <option value="" disabled>
+                    Choose a Profession Rank
+                  </option>
+                  {(draft?.effectiveModels?.professionRanks ?? []).map(
+                    (rank) => (
+                      <option key={rank.key} value={rank.key}>
+                        {rank.name}
+                      </option>
+                    ),
+                  )}
+                </Select>
+              </Field>
+            )}
+            {(kind === "profession" || kind === "background") && (
+              <ProfessionModifiersEditor
+                subject={kind === "background" ? "Background" : "Profession"}
+                levels={modifierLevels}
+                onChange={setModifierLevels}
+                editing={modifierEdit}
+                onEditingChange={setModifierEdit}
+                startingRank={startingProfessionRank}
+                ranks={draft?.effectiveModels?.professionRanks ?? []}
+                attributes={draft?.effectiveModels?.attributes ?? []}
+                skills={(draft?.records ?? [])
+                  .filter(
+                    (r) =>
+                      r.resourceType === "definitions" &&
+                      recordPayload(r).kind === "skill",
+                  )
+                  .map((r) => ({
+                    key: r.sourceId,
+                    name: recordName(r, "Unnamed Skill"),
+                  }))}
+                statistics={(draft?.effectiveModels?.elements ?? [])
+                  .filter(
+                    (e) =>
+                      e.kind === "field" &&
+                      ["integer", "number"].includes(
+                        String(objectValue(e.payload?.valueType).kind),
+                      ),
+                  )
+                  .map((e) => ({
+                    key: String(e.payload?.storageKey ?? e.key),
+                    name: e.name,
+                  }))}
+                disabled={editorSave.saving}
+              />
+            )}
+          </div>
+          {modifierEdit && (
+            <p className="text-sm text-base-content/65" role="status">
+              Add or update the modifier in the list, or cancel its form, before
+              saving this definition.
+            </p>
           )}
-          {kind === "profession" && <ProfessionModifiersEditor
-            levels={modifierLevels} onChange={setModifierLevels}
-            editing={modifierEdit} onEditingChange={setModifierEdit}
-            startingRank={startingProfessionRank}
-            ranks={draft?.effectiveModels?.professionRanks ?? []}
-            attributes={draft?.effectiveModels?.attributes ?? []}
-            skills={(draft?.records ?? []).filter(r => r.resourceType === "definitions" && recordPayload(r).kind === "skill").map(r => ({ key: r.sourceId, name: recordName(r, "Unnamed Skill") }))}
-            statistics={(draft?.effectiveModels?.elements ?? []).filter(e => e.kind === "field" && ["integer", "number"].includes(String(objectValue(e.payload?.valueType).kind))).map(e => ({ key: String(e.payload?.storageKey ?? e.key), name: e.name }))}
-            disabled={editorSave.saving}
-          />}
-          {modifierEdit && <p className="text-sm text-base-content/65" role="status">Add or update the modifier in the list, or cancel its form, before saving the profession.</p>}
-          {!modifiersValid && <Alert tone="warning">Give each modifier a name, a valid target, and whole-number dice counts and sizes before saving.</Alert>}
+          {!modifiersValid && (
+            <Alert tone="warning">
+              Give each modifier a name, a valid target, and whole-number dice
+              counts and sizes before saving.
+            </Alert>
+          )}
           <Button
             type="submit"
             tone="primary"

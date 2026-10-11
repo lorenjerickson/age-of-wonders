@@ -2198,21 +2198,51 @@ export function createPlayerCharacter(
   ).then((character) => ({ character: characterDraftFromApi(character) }));
 }
 
+function characterEditorPath(
+  instanceId: string,
+  characterId: string,
+  suffix: string,
+  definitionId?: string,
+) {
+  return definitionId
+    ? instancePath(
+        definitionId,
+        instanceId,
+        `/characters/${encodeURIComponent(characterId)}/draft${suffix}`,
+      )
+    : playerCharactersPath(
+        instanceId,
+        `/${encodeURIComponent(characterId)}${suffix}`,
+      );
+}
+
 export function getPlayerCharacter(
   campaignInstanceId: string,
   characterId: string,
+  campaignDefinitionId?: string,
 ) {
   return request<PlayerCampaignInstanceCharacterDraftProjection>(
-    playerCharactersPath(
+    characterEditorPath(
       campaignInstanceId,
-      `/${encodeURIComponent(characterId)}`,
+      characterId,
+      "",
+      campaignDefinitionId,
     ),
   ).then((character) => ({ character: characterDraftFromApi(character) }));
 }
 
-export function getCharacterOptions(campaignInstanceId: string) {
+export function getCharacterOptions(
+  campaignInstanceId: string,
+  campaignDefinitionId?: string,
+) {
   return request<PlayerCharacterCreationOptionsProjection>(
-    playerCharactersPath(campaignInstanceId, "/options"),
+    campaignDefinitionId
+      ? instancePath(
+          campaignDefinitionId,
+          campaignInstanceId,
+          "/character-options",
+        )
+      : playerCharactersPath(campaignInstanceId, "/options"),
   );
 }
 
@@ -2225,12 +2255,17 @@ export function updatePlayerCharacterSelections(
     attributeAssignments?: Record<string, number>;
     startingEquipmentIds?: string[];
     biography?: string;
+    imageAssetIds?: Record<string, string>;
+    equipmentAssignments?: Record<string, string[]>;
   } = {},
+  campaignDefinitionId?: string,
 ) {
   return request<PlayerCampaignInstanceCharacterDraftProjection>(
-    playerCharactersPath(
+    characterEditorPath(
       campaignInstanceId,
-      `/${encodeURIComponent(character.id)}`,
+      character.id,
+      "",
+      campaignDefinitionId,
     ),
     {
       method: "PATCH",
@@ -2239,7 +2274,6 @@ export function updatePlayerCharacterSelections(
         name,
         backgroundDefinitionId: selections.backgroundId,
         professionDefinitionId: selections.professionId,
-        heritageDefinitionIds: selections.heritageIds,
         ...details,
         expectedRevision: character.revision,
       }),
@@ -2250,11 +2284,14 @@ export function updatePlayerCharacterSelections(
 export function rollPlayerCharacterAttributes(
   campaignInstanceId: string,
   character: CharacterDraft,
+  campaignDefinitionId?: string,
 ) {
   return request<PlayerCampaignInstanceCharacterDraftProjection>(
-    playerCharactersPath(
+    characterEditorPath(
       campaignInstanceId,
-      `/${encodeURIComponent(character.id)}/attribute-rolls`,
+      character.id,
+      "/attribute-rolls",
+      campaignDefinitionId,
     ),
     {
       method: "POST",
@@ -2267,11 +2304,14 @@ export function rollPlayerCharacterAttributes(
 export function submitPlayerCharacterForReview(
   campaignInstanceId: string,
   character: CharacterDraft,
+  campaignDefinitionId?: string,
 ) {
   return request<PlayerCampaignInstanceCharacterDraftProjection>(
-    playerCharactersPath(
+    characterEditorPath(
       campaignInstanceId,
-      `/${encodeURIComponent(character.id)}/actions/submit-for-review`,
+      character.id,
+      "/actions/submit-for-review",
+      campaignDefinitionId,
     ),
     {
       method: "POST",
@@ -2320,6 +2360,8 @@ export function reviewCampaignInstanceCharacter(
 }
 
 interface RawCharacterDraft {
+  imageAssetIds?: Record<string, string>;
+  equipmentAssignments?: Readonly<Record<string, readonly string[]>>;
   characterId: string;
   revision: number;
   name?: string | null;
@@ -2364,6 +2406,13 @@ function characterDraftFromApi(draft: RawCharacterDraft): CharacterDraft {
         )
       : [],
     biography: draft.biography ?? undefined,
+    imageAssetIds: draft.imageAssetIds ?? {},
+    equipmentAssignments: Object.fromEntries(
+      Object.entries(draft.equipmentAssignments ?? {}).map(([id, slots]) => [
+        id,
+        [...slots],
+      ]),
+    ),
     reviewNote: draft.reviewNote ?? undefined,
     validationIssues: Array.isArray(draft.validationIssues)
       ? draft.validationIssues.filter(isCharacterValidationIssue)
@@ -2727,3 +2776,25 @@ export const previewWorldRules = (
     entropy?: readonly RecordedRuleRoll[];
   },
 ) => worldRulesRequest<WorldRuleExecution>(worldId, "/preview", input);
+
+export function generateCharacterPortrait(
+  definitionId: string,
+  instanceId: string,
+  characterId: string,
+  expectedRevision: number,
+  direction: string,
+  idempotencyKey: string,
+  role: "portrait" | "overheadToken" | "paperDollToken" = "portrait",
+) {
+  return request<{ assetId: string }>(
+    characterEditorPath(instanceId, characterId, "/artwork", definitionId),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ expectedRevision, direction, role }),
+    },
+  );
+}

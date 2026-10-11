@@ -15,6 +15,11 @@ vi.mock("@aow/ui", async (importOriginal) => ({
   ),
 }));
 
+// Portals attach after hydration; render their content inline for server content assertions.
+vi.mock("./AppShellTools", () => ({
+  ShellTools: ({ children }: { children: ReactNode }) => children,
+}));
+
 vi.mock("./index.css?url", () => ({ default: "/test.css" }));
 
 vi.mock("./server/readModels", async (importOriginal) => ({
@@ -52,7 +57,7 @@ vi.mock("./server/readModels", async (importOriginal) => ({
 }));
 
 describe("contextual GM rendering", () => {
-  it("renders only the Location sidebar, contextual breadcrumbs, and the actual nested Map editor", async () => {
+  it("keeps World destinations in the sidebar and Location properties in the record tabs", async () => {
     const router = getRouter();
     router.update({
       history: createMemoryHistory({
@@ -63,13 +68,31 @@ describe("contextual GM rendering", () => {
     });
     await router.load();
     const html = renderToString(<RouterProvider router={router} />);
-    expect(html.replace(/<!--.*?-->/g, "")).toContain("Back to Age of Wonders");
-    expect(html).toContain('aria-label="London navigation"');
+    expect(html.replace(/<!--.*?-->/g, "")).toContain("Back to Worlds");
+    expect(html).toContain('aria-label="Age of Wonders navigation"');
+    expect(html).toContain('aria-label="Location properties"');
+    expect(html).toContain('role="tabpanel"');
+    expect(html).toContain('aria-labelledby="location-properties-tab-map"');
     expect(html).toContain('aria-label="Breadcrumb"');
     expect(html).toContain("Fog over the Thames");
-    expect(html).toContain("Save Map");
-    expect(html).not.toContain('aria-label="Primary navigation"');
-    expect(html).not.toContain('aria-label="Age of Wonders navigation"');
+    expect(html).toContain("Save map");
+    const sidebar = html.match(/<aside[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(sidebar).not.toContain("<details");
+    for (const destination of [
+      "Locations",
+      "Bestiary",
+      "Items",
+      "Skills",
+      "Professions",
+      "Backgrounds",
+      "Models &amp; taxonomies",
+      "Codex",
+      "Versions",
+    ])
+      expect(sidebar).toContain(destination);
+    expect(sidebar).toMatch(/aria-current="page"[^>]*>Locations/);
+    expect(html).toContain('aria-label="Primary navigation"');
+    expect(html).not.toContain('aria-label="London navigation"');
     expect(html).not.toContain("Choose a workspace to begin");
     expect((html.match(/<aside/g) ?? []).length).toBe(1);
     const visible = html.replace(/<[^>]*>/g, "");
@@ -100,6 +123,10 @@ it.each([
     const content = html.match(/<main[\s\S]*?<\/main>/)?.[0] ?? "";
     expect(content).toContain(expected);
     expect(content).not.toContain(absent);
+    expect(html).toContain('aria-label="Location properties"');
+    expect(html).toContain(
+      `aria-labelledby="location-properties-tab-${section || "description"}"`,
+    );
     const breadcrumb =
       html.match(/<nav aria-label="Breadcrumb"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(breadcrumb).toContain("London");

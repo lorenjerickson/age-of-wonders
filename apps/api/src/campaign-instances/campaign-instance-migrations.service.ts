@@ -663,6 +663,13 @@ export class CampaignInstanceMigrationsService {
       mappingRequired: boolean;
     }> = [];
     const claimedTargetKeys = new Set<string>();
+    // Only unused authoring details may disappear. Conservatively treat every
+    // exact string (including extension values and object keys) as a reference.
+    // Prior snapshots/checkpoints retain historical resolution after adoption.
+    const retainedReferences = migrationReferenceStrings([
+      instance.runtime.state,
+      ...targetRecords.map((record) => record.payload),
+    ]);
     for (const sourceRecord of sourceRecords) {
       const mappedId =
         submittedMapping.get(
@@ -681,16 +688,25 @@ export class CampaignInstanceMigrationsService {
           typeLabel: sourceRecord.resourceType,
           change: "removed",
         });
-        conflicts.push({
-          key: `${sourceRecord.resourceType}:${sourceRecord.sourceId}`,
-          resourceType: sourceRecord.resourceType,
-          sourceId: sourceRecord.sourceId,
-          subjectName,
-          typeLabel: sourceRecord.resourceType,
-          detail:
-            "This captured record has no direct-lineage successor or approved mapping.",
-          mappingRequired: true,
-        });
+        const unusedPlotDetail =
+          kind === "migration" &&
+          (sourceRecord.resourceType === "plot-claims" ||
+            sourceRecord.resourceType === "plot-location-contexts") &&
+          sourceRecord.nested !== undefined &&
+          !retainedReferences.has(sourceRecord.nested.localId) &&
+          !retainedReferences.has(sourceRecord.sourceId);
+        if (!unusedPlotDetail) {
+          conflicts.push({
+            key: `${sourceRecord.resourceType}:${sourceRecord.sourceId}`,
+            resourceType: sourceRecord.resourceType,
+            sourceId: sourceRecord.sourceId,
+            subjectName,
+            typeLabel: sourceRecord.resourceType,
+            detail:
+              "This captured record has no direct-lineage successor or approved mapping.",
+            mappingRequired: true,
+          });
+        }
       } else if (targetRecord.contentHash !== sourceRecord.contentHash) {
         changes.push({
           subjectName,
@@ -2729,6 +2745,22 @@ interface MigrationRecord {
     readonly scope: readonly string[];
     readonly localId: string;
   };
+}
+
+function migrationReferenceStrings(
+  value: unknown,
+  strings = new Set<string>(),
+): Set<string> {
+  if (typeof value === "string") strings.add(value);
+  else if (Array.isArray(value)) {
+    for (const entry of value) migrationReferenceStrings(entry, strings);
+  } else if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      strings.add(key);
+      migrationReferenceStrings(entry, strings);
+    }
+  }
+  return strings;
 }
 
 function runtimeMigrationRecords(baseRecords: readonly MigrationRecord[]) {

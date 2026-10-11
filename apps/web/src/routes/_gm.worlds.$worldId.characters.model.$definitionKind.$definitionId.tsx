@@ -1,10 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { WorldModelFacets } from "../WorldModelFacets";
 import { WorldModelEditor } from "../WorldAuthoringPages";
 import { WorldModelStructureEditor } from "../WorldModelStructureEditor";
 export const Route = createFileRoute(
   "/_gm/worlds/$worldId/characters/model/$definitionKind/$definitionId",
 )({ component: ModelRoute });
 function ModelRoute() {
+  return (
+    <WorldModelFacets>
+      <ModelContent />
+    </WorldModelFacets>
+  );
+}
+function ModelContent() {
   const kind = Route.useParams().definitionKind;
   if (kind === "structure") return <WorldModelStructureEditor />;
   return kind === "attributes" ||

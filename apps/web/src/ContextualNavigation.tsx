@@ -6,6 +6,7 @@ import { InternalLink } from "./navigation";
 import {
   contextualBreadcrumbs,
   contextualNavigationStack,
+  contextualSidebarFrame,
   type NavigationData,
 } from "./contextualNavigationModel";
 import {
@@ -69,6 +70,85 @@ function useNavigation(override?: NavigationData) {
   };
 }
 
+export function CurrentDestination() {
+  const { stack, location } = useNavigation();
+  const crumbs = contextualBreadcrumbs(location.pathname, stack);
+  const world = stack.find(
+    (frame) => frame.kind === "World" && frame.links.length > 1,
+  );
+  const worldDestination =
+    stack.at(-1) === world
+      ? world?.links.find((link) => link.active)?.label
+      : undefined;
+  return (
+    <span className="min-w-0 truncate font-semibold">
+      {location.pathname === "/"
+        ? "Home"
+        : location.pathname === "/players"
+          ? "Participants"
+          : (worldDestination ?? crumbs.at(-1)?.label ?? "Workspace")}
+    </span>
+  );
+}
+
+export function PrimaryNavigation({
+  gmAccess,
+  systemAdministrator,
+  onNavigate,
+}: {
+  gmAccess: boolean;
+  systemAdministrator: boolean;
+  onNavigate?: () => void;
+}) {
+  const { location } = useNavigation();
+  const setup =
+    location.pathname.startsWith("/settings") ||
+    location.pathname.startsWith("/players");
+  const items = [
+    {
+      label: "Home",
+      href: "/",
+      visible: gmAccess,
+      active: location.pathname === "/",
+    },
+    {
+      label: "Setup",
+      href: systemAdministrator ? "/settings" : "/players",
+      visible: gmAccess || systemAdministrator,
+      active: setup,
+    },
+    {
+      label: "Worlds",
+      href: "/worlds",
+      visible: gmAccess,
+      active: location.pathname.startsWith("/worlds"),
+    },
+    {
+      label: "Campaigns",
+      href: "/campaigns",
+      visible: gmAccess,
+      active: location.pathname.startsWith("/campaigns"),
+    },
+  ];
+  return (
+    <nav aria-label="Primary navigation" className="shell-primary-navigation">
+      {items
+        .filter((item) => item.visible)
+        .map((item) => (
+          <InternalLink
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            aria-current={item.active ? "page" : undefined}
+            className={`flex min-h-11 items-center rounded-lg px-4 text-sm ${item.active ? "bg-primary/15 font-semibold text-primary" : "text-base-content/70 hover:bg-base-300"}`}
+          >
+            {item.label}
+          </InternalLink>
+        ))}
+    </nav>
+  );
+}
+
 export function ContextualSidebar({
   systemAdministrator,
   gmAccess,
@@ -79,8 +159,27 @@ export function ContextualSidebar({
   onNavigate(): void;
 }) {
   const { stack, location, suffix, gmScope } = useNavigation();
-  const current = stack.at(-1)!;
-  const previous = stack.at(-2);
+  const setup =
+    location.pathname.startsWith("/settings") ||
+    location.pathname.startsWith("/players");
+  const current = setup
+    ? {
+        label: "Setup",
+        kind: "",
+        href: "/settings",
+        links: [
+          { label: "Participants", href: "/players" },
+          { label: "Settings", href: "/settings" },
+        ],
+        groups: undefined,
+      }
+    : contextualSidebarFrame(stack);
+  const currentIndex = stack.indexOf(current);
+  const previous = setup
+    ? undefined
+    : currentIndex > 1
+      ? stack[currentIndex - 1]
+      : undefined;
   const campaignReturn = location.pathname.startsWith("/worlds/")
     ? campaignReturnContext(location.searchStr)
     : undefined;
@@ -108,7 +207,7 @@ export function ContextualSidebar({
         </p>
       </div>
       <nav aria-label={`${current.label} navigation`}>
-        <ul className="menu w-full gap-1 p-0">
+        <ul className="menu w-full gap-1 p-0 [&_a]:min-h-11">
           {current.links
             .filter((link) =>
               link.href === "/settings" ? systemAdministrator : gmAccess,
@@ -118,12 +217,14 @@ export function ContextualSidebar({
                 <InternalLink
                   href={`${link.href}${suffix}`}
                   className={
-                    (location.pathname.replace(/\/$/, "") || "/") === link.href
+                    (link.active ??
+                    (location.pathname.replace(/\/$/, "") || "/") === link.href)
                       ? "menu-active font-semibold"
                       : undefined
                   }
                   aria-current={
-                    (location.pathname.replace(/\/$/, "") || "/") === link.href
+                    (link.active ??
+                    (location.pathname.replace(/\/$/, "") || "/") === link.href)
                       ? "page"
                       : undefined
                   }
@@ -229,10 +330,7 @@ export function ContextualBreadcrumbs({
   const { stack, location, suffix } = useNavigation(data);
   const crumbs = contextualBreadcrumbs(location.pathname, stack);
   return (
-    <nav
-      aria-label="Breadcrumb"
-      className="border-b border-base-300/60 px-6 py-3 lg:px-10"
-    >
+    <nav aria-label="Breadcrumb" className="px-4 pt-5 pb-2 lg:px-10">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm text-base-content/65">
         {crumbs.map((crumb, index) => (
           <li key={crumb.href} className="flex min-w-0 items-center gap-2">
@@ -246,14 +344,14 @@ export function ContextualBreadcrumbs({
                 aria-current="page"
                 className="break-words font-medium text-base-content"
               >
-                {crumb.label}
+                {crumb.label === "Players" ? "Participants" : crumb.label}
               </span>
             ) : (
               <InternalLink
                 className="break-words hover:underline"
                 href={`${crumb.href}${suffix}`}
               >
-                {crumb.label}
+                {crumb.label === "Players" ? "Participants" : crumb.label}
               </InternalLink>
             )}
           </li>

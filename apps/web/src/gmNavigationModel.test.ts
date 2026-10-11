@@ -53,68 +53,57 @@ describe("GM primary navigation", () => {
 });
 
 describe("World secondary navigation", () => {
-  it("uses the five documented progressive-disclosure groups", () => {
-    const groups = worldNavigationForPath(
+  it("exposes editable destinations as a flat list", () => {
+    const items = worldNavigationForPath(
       "world-internal",
       "/worlds/world-internal",
     );
-    expect(groups.map(({ label }) => label)).toEqual([
-      "Atlas",
+    expect(items.map(({ label }) => label)).toEqual([
+      "Overview",
+      "Locations",
       "Bestiary",
-      "Item Compendium",
-      "Characters",
-      "Rules",
+      "Items",
+      "Skills",
+      "Professions",
+      "Backgrounds",
+      "Models & taxonomies",
+      "Codex",
+      "Versions",
     ]);
-    expect(groups.some(({ expanded }) => expanded)).toBe(false);
     expect(
-      JSON.stringify(
-        groups.map(({ label, children }) => ({
-          label,
-          children: children.map(({ label: childLabel, note }) => ({
-            label: childLabel,
-            note,
-          })),
-        })),
-      ),
-    ).not.toContain("world-internal");
-  });
-
-  it("reveals distinct Character libraries beneath the Characters group", () => {
-    const characters = worldNavigationForPath(
-      "world-internal",
-      "/worlds/world-internal/characters/skills",
-    ).find(({ label }) => label === "Characters");
-    expect(characters?.children).toEqual([
-      {
-        label: "Skills",
-        href: "/worlds/world-internal/characters/skills",
-      },
-      {
-        label: "Professions",
-        href: "/worlds/world-internal/characters/professions",
-      },
-      {
-        label: "Backgrounds",
-        href: "/worlds/world-internal/characters/backgrounds",
-      },
-      {
-        label: "Models & taxonomies",
-        href: "/worlds/world-internal/characters/models",
-      },
-    ]);
+      items.filter(({ active }) => active).map(({ label }) => label),
+    ).toEqual(["Overview"]);
+    expect(items.every((item) => !("children" in item))).toBe(true);
   });
 
   it.each([
-    ["/worlds/world-internal/atlas", "Atlas"],
-    ["/worlds/world-internal/bestiary", "Bestiary"],
-    ["/worlds/world-internal/item-compendium", "Item Compendium"],
-    ["/worlds/world-internal/bestiary", "Bestiary"],
-    ["/worlds/world-internal/item-compendium", "Item Compendium"],
-    ["/worlds/world-internal/characters", "Characters"],
-    ["/worlds/world-internal/rules", "Rules"],
-  ])("expands the active group for %s", (pathname, label) => {
-    const groups = worldNavigationForPath("world-internal", pathname);
-    expect(groups.find((group) => group.expanded)?.label).toBe(label);
-    expect(groups.find((group) => group.active)?.label).toBe(label);
+    ["atlas/locations/location/map", "Locations"],
+    ["bestiary/creatures/creature", "Bestiary"],
+    ["item-compendium/items/item", "Items"],
+    ["characters/skills/skill", "Skills"],
+    ["characters/professions/profession", "Professions"],
+    ["characters/backgrounds/background", "Backgrounds"],
+    ["characters/models", "Models & taxonomies"],
+    ["characters/model/attributes/attribute", "Models & taxonomies"],
+    ["rules", "Codex"],
+    ["versions/draft/review", "Versions"],
+  ])("selects exactly the owning destination for %s", (path, label) => {
+    expect(
+      worldNavigationForPath("world-internal", `/worlds/world-internal/${path}`)
+        .filter(({ active }) => active)
+        .map(({ label }) => label),
+    ).toEqual([label]);
+  });
+
+  it("encodes the world identifier only in URLs", () => {
+    const items = worldNavigationForPath(
+      "world/secret",
+      "/worlds/world%2Fsecret/atlas",
+    );
+    expect(items.find(({ active }) => active)?.label).toBe("Locations");
+    expect(
+      items.every(({ href }) => href.startsWith("/worlds/world%2Fsecret")),
+    ).toBe(true);
+    expect(items.map(({ label }) => label).join(" ")).not.toContain("secret");
   });
 });

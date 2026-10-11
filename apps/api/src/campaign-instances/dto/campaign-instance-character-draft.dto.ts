@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsInt,
   IsObject,
@@ -45,7 +44,6 @@ export class UpdatePlayerCampaignInstanceCharacterDraftDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(1)
   @IsString({ each: true })
   heritageDefinitionIds?: string[];
@@ -71,6 +69,11 @@ export class UpdatePlayerCampaignInstanceCharacterDraftDto {
   @IsOptional()
   @IsObject()
   imageAssetIds?: Record<string, string>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  equipmentAssignments?: Record<string, string[]>;
 }
 
 export class ExpectedPlayerCharacterDraftRevisionDto {

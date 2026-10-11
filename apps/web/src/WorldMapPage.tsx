@@ -1,3 +1,4 @@
+import { ShellTools } from "./AppShellTools";
 import { LocationTerrainEditor } from "./LocationTerrainEditor";
 import { ZoomableImage } from "./ZoomableImage";
 import { MediaImage } from "./MediaImage";
@@ -195,43 +196,66 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
     }
   }
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10 lg:px-10">
+    <main className="mx-auto w-full max-w-6xl p-4 lg:px-8 lg:py-7">
       <p className="text-xs font-semibold tracking-widest text-primary uppercase">
         Location ·{" "}
         {record
           ? recordName(record, "Unnamed Location")
           : "Location unavailable"}
       </p>
-      <h1 className="mt-3 text-3xl font-semibold">Map</h1>
-      <Field label="Map orientation" className="mt-6">
-        <Select
-          value={orientation}
-          disabled={!!busy || terrainBusy || !canEdit}
-          onChange={(event) => {
-            const next = event.target.value;
-            if (
-              (dirty || terrainDirty) &&
-              !window.confirm(
-                "Discard unsaved Map changes and change orientation?",
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold">Map</h2>
+        {orientation !== "isometric" && record && (
+          <Button
+            type="submit"
+            form="world-map-settings"
+            tone="primary"
+            className="min-h-11"
+            loading={busy === "Saving"}
+            disabled={
+              !dirty || !!busy || !canEdit || (!!assetId && !altText.trim())
+            }
+          >
+            Save map
+          </Button>
+        )}
+      </div>
+      <p className="mt-2 text-sm text-base-content/60">
+        {orientation === "overhead" ? "Top-down" : orientation} ·{" "}
+        {dirty || terrainDirty ? "Unsaved changes" : "Draft"}
+      </p>
+      <ShellTools>
+        <h2 className="mt-6 text-lg font-semibold">Map setup</h2>
+        <Field label="Map orientation" className="mt-4">
+          <Select
+            value={orientation}
+            disabled={!!busy || terrainBusy || !canEdit}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (
+                (dirty || terrainDirty) &&
+                !window.confirm(
+                  "Discard unsaved Map changes and change orientation?",
+                )
               )
-            )
-              return;
-            const previous = JSON.parse(baseline);
-            setImage(previous.image);
-            setNotes(previous.notes);
-            setAltText(previous.altText);
-            setTerrainDirty(false);
-            setTerrainBusy(false);
-            setSaved(false);
-            setOrientation(next);
-          }}
-        >
-          <option value="scenic">Scenic</option>
-          <option value="overhead">Overhead</option>
-          <option value="side-on">Side-on</option>
-          <option value="isometric">Isometric</option>
-        </Select>
-      </Field>
+                return;
+              const previous = JSON.parse(baseline);
+              setImage(previous.image);
+              setNotes(previous.notes);
+              setAltText(previous.altText);
+              setTerrainDirty(false);
+              setTerrainBusy(false);
+              setSaved(false);
+              setOrientation(next);
+            }}
+          >
+            <option value="scenic">Scenic</option>
+            <option value="overhead">Overhead</option>
+            <option value="side-on">Side-on</option>
+            <option value="isometric">Isometric</option>
+          </Select>
+        </Field>
+      </ShellTools>
       {orientation === "isometric" ? (
         <LocationTerrainEditor
           locationId={locationId}
@@ -255,11 +279,11 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                 key={preview}
                 src={preview}
                 alt={altText}
-                className="max-h-[36rem] w-full object-contain"
+                className="max-h-[70dvh] w-full object-contain"
                 onError={() => setPreviewError(true)}
               />
             ) : (
-              <p className="p-10 text-center text-base-content/60">
+              <p className="flex min-h-[55dvh] items-center justify-center p-10 text-center text-base-content/60">
                 {previewError
                   ? "The attached image could not be loaded. Choose an existing image or upload a replacement."
                   : assetId
@@ -268,192 +292,207 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
               </p>
             )}
           </div>
-          <DraftRequired>
-            {record && (
-              <>
-                <Fieldset
-                  disabled={!!busy || terrainBusy || !canEdit}
-                  className="mt-6 space-y-5"
-                >
-                  <div className="flex flex-wrap gap-3">
-                    <Button tone="outline" onClick={() => void searchMedia()}>
-                      Pick image
-                    </Button>
-                    <Button
-                      tone="outline"
-                      onClick={() => setGenerateOpen((open) => !open)}
-                    >
-                      Generate image
-                    </Button>
-                  </div>
-                  <Field
-                    label="Upload image"
-                    help="Choose an image up to 20 MB."
-                  >
-                    <FileInput
-                      accept="image/*"
-                      className="mt-2 w-full"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void upload(file);
-                        event.target.value = "";
-                      }}
-                    />
-                  </Field>
-                </Fieldset>
-                {pickerOpen && (
-                  <section
-                    className="mt-6 rounded-box border border-base-300 p-5"
-                    aria-label="Image library"
-                  >
-                    <form
-                      className="flex flex-wrap items-end gap-3"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void searchMedia();
-                      }}
-                    >
-                      <Field label="Search images">
-                        <Input
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                        />
-                      </Field>
-                      <Button type="submit" disabled={!!busy}>
-                        Search
-                      </Button>
-                      <Button tone="ghost" onClick={() => setPickerOpen(false)}>
-                        Close library
-                      </Button>
-                    </form>
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {media.map((asset) => (
-                        <MediaChoice
-                          key={asset.id}
-                          asset={asset}
-                          disabled={!!busy}
-                          onSelect={async () => {
-                            setBusy("Opening image");
-                            setMessage("");
-                            try {
-                              await selectAsset(asset);
-                            } catch {
-                              setMessage(
-                                "That image could not be opened. Choose another image.",
-                              );
-                            } finally {
-                              setBusy("");
-                            }
-                          }}
-                        />
-                      ))}
-                    </div>
-                    {!media.length && !busy && (
-                      <p className="mt-4">No matching images.</p>
-                    )}
-                    <div className="mt-4 flex gap-3">
-                      <Button
-                        disabled={offset === 0 || !!busy}
-                        onClick={() =>
-                          void searchMedia(Math.max(0, offset - 24))
-                        }
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        disabled={offset + media.length >= total || !!busy}
-                        onClick={() => void searchMedia(offset + 24)}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </section>
-                )}
-                {generateOpen && (
-                  <section className="mt-6 space-y-4 rounded-box border border-base-300 p-5">
-                    <Field
-                      label="Image direction"
-                      help="Describe the terrain, landmarks, style, and composition. Generation uses the configured AI provider."
-                    >
-                      <Textarea
-                        className="mt-2 w-full"
-                        rows={4}
-                        maxLength={4000}
-                        disabled={!!busy}
-                        value={direction}
-                        onChange={(event) => setDirection(event.target.value)}
-                      />
-                    </Field>
-                    <Button
-                      tone="primary"
-                      loading={busy === "Generating"}
-                      disabled={!!busy || !direction.trim()}
-                      onClick={() => void generate()}
-                    >
-                      Generate Map preview
-                    </Button>
-                  </section>
-                )}
-                <form
-                  className="mt-8 space-y-6"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    setBusy("Saving");
-                    setSaved(false);
-                    setMessage("");
-                    let next = locationWithMapScene(record, notes, orientation);
-                    if (assetId)
-                      next = {
-                        ...next,
-                        payload: {
-                          ...object(next.payload),
-                          image: { ...image, altText, orientation },
-                        },
-                      };
-                    const success = await saveRecord(next);
-                    setBusy("");
-                    if (success) {
-                      setBaseline(
-                        JSON.stringify({ image, notes, orientation, altText }),
-                      );
-                      setSaved(true);
-                    }
-                  }}
-                >
+          <ShellTools>
+            <DraftRequired>
+              {record && (
+                <>
                   <Fieldset
                     disabled={!!busy || terrainBusy || !canEdit}
-                    className="space-y-6"
+                    className="mt-6 space-y-5"
                   >
-                    <Field label="Alternative text">
-                      <Input
-                        className="mt-2 w-full"
-                        required={!!assetId}
-                        value={altText}
-                        onChange={(event) => setAltText(event.target.value)}
-                      />
-                    </Field>
-                    <Field label="Map or scene notes">
-                      <Textarea
-                        className="mt-2 w-full"
-                        maxLength={4000}
-                        rows={5}
-                        value={notes}
-                        onChange={(event) => setNotes(event.target.value)}
-                      />
-                    </Field>
-                    <Button
-                      type="submit"
-                      tone="primary"
-                      loading={busy === "Saving"}
-                      disabled={!dirty || (!!assetId && !altText.trim())}
+                    <div className="flex flex-wrap gap-3">
+                      <Button tone="outline" onClick={() => void searchMedia()}>
+                        Pick image
+                      </Button>
+                      <Button
+                        tone="outline"
+                        onClick={() => setGenerateOpen((open) => !open)}
+                      >
+                        Generate image
+                      </Button>
+                    </div>
+                    <Field
+                      label="Upload image"
+                      help="Choose an image up to 20 MB."
                     >
-                      Save Map
-                    </Button>
+                      <FileInput
+                        accept="image/*"
+                        className="mt-2 w-full"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void upload(file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </Field>
                   </Fieldset>
-                </form>
-              </>
-            )}
-          </DraftRequired>
+                  {pickerOpen && (
+                    <section
+                      className="mt-6 rounded-box border border-base-300 p-5"
+                      aria-label="Image library"
+                    >
+                      <form
+                        className="flex flex-wrap items-end gap-3"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void searchMedia();
+                        }}
+                      >
+                        <Field label="Search images">
+                          <Input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                          />
+                        </Field>
+                        <Button type="submit" disabled={!!busy}>
+                          Search
+                        </Button>
+                        <Button
+                          tone="ghost"
+                          onClick={() => setPickerOpen(false)}
+                        >
+                          Close library
+                        </Button>
+                      </form>
+                      <div className="mt-5 grid gap-4">
+                        {media.map((asset) => (
+                          <MediaChoice
+                            key={asset.id}
+                            asset={asset}
+                            disabled={!!busy}
+                            onSelect={async () => {
+                              setBusy("Opening image");
+                              setMessage("");
+                              try {
+                                await selectAsset(asset);
+                              } catch {
+                                setMessage(
+                                  "That image could not be opened. Choose another image.",
+                                );
+                              } finally {
+                                setBusy("");
+                              }
+                            }}
+                          />
+                        ))}
+                      </div>
+                      {!media.length && !busy && (
+                        <p className="mt-4">No matching images.</p>
+                      )}
+                      <div className="mt-4 flex gap-3">
+                        <Button
+                          disabled={offset === 0 || !!busy}
+                          onClick={() =>
+                            void searchMedia(Math.max(0, offset - 24))
+                          }
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          disabled={offset + media.length >= total || !!busy}
+                          onClick={() => void searchMedia(offset + 24)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </section>
+                  )}
+                  {generateOpen && (
+                    <section className="mt-6 space-y-4 rounded-box border border-base-300 p-5">
+                      <Field
+                        label="Image direction"
+                        help="Describe the terrain, landmarks, style, and composition. Generation uses the configured AI provider."
+                      >
+                        <Textarea
+                          className="mt-2 w-full"
+                          rows={4}
+                          maxLength={4000}
+                          disabled={!!busy}
+                          value={direction}
+                          onChange={(event) => setDirection(event.target.value)}
+                        />
+                      </Field>
+                      <Button
+                        tone="primary"
+                        loading={busy === "Generating"}
+                        disabled={!!busy || !direction.trim()}
+                        onClick={() => void generate()}
+                      >
+                        Generate Map preview
+                      </Button>
+                    </section>
+                  )}
+                  <form
+                    id="world-map-settings"
+                    className="mt-8 space-y-6"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      setBusy("Saving");
+                      setSaved(false);
+                      setMessage("");
+                      let next = locationWithMapScene(
+                        record,
+                        notes,
+                        orientation,
+                      );
+                      if (assetId)
+                        next = {
+                          ...next,
+                          payload: {
+                            ...object(next.payload),
+                            image: { ...image, altText, orientation },
+                          },
+                        };
+                      const success = await saveRecord(next);
+                      setBusy("");
+                      if (success) {
+                        setBaseline(
+                          JSON.stringify({
+                            image,
+                            notes,
+                            orientation,
+                            altText,
+                          }),
+                        );
+                        setSaved(true);
+                      }
+                    }}
+                  >
+                    <Fieldset
+                      disabled={!!busy || terrainBusy || !canEdit}
+                      className="space-y-6"
+                    >
+                      <Field label="Alternative text">
+                        <Input
+                          className="mt-2 w-full"
+                          required={!!assetId}
+                          value={altText}
+                          onChange={(event) => setAltText(event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Map or scene notes">
+                        <Textarea
+                          className="mt-2 w-full"
+                          maxLength={4000}
+                          rows={5}
+                          value={notes}
+                          onChange={(event) => setNotes(event.target.value)}
+                        />
+                      </Field>
+                      <Button
+                        type="submit"
+                        tone="primary"
+                        loading={busy === "Saving"}
+                        disabled={!dirty || (!!assetId && !altText.trim())}
+                      >
+                        Save Map
+                      </Button>
+                    </Fieldset>
+                  </form>
+                </>
+              )}
+            </DraftRequired>
+          </ShellTools>
         </>
       )}
       {busy && (

@@ -7,7 +7,7 @@ import {
 import { InternalLink } from "./navigation";
 import type { ReadSection } from "./server/readModels";
 import { useMemo, useState } from "react";
-import { Input, Label, Select } from "@aow/ui";
+import { Disclosure, Button, Input, Label, Select } from "@aow/ui";
 
 export function CampaignLibraryPage({
   definitions,
@@ -18,6 +18,7 @@ export function CampaignLibraryPage({
   instances: ReadSection<CampaignInstanceList>;
   quickStartSuffix?: string;
 }) {
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("current");
   const definitionCards = useMemo(
@@ -41,48 +42,57 @@ export function CampaignLibraryPage({
     [instances, query, status],
   );
   return (
-    <main className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
-      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        Campaign library
+    <main className="mx-auto w-full max-w-none px-4 py-6 sm:p-8">
+      <h1 className="text-3xl font-semibold tracking-tight">Campaigns</h1>
+      <p className="mt-5 text-base-content/65">
+        Create and manage campaign definitions
       </p>
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-4xl font-semibold tracking-tight">Campaigns</h1>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:flex">
         <InternalLink
-          className="btn btn-primary"
+          className="btn btn-primary min-h-11 sm:min-w-52"
           href={`/campaigns/definitions/new${quickStartSuffix}`}
         >
-          Create Campaign Definition
+          + Create campaign
         </InternalLink>
+        <Button
+          tone="outline"
+          className="min-h-11 sm:min-w-52"
+          aria-expanded={filtersOpen}
+          aria-controls="campaign-filters"
+          onClick={() => setFiltersOpen(!filtersOpen)}
+        >
+          Search / Filter
+        </Button>
       </div>
-      <p className="mt-5 max-w-3xl text-lg leading-8 text-base-content/65">
-        Choose authoring material from Campaign Definitions or manage a played
-        realization through Campaign Instances. These are separate workspaces.
-      </p>
-      <div className="mt-8 grid gap-4 rounded-box border border-base-300 bg-base-200 p-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
-        <Label>
-          Search Campaigns
-          <Input
-            type="search"
-            className="mt-2 w-full"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder="Search by name, World, or revision"
-          />
-        </Label>
-        <Label>
-          Status
-          <Select
-            className="mt-2 w-full"
-            value={status}
-            onChange={(event) => setStatus(event.currentTarget.value)}
-          >
-            <option value="current">Current</option>
-            <option value="all">All</option>
-            <option value="archived">Archived</option>
-          </Select>
-        </Label>
-      </div>
-
+      {filtersOpen && (
+        <div
+          id="campaign-filters"
+          className="mt-5 grid gap-4 rounded-box border border-base-300 bg-base-200 p-4 sm:grid-cols-[minmax(0,1fr)_14rem]"
+        >
+          <Label>
+            Search Campaigns
+            <Input
+              type="search"
+              className="mt-2 w-full"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search by name, World, or revision"
+            />
+          </Label>
+          <Label>
+            Status
+            <Select
+              className="mt-2 w-full"
+              value={status}
+              onChange={(event) => setStatus(event.currentTarget.value)}
+            >
+              <option value="current">Current</option>
+              <option value="all">All</option>
+              <option value="archived">Archived</option>
+            </Select>
+          </Label>
+        </div>
+      )}
       <CampaignSection
         id="campaign-definitions"
         eyebrow="Authoring"
@@ -92,19 +102,27 @@ export function CampaignLibraryPage({
         empty="No Campaign Definitions are available yet."
         error={definitions.ok ? undefined : definitions.message}
         quickStartSuffix={quickStartSuffix}
-        createHref={`/campaigns/instances/new${quickStartSuffix}`}
-        createLabel="Create Campaign Instance"
       />
-      <CampaignSection
-        id="campaign-instances"
-        eyebrow="Instance management"
-        title="Instances"
-        description="Manage each played realization and its captured compatible Campaign and World revisions."
-        cards={instanceCards}
-        empty="No Campaign Instances are available yet."
-        error={instances.ok ? undefined : instances.message}
-        quickStartSuffix={quickStartSuffix}
-      />
+      <p className="mt-5 rounded-box border border-base-300 p-4 text-sm text-base-content/65">
+        GM only · Campaign definitions prepare stories for later play.
+      </p>
+      <Disclosure
+        className="mt-6 rounded-box border border-base-300 p-4"
+        summary="Played campaigns · Instances"
+      >
+        <CampaignSection
+          id="campaign-instances"
+          createHref={`/campaigns/instances/new${quickStartSuffix}`}
+          createLabel="Create Campaign Instance"
+          eyebrow="Instance management"
+          title="Instances"
+          description="Manage each played realization and its captured compatible Campaign and World revisions."
+          cards={instanceCards}
+          empty="No Campaign Instances are available yet."
+          error={instances.ok ? undefined : instances.message}
+          quickStartSuffix={quickStartSuffix}
+        />
+      </Disclosure>
     </main>
   );
 }
@@ -133,21 +151,25 @@ function CampaignSection({
   createLabel?: string;
 }) {
   return (
-    <section className="mt-14" aria-labelledby={`${id}-heading`}>
-      <p className="text-xs font-semibold tracking-[0.16em] text-base-content/45 uppercase">
-        {eyebrow}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+    <section className="mt-5" aria-labelledby={`${id}-heading`}>
+      <p className="sr-only">{eyebrow}</p>
+      <div
+        className={
+          id === "campaign-definitions"
+            ? "sr-only"
+            : "mt-2 flex flex-wrap items-center justify-between gap-4"
+        }
+      >
         <h2 id={`${id}-heading`} className="text-2xl font-semibold">
           {title}
         </h2>
         {createHref && createLabel && (
-          <InternalLink className="btn btn-primary btn-sm" href={createHref}>
+          <InternalLink className="btn btn-outline min-h-11" href={createHref}>
             {createLabel}
           </InternalLink>
         )}
       </div>
-      <p className="mt-2 max-w-3xl text-base-content/60">{description}</p>
+      <p className="sr-only">{description}</p>
       {error ? (
         <div className="alert alert-error mt-6 max-w-3xl">
           <div>
@@ -158,7 +180,7 @@ function CampaignSection({
           </div>
         </div>
       ) : cards.length ? (
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-4">
           {cards.map((card) => (
             <CampaignCard
               key={card.key}
@@ -184,10 +206,10 @@ function CampaignCard({
   quickStartSuffix: string;
 }) {
   return (
-    <article className="card border border-base-300 bg-base-200 shadow-sm">
-      <div className="card-body">
+    <article className="rounded-box border border-base-300 bg-base-100">
+      <div className="space-y-2 p-3 sm:p-4">
         <div className="flex items-start justify-between gap-4">
-          <h3 className="card-title text-xl">{card.name}</h3>
+          <h3 className="text-base font-semibold">{card.name}</h3>
           <span className="badge badge-outline shrink-0">
             {card.statusLabel}
           </span>
@@ -212,10 +234,15 @@ function CampaignCard({
         )}
         <div className="card-actions mt-4">
           <InternalLink
-            className="btn btn-primary btn-sm"
-            href={`${card.href}${quickStartSuffix}`}
+            className="btn btn-outline min-h-11"
+            href={`${card.href}${card.actionLabel === "Open Definition" && card.contextLabels.some((label) => label.startsWith("Working draft")) ? "/plots" : ""}${quickStartSuffix}`}
           >
-            {card.actionLabel}
+            {card.actionLabel === "Open Definition" &&
+            card.contextLabels.some((label) =>
+              label.startsWith("Working draft"),
+            )
+              ? "Open plots"
+              : card.actionLabel}
           </InternalLink>
         </div>
       </div>

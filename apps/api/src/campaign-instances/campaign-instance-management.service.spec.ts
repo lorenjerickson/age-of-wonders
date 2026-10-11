@@ -1,3 +1,4 @@
+import type { LocationId } from "@aow/common";
 import {
   BadRequestException,
   ConflictException,
@@ -204,6 +205,69 @@ describe("CampaignInstanceManagementService", () => {
         "A preparing Campaign Instance cannot become concluded.",
       ),
     );
+  });
+
+  it("offers captured Location names and rejects an opening outside that capture", async () => {
+    const instance = {
+      ...ownedInstance,
+      currentSnapshot: {
+        ...ownedInstance.currentSnapshot,
+        worldDefinitionSnapshot: {
+          manifest: buildSnapshotManifest(1, [
+            {
+              resourceType: "locations",
+              sourceId: "yard",
+              sourceRevision: 1,
+              payload: { id: "yard", name: "Scotland Yard" },
+            },
+            {
+              resourceType: "locations",
+              sourceId: "unnamed",
+              sourceRevision: 1,
+              payload: { id: "unnamed" },
+            },
+          ]),
+        },
+      },
+    };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      $executeRawUnsafe: jest.fn().mockResolvedValue(0),
+      campaignInstance: { findFirst: jest.fn().mockResolvedValue(instance) },
+      campaignInstanceSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      campaignInstanceRuntime: { updateMany },
+    };
+    const service = new CampaignInstanceManagementService(prisma as never);
+    const choices = [
+      { id: "yard", name: "Scotland Yard" },
+      { id: "unnamed", name: "Unnamed captured Location" },
+    ];
+    expect((await service.preparation("instance-1", "gm-1")).locations).toEqual(
+      choices,
+    );
+    expect(
+      await service.updatePreparation("instance-1", "gm-1", {
+        expectedRuntimeRevision: 3,
+        preparation: {
+          startingLocationId: "yard" as LocationId,
+          startingContext: "Dock",
+        },
+      }),
+    ).toMatchObject({
+      preparation: {
+        startingLocationId: "yard" as LocationId,
+        startingContext: "Dock",
+      },
+      locations: choices,
+    });
+    updateMany.mockClear();
+    await expect(
+      service.updatePreparation("instance-1", "gm-1", {
+        expectedRuntimeRevision: 3,
+        preparation: { startingLocationId: "foreign-location" as LocationId },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("preserves runtime state and rejects stale preparation writes", async () => {

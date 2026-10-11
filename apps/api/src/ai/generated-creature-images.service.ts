@@ -8,6 +8,10 @@ import { OpenAiService } from "./openai.service";
 const IMAGE_ROLES = ["portrait", "overheadToken", "paperDollToken"] as const;
 type ImageRole = (typeof IMAGE_ROLES)[number];
 
+/** Token composition takes precedence over narrative/occupation cues in an authored brief. */
+export const MAP_TOKEN_COMPOSITION =
+  "This image is strictly a map-position marker, not a scene, profession illustration, or decorative character vignette. Render exactly one isolated character in a compact, readable standing or natural resting pose. Include only the character's body and explicitly described clothing, armor, and equipment physically worn, attached, or held. Do not invent occupational accessories or props from the character's name, profession, biography, or theme. A blacksmith token must not include an anvil, forge, furnace, workbench, scattered tools, coals, sparks, or workshop decorations; an explicitly described held hammer may remain. Exclude all detached objects, furniture, scenery, terrain, floor, ground line, bases, pedestals, token rings, borders, symbols, decorative effects, smoke, glow, cast shadows, text, and UI. Keep the complete character silhouette visible, centered with transparent padding. Every pixel outside the character and permitted worn or held equipment must be transparent. These token-purpose and isolation constraints override conflicting scene, prop, decoration, or background requests elsewhere in the brief; use those passages only to inform the character's appearance.";
+
 export const roleSettings: Record<
   ImageRole,
   {
@@ -26,13 +30,17 @@ export const roleSettings: Record<
     size: "1024x1024",
     background: "transparent",
     fallback:
-      "Create a strict orthographic plan-view token for a directly overhead map. Place the camera directly above the creature, looking vertically straight down at 90 degrees to the ground plane, with zero tilt or horizontal offset. Show the tops of the head, shoulders, and equipment as seen from directly above. No three-quarter view, isometric view, oblique angle, horizon, or perspective foreshortening. Keep the entire footprint visible without a ring, text, or UI. These camera requirements override any conflicting angle in the art brief.",
+      "Create a strict orthographic plan-view token for a directly overhead map. Place the camera directly above the creature, looking vertically straight down at 90 degrees to the ground plane, with zero tilt or horizontal offset. Show the tops of the head, shoulders, and equipment as seen from directly above. No three-quarter view, isometric view, oblique angle, horizon, or perspective foreshortening. Keep the entire footprint visible without a ring, text, or UI. These camera requirements override any conflicting angle in the art brief." +
+      " " +
+      MAP_TOKEN_COMPOSITION,
   },
   paperDollToken: {
     size: "1024x1024",
     background: "transparent",
     fallback:
-      "Create a compact orthographic side-view paper-doll token. Show the entire creature in profile without a frame, text, or UI.",
+      "Create a compact orthographic side-view paper-doll token. Show the entire creature in profile without a frame, text, or UI." +
+      " " +
+      MAP_TOKEN_COMPOSITION,
   },
 };
 
@@ -68,8 +76,8 @@ export class GeneratedCreatureImagesService {
           `Create the ${role} image for the role-playing creature "${name}".`,
           shared,
           authored,
-          roleSettings[role].fallback,
           "Keep anatomy, proportions, palette, equipment, and identifying marks consistent with the shared visual identity. Render the creature only; no labels or prose.",
+          roleSettings[role].fallback,
         ]
           .filter(Boolean)
           .join("\n\n");

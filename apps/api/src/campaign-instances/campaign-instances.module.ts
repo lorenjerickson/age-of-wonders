@@ -1,3 +1,6 @@
+import { CampaignCharacterArtworkController } from "./campaign-character-artwork.controller";
+import { AiModule } from "../ai/ai.module";
+import { MediaModule } from "../media/media.module";
 import { CampaignSessionMovementController } from "./campaign-session-movement.controller";
 import { CampaignSessionMovementService } from "./campaign-session-movement.service";
 import { CampaignSessionTableController } from "./campaign-session-table.controller";
@@ -29,8 +32,9 @@ import { CampaignInstanceCharacterDraftsController } from "./campaign-instance-c
 import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-character-drafts.service";
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, AiModule, MediaModule],
   controllers: [
+    CampaignCharacterArtworkController,
     CampaignSessionMovementController,
     CampaignSessionTableController,
     CampaignInstanceHierarchyController,

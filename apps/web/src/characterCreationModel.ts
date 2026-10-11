@@ -15,6 +15,8 @@ export interface CharacterDraft {
   attributeAssignments: Record<string, number>;
   startingEquipmentIds: string[];
   biography?: string;
+  imageAssetIds?: Record<string, string>;
+  equipmentAssignments?: Record<string, string[]>;
   reviewNote?: string;
   validationIssues: Array<{ code: string; field: string; message: string }>;
   updatedAt?: string;
@@ -24,14 +26,19 @@ export interface CharacterOption {
   id: string;
   name: string;
   description?: string;
+  compatibleSlotSets?: readonly (readonly string[])[];
+  imageAssetId?: string;
+  modifierGrants?: readonly import("@aow/common").ModifierGrantDefinition[];
 }
 
 export interface CharacterOptions {
+  worldDefinitionId?: string;
   backgrounds: readonly CharacterOption[];
   professions: readonly CharacterOption[];
   heritages: readonly CharacterOption[];
   attributes: readonly CharacterAttributeOption[];
   startingEquipment: readonly CharacterOption[];
+  equipmentSlots?: readonly { id: string; name: string }[];
   maximumHeritages?: number;
   attributeRollCount: number;
 }
@@ -53,8 +60,7 @@ export function applyCharacterSelections(
 export function selectionsComplete(selections: CharacterSelections): boolean {
   return Boolean(
     selections.backgroundId &&
-    selections.professionId &&
-    selections.heritageIds?.length,
+    selections.professionId,
   );
 }
 

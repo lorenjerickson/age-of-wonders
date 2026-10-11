@@ -1,3 +1,4 @@
+import type { ModifierGrantDefinition } from "./modifiers";
 import type { DiceExpression } from "./dice";
 import type { Predicate } from "./expressions";
 import type { EquipmentState } from "./items";
@@ -124,6 +125,8 @@ export type CharacterDefinition<
 > = Definition<"character-template", CharacterTemplateComponents, Extensions>;
 
 export interface BackgroundComponents {
+  /** Backstory benefits granted once when the Background is acquired. */
+  readonly modifierGrants?: readonly ModifierGrantDefinition[];
   readonly attributeOptions?: readonly Attribute[];
   readonly skillProficiencyIds?: readonly DefinitionId[];
   readonly toolProficiencies?: readonly string[];
@@ -166,7 +169,7 @@ export interface CharacterState<
   readonly experiencePoints?: number;
   readonly milestoneCount?: number;
   readonly inspiration?: ResourcePool;
-  readonly heritage: Heritage;
+  readonly heritage?: Heritage;
   readonly backgroundId: DefinitionId;
   readonly creationFeatId?: DefinitionId;
   readonly alignment?: Alignment;

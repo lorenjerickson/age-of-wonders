@@ -266,7 +266,17 @@ await withFixture(async (url) => {
     if (request.method() !== "GET") writes.push(path);
     if (path.endsWith("/download"))
       return route.fulfill({ json: { url: image.uri } });
-    if (path.endsWith("/movement")) return route.fulfill({json:{snapshotNumber:2,runtimeRevision:7,status:status === "paused" ? "paused" : "active",actors:[],capturedRules:[],proposals:[]}});
+    if (path.endsWith("/movement"))
+      return route.fulfill({
+        json: {
+          snapshotNumber: 2,
+          runtimeRevision: 7,
+          status: status === "paused" ? "paused" : "active",
+          actors: [],
+          capturedRules: [],
+          proposals: [],
+        },
+      });
     if (path.endsWith("/table")) {
       locationReads.push(parsed.searchParams.get("locationId"));
       if (holdTable) {
@@ -345,11 +355,17 @@ await withFixture(async (url) => {
   }
   try {
     await page.goto(url);
-    await page.getByRole("heading", { name: "Table", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Into the cavern", exact: true })
+      .waitFor();
     await page
       .getByRole("heading", { name: "Lantern Cavern", exact: true })
       .waitFor();
     await page.getByRole("img", { name: image.altText, exact: true }).waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Plot cues & discoveries$/ })
+      .click();
     for (const text of [
       "Tamsin Reed",
       "The hidden passage",
@@ -413,10 +429,40 @@ await withFixture(async (url) => {
     await page
       .getByRole("heading", { name: "Stone Causeway", exact: true })
       .waitFor();
-    await page.getByText("Place an actor in this Location to open the interactive GM map.", {exact:true}).waitFor();
-    if (await page.locator("canvas").count()) throw new Error("An interactive map invented an actor when none was placed");
+    await page
+      .getByText(
+        "Place an actor in this Location to open the interactive GM map.",
+        { exact: true },
+      )
+      .waitFor();
+    if (await page.locator("canvas").count())
+      throw new Error(
+        "An interactive map invented an actor when none was placed",
+      );
     await assertReadOnlyAndNamed();
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "GM", exact: true }).click();
+    await page.getByRole("dialog", { name: "Game master context" }).waitFor();
+    await page
+      .getByLabel("Viewing Location", { exact: true })
+      .selectOption(cavernId);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("img", { name: image.altText, exact: true }).waitFor();
+    await page.getByRole("button", { name: "Players", exact: true }).click();
+    await page.getByRole("dialog", { name: "Players and actors" }).waitFor();
+    await page.keyboard.press("Escape");
+    if (
+      !(await page
+        .getByRole("button", { name: "Players", exact: true })
+        .evaluate((node) => node === document.activeElement))
+    )
+      throw new Error("Drawer did not restore focus");
+    if (
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      )
+    )
+      throw new Error("Mobile viewport overflow");
     await page.screenshot({
       path: join(tmpdir(), "aow-session-table-mobile.png"),
       fullPage: true,
@@ -424,7 +470,9 @@ await withFixture(async (url) => {
     await page.setViewportSize({ width: 1440, height: 1100 });
     status = "paused";
     await page.reload();
-    await page.getByRole("heading", { name: "Table", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Into the cavern", exact: true })
+      .waitFor();
     await page
       .getByRole("button", { name: "Resume Session", exact: true })
       .waitFor();
@@ -448,7 +496,17 @@ await withFixture(async (url) => {
     tableStatus = 200;
     empty = true;
     await page.reload();
-    await page.getByRole("heading", { name: "Table", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Into the cavern", exact: true })
+      .waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Campaign context$/ })
+      .click();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Plot cues & discoveries$/ })
+      .click();
     await page
       .getByText("No captured Locations are available.", { exact: true })
       .waitFor();
@@ -466,6 +524,20 @@ await withFixture(async (url) => {
       await page.getByRole("img", { name: image.altText, exact: true }).count()
     )
       throw new Error("Empty table retained a previous map");
+    tableStatus = 503;
+    empty = false;
+    await page.reload();
+    await page
+      .getByText(
+        "The table could not be refreshed. Retry to load the latest captured context.",
+        { exact: true },
+      )
+      .waitFor();
+    tableStatus = 200;
+    await page
+      .getByRole("button", { name: "Refresh table", exact: true })
+      .click();
+    await page.getByRole("img", { name: image.altText, exact: true }).waitFor();
     if (errors.length) throw new Error(errors.join("\n"));
     console.log(
       `Session table smoke passed: captured Location/map/party/plot/discoveries, GET-only Location viewing, paused reference view, empty fallback and private-ID protection. Screenshot: ${screenshotPath}`,

@@ -21,6 +21,54 @@ function fixture() {
 }
 
 describe("Session presence lease", () => {
+  it("automatically joins GM-controlled play once across immediate remounts", async () => {
+    vi.useFakeTimers();
+    const { api, lease, listener, refresh, disposed } = fixture();
+    const detach = lease.attach(listener, refresh, false, disposed, true);
+    detach();
+    const finalDetach = lease.attach(listener, refresh, false, disposed, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.join).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenLastCalledWith({ present: true, error: "" });
+    finalDetach();
+    await vi.runOnlyPendingTimersAsync();
+  });
+
+  it("rejoins an expired GM connection without changing normal player reconnect behavior", async () => {
+    vi.useFakeTimers();
+    const { api, lease, listener, refresh, disposed } = fixture();
+    api.heartbeat.mockRejectedValue(new Error("Connection expired"));
+    const detach = lease.attach(listener, refresh, true, disposed, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.heartbeat).toHaveBeenCalledTimes(1);
+    expect(api.join).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(api.join).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith({ present: true, error: "" });
+    detach();
+    await vi.runOnlyPendingTimersAsync();
+  });
+
+  it("retries a dropped GM connection but respects explicit leave", async () => {
+    vi.useFakeTimers();
+    const { api, lease, listener, refresh, disposed } = fixture();
+    api.join.mockRejectedValueOnce(new Error("Offline"));
+    const detach = lease.attach(listener, refresh, false, disposed, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listener).toHaveBeenLastCalledWith({
+      present: false,
+      error: "Offline",
+    });
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(listener).toHaveBeenLastCalledWith({ present: true, error: "" });
+    await lease.leave();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(api.join).toHaveBeenCalledTimes(2);
+    expect(api.heartbeat).not.toHaveBeenCalled();
+    detach();
+    await vi.runOnlyPendingTimersAsync();
+  });
+
   it("renews joined presence every 45 seconds without implicit joining", async () => {
     vi.useFakeTimers();
     const { api, lease, listener, refresh, disposed } = fixture();
