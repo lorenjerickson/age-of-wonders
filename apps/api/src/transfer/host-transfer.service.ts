@@ -52,6 +52,12 @@ export interface HostTransferImportReport {
   graphProjectionsRebuilt: number;
 }
 
+/** Offline historical storage restore, not a gameplay or authoring writer.
+ * The archive codec, hashes, conflict strategy and rollback preserve exact private
+ * content, including retired records. Restored rows remain historical input to
+ * scoped World/Instance migration; they do not activate an Instance or Session.
+ * Retire this adapter only after a lossless versioned archive replacement exists.
+ */
 @Injectable()
 export class HostTransferService {
   constructor(

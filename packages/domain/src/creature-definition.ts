@@ -1,10 +1,12 @@
 import {
   WORLD_CODEX_RESOURCES,
+  type JsonValue,
   type ModelConformance,
   type WorldCreatureDefinition,
 } from "@aow/common";
 import {
   Entity,
+  copyEntityData,
   type DeepReadonly,
   type ValidationIssue,
   type CommandInvocation,
@@ -59,6 +61,36 @@ export class CreatureDefinition extends Entity<
   ) {
     super("creature-definition", data, ["renamed"], context, options);
     this.validate(context);
+  }
+
+  static embodimentPolicyForSave(
+    existing: unknown,
+    strategy:
+      "" | "one-per-instance" | "one-per-realization" | "preserve-extension",
+    maximum: string,
+  ) {
+    const prior =
+      typeof existing === "object" &&
+      existing !== null &&
+      !Array.isArray(existing)
+        ? copyEntityData(existing as Record<string, JsonValue>)
+        : {};
+    if (strategy === "preserve-extension") return prior;
+    if (!strategy) return undefined;
+    if (strategy === "one-per-instance") {
+      return { ...prior, strategy, maximumPerCampaignInstance: 1 };
+    }
+    const parsed = Number(maximum);
+    const maximumPerCampaignInstance =
+      maximum.trim() && Number.isInteger(parsed) && parsed > 0
+        ? parsed
+        : undefined;
+    if (maximumPerCampaignInstance !== undefined) {
+      return { ...prior, strategy, maximumPerCampaignInstance };
+    }
+    const withoutMaximum = { ...prior };
+    delete withoutMaximum.maximumPerCampaignInstance;
+    return { ...withoutMaximum, strategy };
   }
 
   static deserialize(

@@ -1500,7 +1500,8 @@ changes its epistemic kind.
 Authoring validates scoped `PlotDefinition` state before accepting a Plot set. It reports duplicate
 identities, missing or cross-Definition parents and relationship targets, parent cycles, combined
 prerequisite/dependency cycles, and unexplained cross-branch relationships without mutating input.
-Common `validatePlotHierarchy` remains a compatibility helper for unmigrated consumers.
+API, generation and browser callers use `PlotDefinition.validateHierarchy`; the duplicate common
+validator has been retired.
 Plot and placement records are captured through the aggregate-specific Campaign Definition draft,
 revision, and snapshot workflow. They are not unversioned generic domain resources.
 
@@ -1908,14 +1909,13 @@ interface LocationConnectionState {
 }
 ```
 
-`mechanism` is required for `portal` connections and any edge whose traversal is not ordinary
-locomotion. A legacy portal without enough information uses an `unknown` basis and understanding
-only while carrying an explicit science-refactor exception; new records must describe the observed
-operation and known physical implementation honestly.
+`LocationConnectionState` is a historical decoding contract only. Preserve existing mechanism
+and science-refactor exception data when restoring an archive; never generate new connection
+records or interpret this compatibility schema as current travel behavior.
 
 `LocationGraphState` contains `version`, `rootLocationIds`, a flat `locations` array, and a flat
-`connections` array. It is composed into `GameState.entities.geography`; it is not itself a generic
-domain API resource.
+`connections` array for historical decoding. Preserve it in historical archives; new authored
+Location relationships use containment only. It is not a current travel engine or generic write resource.
 
 `image.orientation` determines encounter rendering: `scenic` is an illustrative view, `overhead`
 is a top-down map without gravity, and `side-on` is a profile map where tokens fall vertically to
@@ -3230,7 +3230,7 @@ Before returning generated JSON:
 3. Include all required arrays and objects, even when they are empty.
 4. Use the correct discriminant (`kind`, `phase`, `status`, or similar) for every union.
 5. Keep reusable rules in definitions and mutable facts in state.
-6. Keep geography normalized; parentage uses placement and travel edges use connections.
+6. Keep geography normalized through parent/child containment. Never generate travel edges or adjacency connections.
 7. Put non-standard JSON under a namespaced extension key rather than inventing top-level fields.
 8. Do not claim an asset URL is downloadable unless the asset has actually been created and stored.
 9. Include portrait, overhead-token, and paper-doll-token assets for every creature state.
@@ -3915,3 +3915,20 @@ lights, sounds, drawings, templates and notes. Deprecated inline intent arrays a
 preserved, not used for new authoring. Canvas configuration is reusable preparation;
 these controls do not add a rendering or synchronized playback engine. B07 changes
 ownership and consumers without changing common payload schemas or resource mappings.
+
+
+## B12 consumer and compatibility closure
+
+Common TypeScript types remain the payload source of truth. Aggregate policy is accessed through
+`CampaignDefinition.validateCapturedContent`, `CampaignInstance.validateRuntime/canTransition`,
+`CampaignSession.canTransition`, `InstanceParticipation.validateConsistency`, and
+`PlotDefinition.validateHierarchy`. Do not import their retired standalone common predicates.
+Creature Definition owns embodiment policy authoring; Item Definition owns square-image validation.
+RuleExecution consumes committed observable results within a disposable execution scope.
+
+Current AI generation uses scoped proposals and owner-validated apply. Legacy direct-persist
+generators are no longer injectable. Generic runtime writes are disabled. Science/host archive
+restore is a distinct historical storage adapter: preserve raw private/sparse/retired content under
+codec, metadata and revision/hash checks, without publishing Definition revisions or changing live
+Instance state. Old connection/travel contracts are decoding-only; never generate travel edges.
+Resource identity mappings and persisted DTO fields remain unchanged.

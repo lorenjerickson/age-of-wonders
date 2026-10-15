@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-10-14
-scope: Entity architecture and staged migration; B06 scoped graph/catalog foundation and B08 runtime ownership
+scope: Entity architecture and completed B01–12 migration of existing behavior, with explicit compatibility/value boundaries
 ---
 
 # Entity architecture and migration
@@ -13,6 +13,14 @@ After architecture planning, the user authorized beginning migration. The implem
 below distinguishes the delivered slices from the remaining target architecture.
 
 ## Implementation status
+
+**Current closure: B12.** All original D/C/I acceptance rows are reconciled in
+[B12 closure evidence](verification/b12-migration-closure.md), including scoped
+observable execution, remaining owner-policy consumers and explicit historical
+archive boundaries. B01–12 selected scope is complete. The older per-slice status
+paragraphs below are delivery history, not additional open work. New gameplay,
+unspecified advancement and permanent exclusions are not implied by closure.
+
 
 Current B06 closure: `EntityGraph` provides scoped identity, cycle-safe references,
 dynamic dependency validity, exact isolated hydration, persistent owned-child identity,

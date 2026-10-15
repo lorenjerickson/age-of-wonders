@@ -179,21 +179,3 @@ export interface CampaignSessionSummary {
   readonly createdAt: string;
   readonly approvedAt?: string;
 }
-
-const SESSION_TRANSITIONS: Readonly<
-  Record<CampaignSessionStatus, readonly CampaignSessionStatus[]>
-> = {
-  planned: ["lobby", "cancelled"],
-  lobby: ["planned", "active", "cancelled"],
-  active: ["paused", "concluded"],
-  paused: ["active", "concluded"],
-  concluded: [],
-  cancelled: [],
-};
-
-export function canTransitionCampaignSessionStatus(
-  from: CampaignSessionStatus,
-  to: CampaignSessionStatus,
-): boolean {
-  return SESSION_TRANSITIONS[from].includes(to);
-}

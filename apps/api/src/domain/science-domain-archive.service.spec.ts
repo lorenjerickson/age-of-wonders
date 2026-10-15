@@ -64,6 +64,7 @@ describe("ScienceDomainArchiveService", () => {
       {
         create,
         replace,
+        assertHistoricalArchivePayload: jest.fn(),
       } as unknown as DomainService,
       {} as GraphService,
     );
@@ -96,8 +97,13 @@ describe("ScienceDomainArchiveService", () => {
           input.where.resource_id.id === "location-1" ? existing : null,
         ),
     );
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
-      domainRecord: { findUnique },
+      domainRecord: {
+        findUnique,
+        create: jest.fn().mockResolvedValue({}),
+        updateMany,
+      },
     } as unknown as PrismaService;
     const create = jest.fn(() => Promise.resolve({}));
     const replace = jest.fn(() => Promise.resolve({}));
@@ -106,8 +112,12 @@ describe("ScienceDomainArchiveService", () => {
       {
         create,
         replace,
+        assertHistoricalArchivePayload: jest.fn(),
       } as unknown as DomainService,
-      {} as GraphService,
+      {
+        addDomainResource: jest.fn(),
+        replaceDomainResource: jest.fn(),
+      } as unknown as GraphService,
     );
     const archive = createScienceDomainArchive([
       { resource: "locations", data: locationData("New Observatory") },
@@ -133,11 +143,12 @@ describe("ScienceDomainArchiveService", () => {
       graphProjectionsRebuilt: 2,
       failures: [],
     });
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(replace).toHaveBeenCalledWith(
-      "locations",
-      "location-1",
-      expect.objectContaining({ expectedRevision: 3 }),
+    expect(create).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { resource: "locations", id: "location-1", revision: 3 },
+      }),
     );
   });
 
@@ -194,5 +205,31 @@ describe("ScienceDomainArchiveService", () => {
 
     expect(report.failures[0]?.name).toBe("Glass Observatory");
     expect(JSON.stringify(report)).not.toContain("opaque-location-id");
+  });
+});
+
+it("restores sparse historical content losslessly without enabling live writes", async () => {
+  const data = {
+    identity: { id: "legacy-place" },
+    name: "Private ruins",
+    kind: "site",
+    extensions: { "gm:secret": "Hidden chamber" },
+  };
+  const create = jest.fn().mockResolvedValue({});
+  const prisma = {
+    domainRecord: { findUnique: jest.fn().mockResolvedValue(null), create },
+  } as unknown as PrismaService;
+  const graph = { addDomainResource: jest.fn() } as unknown as GraphService;
+  const domain = new DomainService(prisma, graph);
+  const service = new ScienceDomainArchiveService(prisma, domain, graph);
+  const archive = createScienceDomainArchive([{ resource: "locations", data }]);
+  await expect(domain.create("locations", data)).rejects.toThrow();
+  const preview = await service.import(archive, { apply: false });
+  expect(preview).toMatchObject({ toCreate: 1, failures: [] });
+  expect(create).not.toHaveBeenCalled();
+  const result = await service.import(archive, { apply: true });
+  expect(result).toMatchObject({ created: 1, failures: [] });
+  expect(create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ data }) as unknown,
   });
 });

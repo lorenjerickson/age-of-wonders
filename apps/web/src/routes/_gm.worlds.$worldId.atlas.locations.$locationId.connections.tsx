@@ -1,15 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { LocationSectionPage } from "../LocationWorkspacePages";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { locationHref } from "../locationWorkspaceModel";
 export const Route = createFileRoute(
   "/_gm/worlds/$worldId/atlas/locations/$locationId/connections",
-)({ component: SectionRoute });
-function SectionRoute() {
-  const { locationId } = Route.useParams();
-  return (
-    <LocationSectionPage
-      key={locationId}
-      locationId={locationId}
-      section="connections"
-    />
-  );
-}
+)({
+  beforeLoad: ({ params, location }) => {
+    throw redirect({
+      href: `${locationHref(params.worldId, params.locationId)}/hierarchy${location.searchStr}`,
+      replace: true,
+    });
+  },
+});

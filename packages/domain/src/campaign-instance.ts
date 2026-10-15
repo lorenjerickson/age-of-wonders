@@ -1,6 +1,7 @@
+import type { CampaignInstanceStatus } from "@aow/common";
+import { validateCampaignInstanceRuntimeState } from "./instance-runtime-policy";
 import { resolveInstancePlacement } from "./instance-realization";
 import {
-  validateCampaignInstanceRuntimeState,
   resolveCreatureInstanceEmbodimentPolicy,
   plotDiscoveryClaims,
   type PlotDiscovery,
@@ -81,6 +82,7 @@ export class CampaignInstance extends Entity<
 > {
   private readonly captured: CampaignInstanceRuntimeValidationContext;
   private readonly plots: readonly { sourceId: string; payload: unknown }[];
+  static canTransition = canTransitionCampaignInstanceStatus;
   private constructor(
     data: Runtime,
     context: InstanceCaptureContext,
@@ -698,4 +700,22 @@ export class CampaignInstance extends Entity<
       itemInstances: [],
     };
   }
+}
+
+const CAMPAIGN_INSTANCE_STATUS_TRANSITIONS: Readonly<
+  Record<CampaignInstanceStatus, readonly CampaignInstanceStatus[]>
+> = Object.freeze({
+  preparing: ["active"],
+  active: ["paused", "concluded"],
+  paused: ["active", "concluded"],
+  concluded: ["archived"],
+  archived: ["concluded"],
+});
+
+/** Server-owned lifecycle transition policy; same-state writes are not transitions. */
+function canTransitionCampaignInstanceStatus(
+  current: CampaignInstanceStatus,
+  target: CampaignInstanceStatus,
+): boolean {
+  return CAMPAIGN_INSTANCE_STATUS_TRANSITIONS[current].includes(target);
 }

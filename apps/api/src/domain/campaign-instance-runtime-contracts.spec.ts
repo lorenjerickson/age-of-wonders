@@ -1,3 +1,4 @@
+import { CampaignInstance as CampaignInstanceOwner } from "@aow/domain";
 import type {
   CampaignInstanceId,
   CampaignInstancePlacementRealization,
@@ -9,13 +10,12 @@ import type {
   LocationId,
   PlotDefinitionId,
   WorldPlacementDefinitionId,
-} from "../../../../packages/common/src/types";
-import { validateCampaignInstanceRuntimeState } from "../../../../packages/common/src/types";
+} from "@aow/common";
+
 import {
-  canTransitionCampaignInstanceStatus,
   isCreatureInstanceEmbodimentPolicy,
   resolveCreatureInstanceEmbodimentPolicy,
-} from "../../../../packages/common/src/types";
+} from "@aow/common";
 
 const instanceId = "greybridge-table" as CampaignInstanceId;
 const snapshotId = "greybridge-snapshot" as CampaignInstanceSnapshotId;
@@ -91,18 +91,18 @@ function context() {
 
 describe("Campaign Instance runtime contracts", () => {
   it("allows only the approved recoverable Instance lifecycle", () => {
-    expect(canTransitionCampaignInstanceStatus("preparing", "active")).toBe(
+    expect(CampaignInstanceOwner.canTransition("preparing", "active")).toBe(
       true,
     );
-    expect(canTransitionCampaignInstanceStatus("active", "paused")).toBe(true);
-    expect(canTransitionCampaignInstanceStatus("paused", "active")).toBe(true);
-    expect(canTransitionCampaignInstanceStatus("archived", "concluded")).toBe(
+    expect(CampaignInstanceOwner.canTransition("active", "paused")).toBe(true);
+    expect(CampaignInstanceOwner.canTransition("paused", "active")).toBe(true);
+    expect(CampaignInstanceOwner.canTransition("archived", "concluded")).toBe(
       true,
     );
-    expect(canTransitionCampaignInstanceStatus("preparing", "archived")).toBe(
+    expect(CampaignInstanceOwner.canTransition("preparing", "archived")).toBe(
       false,
     );
-    expect(canTransitionCampaignInstanceStatus("active", "active")).toBe(false);
+    expect(CampaignInstanceOwner.canTransition("active", "active")).toBe(false);
   });
 
   it("requires explicit new policy but resolves legacy captures deterministically", () => {
@@ -135,7 +135,7 @@ describe("Campaign Instance runtime contracts", () => {
 
   it("accepts complete recursive Plot progress and an explicit planned placement", () => {
     expect(
-      validateCampaignInstanceRuntimeState(runtimeState(), context()),
+      CampaignInstanceOwner.validateRuntime(runtimeState(), context()),
     ).toEqual({
       valid: true,
       issues: [],
@@ -148,7 +148,7 @@ describe("Campaign Instance runtime contracts", () => {
     });
 
     expect(
-      validateCampaignInstanceRuntimeState(state, context()),
+      CampaignInstanceOwner.validateRuntime(state, context()),
     ).toMatchObject({
       valid: false,
       issues: [
@@ -169,7 +169,7 @@ describe("Campaign Instance runtime contracts", () => {
       ],
     });
 
-    const result = validateCampaignInstanceRuntimeState(state, context());
+    const result = CampaignInstanceOwner.validateRuntime(state, context());
     expect(result.issues.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
         "placement-status-entity-mismatch",
@@ -194,7 +194,7 @@ describe("Campaign Instance runtime contracts", () => {
     });
 
     expect(
-      validateCampaignInstanceRuntimeState(state, context()).issues.map(
+      CampaignInstanceOwner.validateRuntime(state, context()).issues.map(
         ({ code }) => code,
       ),
     ).toEqual(
@@ -208,7 +208,10 @@ describe("Campaign Instance runtime contracts", () => {
   it("enforces captured Creature cardinality through Campaign placements", () => {
     const sourceCreatureId = "captured-keeper" as CreatureId;
     const embodimentPolicy = {
-      policy: { strategy: "one-per-instance" as const, maximumPerCampaignInstance: 1 },
+      policy: {
+        strategy: "one-per-instance" as const,
+        maximumPerCampaignInstance: 1,
+      },
       source: "explicit" as const,
     };
     const embodiment = (suffix: string) => ({
@@ -235,13 +238,17 @@ describe("Campaign Instance runtime contracts", () => {
       sourceCreatureId,
       embodimentPolicy,
     );
-    const result = validateCampaignInstanceRuntimeState(
-      runtimeState({ creatureEmbodiments: [embodiment("one"), embodiment("two")] as never }),
+    const result = CampaignInstanceOwner.validateRuntime(
+      runtimeState({
+        creatureEmbodiments: [embodiment("one"), embodiment("two")] as never,
+      }),
       validationContext,
     );
     expect(result.issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: "creature-embodiment-cardinality-exceeded" }),
+        expect.objectContaining({
+          code: "creature-embodiment-cardinality-exceeded",
+        }),
       ]),
     );
   });

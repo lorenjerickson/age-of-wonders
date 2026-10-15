@@ -2342,7 +2342,7 @@ export function DraftRecordEditor({
             <Field
               label="Parent Location"
               required
-              help="Choose containment in the Atlas hierarchy. Connections are authored separately."
+              help="Choose the containing Location in the Atlas hierarchy."
             >
               <Select
                 required

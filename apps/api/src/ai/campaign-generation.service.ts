@@ -1,3 +1,4 @@
+import { PlotDefinition as PlotOwner } from "@aow/domain";
 import {
   BadGatewayException,
   Inject,
@@ -22,7 +23,7 @@ import type {
   WorldDefinitionSnapshotId,
   WorldPlacementDefinitionId,
 } from "@aow/common";
-import { validatePlotHierarchy } from "@aow/common";
+
 import { isObject } from "../domain/domain-resource";
 import {
   isCanonicalSnapshotManifest,
@@ -410,7 +411,7 @@ export class CampaignGenerationService {
         dependencies: relationships(candidate.dependencies, plotIdsByKey),
       };
     });
-    const validation = validatePlotHierarchy(
+    const validation = PlotOwner.validateHierarchy(
       plots.map((plot) => ({
         ...plot,
         campaignDefinitionId: "draft-proposal" as CampaignDefinitionId,

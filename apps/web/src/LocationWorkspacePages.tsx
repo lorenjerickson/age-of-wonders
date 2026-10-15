@@ -36,8 +36,7 @@ export function LocationSectionPage({
   section,
 }: {
   locationId: string;
-  section:
-    "description" | "discoveries" | "connections" | "creatures" | "items";
+  section: "description" | "discoveries" | "hierarchy" | "creatures" | "items";
 }) {
   const { draft } = useWorldAuthoring();
   const record = draft?.records.find(
@@ -63,7 +62,7 @@ export function LocationSectionPage({
             location={record}
             collection="discoveries"
           />
-        ) : section === "connections" ? (
+        ) : section === "hierarchy" ? (
           <LocationHierarchy key={locationId} record={record} />
         ) : (
           <LocationCollectionPage

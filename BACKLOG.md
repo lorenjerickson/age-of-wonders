@@ -8,6 +8,18 @@ are superseded by this open-work register.
 
 ## Current status and next step
 
+**B12 complete — remaining consumers, navigation and migration closure.**
+DM-16/17 and UX-09–11 are closed for existing migrated behavior. Remaining aggregate
+validators/lifecycle predicates now use owners, rule execution consumes committed
+observable state, unused direct generators are no longer injectable, and historical
+archive restoration is explicitly isolated from live publication/runtime mutation.
+People profiles and Settings area/detail destinations are addressable; World library
+creation uses the canonical journey; legacy Connections links redirect to Hierarchy.
+See [B12 closure evidence](docs/verification/b12-migration-closure.md) for every D/C/I
+row, verification, measurement and retained boundaries. All twelve batches are closed
+for their selected scope. Unselected product decisions/content work remain below;
+Feat, Heritage and Discipline remain permanently excluded. B12 is included in the user-requested commit.
+
 **B11 complete — contested rolls and simultaneous planned combat.**
 Encounter now owns ordered plans, source-bound contested dice, durable reactions,
 guided conflicts and simulated round publication. Session/API and responsive GM/player
@@ -16,7 +28,7 @@ Confirmed: damage is max(0, damage minus resistance); attack margin >=10 trigger
 critical damage dice doubling. Sparse actors require explicit health/profile setup.
 See [B11 evidence](docs/verification/b11-planned-combat.md) for verification, bounded
 summon/death-save/reaction execution, remaining rules-content decisions and measurement.
-B07/B11 work is included together in the user-requested commit. B12 remains deferred until selected.
+B07/B11 work is included together in the user-requested commit. B12 is completed above.
 
 **B07 complete — Definition and Model lifecycles.**
 Campaign aggregate/preparation, World/Campaign lineage and reference migration, and
@@ -25,7 +37,7 @@ Campaign overlays and Plot Location actor/Item intents are editable through cano
 placements. The explicitly selected per-Location canvas controls cover all existing
 built-in fields, with private content and captured data preserved.
 See [B07 evidence](docs/verification/b07-definition-model-lifecycles.md) for verification,
-measurement and the live-database limitation. B11 is completed above; B12 remains deferred.
+measurement and the live-database limitation. B11 is completed above; B12 is completed above.
 
 **B10 complete — Instance, Session and existing execution.**
 Instance realization/progress, atomic Character/starting-Item activation, Session
@@ -33,7 +45,7 @@ lifecycle/readiness/presence, membership/Agent policy and existing rule/movement
 exploration consumers now use owners. Operational collection/detail destinations,
 Discovery knowledge, Instance weather overrides and manual GM media controls are
 implemented. Verification and its limits are recorded in [B10 evidence](docs/verification/b10-instance-session.md).
-B11 combat redesign is completed above; B12 remaining retirement remains deferred.
+B11 combat redesign is completed above; B12 retirement is completed above.
 UX-08's unselected new proficiency/profession screens remain a decision; existing
 Character review/import/selections/equipment integrate through the B08/B10 boundary.
 
@@ -48,10 +60,10 @@ Both editors and storage now reject them clearly; same-filename retry works, and
 standalone Map route's missing tools were restored. Valid replacements were verified
 through preview, save and reload on desktop/mobile.
 
-B01–11 are complete for their selected scope. B12 remains deferred. Feat, Heritage
+B01–12 are complete for their selected scope. Feat, Heritage
 and Discipline remain permanently excluded. See [B09 evidence](docs/verification/b09-maps-location.md)
 and [map-upload repair evidence](docs/verification/map-image-upload.md).
-Next step: await user selection; do not automatically start B12.
+Next step: await user direction; no further batch or new gameplay is automatically selected.
 
 ## Consolidated delivery plan — 12 batches, not hundreds of slices
 
@@ -63,7 +75,7 @@ A batch can span several working sessions; internal checkpoints do not require a
 by a fictional factor of ten. No elapsed-time estimate is credible until measured.
 
 **Five authoring batches** cover the currently selected direction. Seven further
-batches organize the retained migration/features; B06–11 are complete and B12 remains deferred. Decision-tagged
+batches organize the retained migration/features; B06–12 are complete for their selected scope. Decision-tagged
 fields/libraries/custom extensions remain decisions, not automatic new requirements.
 There is no unlisted “whatever comes later” category: all current open IDs map below.
 
@@ -76,7 +88,7 @@ There is no unlisted “whatever comes later” category: all current open IDs m
 | B09 Complete — maps and Location capabilities | Deliver Map/Wall/Door/Window ownership and accepted weather/A/V configuration, preserving both map formats. Map runtime visibility integrates with Instance in B10. | DM-08, DM-15, LOC-01–02 |
 | B10 Complete — Instance, Session and existing execution | Complete Instance realization/progress, Session/membership, existing runtime command/state$ cutover and their operational views. Integrate B08/B09 against the Instance contract; preserve existing gameplay behavior. | DM-12–14, UX-04–08; integration of DM-10/15 |
 | B11 Complete — combat redesign | Contested formulas, ordered plans, guided durable adjudication, atomic publication and GM/player consumers; bounded first-release contracts and content decisions recorded in B11 evidence. | COM-01–02 |
-| B12 Deferred — remaining consumers and operational navigation | Complete remaining import/restore/generator/legacy cutovers, People/Settings/library navigation and original migration acceptance audit. Authoring navigation already closed in B05 is not repeated. | DM-16–17, UX-09–11 |
+| B12 Complete — remaining consumers and operational navigation | Complete remaining import/restore/generator/legacy cutovers, People/Settings/library navigation and original migration acceptance audit. Authoring navigation already closed in B05 is not repeated. | DM-16–17, UX-09–11 |
 
 B01–05 are the authoring finish line, excluding permanently retired AU-19–21. B06–12 do not become prerequisites for declaring
 that milestone complete. B08–10 have cross-owner dependencies and share an integration
@@ -200,8 +212,8 @@ existing rule, movement and exploration commands. Universal writer retirement re
 | DM-13 Implemented in B10 — Session/membership | I08/D20/D27/C11: Session status/readiness/participation/event boundaries, standing/membership/Agent transitions. | Instance; preserve active-session constraints, privacy/presence/auth boundaries. | B10 |
 | DM-14 Implemented in B10 — existing execution cutover | I08/D19–22/D25: WorldRule owner, Encounter/Decision/Scene/rest/clock/downtime state; interpreter issues entity commands and observes scoped state$. | Runtime owners; preserve deterministic preview/replay/conflict behavior. COM features explicitly excluded. | B10 |
 | DM-15 Existing B09/B10 integration implemented — map runtime/visibility | I08/D26/C21–22: actor positions, exploration/reveals/openings and stateful visibility mutations. | DM-08/09/12; preserve capture/redaction/recovery/current movement. Pure geometry/rendering stays external. | B09/B10 |
-| DM-16 Deferred — remaining writers/retirement | I09/C14–15/C23/D29–30: imports/restores/AI candidates/legacy generators/archive/raw writers and compatibility exports; retire stale Connections/travel terminology and behavior. | Every retained adapter gets consumer/removal conditions. Preserve historical decoding; no adjacency/travel graph resurrection or historical data deletion. | B12 |
-| DM-17 Deferred — migration closure | I10 and all D/C rows: verify original Entity/class ownership, codecs, state-only metadata, commands/events/binding, privacy/concurrency/observable lifecycle and source/guide/resource-map alignment. | Delivered evidence or accepted exclusions for every row before domain migration is called complete. Does not itself resume gameplay features. | B12 |
+| DM-16 Complete — remaining writers/retirement | I09/C14–15/C23/D29–30: imports/restores/AI candidates/legacy generators/archive/raw writers and compatibility exports; retire stale Connections/travel terminology and behavior. | Every retained adapter gets consumer/removal conditions. Preserve historical decoding; no adjacency/travel graph resurrection or historical data deletion. | B12 |
+| DM-17 Complete — migration closure | I10 and all D/C rows: verify original Entity/class ownership, codecs, state-only metadata, commands/events/binding, privacy/concurrency/observable lifecycle and source/guide/resource-map alignment. | Delivered evidence or accepted exclusions for every row before domain migration is called complete. Does not itself resume gameplay features. | B12 |
 
 Primitives, expressions, immutable snapshots/events, DTOs, projections and geometry
 are not automatically live entities. Objects/Traps/Hazards must reconcile with Item
@@ -227,9 +239,9 @@ this inventory does not approve them or restart experience work.
 | UX-06 Implemented in B10 | Instance members/invitations/Character review/import and Agents | Authority, revoke/review lifecycle and profile/assignment distinctions preserved. | B10 |
 | UX-07 Implemented in B10 | Session plan/detail flow | Preserve lobby/start/pause/conclude/cancel and history; no new combat flow. | B10 |
 | UX-08 Existing Character/equipment integration complete; new screens decision/deferred | Player Character rich selections/inventory/proficiency/profession | Owner and runtime/equipment dependencies; no forced pages for scalar allocation. | B10 |
-| UX-09 Deferred | Player directory profile and identity/membership navigation | Read-only or command-controlled identity; no generic credential CRUD. | B12 |
-| UX-10 Deferred | Settings area/setting addressability | Fixed taxonomy; credential rotation/revocation remains protected. | B12 |
-| UX-11 Deferred | World/Campaign library lifecycle navigation | Verify selected lineage, create/cancel and immutable history destinations; overlaps AU-25. | B12 |
+| UX-09 Complete | Player directory profile and identity/membership navigation | Read-only or command-controlled identity; no generic credential CRUD. | B12 |
+| UX-10 Complete | Settings area/setting addressability | Fixed taxonomy; credential rotation/revocation remains protected. | B12 |
+| UX-11 Complete | World/Campaign library lifecycle navigation | Verify selected lineage, create/cancel and immutable history destinations; overlaps AU-25. | B12 |
 
 Previously delivered Campaign root/subplots, Objectives/Pressures/Resistances,
 Discovery facets, Location contexts/placement associations and Plot prerequisites/
@@ -1129,4 +1141,4 @@ World, party/Clock root, fabricated full Character statistics, or combat/rest/do
 algorithms absent from production. Existing legacy value data is preserved. The authorized
 exploration store uses MapExploration commands; the existing evaluator/participant endpoint
 boundary remains unchanged. No automatic visibility sharing or media broadcasting is added.
-B12 still owns universal writer/compatibility retirement and final migration closure.
+B12 subsequently closed remaining writer/compatibility boundaries and final migration acceptance; see its closure evidence above.

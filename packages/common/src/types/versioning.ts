@@ -143,24 +143,6 @@ export interface CampaignDefinitionSnapshot {
 export type CampaignInstanceStatus =
   "preparing" | "active" | "paused" | "concluded" | "archived";
 
-const CAMPAIGN_INSTANCE_STATUS_TRANSITIONS: Readonly<
-  Record<CampaignInstanceStatus, readonly CampaignInstanceStatus[]>
-> = Object.freeze({
-  preparing: ["active"],
-  active: ["paused", "concluded"],
-  paused: ["active", "concluded"],
-  concluded: ["archived"],
-  archived: ["concluded"],
-});
-
-/** Server-owned lifecycle transition policy; same-state writes are not transitions. */
-export function canTransitionCampaignInstanceStatus(
-  current: CampaignInstanceStatus,
-  target: CampaignInstanceStatus,
-): boolean {
-  return CAMPAIGN_INSTANCE_STATUS_TRANSITIONS[current].includes(target);
-}
-
 /** Stable identity for one played realization of a Campaign Definition. */
 export interface CampaignInstance<
   Extensions extends ExtensionData = ExtensionData,

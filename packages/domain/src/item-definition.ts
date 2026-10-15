@@ -62,6 +62,15 @@ export class ItemDefinition extends RuleDefinitionEntity<
     this.validate(context);
   }
 
+  static imageDimensionsIssue(
+    width: number,
+    height: number,
+  ): string | undefined {
+    return width === height
+      ? undefined
+      : "Item images must have equal width and height.";
+  }
+
   static deserialize(
     value: unknown,
     context: ItemDefinitionValidationContext = {},

@@ -9,7 +9,7 @@ export const LOCATION_SECTIONS = [
   "Discoveries",
   "Creatures",
   "Items",
-  "Connections",
+  "Hierarchy",
 ] as const;
 export type LocationSection = Lowercase<(typeof LOCATION_SECTIONS)[number]>;
 export function locationHref(worldId: string, locationId: string) {

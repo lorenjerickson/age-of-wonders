@@ -1,3 +1,4 @@
+import { CampaignDefinition as CampaignDefinitionOwner } from "@aow/domain";
 import type {
   CampaignDefinitionContent,
   CampaignDefinitionId,
@@ -11,8 +12,7 @@ import type {
   PlotDefinitionId,
   WorldPlacementDefinition,
   WorldPlacementDefinitionId,
-} from "../../../../packages/common/src/types";
-import { validateCampaignDefinitionContent } from "../../../../packages/common/src/types";
+} from "@aow/common";
 
 const campaignId = "campaign-1" as CampaignDefinitionId;
 const locationId = "harbor" as LocationId;
@@ -98,7 +98,7 @@ function context() {
 describe("Campaign Definition contracts", () => {
   it("accepts multiple Plot levels and independent/decorating placements against one capture", () => {
     expect(
-      validateCampaignDefinitionContent(
+      CampaignDefinitionOwner.validateCapturedContent(
         content,
         [rootPlot, childPlot],
         [independent, decoration],
@@ -108,7 +108,7 @@ describe("Campaign Definition contracts", () => {
   });
 
   it("rejects undeclared records, uncaptured sources, and mismatched World decorations", () => {
-    const result = validateCampaignDefinitionContent(
+    const result = CampaignDefinitionOwner.validateCapturedContent(
       { ...content, plotDefinitionIds: [rootPlotId] },
       [rootPlot, childPlot],
       [
@@ -138,7 +138,7 @@ describe("Campaign Definition contracts", () => {
 
   it("keeps opaque identities out of validation details", () => {
     const opaque = "opaque-world-placement-id" as WorldPlacementDefinitionId;
-    const result = validateCampaignDefinitionContent(
+    const result = CampaignDefinitionOwner.validateCapturedContent(
       content,
       [rootPlot, childPlot],
       [independent, { ...decoration, capturedWorldPlacementId: opaque }],

@@ -1,5 +1,6 @@
+import { CampaignSession as SessionOwner } from "@aow/domain";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { canTransitionCampaignSessionStatus } from "@aow/common";
+
 import { CampaignSessionService } from "./campaign-session.service";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 
@@ -115,51 +116,73 @@ describe("Campaign Session contracts", () => {
       campaignInstanceSession: {
         findFirst: jest.fn().mockResolvedValue(null),
         findFirstOrThrow: jest.fn().mockResolvedValue(row),
-        updateMany: jest.fn(async ({ data }) => {
+        updateMany: jest.fn(({ data }: { data: Record<string, unknown> }) => {
           Object.assign(row, data, {
             metadataRevision: row.metadataRevision + 1,
           });
-          return { count: 1 };
+          return Promise.resolve({ count: 1 });
         }),
       },
       sessionPresenceLease: {
-        updateMany: jest.fn(async ({ where, data }) => {
-          for (const lease of leases) {
-            const participant = participants.find(
-              (p) => p.id === lease.participationId,
-            )!;
-            if (
-              data.phase &&
-              liveLease(lease, where.expiresAt.gt) &&
-              participant.selected &&
-              participant.response === "ACCEPTED"
-            )
-              lease.phase = data.phase;
-            if (data.leftAt && !lease.leftAt) lease.leftAt = data.leftAt;
-          }
-          return { count: 1 };
-        }),
-        findMany: jest.fn(async () => leases.filter((lease) => !lease.leftAt)),
+        updateMany: jest.fn(
+          ({
+            where,
+            data,
+          }: {
+            where: { expiresAt: { gt: Date } };
+            data: { phase?: string; leftAt?: Date };
+          }) => {
+            for (const lease of leases) {
+              const participant = participants.find(
+                (p) => p.id === lease.participationId,
+              )!;
+              if (
+                data.phase &&
+                liveLease(lease, where.expiresAt.gt) &&
+                participant.selected &&
+                participant.response === "ACCEPTED"
+              )
+                lease.phase = data.phase;
+              if (data.leftAt && !lease.leftAt) lease.leftAt = data.leftAt;
+            }
+            return Promise.resolve({ count: 1 });
+          },
+        ),
+        findMany: jest.fn(() =>
+          Promise.resolve(leases.filter((lease) => !lease.leftAt)),
+        ),
       },
       sessionParticipation: {
-        updateMany: jest.fn(async ({ where, data }) => {
-          for (const participant of participants) {
-            if (!participant.selected) continue;
-            if (where.presenceLeases) {
-              if (
-                participant.response !== "ACCEPTED" ||
-                !leases.some(
-                  (lease) =>
-                    lease.participationId === participant.id &&
-                    liveLease(lease, where.presenceLeases.some.expiresAt.gt),
+        updateMany: jest.fn(
+          ({
+            where,
+            data,
+          }: {
+            where: {
+              presenceLeases?: { some: { expiresAt: { gt: Date } } };
+              attendance?: string;
+            };
+            data: { attendance: string };
+          }) => {
+            for (const participant of participants) {
+              if (!participant.selected) continue;
+              if (where.presenceLeases) {
+                const presenceTime = where.presenceLeases.some.expiresAt.gt;
+                if (
+                  participant.response !== "ACCEPTED" ||
+                  !leases.some(
+                    (lease) =>
+                      lease.participationId === participant.id &&
+                      liveLease(lease, presenceTime),
+                  )
                 )
-              )
-                continue;
-            } else if (participant.attendance !== where.attendance) continue;
-            participant.attendance = data.attendance;
-          }
-          return { count: 1 };
-        }),
+                  continue;
+              } else if (participant.attendance !== where.attendance) continue;
+              participant.attendance = data.attendance;
+            }
+            return Promise.resolve({ count: 1 });
+          },
+        ),
         update: jest.fn().mockResolvedValue({}),
       },
       campaignSessionEvent: {
@@ -172,7 +195,13 @@ describe("Campaign Session contracts", () => {
       campaignSessionSummary: { create: jest.fn().mockResolvedValue({}) },
     };
     const service = new CampaignSessionService(
-      { ...tx, $transaction: jest.fn((operation) => operation(tx)) } as never,
+      {
+        ...tx,
+        $transaction: jest.fn(
+          (operation: (transaction: typeof tx) => Promise<unknown>) =>
+            operation(tx),
+        ),
+      } as never,
       {} as never,
       {} as never,
       {} as never,
@@ -208,7 +237,7 @@ describe("Campaign Session contracts", () => {
         sessionId: "session-1",
         leftAt: null,
         ejectedAt: null,
-        expiresAt: { gt: expect.any(Date) },
+        expiresAt: { gt: expect.any(Date) as unknown },
         participation: { selected: true, response: "ACCEPTED" },
       },
       data: { phase: "PLAY" },
@@ -223,7 +252,7 @@ describe("Campaign Session contracts", () => {
             sessionId: "session-1",
             leftAt: null,
             ejectedAt: null,
-            expiresAt: { gt: expect.any(Date) },
+            expiresAt: { gt: expect.any(Date) as unknown },
           },
         },
       },
@@ -259,8 +288,8 @@ describe("Campaign Session contracts", () => {
       expect.objectContaining({
         where: { id: "present" },
         data: {
-          leftAt: expect.any(Date),
-          totalPresentSeconds: { increment: expect.any(Number) },
+          leftAt: expect.any(Date) as unknown,
+          totalPresentSeconds: { increment: expect.any(Number) as unknown },
         },
       }),
     );
@@ -278,7 +307,7 @@ describe("Campaign Session contracts", () => {
     ["concluded", "active", false],
     ["cancelled", "lobby", false],
   ] as const)("validates %s → %s", (from, to, expected) => {
-    expect(canTransitionCampaignSessionStatus(from, to)).toBe(expected);
+    expect(SessionOwner.canTransition(from, to)).toBe(expected);
   });
 
   it("rejects a Campaign Instance addressed beneath the wrong Definition", async () => {
@@ -385,14 +414,12 @@ describe("Campaign Session contracts", () => {
       };
       const prisma = {
         campaignInstance: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue({
-              id: "instance-1",
-              name: "Campaign",
-              status: "ACTIVE",
-              owner: { displayName: "Morgan" },
-            }),
+          findFirst: jest.fn().mockResolvedValue({
+            id: "instance-1",
+            name: "Campaign",
+            status: "ACTIVE",
+            owner: { displayName: "Morgan" },
+          }),
         },
         campaignInstanceSession: {
           findFirst: jest.fn().mockResolvedValue(null),

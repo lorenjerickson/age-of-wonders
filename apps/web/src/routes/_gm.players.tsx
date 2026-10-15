@@ -25,8 +25,8 @@ const STANDINGS: readonly PlayerServerStanding[] = [
   "banned",
 ];
 
-function PlayersLanding() {
-  const [editing, setEditing] = useState(false);
+export function PlayersLanding({ playerId }: { playerId?: string }) {
+  const editing = Boolean(playerId);
   const [directory, setDirectory] = useState<PlayerDirectoryProjection>();
   const [selected, setSelected] = useState<PlayerDetailProjection>();
   const [search, setSearch] = useState("");
@@ -56,20 +56,31 @@ function PlayersLanding() {
     // Filters are applied explicitly by the form.
   }, []);
 
-  async function inspect(playerId: string) {
-    setBusy(`detail:${playerId}`);
-    setMessage("");
-    try {
-      setSelected(await getPlayer(playerId));
-      setEditing(true);
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Player could not be loaded.",
-      );
-    } finally {
-      setBusy("");
+  useEffect(() => {
+    let current = true;
+    setSelected(undefined);
+    if (playerId) {
+      setBusy("profile");
+      void getPlayer(playerId)
+        .then((player) => {
+          if (current) setSelected(player);
+        })
+        .catch((error: unknown) => {
+          if (current)
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : "Player could not be loaded.",
+            );
+        })
+        .finally(() => {
+          if (current) setBusy("");
+        });
     }
-  }
+    return () => {
+      current = false;
+    };
+  }, [playerId]);
 
   async function updateStanding(target: PlayerServerStanding) {
     if (!selected || target === selected.standing) return;
@@ -96,13 +107,9 @@ function PlayersLanding() {
         {editing ? "Participant profile" : "Participants"}
       </h1>
       {editing && (
-        <Button
-          tone="ghost"
-          className="mt-4 min-h-11"
-          onClick={() => setEditing(false)}
-        >
+        <Link to="/players" className="btn btn-ghost mt-4 min-h-11">
           ← Back to participants
-        </Button>
+        </Link>
       )}
 
       <form
@@ -114,7 +121,7 @@ function PlayersLanding() {
         }}
       >
         <TextInput
-          className="min-w-48 flex-1"
+          className="min-h-11 min-w-48 flex-1"
           label="Search participants"
           placeholder="Search participants…"
           maxLength={120}
@@ -123,6 +130,7 @@ function PlayersLanding() {
         />
         <Disclosure summary="Filters" className="w-full order-last">
           <SelectField
+            className="min-h-11"
             label="Standing"
             value={standing}
             onChange={(event) =>
@@ -202,14 +210,13 @@ function PlayersLanding() {
                     {player.characterCount === 1 ? "Character" : "Characters"}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  loading={busy === `detail:${player.playerId}`}
-                  onClick={() => void inspect(player.playerId)}
+                <Link
+                  to="/players/$playerId"
+                  params={{ playerId: player.playerId }}
+                  className="btn btn-ghost min-h-11"
                 >
-                  View
-                </Button>
+                  View profile
+                </Link>
               </li>
             ))}
           </ul>
@@ -221,8 +228,9 @@ function PlayersLanding() {
         >
           {!selected ? (
             <p className="text-sm leading-6 text-base-content/55">
-              Select a Player to review contact methods, identity-provider
-              status, Instance memberships, and Character history.
+              {busy === "profile"
+                ? "Loading profile…"
+                : "This profile is unavailable. Return to participants to select another profile."}
             </p>
           ) : (
             <div>
@@ -236,6 +244,7 @@ function PlayersLanding() {
                   </h2>
                 </div>
                 <Select
+                  className="min-h-11"
                   aria-label="Player standing"
                   disabled={busy === "standing"}
                   value={selected.standing}
@@ -292,11 +301,12 @@ function PlayersLanding() {
                       className="rounded-box border border-base-300 bg-base-100 p-4"
                     >
                       <Link
-                        to="/campaigns/instances/$campaignInstanceId"
+                        to="/campaigns/instances/$campaignInstanceId/roster/members/$recordId"
                         params={{
                           campaignInstanceId: membership.campaignInstanceId,
+                          recordId: membership.membershipId,
                         }}
-                        className="font-semibold link link-hover"
+                        className="inline-flex min-h-11 items-center font-semibold link link-hover"
                       >
                         {membership.campaignInstanceName}
                       </Link>
@@ -308,7 +318,18 @@ function PlayersLanding() {
                         <ul className="mt-3 space-y-1 text-sm">
                           {membership.characters.map((character) => (
                             <li key={character.characterId}>
-                              {character.name} · {title(character.status)}
+                              <Link
+                                to="/campaigns/instances/$campaignInstanceId/roster/characters/$characterId"
+                                params={{
+                                  campaignInstanceId:
+                                    membership.campaignInstanceId,
+                                  characterId: character.characterId,
+                                }}
+                                className="inline-flex min-h-11 items-center link link-hover"
+                              >
+                                {character.name}
+                              </Link>{" "}
+                              · {title(character.status)}
                               {character.importedFrom
                                 ? ` · imported from ${character.importedFrom.characterName} in ${character.importedFrom.campaignInstanceName}`
                                 : ""}

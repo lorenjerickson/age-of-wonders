@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Badge, Button, FieldError, TextInput, SelectField } from "@aow/ui";
 import type {
   ConfigurationHistoryProjection,
@@ -21,11 +21,20 @@ export const Route = createFileRoute("/_gm/settings")({
   component: SettingsLanding,
 });
 
-function SettingsLanding() {
+export function SettingsLanding({
+  areaId,
+  settingKey,
+}: {
+  areaId?: string;
+  settingKey?: string;
+}) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [areas, setAreas] = useState<SystemSettingAreaProjection[]>([]);
   const [index, setIndex] = useState<SystemSettingsIndexProjection>();
-  const [selected, setSelected] = useState<SystemSettingAreaProjection>();
+  const selected =
+    areas.find((area) => area.area === areaId) ??
+    (!areaId ? areas[0] : undefined);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -37,7 +46,6 @@ function SettingsLanding() {
           result.areas.map((area) => getSystemSettingArea(area.area)),
         );
         setAreas(loaded);
-        setSelected(loaded[0]);
       })
       .catch((error: unknown) => {
         setMessage(
@@ -49,23 +57,9 @@ function SettingsLanding() {
       .finally(() => setBusy(false));
   }, []);
 
-  async function open(area: SystemSettingArea) {
-    setBusy(true);
-    setMessage("");
-    try {
-      setSelected(
-        areas.find((candidate) => candidate.area === area) ??
-          (await getSystemSettingArea(area)),
-      );
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "This settings area could not be loaded.",
-      );
-    } finally {
-      setBusy(false);
-    }
+  function open(area: SystemSettingArea) {
+    setSearch("");
+    void navigate({ to: "/settings/$area", params: { area } });
   }
 
   async function refresh(next: SystemSettingStatus) {
@@ -77,23 +71,18 @@ function SettingsLanding() {
         ),
       })),
     );
-    setSelected((current) =>
-      current
-        ? {
-            ...current,
-            settings: current.settings.map((candidate) =>
-              candidate.key === next.key ? next : candidate,
-            ),
-          }
-        : current,
-    );
     try {
       const [nextIndex, nextArea] = await Promise.all([
         getSystemSettings(),
         selected ? getSystemSettingArea(selected.area) : undefined,
       ]);
       setIndex(nextIndex);
-      if (nextArea) setSelected(nextArea);
+      if (nextArea)
+        setAreas((current) =>
+          current.map((area) =>
+            area.area === nextArea.area ? nextArea : area,
+          ),
+        );
     } catch {
       // The successful mutation remains visible even if the summary refresh fails.
     }
@@ -102,9 +91,36 @@ function SettingsLanding() {
   return (
     <main className="mx-auto max-w-6xl p-4 lg:px-10 lg:py-6">
       <h1 className="text-3xl font-semibold">Settings</h1>
+      {areaId && (
+        <Link to="/settings" className="btn btn-ghost mt-3 min-h-11">
+          ← All settings
+        </Link>
+      )}
+      {settingKey && selected && (
+        <Link
+          to="/settings/$area"
+          params={{ area: selected.area }}
+          className="btn btn-ghost mt-3 min-h-11"
+        >
+          ← {selected.label}
+        </Link>
+      )}
+      {!busy && areaId && !selected && (
+        <p role="alert" className="mt-4">
+          This settings area is unavailable. Choose another category.
+        </p>
+      )}
+      {!busy &&
+        settingKey &&
+        selected &&
+        !selected.settings.some((setting) => setting.key === settingKey) && (
+          <p role="alert" className="mt-4">
+            This setting is unavailable. Return to its category.
+          </p>
+        )}
       <div className="mt-5 flex items-end gap-2">
         <TextInput
-          className="flex-1"
+          className="min-h-11 flex-1"
           label="Search settings across categories"
           placeholder="Search labels or help text…"
           value={search}
@@ -152,6 +168,7 @@ function SettingsLanding() {
           <div className="min-w-0">
             <div className="mb-4 xl:hidden">
               <SelectField
+                className="min-h-11"
                 label="Category"
                 value={selected?.area ?? ""}
                 onChange={(event) =>
@@ -167,10 +184,11 @@ function SettingsLanding() {
             </div>
             {areas.map((area) => {
               const matches = (setting: SystemSettingStatus) =>
-                !search.trim() ||
-                `${setting.label} ${setting.detail} ${area.label}`
-                  .toLowerCase()
-                  .includes(search.trim().toLowerCase());
+                (!settingKey || setting.key === settingKey) &&
+                (!search.trim() ||
+                  `${setting.label} ${setting.detail} ${area.label}`
+                    .toLowerCase()
+                    .includes(search.trim().toLowerCase()));
               const visible = search.trim()
                 ? area.settings.some(matches)
                 : selected?.area === area.area;
@@ -192,6 +210,18 @@ function SettingsLanding() {
                   <div className="mt-5 space-y-4">
                     {area.settings.map((setting) => (
                       <div key={setting.key} hidden={!matches(setting)}>
+                        {!settingKey && (
+                          <Link
+                            to="/settings/$area/$settingKey"
+                            params={{
+                              area: area.area,
+                              settingKey: setting.key,
+                            }}
+                            className="btn btn-ghost min-h-11 mb-2"
+                          >
+                            Open {setting.label}
+                          </Link>
+                        )}
                         <SettingCard
                           area={area.area}
                           setting={setting}
@@ -353,7 +383,7 @@ function SettingCard({
               <Button
                 type="button"
                 tone="primary"
-                size="sm"
+                className="min-h-11"
                 loading={busy}
                 disabled={secret.trim().length < 8}
                 onClick={() =>
@@ -374,7 +404,7 @@ function SettingCard({
               <Button
                 type="button"
                 tone="primary"
-                size="sm"
+                className="min-h-11"
                 loading={busy}
                 disabled={!value.trim()}
                 onClick={() =>
@@ -394,7 +424,7 @@ function SettingCard({
               <Button
                 type="button"
                 tone="outline"
-                size="sm"
+                className="min-h-11"
                 loading={busy}
                 onClick={() =>
                   void apply(() =>
@@ -412,7 +442,7 @@ function SettingCard({
               <Button
                 type="button"
                 tone="ghost"
-                size="sm"
+                className="min-h-11"
                 loading={busy}
                 onClick={() =>
                   void apply(() =>
@@ -430,7 +460,7 @@ function SettingCard({
               <Button
                 type="button"
                 tone="ghost"
-                size="sm"
+                className="min-h-11"
                 loading={busy}
                 onClick={() => {
                   if (!window.confirm(`Disable ${setting.label}?`)) return;
@@ -448,7 +478,7 @@ function SettingCard({
             <Button
               type="button"
               tone="ghost"
-              size="sm"
+              className="min-h-11"
               loading={busy}
               onClick={() => void toggleHistory()}
             >

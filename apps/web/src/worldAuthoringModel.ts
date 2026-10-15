@@ -1,8 +1,11 @@
-import { WorldDefinition } from "@aow/domain";
+import {
+  WorldDefinition,
+  CreatureDefinition,
+  ItemDefinition,
+} from "@aow/domain";
 import type {
   EffectiveWorldModelResponse,
   EffectiveWorldModels,
-  JsonValue,
   WorldDefinitionDraft,
   WorldDefinitionSummary,
   WorldDraftRecord,
@@ -403,28 +406,11 @@ export function creatureEmbodimentPolicyForSave(
     "" | "one-per-instance" | "one-per-realization" | "preserve-extension",
   maximum: string,
 ) {
-  const prior =
-    typeof existing === "object" &&
-    existing !== null &&
-    !Array.isArray(existing)
-      ? (existing as Record<string, JsonValue>)
-      : {};
-  if (strategy === "preserve-extension") return prior;
-  if (!strategy) return undefined;
-  if (strategy === "one-per-instance") {
-    return { ...prior, strategy, maximumPerCampaignInstance: 1 };
-  }
-  const parsed = Number(maximum);
-  const maximumPerCampaignInstance =
-    maximum.trim() && Number.isInteger(parsed) && parsed > 0
-      ? parsed
-      : undefined;
-  if (maximumPerCampaignInstance !== undefined) {
-    return { ...prior, strategy, maximumPerCampaignInstance };
-  }
-  const withoutMaximum = { ...prior };
-  delete withoutMaximum.maximumPerCampaignInstance;
-  return { ...withoutMaximum, strategy };
+  return CreatureDefinition.embodimentPolicyForSave(
+    existing,
+    strategy,
+    maximum,
+  );
 }
 
 export function locationParentId(record: WorldDraftRecord) {
@@ -711,9 +697,9 @@ export function squareItemImageIssue(
   width: number,
   height: number,
 ): string | undefined {
-  return width === height
-    ? undefined
-    : "Choose a square Item image with equal width and height. No image was uploaded.";
+  return ItemDefinition.imageDimensionsIssue(width, height)
+    ? "Choose a square Item image with equal width and height. No image was uploaded."
+    : undefined;
 }
 
 export function draftContextLabel(draft: WorldDefinitionDraft) {

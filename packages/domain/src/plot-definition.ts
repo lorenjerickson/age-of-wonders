@@ -545,6 +545,12 @@ export class PlotDefinition extends Entity<
   private static isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
+  static validateHierarchy(plots: readonly PlotPayload[]) {
+    const issues = this.hierarchyIssues(plots).map(
+      ({ ownerId: _ownerId, ...issue }) => issue,
+    );
+    return { valid: issues.length === 0, issues };
+  }
   private static hierarchyIssues(
     plots: readonly PlotPayload[],
   ): readonly HierarchyIssue[] {

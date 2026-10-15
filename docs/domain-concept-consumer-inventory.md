@@ -1,24 +1,24 @@
 ---
 status: active
-date: 2026-10-11
+date: 2026-10-14
 scope: Source-backed inventory and completion checklist for the Entity migration; no new gameplay requirements
 ---
 
 # Domain concept and consumer inventory
 
-The domain migration is **not complete**. Twenty-one concrete authoring classes and the Entity foundation
-exist; none of that establishes universal migration of their runtime counterparts or consumers.
-This inventory expands the baseline for [migration gates 0–5](entity-architecture-and-migration.md#migration-gates).
-Experience and engine feature development remains paused. Adapting existing runtime behavior later
-is migration work; adding mechanics, experiences or automatic reactions is not authorized by this inventory.
+The existing-behavior Entity migration is complete through B12, with explicit value,
+infrastructure, historical decoding and permanently excluded concept boundaries.
+See [B12 closure](verification/b12-migration-closure.md) for the current disposition
+of every D01–30/C01–23/I00–I10 row and verification limits. That register supersedes
+the progress labels and “remaining” statements in the original baseline tables below.
+It does not authorize new gameplay, automatic reactions or unspecified advancement.
 
 ## Authority, method and status
 
-B06 completes the D01 foundation and D14/D23 catalog portion of I01/I04. The older
-checklist spans wider authoring/runtime work; remaining obligations are mapped to
-B07/B09–12 in BACKLOG.md. Feat, Heritage and Discipline are permanently excluded;
-older references below do not authorize their implementation. B08 completion and
-its explicit B10 boundary are also recorded in BACKLOG.md.
+The tables below preserve the original source inventory and acceptance obligations;
+the linked B12 reconciliation is the current completion register. B05–11 evidence is
+reused rather than treating old Partial/Unmigrated labels as fresh findings. Feat,
+Heritage and Discipline are permanently excluded.
 
 Read `docs/README.md` first. Common TypeScript contracts remain authoritative; canonical architecture
 supplies ownership and accepted target behavior. Inspected all 39 files in `packages/common/src/types`,
@@ -195,50 +195,19 @@ new coverage entry. Paths are relative to `packages/common/src/types/`.
 
 ## Ordered completion checklist
 
-Sequence follows dependencies; item completion requires consumer migration, not merely adding a class.
-Each item refers back to the bounded concept and consumer registers. Do not count all rows as equally
-sized tasks or report a percentage from the number of classes.
+Current dispositions are supported by the per-row [B12 closure register](verification/b12-migration-closure.md).
 
-- [x] **I00 — Source inventory:** classify current files, known behavior owners, consumers, compatibility
-      paths and intentional boundaries. This document satisfies the source-mapping portion of gate 0;
-      representative persisted fixtures and per-slice baseline test runs remain required.
-- [ ] **I01 — Close authoring foundation gaps (D01–11; C01–03, C16–18):** consistent instance disposal,
-      explicit validation modes, full mutation-command contracts and source-of-truth checks for existing
-      classes. Feat-to-Trait-to-Action owned validation now propagates child state diagnostics, but persistent
-      graph foundation and catalog mutation contracts are now delivered in B06. Remaining
-      owner/consumer mutation cutovers follow B07/B09/B10/B12; shared graph infrastructure
-      is not a replacement for those explicit migrations.
-- [ ] **I02 — Placement (D17; C03, C05, C19):** World and Campaign local shape/codec/commands, then
-      aggregate relationships; preserve independent/inherited/decoration variants. Authoring classes and API validation are implemented; browser semantic helpers and runtime realization
-      remain before closure.
-- [ ] **I03 — Discovery then Plot (D15–16; C05–06, C19, C23):** owned claims/facets, reference integrity,
-      recursive hierarchy and associated Placement semantics. Authoring classes and API validation are
-      implemented with legacy/private preservation; browser and runtime consumer cutover remains.
-- [ ] **I04 — Remaining authored definitions (D12–14, D23–25; C02, C04, C13, C18, C20):** Profession,
-      Background, Heritage, Discipline, Feat, Action/Trait, Language/Table/Custom, WorldRule and shared
-      catalog/schema concepts. Trait codecs/structure and Condition compatibility are implemented; Feat-to-Trait-to-Action owned validation is implemented with scoped captures/disposal, while Item owned Trait validation is now implemented; direct Item/Vehicle Action validation and Vehicle field structure are now implemented; catalog CharacterDefinition Trait ownership is now implemented; runtime Character realization remains open. Action codecs/structure and Condition compatibility are implemented; deep rules and runtime execution remain open. Feat codecs/structure and Condition compatibility are implemented; nested semantics and runtime acquisition remain open. Discipline codecs/structural diagnostics and Condition compatibility are implemented; deeper policy/runtime consumers remain open. Heritage compatibility validation and its construction helper are implemented; full structural
-      publication enforcement and dedicated UI remain deferred. Profession and Background existing authoring policy/API/browser helper migration is
-      implemented; deeper semantic validation and runtime advancement remain. Split by actual contract; registered extensions must stay supported.
-- [ ] **I05 — Map and owned elements (D03–04, D26; C04, C17, C21):** settle Map/Terrain ownership,
-      introduce Wall/Door/Window, migrate existing editing/validation and compatible representations.
-      B09 delivers authored weather/audiovisual defaults (D28); runtime overrides/playback remain B10 and existing presentation consumers stay intact.
-- [ ] **I06 — Definition/Model lifecycles (D02, D18, D24; C07, C13–15):** lineage, adoption,
-      compilation, publication/fork and capture migration policy through owners; retire unused writers
-      or restrict/document their compatibility role. Leave storage and transaction mechanics external.
-- [ ] **I07 — Runtime actors and composition (D05–13, D16–19, D22; C08–10, C18, C23):** explicit
-      realization, Character draft/review/activation, runtime Creature/Item, equipment/containers,
-      grants, Plot progress and Instance lifecycle. Resolve legacy Game/Campaign/Object contracts without
-      introducing a competing owner for Instance state.
-- [ ] **I08 — Session and existing execution cutover (D19–21, D25–27; C11–12, C20–22):** lifecycle,
-      participation, Encounter/Decision, command-based runtime mutations and scoped `state$` observation.
-      Preserve current deterministic rule and movement behavior; add no gameplay features.
-- [ ] **I09 — Close every consumer (C01–23; D29–30):** inventory raw writers again; migrate or explicitly
-      retain each import, restore, legacy generator, browser helper and compatibility export. Remove
-      duplicate policy and stale adjacency terminology. Retain projections/I/O/math for stated reasons.
-- [ ] **I10 — Closure audit:** every D/C row has delivered evidence or an explicit accepted exclusion;
-      run relevant compatibility, serialization, privacy, concurrency and state/event tests; compare
-      common types, resource mapping, architecture and AI guide. Report unresolved deferrals separately.
-      Only then report readiness to resume feature work; this inventory does not authorize that resumption.
+- [x] **I00** Source inventory, concept/value boundaries and consumers.
+- [x] **I01** Authoring foundation and Entity graph/command/metadata/disposal contracts (B05/B06).
+- [x] **I02** Placement ownership, browser helpers and realization (B05/B07/B10).
+- [x] **I03** Discovery/Plot ownership and authoring/runtime consumers (B05/B07/B10).
+- [x] **I04** Retained authored definitions/catalog and existing acquisition (B05/B06/B08); permanent exclusions preserved.
+- [x] **I05** Map/owned elements and authored/runtime presentation (B09/B10).
+- [x] **I06** Definition/Model lifecycle, lineage and captured migration (B07).
+- [x] **I07** Runtime actors/Character/Item composition and Instance integration (B08/B10).
+- [x] **I08** Session/existing execution and scoped observable consumption (B10/B11/B12).
+- [x] **I09** Remaining active writer/helper cutovers and explicit historical compatibility retention (B12).
+- [x] **I10** D/C reconciliation, integrated verification and source/guide/resource-map comparison (B12).
 
 ## Verification and per-slice evidence
 

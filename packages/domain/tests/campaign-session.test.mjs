@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CampaignSession } from "../dist/index.js";
-import { canTransitionCampaignSessionStatus } from "@aow/common";
 const time = "2026-10-15T03:00:00.000Z";
 const invoke = (owner, action, extra = {}) =>
   owner.command("transition", {
@@ -43,7 +42,7 @@ test("Session lifecycle preserves current transition matrix, including action al
       });
       try {
         if (
-          canTransitionCampaignSessionStatus(
+          CampaignSession.canTransition(
             status,
             CampaignSession.target(action),
           )

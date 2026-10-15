@@ -1,7 +1,4 @@
-import {
-  canTransitionCampaignSessionStatus,
-  type CampaignSessionStatus,
-} from "@aow/common";
+import { type CampaignSessionStatus } from "@aow/common";
 import {
   Entity,
   type EntityOptions,
@@ -239,6 +236,7 @@ export class CampaignSession extends Entity<
     });
     return checks;
   }
+  static canTransition = canTransitionCampaignSessionStatus;
   private constructor(data: CampaignSessionState, options?: EntityOptions) {
     super(
       "campaign-session",
@@ -266,7 +264,7 @@ export class CampaignSession extends Entity<
     );
   }
   static assertTransition(from: CampaignSessionStatus, action: string): void {
-    if (!canTransitionCampaignSessionStatus(from, this.target(action)))
+    if (!CampaignSession.canTransition(from, this.target(action)))
       throw new TypeError(
         `A ${from} Session cannot ${action.replace("-", " ")}.`,
       );
@@ -398,4 +396,22 @@ export class CampaignSession extends Entity<
       ],
     };
   }
+}
+
+const SESSION_TRANSITIONS: Readonly<
+  Record<CampaignSessionStatus, readonly CampaignSessionStatus[]>
+> = {
+  planned: ["lobby", "cancelled"],
+  lobby: ["planned", "active", "cancelled"],
+  active: ["paused", "concluded"],
+  paused: ["active", "concluded"],
+  concluded: [],
+  cancelled: [],
+};
+
+function canTransitionCampaignSessionStatus(
+  from: CampaignSessionStatus,
+  to: CampaignSessionStatus,
+): boolean {
+  return SESSION_TRANSITIONS[from].includes(to);
 }

@@ -1,3 +1,4 @@
+import { validateParticipationConsistency } from "./participation-policy";
 import {
   CORE_SESSION_AGENT_ACT_CAPABILITIES,
   CORE_SESSION_AGENT_OBSERVE_CAPABILITIES,
@@ -48,6 +49,7 @@ export class InstanceParticipation extends Entity<
   InstanceParticipationCommands,
   InstanceParticipationEvents
 > {
+  static validateConsistency = validateParticipationConsistency;
   private constructor(
     data: InstanceParticipationState,
     options?: EntityOptions,

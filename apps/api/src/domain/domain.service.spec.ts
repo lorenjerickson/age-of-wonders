@@ -22,6 +22,10 @@ const location = (id: string, kind: string, parentLocationId?: string) => ({
 
 describe("DomainService singleton creation", () => {
   it.each([
+    "characters",
+    "creatures",
+    "items",
+    "objects",
     "campaigns",
     "games",
     "sessions",
@@ -53,31 +57,6 @@ describe("DomainService singleton creation", () => {
       expect(remove).not.toHaveBeenCalled();
     },
   );
-
-  it.each([
-    [
-      "locations" as const,
-      {
-        identity: { id: "world:new" },
-        name: "Another World",
-        kind: "world",
-        placement: { kind: "root" },
-      },
-      "A world already exists",
-    ],
-  ])("rejects a second %s aggregate", async (resource, data, message) => {
-    const create = jest.fn();
-    const prisma = {
-      domainRecord: {
-        count: jest.fn(() => Promise.resolve(1)),
-        create,
-      },
-    } as unknown as PrismaService;
-    const service = new DomainService(prisma, {} as GraphService);
-
-    await expect(service.create(resource, data)).rejects.toThrow(message);
-    expect(create).not.toHaveBeenCalled();
-  });
 });
 
 describe("DomainService neutral errors", () => {
@@ -95,8 +74,12 @@ describe("DomainService neutral errors", () => {
     );
     await expect(missing).rejects.not.toThrow(opaqueRouteId);
 
-    const mismatch = service.replace("items", opaqueRouteId, {
-      data: { id: opaquePayloadId },
+    const mismatch = service.replace("definitions", opaqueRouteId, {
+      data: {
+        identity: { id: opaquePayloadId, name: "Language" },
+        kind: "unknown",
+        components: {},
+      },
     });
     await expect(mismatch).rejects.toThrow(
       "The selected resource does not match the submitted resource",
@@ -277,4 +260,20 @@ it("retains legacy travel reads but rejects new connection mutations before pers
   expect(create).not.toHaveBeenCalled();
   expect(update).not.toHaveBeenCalled();
   expect(remove).not.toHaveBeenCalled();
+});
+
+it("rejects invalid canonical authored payloads before persistence", async () => {
+  const create = jest.fn();
+  const service = new DomainService(
+    { domainRecord: { create } } as unknown as PrismaService,
+    {} as GraphService,
+  );
+  await expect(
+    service.create("locations", {
+      identity: { id: "place" },
+      name: "Place",
+      kind: "site",
+    }),
+  ).rejects.toThrow();
+  expect(create).not.toHaveBeenCalled();
 });

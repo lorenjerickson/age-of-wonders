@@ -10,7 +10,6 @@ import { Button, TextInput, Textarea, Field, Disclosure } from "@aow/ui";
 import { useWorldAuthoring } from "./WorldAuthoringShell";
 import { InternalLink, useInternalNavigate } from "./navigation";
 import {
-  createWorldDefinitionDraft,
   startWorldDefinitionDraft,
   getEffectiveWorldModels,
   listWorldDefinitions,
@@ -597,11 +596,6 @@ export function AstraWorldLibrary() {
   const [worlds, setWorlds] = useState<WorldDefinitionSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
-  const [create, setCreate] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [busy, setBusy] = useState(false);
-  const navigate = useInternalNavigate();
   useEffect(() => {
     listWorldDefinitions()
       .then((r) => {
@@ -610,79 +604,40 @@ export function AstraWorldLibrary() {
       })
       .catch((e) => setError(e.message));
   }, []);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const world = await createWorldDefinitionDraft({ name, description });
-      await navigate(`/worlds/${encodeURIComponent(world.id)}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create World.");
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <AstraFrame title="Your worlds">
-      <main className={create ? "astra-form-page" : "astra-page"}>
+      <main className="astra-page">
         <div className="astra-heading">
           <div>
             <div className="astra-eyebrow">THE GAME MASTER’S WORKSPACE</div>
-            <h1>{create ? "Create a world." : "Your worlds."}</h1>
+            <h1>Your worlds.</h1>
             <p>Choose a world to continue its story.</p>
           </div>
-          {!create && (
-            <Button tone="primary" onClick={() => setCreate(true)}>
-              ＋ Create world
-            </Button>
-          )}
+          <InternalLink className="btn btn-primary min-h-11" href="/worlds/new">
+            ＋ Create world
+          </InternalLink>
         </div>
         {error && (
           <p role="alert" className="astra-error">
             {error}
           </p>
         )}
-        {create ? (
-          <form onSubmit={submit} className="astra-panel astra-form">
-            <TextInput
-              label="World name"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <Field label="A few words about your world">
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </Field>
-            <div className="astra-actions">
-              <Button type="button" onClick={() => setCreate(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" tone="primary" disabled={busy}>
-                Create world
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="astra-grid">
-            {worlds.map((w) => (
-              <InternalLink
-                key={w.id}
-                href={`/worlds/${encodeURIComponent(w.id)}`}
-                className="astra-panel astra-card"
-              >
-                <div className="astra-card-body">
-                  <span className="astra-card-icon">◈</span>
-                  <h3>{w.name}</h3>
-                  <p>{w.description || "A world of possibility."}</p>
-                </div>
-              </InternalLink>
-            ))}
-          </div>
-        )}
-        {loaded && !worlds.length && !create && (
+        <div className="astra-grid">
+          {worlds.map((w) => (
+            <InternalLink
+              key={w.id}
+              href={`/worlds/${encodeURIComponent(w.id)}`}
+              className="astra-panel astra-card"
+            >
+              <div className="astra-card-body">
+                <span className="astra-card-icon">◈</span>
+                <h3>{w.name}</h3>
+                <p>{w.description || "A world of possibility."}</p>
+              </div>
+            </InternalLink>
+          ))}
+        </div>
+        {loaded && !worlds.length && (
           <div className="astra-empty astra-panel">
             <h3>Your next story starts here.</h3>
             <p>Create a world to begin.</p>

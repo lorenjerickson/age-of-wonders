@@ -1,9 +1,7 @@
 import {
-  executeWorldRules,
   validateWorldRule,
   validateWorldRules,
   type WorldRule as WorldRuleData,
-  type WorldRuleExecution,
 } from "@aow/common";
 import {
   Entity,
@@ -58,54 +56,4 @@ export class WorldRule extends Entity<
     return { data: invocation.params.rule };
   }
 }
-type ExecutionInput = Parameters<typeof executeWorldRules>[0];
-type ExecutionState = { input: ExecutionInput; result?: WorldRuleExecution };
-type ExecutionCommands = {
-  evaluate: {
-    params: { entropy?: ExecutionInput["entropy"] };
-    context: object;
-  };
-};
-/** One deterministic preview/replay scope, including entropy requests and diagnostics. */
-export class RuleExecution extends Entity<
-  ExecutionState,
-  ExecutionCommands,
-  Record<string, never>
-> {
-  private constructor(input: ExecutionInput) {
-    super("rule-execution", { input }, [], { mode: "runtime" });
-  }
-  static create(input: ExecutionInput) {
-    return new RuleExecution(input);
-  }
-  static async run(input: ExecutionInput): Promise<WorldRuleExecution> {
-    const owner = RuleExecution.create(input);
-    try {
-      const receipt = await owner.command("evaluate", {
-        initiator: input.event.source,
-        params: {},
-        context: {},
-      });
-      if (receipt.status === "rejected")
-        throw new TypeError(receipt.reason ?? "Rule execution rejected.");
-      return owner.serialize().data.result!;
-    } finally {
-      owner.dispose();
-    }
-  }
-  protected validateState() {
-    return [];
-  }
-  protected handleCommand(
-    _name: "evaluate",
-    invocation: CommandInvocation<ExecutionCommands["evaluate"]>,
-  ): EntityTransition<ExecutionState, Record<string, never>> {
-    const input = {
-      ...this.serialize().data.input,
-      ...(invocation.params.entropy === undefined
-        ? {}
-        : { entropy: invocation.params.entropy }),
-    };
-    return { data: { input, result: executeWorldRules(input) } };
-  }
-}
+export { RuleExecution } from "./rule-execution";

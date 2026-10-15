@@ -1,3 +1,4 @@
+import { CampaignInstance as CampaignInstanceOwner } from "@aow/domain";
 import { InstanceParticipation } from "@aow/domain";
 import {
   readActorEquipment,
@@ -20,7 +21,6 @@ import {
   Prisma,
 } from "@prisma/client";
 import {
-  canTransitionCampaignInstanceStatus,
   resolveCreatureInstanceEmbodimentPolicy,
   plotDiscoveryClaims,
   type PlotDiscovery,
@@ -144,7 +144,7 @@ export class CampaignInstanceManagementService {
     const expected = instance.status;
     const target = dto.targetStatus.toUpperCase();
     if (
-      !canTransitionCampaignInstanceStatus(
+      !CampaignInstanceOwner.canTransition(
         expected.toLowerCase() as Lowercase<CampaignInstanceStatus>,
         dto.targetStatus,
       )

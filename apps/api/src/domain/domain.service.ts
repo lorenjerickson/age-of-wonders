@@ -17,8 +17,15 @@ import {
   isObject,
   readResourceMetadata,
 } from "./domain-resource";
+import { canonicalWorldRecordIssue } from "../world-definitions/world-authored-record";
 import { migrateScienceDomainData } from "./science-domain-migration";
 
+/** Historical DomainRecord reader and compatibility adapter.
+ * Generic mutation methods have no HTTP controller or active generation consumer;
+ * only retained legacy generator fixtures call them. Current authoring uses scoped
+ * World owners and runtime uses Instance owners. Remove these mutation methods with
+ * the legacy generator sources after archive decoding fixtures have replacements.
+ */
 @Injectable()
 export class DomainService {
   constructor(
@@ -27,9 +34,7 @@ export class DomainService {
   ) {}
 
   async create(resource: DomainResource, data: Record<string, unknown>) {
-    this.assertLegacyRuntimeWriteDisabled(resource);
-    this.assertCurrentScienceContract(resource, data);
-    this.assertCatalogStructure(resource, data);
+    this.assertWritablePayload(resource, data);
     const metadata = readResourceMetadata(resource, data);
     if (
       resource === "campaigns" ||
@@ -129,9 +134,7 @@ export class DomainService {
     id: string,
     dto: ReplaceDomainResourceDto,
   ) {
-    this.assertLegacyRuntimeWriteDisabled(resource);
-    this.assertCurrentScienceContract(resource, dto.data);
-    this.assertCatalogStructure(resource, dto.data);
+    this.assertWritablePayload(resource, dto.data);
     const metadata = readResourceMetadata(resource, dto.data);
     if (metadata.id !== id) {
       throw new ConflictException(
@@ -230,6 +233,27 @@ export class DomainService {
     }
   }
 
+  /** Owner validation for retained authored mutations; historical restore uses its separate codec boundary. */
+  assertWritablePayload(
+    resource: DomainResource,
+    data: Record<string, unknown>,
+  ): void {
+    this.assertLegacyRuntimeWriteDisabled(resource);
+    this.assertCurrentScienceContract(resource, data);
+    this.assertCatalogStructure(resource, data);
+    const metadata = readResourceMetadata(resource, data);
+    const issue = canonicalWorldRecordIssue(resource, metadata.id, data);
+    if (issue) throw new BadRequestException(issue);
+  }
+
+  /** Archive metadata decoding is not semantic authoring or runtime publication. */
+  assertHistoricalArchivePayload(
+    resource: DomainResource,
+    data: Record<string, unknown>,
+  ): void {
+    readResourceMetadata(resource, data);
+  }
+
   private assertLegacyRuntimeWriteDisabled(resource: DomainResource): void {
     if (resource === "location-connections") {
       throw new ConflictException(
@@ -238,6 +262,10 @@ export class DomainService {
     }
     if (
       [
+        "characters",
+        "creatures",
+        "items",
+        "objects",
         "campaigns",
         "games",
         "sessions",

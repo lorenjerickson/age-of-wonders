@@ -1,3 +1,4 @@
+import { validateCampaignDefinitionContent } from "./campaign-content-policy";
 import { assertCampaignGovernedConformance } from "./definition-conformance";
 import {
   Entity,
@@ -49,6 +50,7 @@ export class CampaignDefinition extends Entity<
     this.validate(context);
   }
   static validateContent = validateCampaignDefinitionDraft;
+  static validateCapturedContent = validateCampaignDefinitionContent;
   static createContent() {
     return {
       formatVersion: 1,

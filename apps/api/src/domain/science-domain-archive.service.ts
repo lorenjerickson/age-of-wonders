@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { DomainRecord } from "@prisma/client";
+import { Prisma, type DomainRecord } from "@prisma/client";
 import { GraphService } from "../graph/graph.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -40,6 +40,12 @@ export interface ScienceDomainArchiveImportReport {
   readonly exceptions: readonly ScienceDomainArchiveException[];
 }
 
+/** Historical DomainRecord storage restore only. Never publishes World revisions or
+ * mutates Campaign Instance state. Retained for CLI science archive imports until
+ * a lossless replacement preserves all sparse/retired/private authored content.
+ * Archive codec + metadata checks apply equally to preflight and apply; active
+ * authoring and runtime mutation use dedicated owner-backed services.
+ */
 @Injectable()
 export class ScienceDomainArchiveService {
   constructor(
@@ -123,10 +129,26 @@ export class ScienceDomainArchiveService {
     }
 
     if (!existing) {
+      if (!this.canWrite(record, name, report)) return;
       report.toCreate += 1;
       if (!apply) return;
       try {
-        await this.domain.create(record.resource, record.data);
+        {
+          await this.prisma.domainRecord.create({
+            data: {
+              resource: record.resource,
+              ...metadata,
+              data: record.data as Prisma.InputJsonObject,
+            },
+          });
+          await this.graph.addDomainResource(
+            record.resource,
+            metadata.id,
+            record.data,
+            metadata.kind,
+            metadata.name,
+          );
+        }
         report.created += 1;
         report.graphProjectionsRebuilt += 1;
       } catch {
@@ -175,13 +197,35 @@ export class ScienceDomainArchiveService {
       return;
     }
 
+    if (!this.canWrite(record, name, report)) return;
     report.toUpdate += 1;
     if (!apply) return;
     try {
-      await this.domain.replace(record.resource, metadata.id, {
-        data: record.data,
-        expectedRevision: existing.revision,
-      });
+      {
+        const result = await this.prisma.domainRecord.updateMany({
+          where: {
+            resource: record.resource,
+            id: metadata.id,
+            revision: existing.revision,
+          },
+          data: {
+            ...metadata,
+            data: record.data as Prisma.InputJsonObject,
+            revision: { increment: 1 },
+          },
+        });
+        if (result.count !== 1) throw new Error("Archive revision conflict.");
+        await this.graph.replaceDomainResource(
+          record.resource,
+          metadata.id,
+          existing.data,
+          record.data,
+          existing.kind ?? undefined,
+          existing.name ?? undefined,
+          metadata.kind,
+          metadata.name,
+        );
+      }
       report.updated += 1;
       report.graphProjectionsRebuilt += 1;
     } catch {
@@ -191,6 +235,28 @@ export class ScienceDomainArchiveService {
         reason:
           "The record changed or its graph projection could not be rebuilt. Stop writes and run the import again.",
       });
+    }
+  }
+
+  private canWrite(
+    record: ScienceDomainArchiveRecord,
+    name: string,
+    report: { failures: ScienceDomainArchiveImportFailure[] },
+  ): boolean {
+    try {
+      // Historical runtime storage is deliberately outside live owner mutation.
+      // Archive decoding and metadata validation retain old/private fields losslessly;
+      // only scoped Instance workflows may realize these records into active state.
+      this.domain.assertHistoricalArchivePayload(record.resource, record.data);
+      return true;
+    } catch {
+      report.failures.push({
+        resource: record.resource,
+        name,
+        reason:
+          "The historical record has invalid archive metadata and was not restored. Retain the archive for repair.",
+      });
+      return false;
     }
   }
 

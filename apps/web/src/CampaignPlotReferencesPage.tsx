@@ -1,3 +1,4 @@
+import { PlotDefinition as PlotOwner } from "@aow/domain";
 import { CampaignPlacementsPage } from "./CampaignDefinitionPages";
 import {
   eligiblePlotContextPlacements,
@@ -6,7 +7,7 @@ import {
 import { useState, type FormEvent } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { Alert, Button, Input, Label, Select } from "@aow/ui";
-import { validatePlotHierarchy, type PlotDefinition } from "@aow/common";
+import { type PlotDefinition } from "@aow/common";
 import type { JsonValue } from "./api";
 import {
   CampaignDraftRequired,
@@ -142,7 +143,7 @@ function References({
       return false;
     const nextRecord = { ...record, payload: { ...payload, [field]: next } };
     if (collection !== "locations") {
-      const result = validatePlotHierarchy(
+      const result = PlotOwner.validateHierarchy(
         plots.map(
           (item) =>
             (item.sourceId === plotId

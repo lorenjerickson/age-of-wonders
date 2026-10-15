@@ -1,3 +1,4 @@
+import { InstanceParticipation as ParticipationOwner } from "@aow/domain";
 import type {
   AgentId,
   CampaignInstanceAgentParticipationId,
@@ -8,16 +9,15 @@ import type {
   SessionId,
   SessionParticipationId,
   UserId,
-} from "../../../../packages/common/src/types/primitives";
+} from "@aow/common";
 import {
-  validateParticipationConsistency,
   type CampaignInstanceAgentParticipation,
   type CampaignInstanceCharacterAssociation,
   type CampaignInstanceHumanMembership,
   type CampaignInstanceInvitationPreview,
   type CampaignInstanceSession,
   type SessionParticipation,
-} from "../../../../packages/common/src/types/participation";
+} from "@aow/common";
 
 const id = <Value extends string>(value: string) => value as Value;
 
@@ -129,7 +129,7 @@ describe("validateParticipationConsistency", () => {
   });
 
   it("accepts same-Instance memberships, characters, Sessions, and Agents", () => {
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [playerMembership],
       agentParticipations: [agentParticipation],
       characterAssociations: [character],
@@ -152,7 +152,7 @@ describe("validateParticipationConsistency", () => {
   });
 
   it("rejects a Character associated with a membership from another Instance", () => {
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [playerMembership],
       agentParticipations: [],
       characterAssociations: [{ ...character, campaignInstanceId: instanceB }],
@@ -169,7 +169,7 @@ describe("validateParticipationConsistency", () => {
   });
 
   it("rejects Session participation through a membership or Agent from another Instance", () => {
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [playerMembership],
       agentParticipations: [agentParticipation],
       characterAssociations: [character],
@@ -206,7 +206,7 @@ describe("validateParticipationConsistency", () => {
   });
 
   it("rejects active Characters outside the Player membership's association history", () => {
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [
         {
           ...playerMembership,
@@ -230,7 +230,7 @@ describe("validateParticipationConsistency", () => {
   it("rejects missing or mismatched associations anywhere in Character history", () => {
     const missingCharacter = id<CharacterId>("missing-history-character");
     const wrongMembership = id<CampaignInstanceMembershipId>("other-player");
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [
         {
           ...playerMembership,
@@ -258,7 +258,7 @@ describe("validateParticipationConsistency", () => {
   });
 
   it("rejects import provenance that points back to the destination Instance", () => {
-    const result = validateParticipationConsistency({
+    const result = ParticipationOwner.validateConsistency({
       humanMemberships: [playerMembership],
       agentParticipations: [],
       characterAssociations: [
