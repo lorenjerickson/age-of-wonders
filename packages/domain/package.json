@@ -16,11 +16,16 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "dev": "vite build --watch",
-    "typecheck": "tsc --noEmit && tsc -p tests/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc -p tests/tsconfig.json",
+    "test": "pnpm build && node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
     "vite": "^7.1.4"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@aow/common": "workspace:*",
+    "rxjs": "^7.8.2"
+  }
 }

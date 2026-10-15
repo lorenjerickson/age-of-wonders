@@ -108,7 +108,11 @@ export interface CampaignInstanceCreatureStateOverlay<
   readonly currentLocationId?: LocationId;
   /** Feet in grid units of the current captured isometric Location. Authored during setup or changed by an approved captured-rule effect. */
   readonly terrainPosition?: TerrainPoint;
-  /** The aow:rules namespace stores authored numeric aow:movementRemaining and aow:moves resources; absence grants no default allowance. */
+  /** Optional equipment overlay; absent on historical captures until explicitly equipped. */
+  readonly equipment?: import("./items").EquipmentState;
+  /** Explicit runtime effects; Instance orchestration supplies elapsed units/events. */
+  readonly activeEffects?: readonly import("./rules").ActiveEffect[];
+  /** The aow:rules namespace stores authored numeric aow:movementRemaining, aow:moves and aow:bonusActions resources; absence grants no default allowance. */
   readonly extensions?: Extensions;
 }
 
@@ -139,6 +143,11 @@ export interface CampaignInstanceRuntimeState<
   readonly itemInstances: readonly ItemInstance[];
   /** ISO-8601 value in the Campaign's fictional clock, when one has been established. */
   readonly campaignTime?: string;
+  /** Instance-local presentation; absent weather inherits capture, null suppresses it. */
+  readonly locationPresentationOverrides?: readonly {
+    readonly locationId: LocationId;
+    readonly weather?: import("./world-authoring").LocationWeather | null;
+  }[];
   readonly extensions?: Extensions;
 }
 

@@ -1,3 +1,10 @@
+import {
+  CampaignSession,
+  type CampaignSessionAction,
+  type CampaignSessionState,
+} from "@aow/domain";
+import type { CampaignSessionStatus } from "@aow/common";
+import type { CampaignInstanceSessionStatus } from "@prisma/client";
 import { participantActorBinding } from "./participant-spatial-binding";
 import type { ParticipantSpatialBinding } from "@aow/common";
 import {
@@ -13,7 +20,6 @@ import { Prisma } from "@prisma/client";
 import {
   CORE_SESSION_AGENT_ACT_CAPABILITIES,
   CORE_SESSION_AGENT_OBSERVE_CAPABILITIES,
-  canTransitionCampaignSessionStatus,
 } from "@aow/common";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
@@ -38,7 +44,7 @@ import {
   validateRuntimeForCapturedPair,
 } from "./campaign-instance-management.service";
 
-const MAX_PARTICIPANTS = 8;
+const MAX_PARTICIPANTS = CampaignSession.participantLimit;
 
 @Injectable()
 export class CampaignSessionService {
@@ -561,10 +567,11 @@ export class CampaignSessionService {
         userId,
         client,
       );
-      requireAcceptedPresence(participation);
-      requirePresenceStatus(participation.session.status);
+      requirePresence(participation);
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 90_000);
+      const expiresAt = new Date(
+        CampaignSession.presenceWindow(now.getTime()).expiresAt,
+      );
       const connectionKeyHash = digest(
         `${sessionId}:${participation.id}:${connectionKey}`,
       );
@@ -575,7 +582,7 @@ export class CampaignSessionService {
           sessionId,
           participationId: participation.id,
           connectionKeyHash,
-          phase: participation.session.status === "ACTIVE" ? "PLAY" : "LOBBY",
+          phase: CampaignSession.presencePhase(participation.session.status),
           expiresAt,
         },
         update: {
@@ -584,7 +591,7 @@ export class CampaignSessionService {
           expiresAt,
           leftAt: null,
           ejectedAt: null,
-          phase: participation.session.status === "ACTIVE" ? "PLAY" : "LOBBY",
+          phase: CampaignSession.presencePhase(participation.session.status),
         },
         select: { expiresAt: true },
       });
@@ -592,8 +599,12 @@ export class CampaignSessionService {
         where: { id: participation.id },
         data: {
           joinedAt: participation.joinedAt ?? now,
-          ...(participation.session.status === "ACTIVE"
-            ? { attendance: "ATTENDED" }
+          ...(CampaignSession.attendanceOnJoin(participation.session.status)
+            ? {
+                attendance: CampaignSession.attendanceOnJoin(
+                  participation.session.status,
+                ),
+              }
             : {}),
         },
       });
@@ -635,8 +646,7 @@ export class CampaignSessionService {
         userId,
         client,
       );
-      requireAcceptedPresence(currentParticipation);
-      requirePresenceStatus(currentParticipation.session.status);
+      requirePresence(currentParticipation);
       const now = new Date();
       const connectionKeyHash = digest(
         `${sessionId}:${currentParticipation.id}:${connectionKey}`,
@@ -649,11 +659,18 @@ export class CampaignSessionService {
           leftAt: null,
           ejectedAt: null,
           expiresAt: { gt: now },
-          lastHeartbeatAt: { lte: new Date(now.getTime() - 5_000) },
+          lastHeartbeatAt: {
+            lte: new Date(
+              CampaignSession.presenceWindow(now.getTime())
+                .renewHeartbeatThrough,
+            ),
+          },
         },
         data: {
           lastHeartbeatAt: now,
-          expiresAt: new Date(now.getTime() + 90_000),
+          expiresAt: new Date(
+            CampaignSession.presenceWindow(now.getTime()).expiresAt,
+          ),
         },
       });
       if (lease.count !== 1) {
@@ -847,8 +864,7 @@ export class CampaignSessionService {
         userId,
         client,
       );
-      requireAcceptedPresence(currentParticipation);
-      requirePresenceStatus(currentParticipation.session.status);
+      requirePresence(currentParticipation);
       const now = new Date();
       const connectionKeyHash = digest(
         `${sessionId}:${currentParticipation.id}:${connectionKey}`,
@@ -924,7 +940,7 @@ export class CampaignSessionService {
           where: {
             id: sessionId,
             campaignInstanceId: instanceId,
-            status: { in: ["LOBBY", "ACTIVE", "PAUSED"] },
+            status: { in: [...CampaignSession.presenceStatuses] },
           },
           select: { metadataRevision: true, lastEventSequence: true },
         });
@@ -1285,20 +1301,15 @@ export class CampaignSessionService {
     command: string,
     dto: CampaignSessionLifecycleDto,
   ) {
-    const targetByCommand = {
-      "open-lobby": "LOBBY",
-      "close-lobby": "PLANNED",
-      start: "ACTIVE",
-      pause: "PAUSED",
-      resume: "ACTIVE",
-      conclude: "CONCLUDED",
-      cancel: "CANCELLED",
-    } as const;
-    const target = targetByCommand[command as keyof typeof targetByCommand];
-    if (!target)
+    try {
+      CampaignSession.target(command);
+    } catch (error) {
       throw new BadRequestException(
-        "The requested Session action is not supported.",
+        error instanceof Error
+          ? error.message
+          : "The requested Session action is not supported.",
       );
+    }
     await this.ownedInstance(instanceId, userId, true);
 
     try {
@@ -1348,21 +1359,23 @@ export class CampaignSessionService {
               },
               select: { name: true },
             });
+          const from = row.status.toLowerCase() as CampaignSessionStatus;
           if (
-            row.status === target &&
-            row.metadataRevision === dto.expectedMetadataRevision + 1
-          ) {
+            CampaignSession.isReplay(
+              from,
+              row.metadataRevision,
+              command,
+              dto.expectedMetadataRevision,
+            )
+          )
             return;
-          }
-          const from = row.status.toLowerCase() as Parameters<
-            typeof canTransitionCampaignSessionStatus
-          >[0];
-          const to = target.toLowerCase() as Parameters<
-            typeof canTransitionCampaignSessionStatus
-          >[1];
-          if (!canTransitionCampaignSessionStatus(from, to)) {
+          try {
+            CampaignSession.assertTransition(from, command);
+          } catch (error) {
             throw new BadRequestException(
-              `A ${from} Session cannot ${command.replace("-", " ")}.`,
+              error instanceof Error
+                ? error.message
+                : "The Session transition is invalid.",
             );
           }
           if (command === "start" || command === "resume") {
@@ -1400,6 +1413,43 @@ export class CampaignSessionService {
               "The Campaign Instance has no valid runtime boundary.",
             );
           }
+          const lifecycleOwner = CampaignSession.deserializePayload({
+            status: from,
+            metadataRevision: row.metadataRevision,
+            ...(row.firstEventSequence == null
+              ? {}
+              : { firstEventSequence: row.firstEventSequence }),
+            ...(row.lastEventSequence == null
+              ? {}
+              : { lastEventSequence: row.lastEventSequence }),
+          });
+          let lifecycle: CampaignSessionState;
+          try {
+            const receipt = await lifecycleOwner.command("transition", {
+              initiator: userId,
+              params: {
+                action: command as CampaignSessionAction,
+                expectedMetadataRevision: row.metadataRevision,
+                occurredAt: now.toISOString(),
+                ...(snapshotId && runtimeRevision
+                  ? { runtime: { snapshotId, revision: runtimeRevision } }
+                  : {}),
+                ...(dto.reason === undefined ? {} : { reason: dto.reason }),
+              },
+              context: {},
+            });
+            if (receipt.status === "rejected")
+              throw new TypeError("The Session transition is invalid.");
+            lifecycle = lifecycleOwner.serializePayload();
+          } catch (error) {
+            throw new BadRequestException(
+              error instanceof Error
+                ? error.message
+                : "The Session transition is invalid.",
+            );
+          } finally {
+            lifecycleOwner.dispose();
+          }
           if (command === "start" && lockedInstance.status === "PREPARING") {
             const activated = await client.campaignInstance.updateMany({
               where: {
@@ -1427,50 +1477,61 @@ export class CampaignSessionService {
               status: row.status,
             },
             data: {
-              status: target,
+              status:
+                lifecycle.status.toUpperCase() as CampaignInstanceSessionStatus,
               metadataRevision: { increment: 1 },
-              lastEventSequence: sequence,
-              ...(command === "start" && !row.firstEventSequence
-                ? { firstEventSequence: sequence }
+              lastEventSequence: lifecycle.lastEventSequence,
+              ...(lifecycle.firstEventSequence === undefined
+                ? {}
+                : { firstEventSequence: lifecycle.firstEventSequence }),
+              ...(lifecycle.lobbyOpenedAt
+                ? { lobbyOpenedAt: new Date(lifecycle.lobbyOpenedAt) }
                 : {}),
-              ...(command === "open-lobby" ? { lobbyOpenedAt: now } : {}),
-              ...(command === "start"
+              ...(lifecycle.startedAt
                 ? {
-                    startedAt: now,
-                    startSnapshotId: snapshotId,
-                    startRuntimeRevision: runtimeRevision,
-                    lastRuntimeRevision: runtimeRevision,
+                    startedAt: new Date(lifecycle.startedAt),
+                    startSnapshotId: lifecycle.startSnapshotId,
+                    startRuntimeRevision: lifecycle.startRuntimeRevision,
+                    lastRuntimeRevision: lifecycle.lastRuntimeRevision,
                   }
                 : {}),
-              ...(command === "pause"
-                ? { pausedAt: now, lastRuntimeRevision: runtimeRevision }
-                : {}),
-              ...(command === "resume"
-                ? { resumedAt: now, lastRuntimeRevision: runtimeRevision }
-                : {}),
-              ...(command === "conclude"
+              ...(lifecycle.pausedAt
                 ? {
-                    concludedAt: now,
-                    endSnapshotId: snapshotId,
-                    endRuntimeRevision: runtimeRevision,
-                    lastRuntimeRevision: runtimeRevision,
+                    pausedAt: new Date(lifecycle.pausedAt),
+                    lastRuntimeRevision: lifecycle.lastRuntimeRevision,
+                  }
+                : {}),
+              ...(lifecycle.resumedAt
+                ? {
+                    resumedAt: new Date(lifecycle.resumedAt),
+                    lastRuntimeRevision: lifecycle.lastRuntimeRevision,
+                  }
+                : {}),
+              ...(lifecycle.concludedAt
+                ? {
+                    concludedAt: new Date(lifecycle.concludedAt),
+                    endSnapshotId: lifecycle.endSnapshotId,
+                    endRuntimeRevision: lifecycle.endRuntimeRevision,
+                    lastRuntimeRevision: lifecycle.lastRuntimeRevision,
                     summaryStatus: "DRAFT",
-                    currentSummaryRevision: 1,
+                    currentSummaryRevision: lifecycle.currentSummaryRevision,
                   }
                 : {}),
-              ...(command === "cancel"
+              ...(lifecycle.cancelledAt
                 ? {
-                    cancelledAt: now,
-                    cancellationReason: cleanRequired(
-                      dto.reason,
-                      "Cancellation reason",
-                    ),
+                    cancelledAt: new Date(lifecycle.cancelledAt),
+                    cancellationReason: lifecycle.cancellationReason,
                   }
                 : {}),
             },
           });
           if (changed.count !== 1) throw staleSession();
-          if (["start", "resume", "pause"].includes(command)) {
+          if (
+            command === "start" ||
+            command === "resume" ||
+            command === "pause"
+          ) {
+            const presencePolicy = CampaignSession.lifecyclePresence(command);
             const activePresence = {
               sessionId,
               leftAt: null,
@@ -1484,9 +1545,9 @@ export class CampaignSessionService {
                 ...activePresence,
                 participation: { selected: true, response: "ACCEPTED" },
               },
-              data: { phase: command === "pause" ? "LOBBY" : "PLAY" },
+              data: { phase: presencePolicy.phase },
             });
-            if (command !== "pause") {
+            if (presencePolicy.attended) {
               await client.sessionParticipation.updateMany({
                 where: {
                   sessionId,
@@ -2252,107 +2313,14 @@ function readinessChecks(
   const policyIssue = capturedCreaturePolicyProblems(
     instance.currentSnapshot,
   )[0];
-  const capturedRuntimeReady =
-    Boolean(instance.currentSnapshotId && instance.runtime) &&
-    !runtimeIssue &&
-    !policyIssue;
-  const checks = [
-    {
-      key: "lobby",
-      label: "Lobby",
-      status:
-        session.status === "LOBBY" || session.status === "PAUSED"
-          ? ("ready" as const)
-          : ("blocked" as const),
-      detail:
-        session.status === "LOBBY" || session.status === "PAUSED"
-          ? "The Session is ready for a lifecycle decision."
-          : "Open the lobby before starting the Session.",
-    },
-  ];
-  checks.push({
-    key: "runtime",
-    label: "Campaign Instance",
-    status:
-      (instance.status === "ACTIVE" ||
-        (session.status === "LOBBY" && instance.status === "PREPARING")) &&
-      capturedRuntimeReady
-        ? "ready"
-        : "blocked",
-    detail:
-      session.status === "LOBBY" && instance.status === "PREPARING"
-        ? "The Campaign Instance is ready to activate when this Session starts."
-        : instance.status !== "ACTIVE"
-          ? "The Campaign Instance must be active before this Session can resume."
-          : capturedRuntimeReady
-            ? "The captured Campaign, World, and runtime are available."
-            : (runtimeIssue ??
-              policyIssue ??
-              "The captured Campaign and World pair is unavailable."),
+  return CampaignSession.readiness({
+    instanceStatus: instance.status,
+    hasCapturedRuntime: Boolean(instance.currentSnapshotId && instance.runtime),
+    runtimeIssue,
+    policyIssue,
+    session,
+    conflictingSessionName,
   });
-  checks.push({
-    key: "installation-session",
-    label: "Hosted Session capacity",
-    status: conflictingSessionName ? "blocked" : "ready",
-    detail: conflictingSessionName
-      ? `${conflictingSessionName} must pause or conclude before this Session can start or resume.`
-      : "No other Session is active on this server.",
-  });
-  const gmPresent = session.participations.some(
-    (p) =>
-      p.role === "GM" &&
-      p.response === "ACCEPTED" &&
-      p.humanMembership?.status === "ACTIVE" &&
-      p.presenceLeases.length > 0,
-  );
-  for (const participant of session.participations) {
-    const controlledByGm = Boolean(
-      session.gmControlsPlayers && participant.role === "PLAYER",
-    );
-    if (!participant.required) continue;
-    const present = participant.presenceLeases.length > 0;
-    const activeHuman =
-      !participant.humanMembership ||
-      participant.humanMembership.status === "ACTIVE";
-    const characterReady =
-      participant.role !== "PLAYER" ||
-      participant.humanMembership?.activeCharacter?.status === "ACTIVE";
-    const agentReady =
-      !participant.agentParticipation ||
-      ["AUTHORIZED", "ACTIVE", "PAUSED"].includes(
-        participant.agentParticipation.status,
-      );
-    const ready =
-      activeHuman &&
-      characterReady &&
-      agentReady &&
-      (controlledByGm
-        ? gmPresent
-        : participant.response === "ACCEPTED" &&
-          (participant.role === "AGENT" || present));
-    checks.push({
-      key: `participant-${participant.id}`,
-      label: participant.participantName || "Required participant",
-      status: ready ? "ready" : "blocked",
-      detail: ready
-        ? controlledByGm
-          ? `${participant.participantName} is controlled by the GM.`
-          : `${participant.participantName} is ready.`
-        : controlledByGm
-          ? `${participant.participantName} needs an active membership, an active Character, and the GM present.`
-          : participant.role === "AGENT"
-            ? `${participant.participantName} must remain authorized for this Session.`
-            : `${participant.participantName} must accept, be present, and have any required active Character.`,
-    });
-  }
-  checks.push({
-    key: "participant-limit",
-    label: "Participant limit",
-    status:
-      session.participations.length <= MAX_PARTICIPANTS ? "ready" : "blocked",
-    detail: `${session.participations.length} of ${MAX_PARTICIPANTS} participant places are selected.`,
-  });
-  return checks;
 }
 
 function readinessToken(
@@ -2469,29 +2437,31 @@ async function lockSessionLifecycle(client: Prisma.TransactionClient) {
     'LOCK TABLE "CampaignInstanceSession" IN SHARE ROW EXCLUSIVE MODE',
   );
 }
-function requireAcceptedPresence(participation: { response: string }) {
-  if (participation.response !== "ACCEPTED") {
-    throw new ConflictException(
-      "Accept the Session invitation before using presence.",
+function requirePresence(participation: {
+  response: string;
+  session: { status: string };
+}) {
+  try {
+    CampaignSession.assertPresence(
+      participation.response,
+      participation.session.status,
     );
-  }
-}
-function requirePresenceStatus(status: string) {
-  if (!["LOBBY", "ACTIVE", "PAUSED"].includes(status)) {
-    throw new ConflictException("This Session is not accepting participants.");
+  } catch (error) {
+    throw new ConflictException(
+      error instanceof Error
+        ? error.message
+        : "This Session is not accepting participants.",
+    );
   }
 }
 function boundedPresenceSeconds(
   lease: { joinedAt: Date; expiresAt: Date },
   closedAt: Date,
 ) {
-  return Math.max(
-    0,
-    Math.floor(
-      (Math.min(closedAt.getTime(), lease.expiresAt.getTime()) -
-        lease.joinedAt.getTime()) /
-        1_000,
-    ),
+  return CampaignSession.presenceSeconds(
+    lease.joinedAt.getTime(),
+    lease.expiresAt.getTime(),
+    closedAt.getTime(),
   );
 }
 function digest(value: string) {

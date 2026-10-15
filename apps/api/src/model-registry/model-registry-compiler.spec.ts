@@ -28,6 +28,55 @@ import {
 } from "./model-registry-compiler";
 
 describe("model registry compiler", () => {
+  it.each([0, 1])(
+    "keeps Attribute and generic option diagnostics compatible (option %s)",
+    (index) => {
+      const extension = createGmExtension();
+      const dependency = compileModelSchemaRelease(
+        createEditableCoreModelSeed(),
+      );
+      const wrongOwner = dependency.elements.find(
+        (element) => element.lineage.kind === "concept",
+      )!;
+      const original = extension.revisions[index]!;
+      const changed: ModelElementRevision = {
+        ...original,
+        presentation: { label: " " },
+        payload: {
+          kind: "vocabulary-option",
+          vocabularyId: wrongOwner.lineage.id,
+        },
+      };
+      const revision = {
+        ...changed,
+        identity: {
+          ...changed.identity,
+          contentHash: modelElementRevisionContentHash(changed),
+        },
+      };
+      const result = validateModelSchemaCompilation({
+        ...extension,
+        dependencies: [dependency],
+        revisions: extension.revisions.map((value, i) =>
+          i === index ? revision : value,
+        ),
+      });
+      expect(result.issues).toEqual([
+        {
+          code: "element-label-missing",
+          subject: extension.lineages[index]!.key,
+          detail: "A model element needs a human-readable label.",
+        },
+        {
+          code: "element-reference-kind-mismatch",
+          subject: extension.lineages[index]!.key,
+          detail:
+            "A vocabulary option owner must reference a vocabulary element.",
+        },
+      ]);
+    },
+  );
+
   it("compiles the editable core release and keeps legacy Will migration explicit", () => {
     const seed = createEditableCoreModelSeed();
     const compiled = compileModelSchemaRelease(seed);

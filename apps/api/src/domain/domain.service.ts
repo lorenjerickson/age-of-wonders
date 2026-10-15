@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { catalogOwner } from "@aow/domain";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "../graph/graph.service";
 import type {
@@ -28,6 +29,7 @@ export class DomainService {
   async create(resource: DomainResource, data: Record<string, unknown>) {
     this.assertLegacyRuntimeWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, data);
+    this.assertCatalogStructure(resource, data);
     const metadata = readResourceMetadata(resource, data);
     if (
       resource === "campaigns" ||
@@ -129,6 +131,7 @@ export class DomainService {
   ) {
     this.assertLegacyRuntimeWriteDisabled(resource);
     this.assertCurrentScienceContract(resource, dto.data);
+    this.assertCatalogStructure(resource, dto.data);
     const metadata = readResourceMetadata(resource, dto.data);
     if (metadata.id !== id) {
       throw new ConflictException(
@@ -143,9 +146,15 @@ export class DomainService {
       );
     }
 
+    const payload = await this.replaceCatalogPayload(
+      resource,
+      previous.data,
+      dto.data,
+    );
+
     const update = {
       ...metadata,
-      data: dto.data as Prisma.InputJsonObject,
+      data: payload as Prisma.InputJsonObject,
       revision: { increment: 1 },
     } satisfies Prisma.DomainRecordUpdateManyMutationInput;
 
@@ -169,7 +178,7 @@ export class DomainService {
         resource,
         id,
         previous.data,
-        dto.data,
+        payload,
         previous.kind ?? undefined,
         previous.name ?? undefined,
         metadata.kind,
@@ -187,7 +196,7 @@ export class DomainService {
         resource,
         id,
         previous.data,
-        dto.data,
+        payload,
         previous.kind ?? undefined,
         previous.name ?? undefined,
         metadata.kind,
@@ -222,6 +231,11 @@ export class DomainService {
   }
 
   private assertLegacyRuntimeWriteDisabled(resource: DomainResource): void {
+    if (resource === "location-connections") {
+      throw new ConflictException(
+        "Location travel connections are retired. Use Location hierarchy; travel is handled at the table.",
+      );
+    }
     if (
       [
         "campaigns",
@@ -253,7 +267,9 @@ export class DomainService {
 
   private notFound(resource: DomainResource, id: string): never {
     void id;
-    throw new NotFoundException(`The selected ${resource} resource was not found`);
+    throw new NotFoundException(
+      `The selected ${resource} resource was not found`,
+    );
   }
 
   private isPrismaError(error: unknown, code: string): boolean {
@@ -263,6 +279,58 @@ export class DomainService {
       typeof error.code === "string" &&
       error.code === code
     );
+  }
+
+  /** Compatibility writes validate supplied structure, retaining forward references for archive import. */
+  private assertCatalogStructure(
+    resource: DomainResource,
+    data: Record<string, unknown>,
+  ): void {
+    try {
+      const entity = catalogOwner(resource, data, { mode: "draft" });
+      if (!entity) return;
+      try {
+        if (
+          entity.state.metadata.validity.issues.some(
+            (issue) => issue.blocking !== false,
+          )
+        )
+          throw new Error("Invalid catalog structure.");
+      } finally {
+        entity.dispose();
+      }
+    } catch {
+      throw new BadRequestException(
+        "The catalog resource has invalid structure. Repair its supplied fields before saving.",
+      );
+    }
+  }
+
+  private async replaceCatalogPayload(
+    resource: DomainResource,
+    previous: Record<string, unknown>,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    try {
+      const entity = catalogOwner(resource, previous, { mode: "draft" });
+      if (!entity) return data;
+      try {
+        const receipt = await entity.command("replace", {
+          initiator: "domain-resource-adapter",
+          params: { data },
+          context: {},
+        });
+        if (receipt.status !== "committed" && receipt.status !== "unchanged")
+          throw new Error("Catalog replacement rejected.");
+        return entity.serializePayload();
+      } finally {
+        entity.dispose();
+      }
+    } catch {
+      throw new BadRequestException(
+        "The catalog resource cannot be replaced with the supplied data.",
+      );
+    }
   }
 
   private assertCurrentScienceContract(

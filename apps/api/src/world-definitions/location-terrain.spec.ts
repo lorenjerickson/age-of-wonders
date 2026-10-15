@@ -1,3 +1,4 @@
+import { worldAccessWhere } from "./world-access";
 import {
   BadRequestException,
   ConflictException,
@@ -58,7 +59,18 @@ const upload = { expectedDraftId: "draft", expectedStorageRevision: 1, chunk };
 const root = {
   resourceType: "locations",
   sourceId: "root",
-  payload: worldLocationPayload("root", { name: "Root", kind: "world" }),
+  payload: worldLocationPayload("root", {
+    name: "Root",
+    kind: "world",
+    image: {
+      assetId: "map-image",
+      altText: "Root map",
+      width: 1024,
+      height: 768,
+      mimeType: "image/png",
+      orientation: "overhead",
+    },
+  }),
 };
 const content = {
   rootLocationId: "root",
@@ -95,10 +107,23 @@ function setup() {
   const prisma = {
     worldDefinition: {
       findUnique: jest.fn(
-        async ({ where }: { where: { id: string; ownerUserId: string } }) =>
-          where.id === "world" && where.ownerUserId === "gm"
-            ? { id: "world", status: "ACTIVE", draft: state }
-            : null,
+        async ({
+          where,
+        }: {
+          where: { id: string } & ReturnType<typeof worldAccessWhere>;
+        }) => {
+          const owner = where.OR.some((clause) => clause.ownerUserId === "gm");
+          const share = where.OR.some(
+            (clause) =>
+              clause.accessEntries &&
+              (clause.accessEntries.some.player.userId === "editor" ||
+                (clause.accessEntries.some.player.userId === "viewer" &&
+                  !clause.accessEntries.some.role)),
+          );
+          return where.id === "world" && (owner || share)
+            ? { id: "world", ownerUserId: "gm", status: "ACTIVE", draft: state }
+            : null;
+        },
       ),
     },
     worldDefinitionDraft: {
@@ -197,13 +222,24 @@ function setup() {
 describe("Location terrain persistence", () => {
   it("saves an empty isometric grid without generation and switches orientation back to an image", async () => {
     const h = setup();
-    const blank = {...map, chunks: []};
-    const saved = await h.service.saveLocationTerrain("world", "root", {...request,map:blank}, "gm");
-    expect((await h.service.getLocationTerrain("world","root","gm")).chunks).toEqual([]);
-    const changed = worldLocationPayload("root", {name:"Location",kind:"world",mapOrientation:"overhead"}, saved.records[0].payload);
-    expect(changed.map).toEqual({kind:"image"});
+    const blank = { ...map, chunks: [] };
+    const saved = await h.service.saveLocationTerrain(
+      "world",
+      "root",
+      { ...request, map: blank },
+      "gm",
+    );
+    expect(
+      (await h.service.getLocationTerrain("world", "root", "gm")).chunks,
+    ).toEqual([]);
+    const changed = worldLocationPayload(
+      "root",
+      { name: "Location", kind: "world", mapOrientation: "overhead" },
+      saved.records[0].payload,
+    );
+    expect(changed.map).toEqual({ kind: "image" });
     expect(changed.mapScene?.orientation).toBe("overhead");
-    expect((saved.records[0].payload as {map: unknown}).map).toEqual(blank);
+    expect((saved.records[0].payload as { map: unknown }).map).toEqual(blank);
   });
 
   it("uploads without changing the active map, then atomically saves a self-contained capture", async () => {
@@ -220,7 +256,10 @@ describe("Location terrain persistence", () => {
       "gm",
     );
     expect(saved.storageRevision).toBe(2);
-    expect((saved.records[0].payload as {mapScene: {orientation: string}}).mapScene.orientation).toBe("isometric");
+    expect(
+      (saved.records[0].payload as { mapScene: { orientation: string } })
+        .mapScene.orientation,
+    ).toBe("isometric");
     expect(saved.records).toHaveLength(1); // Chunk buffers are not sent in every World draft response.
     expect(h.getState().snapshotRecords).toHaveLength(2);
     expect(resolveTerrainManifest(map, h.getState().snapshotRecords)).toEqual(
@@ -412,4 +451,16 @@ describe("Location terrain persistence", () => {
     ).toBe(true);
     expect(() => captureTerrainRecords(records)).toThrow();
   });
+});
+
+it("lets an editor save shared terrain and a viewer read it without authoring", async () => {
+  const h = setup();
+  await h.service.uploadTerrainChunk("world", "root", upload, "editor");
+  await h.service.saveLocationTerrain("world", "root", request, "editor");
+  await expect(
+    h.service.getLocationTerrain("world", "root", "viewer"),
+  ).resolves.toBeDefined();
+  await expect(
+    h.service.uploadTerrainChunk("world", "root", upload, "viewer"),
+  ).rejects.toBeInstanceOf(NotFoundException);
 });

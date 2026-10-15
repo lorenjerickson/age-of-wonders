@@ -1,0 +1,70 @@
+{
+  "worldId": "c573052d-e4ef-4dd3-99da-33576f550bfe",
+  "receipt": [
+    {
+      "check": "authenticated-world-create",
+      "pass": true
+    },
+    {
+      "check": "item-ui-create-image-upload-database-readback",
+      "pass": true
+    },
+    {
+      "check": "item-save-hard-reload",
+      "pass": true
+    },
+    {
+      "check": "location-map-private-discovery-ui-database-readback",
+      "pass": true
+    },
+    {
+      "check": "mobile-placement-save-hard-navigation",
+      "pass": true
+    },
+    {
+      "check": "mobile-rule-create-edit-persistence",
+      "pass": true
+    },
+    {
+      "check": "export-retains-private-and-siblings",
+      "pass": true
+    },
+    {
+      "check": "authenticated-outsider-private-denial-and-shared-viewer-readonly",
+      "pass": true
+    },
+    {
+      "check": "database-stale-save-atomic-rejection",
+      "pass": true
+    },
+    {
+      "check": "malformed-save-leaves-database-unchanged",
+      "pass": true
+    },
+    {
+      "check": "unreferenced-item-ui-removal-preserves-siblings",
+      "pass": true
+    },
+    {
+      "check": "referenced-source-removal-blocked-in-ui",
+      "pass": true
+    },
+    {
+      "check": "injected500-retains-form-real-database-retry",
+      "pass": true
+    },
+    {
+      "check": "required-root-map-ui-save",
+      "pass": true
+    },
+    {
+      "check": "ui-validate-publish-immutable-revision",
+      "pass": true
+    },
+    {
+      "check": "unauthenticated-private-draft-export-denied",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

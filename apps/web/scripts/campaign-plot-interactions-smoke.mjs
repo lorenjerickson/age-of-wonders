@@ -310,15 +310,22 @@ await withFixture(async (url) => {
     );
   const save = async (label) => {
     const revision = draft.storageRevision;
-    await page.getByRole("button", { name: label, exact: true }).click();
-    await page.waitForFunction(() =>
-      document.body.innerText.includes("Draft saved"),
+    const response = page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/campaigns/campaign/draft") &&
+        r.request().method() === "PUT",
     );
+    await page.getByRole("button", { name: label, exact: true }).click();
+    assert.equal((await response).status(), 200);
+    await page
+      .getByRole("button", { name: label, exact: true })
+      .waitFor({ state: "detached" });
     assert.equal(draft.storageRevision, revision + 1);
     assert.deepEqual(errors, []);
   };
   try {
     await route("root");
+    await page.getByRole("button", { name: "Edit plot", exact: true }).click();
     await field("Name").waitFor();
     assert.equal(
       await page.getByRole("textbox").count(),
@@ -344,7 +351,10 @@ await withFixture(async (url) => {
         ).includes(collection[0].toUpperCase() + collection.slice(1)),
       );
       await page
-        .getByRole("link", { name: "Add " + singular, exact: true })
+        .getByRole("link", {
+          name: new RegExp("^\\+?\\s*Add " + singular + "$"),
+          exact: true,
+        })
         .click();
       await field("Name").fill("New " + singular);
       await field("Description").fill("Individual child detail");
@@ -382,7 +392,7 @@ await withFixture(async (url) => {
     }
     await route("root/discoveries");
     await page
-      .getByRole("link", { name: "Add discovery", exact: true })
+      .getByRole("link", { name: /^(?:\+\s*)?Add discovery$/, exact: true })
       .click();
     await field("Name").fill("Footprints");
     await save("Save discovery");
@@ -395,7 +405,9 @@ await withFixture(async (url) => {
     await page
       .getByRole("link", { name: "Manage discovery facets (0)", exact: true })
       .click();
-    await page.getByRole("link", { name: "Add facet", exact: true }).click();
+    await page
+      .getByRole("link", { name: /^(?:\+\s*)?Add facet$/, exact: true })
+      .click();
     await field("Statement").fill("The keeper arrived before dawn");
     await field("Provenance").fill("Witness account");
     await save("Save facet");
@@ -460,7 +472,10 @@ await withFixture(async (url) => {
     ]) {
       await route("root/" + collection);
       await page
-        .getByRole("link", { name: "Add " + singular, exact: true })
+        .getByRole("link", {
+          name: new RegExp("^\\+?\\s*Add " + singular + "$"),
+          exact: true,
+        })
         .click();
       await page
         .getByRole("combobox", { name: "Plot", exact: true })
@@ -485,7 +500,10 @@ await withFixture(async (url) => {
     }
     await route("root/locations");
     await page
-      .getByRole("link", { name: "Add Location context", exact: true })
+      .getByRole("link", {
+        name: /^(?:\+\s*)?Add Location context$/,
+        exact: true,
+      })
       .click();
     await page
       .getByRole("combobox", { name: "Location", exact: true })
@@ -546,7 +564,10 @@ await withFixture(async (url) => {
       .getByText("No placement associations yet.", { exact: true })
       .waitFor();
     await page
-      .getByRole("link", { name: "Add placement association", exact: true })
+      .getByRole("link", {
+        name: /^(?:\+\s*)?Add placement association$/,
+        exact: true,
+      })
       .click();
     await page
       .getByRole("combobox", { name: "Campaign placement", exact: true })
@@ -555,7 +576,9 @@ await withFixture(async (url) => {
     assert.deepEqual(current("root").locationContexts[0], originalQuay);
     // Subplots are individually created, edited, reparented and deleted.
     await route("root/subplots");
-    await page.getByRole("link", { name: "Add subplot", exact: true }).click();
+    await page
+      .getByRole("link", { name: /^(?:\+\s*)?Add subplot$/, exact: true })
+      .click();
     await field("Name").fill("Find the keeper");
     await save("Save Plot");
     const child = draft.records.find(
@@ -571,6 +594,7 @@ await withFixture(async (url) => {
       .click();
     await page.getByText(/Move or delete this Plot/).waitFor();
     await route(encodeURIComponent(child.sourceId));
+    await page.getByRole("button", { name: "Edit plot", exact: true }).click();
     await page
       .getByRole("combobox", { name: "Parent Plot", exact: true })
       .selectOption("peer");
@@ -654,20 +678,27 @@ await withFixture(async (url) => {
     assert.equal(current("root").objectives[0].name, "Unsaved objective");
     await route("root");
     await page.setViewportSize({ width: 390, height: 844 });
-    await field("Name").waitFor();
+    await page
+      .getByRole("button", { name: "Edit plot", exact: true })
+      .waitFor();
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
       true,
     );
-    // Shared Campaign navigation toggle also controls selected Plot children.
-    const objectiveNav = page
-      .getByRole("link", { name: "Objectives", exact: true })
-      .first();
-    assert.equal(await objectiveNav.isVisible(), false);
-    await page.getByRole("button", { name: /Campaign navigation/ }).click();
-    assert.equal(await objectiveNav.isVisible(), true);
+    // Current mobile entry uses the selected Plot's progressively disclosed outline.
+    const outline = page.getByRole("region", {
+      name: "Plot outline",
+      exact: true,
+    });
+    assert.equal(await outline.count(), 0);
+    await page.getByRole("button", { name: "Outline", exact: true }).click();
+    await outline.waitFor();
+    await page
+      .getByRole("button", { name: "Close outline", exact: true })
+      .click();
+    assert.equal(await outline.count(), 0);
     assert.deepEqual(draft.capturedWorldContent, originalCapture);
     assert.deepEqual(errors, []);
     await page.screenshot({ path: screenshotPath, fullPage: true });

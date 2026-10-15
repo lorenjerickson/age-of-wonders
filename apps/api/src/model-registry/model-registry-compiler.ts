@@ -1,3 +1,4 @@
+import { Attribute } from "@aow/domain";
 import type {
   JsonValue,
   ModelAtomicValueType,
@@ -511,19 +512,35 @@ function validateRevision(
       "The revision content hash does not match its canonical content.",
     );
   }
-  if (revision.payload.kind !== lineage.kind) {
-    add(
-      "element-kind-mismatch",
-      lineage.key,
-      "The revision payload kind differs from its lineage kind.",
-    );
-  }
-  if (revision.presentation.label.trim() === "") {
-    add(
-      "element-label-missing",
-      lineage.key,
-      "A model element needs a human-readable label.",
-    );
+  if (lineage.semanticRole === "aow:attribute") {
+    const attribute = Attribute.deserializePayload({ lineage, revision });
+    try {
+      for (const issue of attribute.state.metadata.validity.issues) {
+        if (
+          ["element-kind-mismatch", "element-label-missing"].includes(
+            issue.code,
+          )
+        )
+          add(issue.code, lineage.key, issue.message);
+      }
+    } finally {
+      attribute.dispose();
+    }
+  } else {
+    if (revision.payload.kind !== lineage.kind) {
+      add(
+        "element-kind-mismatch",
+        lineage.key,
+        "The revision payload kind differs from its lineage kind.",
+      );
+    }
+    if (revision.presentation.label.trim() === "") {
+      add(
+        "element-label-missing",
+        lineage.key,
+        "A model element needs a human-readable label.",
+      );
+    }
   }
   if (
     registry.provenance.kind === "gm" &&
@@ -779,6 +796,28 @@ function validateReferenceKinds(
     expectKind(payload.sourceConceptId, "concept", "A relationship source");
     expectKind(payload.targetConceptId, "concept", "A relationship target");
   } else if (payload.kind === "vocabulary-option") {
+    if (element.lineage.semanticRole === "aow:attribute") {
+      const attribute = Attribute.deserializePayload(
+        { lineage: element.lineage, revision: element.revision },
+        {
+          elements: [...byId.values()],
+        },
+      );
+      try {
+        for (const issue of attribute.state.metadata.validity.issues) {
+          if (
+            [
+              "element-reference-kind-mismatch",
+              "element-option-parent-vocabulary-mismatch",
+            ].includes(issue.code)
+          )
+            add(issue.code, element.lineage.key, issue.message);
+        }
+      } finally {
+        attribute.dispose();
+      }
+      return;
+    }
     expectKind(payload.vocabularyId, "vocabulary", "A vocabulary option owner");
     expectKind(payload.parentOptionId, "vocabulary-option", "A parent option");
     const parent = payload.parentOptionId

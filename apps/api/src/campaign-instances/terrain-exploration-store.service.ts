@@ -130,7 +130,7 @@ export class TerrainExplorationStore {
         const previous = await tx.campaignTerrainExploration.findUnique({
           where: { campaignInstanceId_snapshotId_locationId_observerId: scope },
         });
-        let result: ReturnType<typeof projectTerrainWithExploration>;
+        let result: Awaited<ReturnType<typeof projectTerrainWithExploration>>;
         try {
           if (
             previous &&
@@ -138,7 +138,7 @@ export class TerrainExplorationStore {
               canonicalJsonHash(previous.payload) !== previous.contentHash)
           )
             return waiting;
-          result = projectTerrainWithExploration({
+          result = await projectTerrainWithExploration({
             context: evaluated.context,
             decision: evaluated,
             volume: resolveTerrainManifest(

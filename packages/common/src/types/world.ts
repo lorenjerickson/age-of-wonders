@@ -38,6 +38,7 @@ export interface RestState {
   readonly activities?: Readonly<Record<string, string>>;
 }
 
+/** @deprecated Legacy captured travel progress, retained for lossless reads only. */
 export interface TravelState {
   readonly participantIds: readonly EntityId[];
   readonly originLocationId: LocationId;

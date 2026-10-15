@@ -72,6 +72,13 @@ export interface LocationImage {
 export type LocationImageOrientation = "scenic" | "overhead" | "side-on";
 export type LocationMapOrientation = LocationImageOrientation | "isometric";
 
+/** Saved image-pixel grid configuration; inactive when the map is scenic. */
+export interface LocationSceneGrid {
+  readonly kind: "square" | "hex";
+  /** Finite positive size in map-image pixels, separate from terrain physical cell size. */
+  readonly cellSizePixels: number;
+}
+
 export interface NormalizedMapCoordinate {
   readonly kind: "normalized-map";
   /** Horizontal position in the inclusive range 0..1. */
@@ -113,8 +120,9 @@ export interface LocationTransitionDestination {
 }
 
 /**
- * A circular encounter-map trigger. A token intersecting the trigger is moved
- * to the destination position, which may be on this or another location map.
+ * Encounter-map transfer trigger. Same-map destinations remain map movement.
+ * Cross-Location destinations are legacy captured data retained for lossless reads
+ * only: inter-Location travel is handled through roleplay, not these triggers.
  */
 export interface LocationTransition {
   readonly id: string;
@@ -268,7 +276,7 @@ export interface LocationState<
   readonly profile: Profile;
   /** Encounter-scale collision boundaries; only meaningful when kind is `site`. */
   readonly walls?: readonly LocationWall[];
-  /** Encounter-scale token transfer triggers; only meaningful when kind is `site`. */
+  /** Legacy transfers may be retained; cross-Location destinations must not be authored or executed. */
   readonly transitions?: readonly LocationTransition[];
   /** Encounter-scale scenes contextually situated in this strategic location. */
   readonly sceneIds: readonly SceneId[];
@@ -298,6 +306,7 @@ export interface ConnectionMechanism {
   readonly failureModes?: readonly string[];
 }
 
+/** @deprecated Captured travel edge retained for legacy reads; never author new travel graphs. */
 export interface LocationConnectionState<
   Extensions extends ExtensionData = ExtensionData,
 > {
@@ -334,5 +343,6 @@ export interface LocationGraphState<
   readonly version: VersionedState;
   readonly rootLocationIds: readonly LocationId[];
   readonly locations: readonly Location[];
+  /** @deprecated Legacy captured travel edges; retained without deriving or executing routes. */
   readonly connections: readonly Connection[];
 }

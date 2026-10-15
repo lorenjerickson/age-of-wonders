@@ -51,6 +51,10 @@ describe("canonical World authored records", () => {
       name: "Glass Harbor",
       kind: "settlement",
       parentLocationId: "world-root",
+      image: {
+        assetId: "harbor-map", altText: "Harbor map", width: 1024, height: 768,
+        mimeType: "image/png", orientation: "overhead",
+      },
     });
     const revised = worldLocationPayload(
       "location-1",

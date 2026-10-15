@@ -13,12 +13,19 @@ function ModelRoute() {
   );
 }
 function ModelContent() {
-  const kind = Route.useParams().definitionKind;
-  if (kind === "structure") return <WorldModelStructureEditor />;
+  const { definitionKind: kind, definitionId } = Route.useParams();
+  if (kind === "structure")
+    return (
+      <WorldModelStructureEditor key={definitionId} context={definitionId} />
+    );
   return kind === "attributes" ||
     kind === "equipment-slots" ||
     kind === "profession-ranks" ? (
-    <WorldModelEditor kind={kind} />
+    <WorldModelEditor
+      key={`${kind}/${definitionId}`}
+      kind={kind}
+      context={definitionId}
+    />
   ) : (
     <main className="mx-auto max-w-3xl px-6 py-14">
       <h1 className="text-3xl font-semibold">Model unavailable</h1>

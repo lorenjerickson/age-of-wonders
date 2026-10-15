@@ -1,0 +1,65 @@
+{
+  "batch": "B05",
+  "active_session_start": "2026-10-14T04:17:27+00:00",
+  "active_session_end": "2026-10-14T04:46:56.068939+00:00",
+  "active_wall_seconds": 1769.069,
+  "command_seconds": 795.44,
+  "verification_interval_union_seconds": 542.047,
+  "verification_wall_share_percent": 30.64,
+  "categories": {
+    "browser": {
+      "command_seconds": 460.778,
+      "commands": 24,
+      "marked_reruns": 19,
+      "failed_attempts": 18
+    },
+    "build": {
+      "command_seconds": 70.982,
+      "commands": 4,
+      "marked_reruns": 2,
+      "failed_attempts": 2
+    },
+    "lint": {
+      "command_seconds": 39.584,
+      "commands": 14,
+      "marked_reruns": 3,
+      "failed_attempts": 2
+    },
+    "tests": {
+      "command_seconds": 200.217,
+      "commands": 28,
+      "marked_reruns": 16,
+      "failed_attempts": 5
+    },
+    "typecheck": {
+      "command_seconds": 23.879,
+      "commands": 2,
+      "marked_reruns": 0,
+      "failed_attempts": 0
+    }
+  },
+  "recorded_manual_reviews_seconds": [
+    145.430569,
+    43
+  ],
+  "manual_review_is_separate_from_command_time": true,
+  "useful_work_continued_during_parallel_verification": true,
+  "blocked_wait_seconds": null,
+  "unmeasured": [
+    "initial source and field audit",
+    "environment and fixture preparation/debugging outside timed commands",
+    "some manual/visual review",
+    "documentation and cleanup subintervals"
+  ],
+  "rerun_reasons": [
+    "malformed payload preservation and boundary repairs",
+    "current fixture control labels/navigation/save outcomes and mandatory values",
+    "isolated server startup/port/cache hydration setup",
+    "real-router removal and Location dedicated-endpoint integration fixes",
+    "root-map setup required before publication",
+    "owner parent legacy-shape regression and type narrowing",
+    "SSR mock React/draft identity corrections and UI primitive check",
+    "compiler overlapped browser fixture temporary-file cleanup",
+    "final affected checks after bounded fixes"
+  ]
+}

@@ -114,8 +114,6 @@ export type GameCommand =
   | { readonly kind: 'start-encounter'; readonly encounter: EncounterState }
   | { readonly kind: 'advance-turn'; readonly encounterId: string }
   | { readonly kind: 'begin-rest'; readonly rest: import('./world').RestState }
-  | { readonly kind: 'begin-travel'; readonly travel: import('./world').TravelState }
-  | { readonly kind: 'advance-travel'; readonly elapsed: import('./primitives').Duration }
   | { readonly kind: 'set-party-location'; readonly partyId: EntityId; readonly locationId: import('./primitives').LocationId; readonly reason: string }
   | { readonly kind: 'take-up-profession'; readonly characterId: import('./primitives').CharacterId; readonly professionId: DefinitionId }
   | { readonly kind: 'spend-profession-advancement'; readonly characterId: import('./primitives').CharacterId; readonly professionId: DefinitionId; readonly targetExpertise: string }

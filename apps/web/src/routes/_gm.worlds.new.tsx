@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { Alert, Button, Field, Input, Textarea } from "@aow/ui";
 import { createWorldDefinitionDraft } from "../api";
-import { useInternalNavigate } from "../navigation";
+import { RouterButtonLink, useInternalNavigate } from "../navigation";
 import { quickStartSuffix } from "../quickStartModel";
 import { worldCreationInput } from "../worldAuthoringModel";
 
@@ -76,6 +76,11 @@ function NewWorldRoute() {
         >
           Create working draft
         </Button>
+        {!saving && (
+          <RouterButtonLink className="min-h-11" href={`/worlds${guideSuffix}`}>
+            Cancel
+          </RouterButtonLink>
+        )}
       </form>
     </main>
   );

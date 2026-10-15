@@ -29,17 +29,30 @@ describe("DomainService singleton creation", () => {
     "encounters",
     "pending-decisions",
     "game-events",
-  ] as const)("rejects every legacy %s mutation before persistence", async (resource) => {
-    const create = jest.fn(), update = jest.fn(), remove = jest.fn();
-    const prisma = { domainRecord: { create, update, delete: remove } } as unknown as PrismaService;
-    const service = new DomainService(prisma, {} as GraphService);
-    await expect(service.create(resource, {})).rejects.toThrow("Legacy campaign and play-state writes are disabled");
-    await expect(service.replace(resource, "legacy", { data: {} })).rejects.toThrow("Legacy campaign and play-state writes are disabled");
-    await expect(service.remove(resource, "legacy")).rejects.toThrow("Legacy campaign and play-state writes are disabled");
-    expect(create).not.toHaveBeenCalled();
-    expect(update).not.toHaveBeenCalled();
-    expect(remove).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    "rejects every legacy %s mutation before persistence",
+    async (resource) => {
+      const create = jest.fn(),
+        update = jest.fn(),
+        remove = jest.fn();
+      const prisma = {
+        domainRecord: { create, update, delete: remove },
+      } as unknown as PrismaService;
+      const service = new DomainService(prisma, {} as GraphService);
+      await expect(service.create(resource, {})).rejects.toThrow(
+        "Legacy campaign and play-state writes are disabled",
+      );
+      await expect(
+        service.replace(resource, "legacy", { data: {} }),
+      ).rejects.toThrow("Legacy campaign and play-state writes are disabled");
+      await expect(service.remove(resource, "legacy")).rejects.toThrow(
+        "Legacy campaign and play-state writes are disabled",
+      );
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [
@@ -232,4 +245,36 @@ describe("DomainService science compatibility", () => {
     );
     expect(create).not.toHaveBeenCalled();
   });
+});
+
+it("retains legacy travel reads but rejects new connection mutations before persistence", async () => {
+  const findUnique = jest.fn().mockResolvedValue({
+    id: "route",
+    resource: "location-connections",
+    data: { identity: { id: "route" } },
+  });
+  const create = jest.fn(),
+    update = jest.fn(),
+    remove = jest.fn();
+  const service = new DomainService(
+    {
+      domainRecord: { findUnique, create, update, delete: remove },
+    } as unknown as PrismaService,
+    {} as GraphService,
+  );
+  await expect(service.create("location-connections", {})).rejects.toThrow(
+    "travel connections are retired",
+  );
+  await expect(
+    service.replace("location-connections", "route", { data: {} }),
+  ).rejects.toThrow("travel connections are retired");
+  await expect(service.remove("location-connections", "route")).rejects.toThrow(
+    "travel connections are retired",
+  );
+  await expect(
+    service.get("location-connections", "route"),
+  ).resolves.toMatchObject({ id: "route" });
+  expect(create).not.toHaveBeenCalled();
+  expect(update).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
 });

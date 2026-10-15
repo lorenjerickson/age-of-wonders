@@ -1,3 +1,4 @@
+import { ItemDefinition, LocationDefinition } from "@aow/domain";
 import {
   BadGatewayException,
   BadRequestException,
@@ -219,7 +220,27 @@ export class WorldDraftProposalService {
         ...new Set([...stringArray(content.definitionIds), id]),
       ];
     }
-    const issue = canonicalWorldRecordIssue(resourceType, id, payload);
+    // Text proposals are incomplete previews. A real map is required by the apply/upsert path.
+    let deferredMapIssue: string | undefined;
+    let issue: string | undefined;
+    if (kind === "location") {
+      const location = LocationDefinition.deserializePayload(payload, {
+        sourceId: id,
+        records,
+      });
+      try {
+        deferredMapIssue = location.state.metadata.validity.issues.find(
+          (entry) => entry.code === "location-canonical-map-required",
+        )?.message;
+        issue = location.state.metadata.validity.issues.find(
+          (entry) =>
+            !entry.unresolved &&
+            entry.code !== "location-canonical-map-required",
+        )?.message;
+      } finally {
+        location.dispose();
+      }
+    } else issue = canonicalWorldRecordIssue(resourceType, id, payload);
     if (issue) throw new BadGatewayException("The AI proposal is not valid.");
     const candidate = { resourceType, sourceId: id, payload };
     if (compiled) {
@@ -251,6 +272,12 @@ export class WorldDraftProposalService {
     if (
       candidateReport.issues.some(
         (entry) =>
+          !(
+            kind === "location" &&
+            entry.code === "location-definition-invalid" &&
+            entry.detail === deferredMapIssue &&
+            entry.subject === proposal.name
+          ) &&
           !baselineIssues.has(
             `${entry.code}\0${entry.subject}\0${entry.detail}`,
           ),
@@ -403,29 +430,16 @@ function normalizeProposal(
       ...(progressiveMechanicsNotes ? { progressiveMechanicsNotes } : {}),
     };
   }
-  const family = requiredText(value.itemFamilyKey, 240, "Item family");
-  if (!vocabulary.itemFamilies.includes(family)) {
-    throw new BadGatewayException(
-      "The AI proposal selected an unavailable Item family.",
-    );
+  try {
+    return {
+      ...common,
+      ...ItemDefinition.decodeAuthoringSelection(value, vocabulary),
+    };
+  } catch (error) {
+    if (error instanceof TypeError)
+      throw new BadGatewayException(`The AI proposal ${error.message}`);
+    throw error;
   }
-  const quality = requiredText(value.quality, 20, "quality");
-  if (!["ramshackle", "standard", "fine", "exquisite"].includes(quality)) {
-    throw new BadGatewayException(
-      "The AI proposal selected an invalid quality.",
-    );
-  }
-  return {
-    ...common,
-    itemFamilyKey: family,
-    category: requiredText(value.category, 120, "category"),
-    quality,
-    compatibleEquipmentSlotSets: nestedStringSelection(
-      value.compatibleEquipmentSlotSets,
-      vocabulary.equipmentSlots,
-      "Equipment Slot",
-    ),
-  };
 }
 
 function buildPrompt(
@@ -585,45 +599,6 @@ function stringSelection(
     );
   }
   return [...new Set(result)];
-}
-
-function nestedStringSelection(
-  value: unknown,
-  allowed: readonly string[],
-  label: string,
-): string[][] {
-  if (!Array.isArray(value) || value.length > 200) {
-    throw new BadGatewayException(
-      `The AI proposal contains invalid ${label} selections.`,
-    );
-  }
-  const result: string[][] = [];
-  for (const entry of value) {
-    if (!Array.isArray(entry) || entry.length === 0 || entry.length > 20) {
-      throw new BadGatewayException(
-        `The AI proposal contains invalid ${label} selections.`,
-      );
-    }
-    const slots = entry.filter(
-      (slot): slot is string => typeof slot === "string",
-    );
-    if (
-      slots.length !== entry.length ||
-      slots.some((slot) => !allowed.includes(slot))
-    ) {
-      throw new BadGatewayException(
-        `The AI proposal selected an unavailable ${label}.`,
-      );
-    }
-    const unique = [...new Set(slots)];
-    if (unique.length !== slots.length) {
-      throw new BadGatewayException(
-        `The AI proposal contains duplicate ${label} selections.`,
-      );
-    }
-    result.push(unique);
-  }
-  return result;
 }
 
 function boundedStringList(

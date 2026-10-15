@@ -1,5 +1,10 @@
 # Agent instructions
 
+## Project continuity
+
+Read the root `BACKLOG.md` at task start and update current status, verification,
+and next steps before handoff. Preserve deferred work without expanding task scope.
+
 ## UX/UI design requirements
 
 Always accommodate desktop and mobile in UI design work, with both sizes represented in Figma

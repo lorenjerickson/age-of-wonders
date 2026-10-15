@@ -1,9 +1,10 @@
+import { visibleRecordName } from "./recordDisplay";
 import type { ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useWorldAuthoring } from "./WorldAuthoringShell";
 import { InternalLink } from "./navigation";
 import { RecordTabs, recordTabId } from "./RecordTabs";
-import { recordName, worldWorkspaceSuffix } from "./worldAuthoringModel";
+import { worldWorkspaceSuffix } from "./worldAuthoringModel";
 import {
   LOCATION_SECTIONS,
   locationSectionHref,
@@ -51,7 +52,7 @@ export function LocationRecordView({
           All locations
         </InternalLink>
         <h1 className="mt-2 text-3xl font-semibold">
-          {recordName(record, "Unnamed Location")}
+          {visibleRecordName(record, "Unnamed Location")}
         </h1>
         <RecordTabs
           label="Location properties"

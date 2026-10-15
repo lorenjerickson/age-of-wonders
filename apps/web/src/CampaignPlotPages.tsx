@@ -1,3 +1,4 @@
+import { PlotDefinition } from "@aow/domain";
 import { useState, type FormEvent } from "react";
 import { useLocation } from "@tanstack/react-router";
 import {
@@ -107,29 +108,12 @@ function PlotList({ parent }: { parent?: CampaignDraftRecord }) {
   const [message, setMessage] = useState("");
   async function remove(record: CampaignDraftRecord) {
     setMessage("");
-    const hasChildren = records.some(
-      (r) =>
-        text(obj(recordObject(r).parent).parentPlotDefinitionId) ===
-        record.sourceId,
+    const issue = PlotDefinition.authoringDeletionIssue(
+      draft?.records ?? [],
+      record.sourceId,
     );
-    const hasReferences =
-      records.some((r) =>
-        [
-          ...arr(recordObject(r).prerequisites),
-          ...arr(recordObject(r).dependencies),
-        ].some((link) => obj(link).plotDefinitionId === record.sourceId),
-      ) ||
-      (draft?.records ?? []).some(
-        (r) =>
-          r.resourceType === "campaign-placements" &&
-          arr(recordObject(r).plotDefinitionIds).includes(record.sourceId),
-      );
-    if (hasChildren || hasReferences) {
-      setMessage(
-        hasChildren
-          ? "Move or delete this Plot’s subplots before deleting it."
-          : "Remove this Plot’s prerequisite, dependency, and placement associations before deleting it.",
-      );
+    if (issue) {
+      setMessage(issue);
       return;
     }
     if (
@@ -267,32 +251,13 @@ function PlotEditor({
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
-    const ancestors = new Set<string>();
-    let next = parentId;
-    while (next && !ancestors.has(next)) {
-      ancestors.add(next);
-      next = text(
-        obj(
-          recordObject(
-            records.find((r) => r.sourceId === next) ?? {
-              resourceType: "plots",
-              sourceId: "",
-              payload: {},
-            },
-          ).parent,
-        ).parentPlotDefinitionId,
-      );
-    }
-    if (
-      [...arr(payload.prerequisites), ...arr(payload.dependencies)].some(
-        (link) =>
-          !ancestors.has(text(obj(link).plotDefinitionId)) &&
-          !text(obj(link).crossBranchRationale).trim(),
-      )
-    ) {
-      setMessage(
-        "This parent would make an existing relationship cross-branch. Add its rationale on the Prerequisites or Dependencies page first.",
-      );
+    const issue = PlotDefinition.authoringParentChangeIssue(
+      payload,
+      records,
+      parentId,
+    );
+    if (issue) {
+      setMessage(issue);
       return;
     }
     const id = selected?.sourceId ?? `plot:${crypto.randomUUID()}`;

@@ -33,13 +33,11 @@ function setup(
   const getActiveDraft = jest
     .fn()
     .mockResolvedValue({ storageRevision: 2, records });
-  const generate = jest
-    .fn()
-    .mockResolvedValue({
-      data: { image: { assetId: "map" } },
-      asset: { id: "map", originalName: "London.webp", mimeType: "image/webp" },
-      imageResponseId: "response",
-    });
+  const generate = jest.fn().mockResolvedValue({
+    data: { image: { assetId: "map" } },
+    asset: { id: "map", originalName: "London.webp", mimeType: "image/webp" },
+    imageResponseId: "response",
+  });
   const audit = jest.fn().mockResolvedValue({ id: "audit" });
   return {
     getActiveDraft,
@@ -97,4 +95,35 @@ it("rejects stale drafts and foreign or missing Locations before charging for ge
     ),
   ).rejects.toBeInstanceOf(NotFoundException);
   expect(missing.generate).not.toHaveBeenCalled();
+});
+it("previews an unsaved Location without requiring a record or exposing private fields", async () => {
+  const f = setup([]);
+  const input = {
+    ...dto,
+    name: "New harbor",
+    description: "Public coastline",
+    kind: "settlement",
+    gmDescription: "Hidden faction",
+  };
+  const result = await f.controller.generate(
+    "world",
+    "",
+    request,
+    "new-location-map",
+    input,
+  );
+  expect(result.storageRevision).toBe(2);
+  expect(f.generate).toHaveBeenCalledWith(
+    {
+      name: "New harbor",
+      description: "Public coastline",
+      kind: "settlement",
+      image: { orientation: "overhead" },
+    },
+    ["location-map"],
+    "overhead view. A foggy overhead map",
+    { worldId: "world", userId: "gm" },
+  );
+  expect(JSON.stringify(f.generate.mock.calls)).not.toContain("Hidden faction");
+  expect(f.audit).toHaveBeenCalledTimes(1);
 });

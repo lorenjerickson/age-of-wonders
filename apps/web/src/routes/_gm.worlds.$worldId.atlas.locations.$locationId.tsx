@@ -1,7 +1,7 @@
 import { locationHref } from "../locationWorkspaceModel";
 import { LocationSectionPage } from "../LocationWorkspacePages";
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
-import { DraftRecordEditor } from "../WorldAuthoringPages";
+import { AstraAtlas } from "../AstraAtlas";
 import { LocationRecordView } from "../LocationRecordView";
 export const Route = createFileRoute(
   "/_gm/worlds/$worldId/atlas/locations/$locationId",
@@ -20,11 +20,5 @@ function LocationRoute() {
       </LocationRecordView>
     );
   if (pathname !== locationHref(worldId, locationId)) return <Outlet />;
-  return (
-    <DraftRecordEditor
-      key={locationId}
-      kind="locations"
-      sourceId={locationId === "new" ? undefined : locationId}
-    />
-  );
+  return <AstraAtlas />;
 }

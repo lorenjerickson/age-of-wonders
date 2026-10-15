@@ -8,6 +8,22 @@ const root = {
       id: "world-root",
       version: { revision: 1, updatedAt: "2026-09-07T00:00:00.000Z" },
     },
+    map: {
+      kind: "isometric" as const,
+      formatVersion: 1 as const,
+      dimensions: { x: 16, y: 16, z: 8 },
+      cellSize: { value: 5 as const, unit: "ft" as const },
+      chunkSize: 16 as const,
+      materials: [
+        {
+          key: "terrain:grass" as const,
+          revision: 1,
+          name: "Grass",
+          terrainType: "terrain:grass" as const,
+        },
+      ],
+      chunks: [],
+    },
     name: "The Glasswake",
     kind: "world",
     placement: { kind: "root" },

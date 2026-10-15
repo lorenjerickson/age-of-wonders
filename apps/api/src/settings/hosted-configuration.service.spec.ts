@@ -12,6 +12,24 @@ function protector() {
 }
 
 describe("HostedConfigurationService", () => {
+  it.each([
+    [" custom-image-model ", "custom-image-model"],
+    ["", "gpt-image-2.5-flare"],
+    ["   ", "gpt-image-2.5-flare"],
+    [undefined, "gpt-image-2.5-flare"],
+  ])(
+    "resolves the image model from deployment configuration (%s)",
+    (value, expected) => {
+      const service = new HostedConfigurationService(
+        {} as never,
+        new ConfigService({ OPENAI_IMAGE_MODEL: value }),
+        protector(),
+      );
+
+      expect(service.openAiImageModel()).toBe(expected);
+    },
+  );
+
   it("uses a protected application secret without returning it in controls", async () => {
     const contacts = protector();
     const protectedSecret = contacts.protectOpaque("sk-private-value");

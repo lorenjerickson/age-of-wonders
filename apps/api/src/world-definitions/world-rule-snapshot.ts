@@ -1,4 +1,5 @@
-import { validateWorldRules, WORLD_RULE_RESOURCE } from "@aow/common";
+import { WorldRule } from "@aow/domain";
+import { WORLD_RULE_RESOURCE } from "@aow/common";
 
 /** World rules are snapshot-owned components, never generic mutable rule-variant resources. */
 export function worldRuleSnapshotIssue(
@@ -12,7 +13,7 @@ export function worldRuleSnapshotIssue(
   const rules = records.filter(
     (record) => record.resourceType === WORLD_RULE_RESOURCE,
   );
-  const report = validateWorldRules(rules.map((record) => record.payload));
+  const report = WorldRule.validateRules(rules.map((record) => record.payload));
   if (!report.valid) return report.issues.join(" ");
   for (const record of rules) {
     const rule = record.payload as { id: string; revision: number };

@@ -598,3 +598,195 @@ describe("Character equipment assignments", () => {
     ).toContain("carried Item");
   });
 });
+
+describe("B08 captured Character benefits", () => {
+  it("captures Background, explicit Profession tier and referenced Skill grants without inventing actor statistics", async () => {
+    const { service, prisma } = harness();
+    prisma.campaignInstanceCharacterDraft.findFirst.mockResolvedValue(
+      completeDraft({
+        status: "COMPLETE",
+        reviewedAt: new Date("2026-10-14T00:00:00Z"),
+      }),
+    );
+    const recipe = {
+      id: "health",
+      label: "Health",
+      kind: "rolled-flat",
+      stacking: "add",
+      dice: [{ count: 2, sides: 6 }],
+      target: { kind: "health-maximum" },
+    };
+    const manifest = buildSnapshotManifest(1, [
+      {
+        resourceType: "definitions",
+        sourceId: "background-scout",
+        payload: {
+          kind: "background",
+          name: "Scout",
+          components: {
+            modifierGrants: [recipe],
+            skillProficiencyIds: ["tracking"],
+          },
+        },
+      },
+      {
+        resourceType: "definitions",
+        sourceId: "tracking",
+        payload: {
+          kind: "skill",
+          components: {
+            modifierGrants: [
+              {
+                ...recipe,
+                id: "tracking-grant",
+                kind: "skill-proficiency",
+                target: { kind: "skill-check", skillDefinitionId: "tracking" },
+              },
+            ],
+          },
+        },
+      },
+      {
+        resourceType: "definitions",
+        sourceId: "profession-ranger",
+        payload: {
+          kind: "profession",
+          name: "Ranger",
+          components: {
+            acquisition: [
+              { kind: "character-creation", startingExpertise: "aow:novice" },
+            ],
+            expertiseLevels: [
+              {
+                tier: "aow:novice",
+                benefits: { modifierGrants: [{ ...recipe, id: "novice" }] },
+              },
+              {
+                tier: "aow:master",
+                benefits: { modifierGrants: [{ ...recipe, id: "master" }] },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    prisma.campaignInstance.findUnique.mockResolvedValue({
+      currentSnapshot: {
+        id: "instance-snapshot-1",
+        campaignDefinitionSnapshot: {
+          campaignDefinitionRevision: { content: {} },
+        },
+        worldDefinitionSnapshot: {
+          manifest,
+          worldDefinitionRevision: { modelSchemaSelections: [] },
+        },
+      },
+    });
+    const result = await service.activationMaterialization(
+      "instance-1",
+      "character-1",
+      "gm-1",
+    );
+    const grants = result.data
+      .modifierGrants as unknown as import("@aow/common").GrantedModifier[];
+    expect(grants.map((grant) => grant.definition.id)).toEqual([
+      "health",
+      "tracking-grant",
+      "novice",
+    ]);
+    expect(grants[0].resolution).toMatchObject({
+      kind: "flat",
+      rolls: [[expect.any(Number), expect.any(Number)]],
+      value: expect.any(Number) as unknown,
+    });
+    expect(grants[1].resolution).toEqual({ kind: "per-check" });
+    expect(grants[2].source).toMatchObject({
+      kind: "profession",
+      expertise: "aow:novice",
+    });
+    expect(result.data).not.toHaveProperty("hitPoints");
+    expect(
+      grants.every(
+        (grant) =>
+          grant.grantedByEventId === "character-creation:character-1:1",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("imported Character acquisition", () => {
+  it("retains exact captured grants and private source fields without carrying deselected grants", async () => {
+    const { service, prisma } = harness();
+    const recipe = {
+      id: "health",
+      label: "Hardy",
+      kind: "rolled-flat",
+      target: { kind: "health-maximum" },
+      stacking: "add",
+      dice: [{ count: 1, sides: 6 }],
+    };
+    const grant = {
+      id: "old-grant",
+      grantedByEventId: "original-event",
+      active: true,
+      source: { kind: "background", definitionId: "background-scout" },
+      definition: recipe,
+      resolution: { kind: "flat", rolls: [[4]], value: 4 },
+    };
+    prisma.campaignInstanceCharacterDraft.findFirst.mockResolvedValue(
+      completeDraft({
+        status: "COMPLETE",
+        sourceSheet: {
+          privateData: { secret: "preserved" },
+          modifierGrants: [
+            grant,
+            {
+              ...grant,
+              id: "deselected",
+              source: { kind: "background", definitionId: "old-background" },
+            },
+          ],
+        },
+      }),
+    );
+    prisma.campaignInstance.findUnique.mockResolvedValue({
+      currentSnapshot: {
+        id: "instance-snapshot-1",
+        campaignDefinitionSnapshot: {
+          campaignDefinitionRevision: {
+            content: { modelSchemaReleaseIds: [] },
+          },
+        },
+        worldDefinitionSnapshot: {
+          worldDefinitionRevision: { modelSchemaSelections: [] },
+          manifest: buildSnapshotManifest(1, [
+            {
+              resourceType: "definitions",
+              sourceId: "background-scout",
+              payload: {
+                kind: "background",
+                name: "Scout",
+                components: { modifierGrants: [recipe] },
+              },
+            },
+            {
+              resourceType: "definitions",
+              sourceId: "profession-ranger",
+              payload: { kind: "profession", name: "Ranger" },
+            },
+          ]),
+        },
+      },
+    });
+    const result = await service.activationMaterialization(
+      "instance-1",
+      "character-1",
+      "gm-1",
+    );
+    expect(result.data).toMatchObject({
+      privateData: { secret: "preserved" },
+      modifierGrants: [grant],
+    });
+    expect((result.data.modifierGrants as unknown[]).length).toBe(1);
+  });
+});

@@ -1,8 +1,31 @@
-import { locationMapIssue } from "@aow/common";
+import {
+  Map as DomainMap,
+  WorldDefinition,
+  LocationDefinition,
+  CreatureDefinition,
+  ItemDefinition,
+  CharacterTemplate,
+  SkillDefinition,
+  ProfessionDefinition,
+  BackgroundDefinition,
+} from "@aow/domain";
+import { worldAccessWhere } from "./world-access";
+import {
+  worldCodexSnapshotIssue,
+  grantedConditionIssue,
+} from "./world-codex-validation";
+import { WORLD_CODEX_RESOURCES } from "@aow/common";
 import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
-import type { UploadTerrainChunkDto, SaveLocationTerrainDto } from "./dto/location-terrain.dto";
-import { TERRAIN_CHUNK_RESOURCE, validateUploadedTerrainChunk, captureTerrainRecords, resolveTerrainManifest } from "./terrain-snapshot";
-import { backgroundModifierGrantIssue, professionModifierGrantIssue, skillModifierGrantIssue } from "@aow/common";
+import type {
+  UploadTerrainChunkDto,
+  SaveLocationTerrainDto,
+} from "./dto/location-terrain.dto";
+import {
+  TERRAIN_CHUNK_RESOURCE,
+  validateUploadedTerrainChunk,
+  captureTerrainRecords,
+  resolveTerrainManifest,
+} from "./terrain-snapshot";
 import {
   BadRequestException,
   ConflictException,
@@ -100,8 +123,19 @@ export class WorldDefinitionAuthoringService {
   }
 
   async getDraft(worldDefinitionId: string, userId: string) {
-    const row = await this.ownedDraft(worldDefinitionId, userId);
+    const row = await this.ownedDraft(worldDefinitionId, userId, false);
     return draftResponse(row.draft);
+  }
+
+  async exportDraft(worldDefinitionId: string, userId: string) {
+    const row = await this.ownedDraft(worldDefinitionId, userId, false);
+    return {
+      revisionName: row.draft.revisionName,
+      storageRevision: row.draft.storageRevision,
+      content: row.draft.content,
+      // The editor projection omits terrain payloads; a portable export must retain them.
+      records: readRecords(row.draft.snapshotRecords),
+    };
   }
 
   async getActiveDraft(worldDefinitionId: string, userId: string) {
@@ -117,7 +151,7 @@ export class WorldDefinitionAuthoringService {
     userId: string,
   ) {
     const owned = await this.prisma.worldDefinition.findUnique({
-      where: { id: worldId, ownerUserId: userId },
+      where: { id: worldId, ...worldAccessWhere(userId, true) },
       select: {
         status: true,
         draft: { select: { id: true, storageRevision: true, content: true } },
@@ -168,7 +202,7 @@ export class WorldDefinitionAuthoringService {
     locationId: string,
     userId: string,
   ) {
-    const owned = await this.ownedDraft(worldId, userId);
+    const owned = await this.ownedDraft(worldId, userId, false);
     const records = readRecords(owned.draft.snapshotRecords);
     const location = records.find(
       (r) => r.resourceType === "locations" && r.sourceId === locationId,
@@ -188,7 +222,7 @@ export class WorldDefinitionAuthoringService {
     contentHash: string,
     userId: string,
   ) {
-    const owned = await this.ownedDraft(worldId, userId);
+    const owned = await this.ownedDraft(worldId, userId, false);
     const records = readRecords(owned.draft.snapshotRecords);
     const location = records.find(
       (r) => r.resourceType === "locations" && r.sourceId === locationId,
@@ -222,7 +256,7 @@ export class WorldDefinitionAuthoringService {
     const owned = await this.ownedDraft(worldId, userId);
     if (owned.status !== "ACTIVE") throw archivedConflict();
     if (owned.draft.id !== dto.expectedDraftId) throw staleDraft();
-    const issue = locationMapIssue(dto.map);
+    const issue = DomainMap.mapIssue(dto.map);
     if (issue) throw new BadRequestException(issue);
     const requestHash = canonicalJsonHash({
       locationId,
@@ -270,31 +304,31 @@ export class WorldDefinitionAuthoringService {
           },
         })
       : [];
-    const identity = objectValue(location.payload.identity);
-    const version = objectValue(identity.version);
-    const payload = {
-      ...location.payload,
-      map: dto.map,
-      mapScene: {
-        ...objectValue(location.payload.mapScene),
-        orientation:
-          dto.map.kind === "isometric"
-            ? "isometric"
-            : (objectValue(location.payload.image).orientation ?? "scenic"),
+    const locationOwner = LocationDefinition.deserializePayload(
+      location.payload,
+      {
+        records,
+        baseline: location.payload,
+        mode: "draft",
+        rootLocationId: stringValue(owned.draft.content, "rootLocationId"),
       },
-      identity: {
-        ...identity,
-        version: {
-          ...version,
-          revision: Number(version.revision) + 1,
-          updatedAt: new Date().toISOString(),
-        },
-      },
-    };
+    );
+    let payload: Record<string, unknown>;
+    try {
+      const changed = await locationOwner.map.replace(dto.map, userId);
+      if (changed.status === "rejected")
+        throw new BadRequestException(
+          "The map change would invalidate this Location.",
+        );
+      payload = locationOwner.serializePayload();
+    } finally {
+      locationOwner.dispose();
+    }
     const locationIssue = canonicalWorldRecordIssue(
       "locations",
       locationId,
       payload,
+      location.payload,
     );
     if (locationIssue) throw new BadRequestException(locationIssue);
     const nextRecords = normalizeRecords(
@@ -318,7 +352,10 @@ export class WorldDefinitionAuthoringService {
             where: {
               id: owned.draft.id,
               storageRevision: dto.expectedStorageRevision,
-              worldDefinition: { ownerUserId: userId, status: "ACTIVE" },
+              worldDefinition: {
+                status: "ACTIVE",
+                ...worldAccessWhere(userId, true),
+              },
             },
             data: {
               snapshotRecords: jsonArray(nextRecords),
@@ -492,12 +529,11 @@ export class WorldDefinitionAuthoringService {
       authoredModel.releaseIds,
       authoredModel.elements,
     );
-    const content = isObject(owned.draft.content)
-      ? { ...owned.draft.content }
-      : {};
-    content.definitionIds = [
-      ...new Set([...definitionIds(owned.draft.content), id]),
-    ];
+    const content = WorldDefinition.withMember(
+      objectValue(owned.draft.content),
+      "definitionIds",
+      id,
+    );
     if (Array.isArray(content.creatureIds)) {
       content.creatureIds = content.creatureIds.filter((value) => value !== id);
     }
@@ -549,6 +585,83 @@ export class WorldDefinitionAuthoringService {
     );
   }
 
+  async deleteAuthoredRecord(
+    worldId: string,
+    userId: string,
+    kind:
+      | "locations"
+      | "creature"
+      | "item"
+      | "skill"
+      | "profession"
+      | "background"
+      | "monster"
+      | "character-template",
+    id: string,
+    expected: { expectedDraftId: string; expectedStorageRevision: number },
+  ) {
+    const owned = await this.ownedDraft(worldId, userId);
+    if (owned.status !== "ACTIVE") throw archivedConflict();
+    if (
+      owned.draft.id !== expected.expectedDraftId ||
+      owned.draft.storageRevision !== expected.expectedStorageRevision
+    )
+      throw staleDraft();
+    const records = readRecords(owned.draft.snapshotRecords);
+    const resourceType = kind === "locations" ? "locations" : "definitions";
+    const record = records.find(
+      (r) =>
+        r.resourceType === resourceType &&
+        r.sourceId === id &&
+        (kind === "locations" || objectValue(r.payload).kind === kind),
+    );
+    if (!record) throw worldRecordNotFound();
+    if (
+      kind === "locations" &&
+      stringValue(owned.draft.content, "rootLocationId") === id
+    )
+      throw new ConflictException("The World root Location cannot be deleted.");
+    const remaining = records.filter((r) => r !== record);
+    const references = (value: unknown): boolean =>
+      value === id ||
+      (Array.isArray(value)
+        ? value.some(references)
+        : isObject(value) && Object.values(value).some(references));
+    if (
+      remaining.some((r) => {
+        if (r.resourceType === "location-connections") return false;
+        if (r.resourceType !== "locations") return references(r.payload);
+        const location = LocationDefinition.deserializePayload(r.payload);
+        try {
+          return location.references(id);
+        } finally {
+          location.dispose();
+        }
+      }) ||
+      worldCodexSnapshotIssue(remaining, records)
+    )
+      throw new ConflictException(
+        "This entry is still used in the World. Remove its references before deleting it.",
+      );
+    const membership = kind === "locations" ? "locationIds" : "definitionIds";
+    const content = WorldDefinition.withoutMember(
+      objectValue(owned.draft.content),
+      membership,
+      id,
+    );
+    return this.persistDraft(
+      worldId,
+      owned.draft,
+      {
+        ...expected,
+        revisionName: owned.draft.revisionName,
+        content,
+        records: remaining,
+      },
+      userId,
+    );
+  }
+
   private async upsertAuthoredRecord(
     worldDefinitionId: string,
     kind: "locations" | "creature" | "item",
@@ -588,32 +701,22 @@ export class WorldDefinitionAuthoringService {
       const location = dto as UpsertWorldLocationDraftDto;
       const rootId = stringValue(owned.draft.content, "rootLocationId");
       const isRoot = id === rootId;
-      if (!isRoot && !location.parentLocationId)
-        throw new BadRequestException("A parent Location is required.");
-      if (location.parentLocationId === id)
-        throw new BadRequestException("A Location cannot contain itself.");
-      if (
-        location.parentLocationId &&
-        !records.some(
-          (record) =>
-            record.resourceType === "locations" &&
-            record.sourceId === location.parentLocationId,
-        )
-      )
-        throw new BadRequestException(
-          "The parent Location is not in this World draft.",
-        );
-      if (
-        location.parentLocationId &&
-        locationAncestorIds(records, location.parentLocationId).has(id)
-      )
-        throw new BadRequestException(
-          "The Location hierarchy cannot contain a cycle.",
-        );
+      const hierarchyIssue = WorldDefinition.hierarchyPlacementIssue(
+        owned.draft.content,
+        records,
+        id,
+        location.parentLocationId,
+      );
+      if (hierarchyIssue) throw new BadRequestException(hierarchyIssue);
       if (location.image) {
         const prior = objectValue(existing?.payload).image;
-        const previousAssetId = objectValue(prior).assetId;
-        if (location.image.assetId !== previousAssetId) {
+        const preserved = LocationDefinition.preservedArtwork(
+          location.image,
+          prior,
+        );
+        if (preserved) {
+          location.image = preserved;
+        } else {
           const asset =
             typeof location.image.assetId === "string"
               ? await this.prisma.mediaAsset.findFirst({
@@ -622,6 +725,10 @@ export class WorldDefinitionAuthoringService {
                     OR: [
                       { createdByUserId: userId },
                       { createdByUserId: null },
+                      {
+                        scopeType: "world-definition",
+                        scopeId: worldDefinitionId,
+                      },
                     ],
                     mimeType: { startsWith: "image/" },
                   },
@@ -631,9 +738,68 @@ export class WorldDefinitionAuthoringService {
             throw new BadRequestException(
               "The selected Location image is unavailable.",
             );
-          location.image = { ...location.image, mimeType: asset.mimeType };
-          delete location.image.uri;
+          location.image = LocationDefinition.verifiedArtwork(
+            location.image,
+            asset.mimeType,
+          );
         }
+      }
+      const presentationIssue = LocationDefinition.presentationIssue(
+        {
+          ...(location.weather == null ? {} : { weather: location.weather }),
+          ...(location.audiovisualEffects == null
+            ? {}
+            : { audiovisualEffects: location.audiovisualEffects }),
+        },
+        objectValue(existing?.payload),
+      );
+      if (presentationIssue) throw new BadRequestException(presentationIssue);
+      if (
+        location.audiovisualEffects &&
+        JSON.stringify(location.audiovisualEffects) !==
+          JSON.stringify(objectValue(existing?.payload).audiovisualEffects)
+      ) {
+        const previousCues = objectValue(existing?.payload).audiovisualEffects;
+        location.audiovisualEffects = await Promise.all(
+          location.audiovisualEffects.map(async (cue) => {
+            const prior = Array.isArray(previousCues)
+              ? previousCues.some(
+                  (value) =>
+                    isObject(value) &&
+                    value.id === cue.id &&
+                    value.assetId === cue.assetId &&
+                    value.kind === cue.kind,
+                )
+              : undefined;
+            if (!prior) {
+              const asset = await this.prisma.mediaAsset.findFirst({
+                where: {
+                  id: cue.assetId,
+                  OR: [
+                    { createdByUserId: userId },
+                    { createdByUserId: null },
+                    {
+                      scopeType: "world-definition",
+                      scopeId: worldDefinitionId,
+                    },
+                  ],
+                },
+              });
+              if (
+                !asset ||
+                (cue.kind === "audio"
+                  ? !asset.mimeType.startsWith("audio/")
+                  : !/^(image|video)\//.test(asset.mimeType))
+              )
+                throw new BadRequestException(
+                  "Choose available media matching the audiovisual cue type.",
+                );
+            }
+            const clean = { ...cue } as unknown as Record<string, unknown>;
+            delete clean.uri;
+            return clean as unknown as import("@aow/common").LocationAudiovisualEffect;
+          }),
+        );
       }
       payload = worldLocationPayload(
         id,
@@ -643,7 +809,12 @@ export class WorldDefinitionAuthoringService {
           kind: isRoot ? "world" : location.kind,
           ...(isRoot ? {} : { parentLocationId: location.parentLocationId }),
           gmDescription: location.gmDescription,
+          weather: location.weather,
+          audiovisualEffects: location.audiovisualEffects,
           discoveries: location.discoveries,
+          map: location.map,
+          mapSceneGrid: location.mapSceneGrid,
+          grantedConditions: location.grantedConditions,
           image: location.image,
           profileSummary: location.profileSummary,
           profileTags: location.profileTags,
@@ -672,17 +843,23 @@ export class WorldDefinitionAuthoringService {
           existing?.payload,
         );
       } else {
-        payload = worldItemPayload(
-          id,
-          await this.verifiedWorldItemInput(
-            worldDefinitionId,
-            userId,
-            dto as UpsertWorldItemDraftDto,
+        try {
+          payload = worldItemPayload(
+            id,
+            await this.verifiedWorldItemInput(
+              worldDefinitionId,
+              userId,
+              dto as UpsertWorldItemDraftDto,
+              existing?.payload,
+            ),
+            authoredModel.conformance,
             existing?.payload,
-          ),
-          authoredModel.conformance,
-          existing?.payload,
-        );
+          );
+        } catch (error) {
+          if (error instanceof TypeError)
+            throw new BadRequestException(error.message);
+          throw error;
+        }
         if (
           existing &&
           canonicalWorldRecordIssue(
@@ -708,13 +885,63 @@ export class WorldDefinitionAuthoringService {
         }
       }
     }
-    const issue = canonicalWorldRecordIssue(resourceType, id, payload);
+    if (kind === "locations") {
+      const entity = LocationDefinition.deserializePayload(payload, {
+        sourceId: id,
+        records,
+        baseline: existing?.payload,
+        mode: "draft",
+        rootLocationId: stringValue(owned.draft.content, "rootLocationId"),
+      });
+      try {
+        const issue = entity.state.metadata.validity.issues.find(
+          (issue) => issue.blocking !== false && !issue.unresolved,
+        );
+        if (issue) throw new BadRequestException(issue.message);
+      } finally {
+        entity.dispose();
+      }
+      const map = objectValue(objectValue(payload).map);
+      if (map.kind === "isometric") {
+        // Referenced chunks must already belong to this authorized draft. Uploaded chunks
+        // are attached through the terrain save endpoint, which checks their receipt/hash.
+        resolveTerrainManifest(
+          map as unknown as import("@aow/common").IsometricTerrainManifest,
+          records,
+        );
+      }
+    }
+    const grantIssue =
+      kind === "creature"
+        ? CreatureDefinition.deserializePayload(payload, {
+            sourceId: id,
+            records,
+          }).state.metadata.validity.issues.find(
+            (issue) => issue.code === "creature-codex-conditions",
+          )?.message
+        : kind === "item"
+          ? itemGrantedConditionIssue(
+              payload,
+              id,
+              records,
+              dto as UpsertWorldItemDraftDto,
+            )
+          : undefined;
+    if (grantIssue) throw new BadRequestException(grantIssue);
+    const issue = canonicalWorldRecordIssue(
+      resourceType,
+      id,
+      payload,
+      kind === "locations" ? existing?.payload : undefined,
+    );
     if (issue) throw new BadRequestException(issue);
     if (authoredModel) {
       assertGovernedRecordConformance(
         [{ resourceType, sourceId: id, payload }],
         authoredModel.releaseIds,
         authoredModel.elements,
+        undefined,
+        "draft",
       );
     }
     const nextRecords = [
@@ -724,16 +951,14 @@ export class WorldDefinitionAuthoringService {
       ),
       { resourceType, sourceId: id, payload },
     ];
-    const content = isObject(owned.draft.content)
-      ? { ...owned.draft.content }
-      : {};
+    const codexIssue = worldCodexSnapshotIssue(nextRecords, records);
+    if (codexIssue) throw new BadRequestException(codexIssue);
     const membership = kind === "locations" ? "locationIds" : "definitionIds";
-    const current = Array.isArray(content[membership])
-      ? content[membership].filter(
-          (value): value is string => typeof value === "string",
-        )
-      : [];
-    content[membership] = [...new Set([...current, id])];
+    const content = WorldDefinition.withMember(
+      objectValue(owned.draft.content),
+      membership,
+      id,
+    );
     return this.persistDraft(
       worldDefinitionId,
       owned.draft,
@@ -754,9 +979,13 @@ export class WorldDefinitionAuthoringService {
     kind: "creature" | "item",
   ) {
     const releaseIds = modelReleaseIds(content);
+    const worldOwner = await this.prisma.worldDefinition.findUnique({
+      where: { id: worldDefinitionId },
+      select: { ownerUserId: true },
+    });
     const effective = await this.models.resolveEffectiveRoots(
       releaseIds,
-      userId,
+      worldOwner?.ownerUserId ?? userId,
       worldDefinitionId,
     );
     const concept = effective.elements.find(
@@ -787,12 +1016,15 @@ export class WorldDefinitionAuthoringService {
     if (!dto.images) return dto;
     const priorImages = preservedCreatureImages(previous);
     const images: Record<string, unknown> = {};
-    for (const [role, value] of Object.entries(dto.images)) {
-      if (
-        !["portrait", "overheadToken", "paperDollToken"].includes(role) ||
-        !isObject(value)
-      )
-        throw new BadRequestException("Choose a valid Creature artwork view.");
+    let artwork: ReturnType<typeof CreatureDefinition.decodeArtworkViews>;
+    try {
+      artwork = CreatureDefinition.decodeArtworkViews(dto.images);
+    } catch (error) {
+      if (error instanceof TypeError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
+    for (const [role, value] of Object.entries(artwork)) {
       const priorImage = objectValue(priorImages[role]);
       if (
         value.assetId === priorImage.assetId &&
@@ -806,7 +1038,6 @@ export class WorldDefinitionAuthoringService {
           ? await this.prisma.mediaAsset.findFirst({
               where: {
                 id: value.assetId,
-                createdByUserId: userId,
                 scopeType: "world-definition",
                 scopeId: worldId,
               },
@@ -828,6 +1059,7 @@ export class WorldDefinitionAuthoringService {
     dto: UpsertWorldItemDraftDto,
     previous: unknown,
   ): Promise<UpsertWorldItemDraftDto> {
+    if (dto.image === undefined) return dto;
     const submittedImage = isObject(dto.image) ? dto.image : {};
     const priorPayload = isObject(previous) ? previous : {};
     const priorImage = isObject(priorPayload.image) ? priorPayload.image : {};
@@ -852,7 +1084,6 @@ export class WorldDefinitionAuthoringService {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: {
         id: assetId,
-        createdByUserId: userId,
         scopeType: "world-definition",
         scopeId: worldDefinitionId,
       },
@@ -981,6 +1212,7 @@ export class WorldDefinitionAuthoringService {
     dto: SaveWorldDraftDto,
     userId: string,
     authoredRules = false,
+    authoredCodex = false,
   ) {
     const owned = await this.ownedDraft(worldDefinitionId, userId);
     if (owned.status !== "ACTIVE") throw archivedConflict();
@@ -1000,11 +1232,55 @@ export class WorldDefinitionAuthoringService {
         (r) => r.resourceType === TERRAIN_CHUNK_RESOURCE,
       ),
     ]);
+    const codexRecords = (entries: readonly WorldDraftRecordDto[]) =>
+      entries.filter((r) =>
+        (Object.values(WORLD_CODEX_RESOURCES) as readonly string[]).includes(
+          r.resourceType,
+        ),
+      );
+    if (
+      !authoredCodex &&
+      canonicalJsonHash(codexRecords(records)) !==
+        canonicalJsonHash(
+          codexRecords(readRecords(owned.draft.snapshotRecords)),
+        )
+    )
+      throw new BadRequestException(
+        "Edit Characters, Conditions and Effects through the World Codex workspace.",
+      );
+    const codexIssue = worldCodexSnapshotIssue(
+      records,
+      readRecords(owned.draft.snapshotRecords),
+    );
+    if (codexIssue) throw new BadRequestException(codexIssue);
+    for (const record of records.filter(
+      (r) => r.resourceType === "world-character-templates",
+    )) {
+      const previous = readRecords(owned.draft.snapshotRecords).find(
+        (r) =>
+          r.resourceType === record.resourceType &&
+          r.sourceId === record.sourceId,
+      );
+      const entity = CharacterTemplate.deserializePayload(record.payload, {
+        records,
+        baseline: previous?.payload,
+      });
+      try {
+        const issue = entity.state.metadata.validity.issues.find(
+          (issue) => issue.blocking !== false,
+        );
+        if (issue) throw new BadRequestException(issue.message);
+      } finally {
+        entity.dispose();
+      }
+    }
     const ruleIssue = worldRuleSnapshotIssue(records);
     if (ruleIssue) throw new BadRequestException(ruleIssue);
     if (
       !authoredRules &&
-      canonicalJsonHash(records.filter((r) => r.resourceType === "world-rules")) !==
+      canonicalJsonHash(
+        records.filter((r) => r.resourceType === "world-rules"),
+      ) !==
         canonicalJsonHash(
           readRecords(owned.draft.snapshotRecords).filter(
             (r) => r.resourceType === "world-rules",
@@ -1018,13 +1294,19 @@ export class WorldDefinitionAuthoringService {
       if (
         record.resourceType !== "definitions" ||
         !isObject(record.payload) ||
-        !["profession", "skill", "background"].includes(String(record.payload.kind))
+        !["profession", "skill", "background"].includes(
+          String(record.payload.kind),
+        )
       )
         continue;
       const issue =
-        record.payload.kind === "background" ? backgroundModifierGrantIssue(record.payload.components) : record.payload.kind === "skill"
-          ? skillModifierGrantIssue(record.payload.components)
-          : professionModifierGrantIssue(record.payload.components);
+        record.payload.kind === "skill"
+          ? skillComponentIssue(record.payload)
+          : canonicalWorldRecordIssue(
+              "definitions",
+              record.sourceId,
+              record.payload,
+            );
       if (issue) throw new BadRequestException(issue);
     }
     assertBoundedDraftJson(dto.content, records);
@@ -1057,6 +1339,10 @@ export class WorldDefinitionAuthoringService {
       where: {
         id: draft.id,
         storageRevision: dto.expectedStorageRevision,
+        worldDefinition: {
+          status: "ACTIVE",
+          ...worldAccessWhere(userId, true),
+        },
       },
       data: {
         revisionName: visible(dto.revisionName, "A revision name is required."),
@@ -1094,7 +1380,7 @@ export class WorldDefinitionAuthoringService {
       try {
         const effectiveModel = await this.models.resolveEffectiveRoots(
           modelSchemaReleaseIds,
-          userId,
+          owned.ownerUserId ?? userId,
           worldDefinitionId,
         );
         assertGovernedRecordConformance(
@@ -1132,6 +1418,10 @@ export class WorldDefinitionAuthoringService {
       where: {
         id: owned.draft.id,
         storageRevision: dto.expectedStorageRevision,
+        worldDefinition: {
+          status: "ACTIVE",
+          ...worldAccessWhere(userId, true),
+        },
       },
       data: {
         validationStatus: report.valid ? "VALID" : "BLOCKED",
@@ -1547,15 +1837,16 @@ export class WorldDefinitionAuthoringService {
     };
   }
 
-  private async ownedDraft(id: string, userId: string) {
+  private async ownedDraft(id: string, userId: string, write = true) {
     let row;
     try {
       row = await this.prisma.worldDefinition.findUnique({
-        where: { id, ownerUserId: userId },
+        where: { id, ...worldAccessWhere(userId, write) },
         select: {
           id: true,
           status: true,
           metadataRevision: true,
+          ownerUserId: true,
           draft: { select: draftSelect },
         },
       });
@@ -1604,7 +1895,9 @@ function draftResponse(
     baseSnapshotId: row.baseSnapshotId ?? undefined,
     revisionName: row.revisionName,
     content: row.content,
-    records: readRecords(row.snapshotRecords).filter((r) => r.resourceType !== TERRAIN_CHUNK_RESOURCE),
+    records: readRecords(row.snapshotRecords).filter(
+      (r) => r.resourceType !== TERRAIN_CHUNK_RESOURCE,
+    ),
     storageRevision: row.storageRevision,
     validationStatus: row.validationStatus.toLowerCase().replaceAll("_", "-"),
     validatedStorageRevision: row.validatedStorageRevision ?? undefined,
@@ -1686,14 +1979,9 @@ function readRecords(value: Prisma.JsonValue): WorldDraftRecordDto[] {
 function newWorldBaseline(name: string) {
   const rootLocationId = randomUUID();
   return {
-    content: {
-      rootLocationId,
-      locationIds: [rootLocationId],
-      definitionIds: [],
-      schemaDefinitionIds: [],
-      worldPlacementDefinitionIds: [],
-      modelSchemaReleaseIds: [CORE_MODEL_SCHEMA_RELEASE_ID],
-    },
+    content: WorldDefinition.createContent(rootLocationId, [
+      CORE_MODEL_SCHEMA_RELEASE_ID,
+    ]),
     records: [
       {
         resourceType: "locations",
@@ -1710,8 +1998,14 @@ function rewriteReferences(
   currentResource?: string,
   fieldName?: string,
 ): unknown {
-  if (typeof value === "string")
+  if (typeof value === "string") {
+    if (fieldName === "propertyPath") {
+      const skill = /^skills\.(.+)\.(value|modifier)$/.exec(value);
+      if (skill && mapping.definitions?.[skill[1]!])
+        return `skills.${mapping.definitions[skill[1]!]}.${skill[2]}`;
+    }
     return mappedReference(value, mapping, currentResource, fieldName) ?? value;
+  }
   if (Array.isArray(value))
     return value.map((entry) =>
       rewriteReferences(entry, mapping, currentResource, fieldName),
@@ -1719,7 +2013,7 @@ function rewriteReferences(
   if (isObject(value))
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
-        key,
+        fieldName === "skills" ? (mapping.definitions?.[key] ?? key) : key,
         rewriteReferences(entry, mapping, currentResource, key),
       ]),
     );
@@ -1734,19 +2028,26 @@ function mappedReference(
   if (fieldName === "id" && currentResource)
     return mapping[currentResource]?.[value];
   const normalized = fieldName?.toLowerCase() ?? "";
-  const preferred = normalized.includes("location")
-    ? ["locations"]
-    : normalized.includes("schema")
-      ? ["extension-schemas", "definitions"]
-      : normalized.includes("definition")
-        ? ["definitions"]
-        : normalized.includes("creature")
-          ? ["creatures"]
-          : normalized.includes("item")
-            ? ["items"]
-            : normalized.endsWith("id") || normalized.endsWith("ids")
-              ? Object.keys(mapping)
-              : [];
+  const preferred =
+    normalized === "equipmentpool"
+      ? ["definitions"]
+      : normalized === "conditionid"
+        ? ["world-conditions"]
+        : normalized === "effectid"
+          ? ["world-effects"]
+          : normalized.includes("location")
+            ? ["locations"]
+            : normalized.includes("schema")
+              ? ["extension-schemas", "definitions"]
+              : normalized.includes("definition")
+                ? ["definitions"]
+                : normalized.includes("creature")
+                  ? ["creatures"]
+                  : normalized.includes("item")
+                    ? ["items"]
+                    : normalized.endsWith("id") || normalized.endsWith("ids")
+                      ? Object.keys(mapping)
+                      : [];
   const matches = preferred.flatMap((resource) =>
     mapping[resource]?.[value] ? [mapping[resource][value]] : [],
   );
@@ -1905,6 +2206,8 @@ async function itemMediaAuthorizationIssues(
   );
   const issues = await Promise.all(
     items.map(async (record) => {
+      if (isObject(record.payload) && record.payload.image === undefined)
+        return undefined;
       const image =
         isObject(record.payload) && isObject(record.payload.image)
           ? record.payload.image
@@ -1915,7 +2218,6 @@ async function itemMediaAuthorizationIssues(
           ? await client.mediaAsset.findFirst({
               where: {
                 id: assetId,
-                createdByUserId: userId,
                 scopeType: "world-definition",
                 scopeId: worldDefinitionId,
                 mimeType: { startsWith: "image/" },
@@ -1955,30 +2257,6 @@ function stringValue(value: Prisma.JsonValue, key: string): string | undefined {
     ? value[key]
     : undefined;
 }
-function locationAncestorIds(
-  records: readonly WorldDraftRecordDto[],
-  startId: string,
-): Set<string> {
-  const parents = new Map<string, string>();
-  for (const record of records) {
-    if (record.resourceType !== "locations" || !isObject(record.payload))
-      continue;
-    const placement = record.payload.placement;
-    if (
-      isObject(placement) &&
-      placement.kind === "within-parent" &&
-      typeof placement.parentLocationId === "string"
-    )
-      parents.set(record.sourceId, placement.parentLocationId);
-  }
-  const ancestors = new Set<string>();
-  let cursor: string | undefined = startId;
-  while (cursor && !ancestors.has(cursor)) {
-    ancestors.add(cursor);
-    cursor = parents.get(cursor);
-  }
-  return ancestors;
-}
 function worldRecordNotFound(): NotFoundException {
   return new NotFoundException(
     "The selected World draft record was not found.",
@@ -1994,10 +2272,8 @@ export function assertGovernedRecordConformance(
   rootReleaseIds: readonly string[],
   elements: readonly CompiledModelElement[],
   declaredDefinitionIds?: ReadonlySet<string>,
+  mode: "draft" | "publication" = "publication",
 ): void {
-  const byKey = new Map(
-    elements.map((element) => [element.lineage.key as string, element]),
-  );
   const conceptIds = new Set(
     elements
       .filter((element) => element.lineage.kind === "concept")
@@ -2018,6 +2294,53 @@ export function assertGovernedRecordConformance(
       record.resourceType,
       record.payload,
     );
+    if (
+      definitionType === "creature" ||
+      definitionType === "item" ||
+      definitionType === "skill" ||
+      definitionType === "profession" ||
+      definitionType === "background"
+    ) {
+      const entityClass =
+        definitionType === "creature"
+          ? CreatureDefinition
+          : definitionType === "item"
+            ? ItemDefinition
+            : definitionType === "skill"
+              ? SkillDefinition
+              : definitionType === "profession"
+                ? ProfessionDefinition
+                : BackgroundDefinition;
+      const entity = entityClass.deserializePayload(
+        // Explicit adapter for pre-kind authored records; no stored payload is changed.
+        { ...record.payload, kind: definitionType },
+        {
+          sourceId: record.sourceId,
+          mode,
+          model: {
+            releaseIds: rootReleaseIds,
+            elements: elements.map((element) => ({
+              key: element.lineage.key,
+              id: element.lineage.id,
+              kind: element.lineage.kind,
+              semanticRole: element.lineage.semanticRole,
+              valueMetadata: isObject(element.revision.payload)
+                ? element.revision.payload.valueMetadata
+                : undefined,
+            })),
+          },
+        },
+      );
+      try {
+        const issue = entity.state.metadata.validity.issues.find(
+          (issue) => issue.code === `${definitionType}-model-invalid`,
+        );
+        if (issue) throw new BadRequestException(issue.message);
+      } finally {
+        entity.dispose();
+      }
+      continue;
+    }
     const expectedRole = definitionType
       ? `aow:${definitionType}`
       : record.resourceType === "world-placements"
@@ -2067,98 +2390,9 @@ export function assertGovernedRecordConformance(
         );
       }
     }
-    if (definitionType === "creature") {
-      const components = isObject(record.payload.components)
-        ? record.payload.components
-        : record.payload;
-      assertNumericModelValues(components.attributes, byKey, "aow:attribute");
-      assertModelKeys(components.equipmentSlots, byKey, "aow:equipment-slot");
-    }
-    if (definitionType === "item") {
-      const components = isObject(record.payload.components)
-        ? record.payload.components
-        : record.payload;
-      const equippable = isObject(components.equippable)
-        ? components.equippable
-        : undefined;
-      const compatibleSlots = Array.isArray(equippable?.compatibleSlotSets)
-        ? flattenNestedValues(equippable.compatibleSlotSets)
-        : Array.isArray(record.payload.compatibleEquipmentSlots)
-          ? record.payload.compatibleEquipmentSlots
-          : [];
-      assertModelKeys(compatibleSlots, byKey, "aow:equipment-slot");
-      const modelValues = isObject(record.payload.modelValues)
-        ? record.payload.modelValues
-        : {};
-      const itemFamilyKey =
-        modelValues["aow:item-family"] ?? record.payload.itemFamilyKey;
-      if (
-        typeof itemFamilyKey !== "string" ||
-        byKey.get(itemFamilyKey)?.lineage.semanticRole !== "aow:item-family"
-      ) {
-        throw new BadRequestException(
-          "An Item Definition must select an available Item family.",
-        );
-      }
-    }
-    if (definitionType === "skill") {
-      const components = isObject(record.payload.components)
-        ? record.payload.components
-        : {};
-      const defaultAttribute = components.defaultAttribute;
-      if (
-        defaultAttribute !== undefined &&
-        (typeof defaultAttribute !== "string" ||
-          byKey.get(defaultAttribute)?.lineage.semanticRole !== "aow:attribute")
-      )
-        throw new BadRequestException(
-          "A Skill Definition must select an available default Attribute.",
-        );
-    }
-    if (definitionType === "profession") {
-      const components = isObject(record.payload.components)
-        ? record.payload.components
-        : {};
-      const ranks = arrayValue(components.expertiseOrder);
-      const rankReferences = [...ranks];
-      for (const level of arrayValue(components.expertiseLevels))
-        if (isObject(level)) rankReferences.push(level.tier);
-      for (const rule of arrayValue(components.acquisition))
-        if (isObject(rule)) rankReferences.push(rule.startingExpertise);
-      for (const action of arrayValue(components.actions)) {
-        if (!isObject(action)) continue;
-        rankReferences.push(action.unlocksAt);
-        for (const improvement of arrayValue(action.improvements))
-          if (isObject(improvement))
-            rankReferences.push(improvement.atExpertise);
-      }
-      if (
-        ranks.length === 0 ||
-        rankReferences.some(
-          (rank) =>
-            typeof rank !== "string" ||
-            byKey.get(rank)?.lineage.semanticRole !== "aow:profession-rank",
-        )
-      )
-        throw new BadRequestException(
-          "A Profession Definition must select available Profession Ranks.",
-        );
-    }
   }
 }
 
-function flattenNestedValues(value: unknown): unknown[] {
-  if (!Array.isArray(value)) return [];
-  const result: unknown[] = [];
-  for (const group of value as readonly unknown[]) {
-    if (!Array.isArray(group)) continue;
-    for (const entry of group as readonly unknown[]) result.push(entry);
-  }
-  return result;
-}
-function arrayValue(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
 function governedDefinitionKind(
   resourceType: string,
   payload: Record<string, unknown>,
@@ -2179,60 +2413,6 @@ function governedDefinitionKind(
   )
     return payload.definitionType;
   return undefined;
-}
-function assertNumericModelValues(
-  value: unknown,
-  byKey: ReadonlyMap<string, CompiledModelElement>,
-  semanticRole: string,
-): void {
-  if (!isObject(value))
-    throw new BadRequestException(
-      "Creature Attributes must use the effective Model Schema.",
-    );
-  for (const [key, score] of Object.entries(value)) {
-    const element = byKey.get(key);
-    const metadata =
-      isObject(element?.revision.payload) &&
-      isObject(element.revision.payload.valueMetadata)
-        ? element.revision.payload.valueMetadata
-        : {};
-    const minimum =
-      typeof metadata["aow:minimum"] === "number" ? metadata["aow:minimum"] : 0;
-    const maximum =
-      typeof metadata["aow:maximum"] === "number"
-        ? metadata["aow:maximum"]
-        : 100;
-    if (
-      element?.lineage.semanticRole !== semanticRole ||
-      typeof score !== "number" ||
-      !Number.isInteger(score) ||
-      score < minimum ||
-      score > maximum
-    ) {
-      throw new BadRequestException(
-        "A Creature Attribute is unavailable or outside its allowed range.",
-      );
-    }
-  }
-}
-function assertModelKeys(
-  value: unknown,
-  byKey: ReadonlyMap<string, CompiledModelElement>,
-  semanticRole: string,
-): void {
-  if (
-    !Array.isArray(value) ||
-    new Set(value).size !== value.length ||
-    value.some(
-      (key) =>
-        typeof key !== "string" ||
-        byKey.get(key)?.lineage.semanticRole !== semanticRole,
-    )
-  ) {
-    throw new BadRequestException(
-      "A governed Definition references an unavailable Model option.",
-    );
-  }
 }
 function visible(value: string, message: string) {
   const v = value?.trim();
@@ -2270,4 +2450,55 @@ function isPrismaConflict(error: unknown) {
 }
 function isPrismaUniqueConflict(error: unknown) {
   return isObject(error) && error.code === "P2002";
+}
+
+/** Preserve the draft-save diagnostic while policy stays inside SkillDefinition. */
+function skillComponentIssue(payload: unknown): string | undefined {
+  const entity = SkillDefinition.deserializePayload(payload);
+  try {
+    return entity.state.metadata.validity.issues.find(
+      (issue) => issue.code === "skill-canonical-components",
+    )?.message;
+  } finally {
+    entity.dispose();
+  }
+}
+
+/** Validate explicitly edited owned content without blocking repairs to unrelated legacy content. */
+function itemGrantedConditionIssue(
+  payload: unknown,
+  sourceId: string,
+  records: readonly {
+    resourceType: string;
+    sourceId: string;
+    payload: unknown;
+  }[],
+  input: UpsertWorldItemDraftDto,
+): string | undefined {
+  const entity = ItemDefinition.deserializePayload(payload, {
+    sourceId,
+    records,
+  });
+  try {
+    return entity.state.metadata.validity.issues.find(
+      (issue) =>
+        issue.code === "item-codex-conditions" ||
+        (issue.blocking !== false &&
+          !issue.unresolved &&
+          ((input.slottedContainer !== undefined &&
+            issue.code === "item-codex-storage-invalid") ||
+            (input.beltSlotCategory !== undefined &&
+              issue.code === "item-codex-belt-category-invalid") ||
+            (input.rarity !== undefined &&
+              issue.code === "item-codex-rarity-invalid") ||
+            (input.traits !== undefined &&
+              issue.code.startsWith("item-traits-")) ||
+            (input.actions !== undefined &&
+              issue.code.startsWith("item-actions-")) ||
+            (input.vehicle !== undefined &&
+              issue.code.startsWith("item-vehicle-")))),
+    )?.message;
+  } finally {
+    entity.dispose();
+  }
 }

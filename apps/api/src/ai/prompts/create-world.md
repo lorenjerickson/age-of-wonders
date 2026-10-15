@@ -85,7 +85,8 @@ payload.
   pressure.
 - Make the locations spatially and thematically legible. Explain major barriers, routes, contested
   borders, or poorly understood physical transitions in the outline without fabricating full
-  `LocationConnectionState` records.
+  `LocationConnectionState` records. Location relationships are containment-only; travel is
+  roleplayed at the table. Do not generate adjacency fields or automated cross-Location transfers.
 - For any portal-like transition, describe its observed operation and physical infrastructure or
   activation requirements; unexplained transitions must remain explicitly unresolved.
 - Any plane-like environment mentioned in the outline must have measurable environmental

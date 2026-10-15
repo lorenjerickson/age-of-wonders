@@ -31,7 +31,8 @@ Campaign Definition lineage is based on a World lineage and each Definition revi
 World revision; it is not a mode, view, or live subset of that World. A Campaign Instance realizes
 one captured Campaign Definition revision for an actual group and continuing history. A Player is
 a person with a durable identity and server profile; they are not owned by a Campaign or Session.
-Characters and their histories belong to exactly one Campaign Instance. A Session belongs to a
+Playable Characters and their histories belong to exactly one Campaign Instance. World-authored
+NPC templates in the Codex are a separate authoring concept, as specified below. A Session belongs to a
 Campaign Instance and records one period of play.
 
 References across those boundaries are versioned snapshots, not live pointers. Each Campaign
@@ -45,9 +46,46 @@ schema. The product must let authorized users extend the model itself—includin
 fields, relationships, vocabularies, and hierarchies—while preserving the small fixed spine needed
 for ownership, identity, history, and authorization.
 
+## Accepted Figma-led World UI update — 2026-10-11
+
+The [Age of Wonders Figma document](https://www.figma.com/design/zRxEmjYZ0tuKOG9xj60Gtm/Age-of-Wonders?node-id=4-1667)
+is authoritative for the current World authoring UI's presentation and visible navigation. Its
+World overview, Atlas, Codex, Rule system, People & access, and Export world structure supersedes
+prior UI navigation prescriptions for those surfaces, including the earlier mind-map-derived
+visible site map. The broader ownership and runtime boundaries in this document remain valid.
+Features absent from this design are excluded from the new view while their implementations and
+data are preserved; they are not implicitly removed from the product model.
+
+The user accepted responsive mobile layouts derived from the desktop designs, supporting flows
+using the supplied page/form patterns, and account-name/password sign-in. Mobile navigation uses
+a compact row with progressive disclosure rather than stacked persistent controls.
+
+The Codex introduces World-owned **Characters as NPC templates**, distinct from Campaign Instance
+playable Characters and their histories. Each NPC template references a Creature Definition in
+the same World and owns its editable authoring statistics. This does not move playable Character
+ownership into the World or bypass versioned campaign capture.
+
+**Conditions and Effects are reusable World-owned authoring definitions.** Conditions reference
+Effects; each referenced modifier may permit an explicit Condition-specific value override.
+Locations, Items, Creatures, and NPC templates grant Conditions through references. Shared
+references must remain valid, and deletion must reject dangling dependencies. These authored
+grants and durations do not themselves implement runtime application or countdowns. Existing
+runtime Active Effects and captured rule execution remain distinct contracts.
+
+**Accepted Location migration decision (2026-10-11):** Location relationships are hierarchical only.
+Remove authored related-Location links and adjacency/travel-graph concepts; inter-Location travel is
+roleplayed at the table. Parent/child containment and hierarchy position remain. Authored link UI/fields are removed; legacy travel resources remain read-only migration input. Retirement must
+preserve previously captured data and distinguish travel from movement within a Location map.
+
+See [Figma UI refactor](figma-ui-refactor.md) for implemented surfaces and the inventory of excluded
+features with proposed future destinations. Those placement proposals are not yet accepted
+requirements. The common TypeScript types remain authoritative for exact field shapes and the
+AI-facing model guide must stay synchronized with those types.
+
 ## Authority and interpretation
 
-For this analysis, evidence is applied in this order:
+The original conceptual analysis below used the following evidence order. For the current World
+UI, apply the accepted Figma update above and the authority rules in `docs/README.md` first:
 
 1. The supplied mind map and the accompanying direction are authoritative for concepts and
    hierarchy.
@@ -681,6 +719,25 @@ The map belongs to its Location as the diagram specifies. A runtime scene can st
 that map, but must not become the competing owner of the location's map, walls, doors, orientation,
 or source presentation.
 
+Every valid Location must have a map. Preserve image and isometric formats; legacy mapless drafts
+must be repairable but cannot satisfy validity/publication. Preserve the existing scene/grid
+configuration, including square/hex pixel grids; scenic maps do not render or use grids. Retain
+configuration when changing orientation, and keep image pixels distinct from terrain cell units.
+`LocationDefinition` owns authored state, with World scope supplied through context. Private GM
+fields remain private. B09 implements authored weather and named asset-backed audiovisual
+presentation defaults, captured as World data. B10 adds Instance-local weather overrides and explicit local GM playback controls. Automatic scheduling and synchronized participant playback remain outside the existing-execution cutover.
+These are presentation settings, separate from mechanical Conditions/Effects.
+These requirements are implemented in Location authoring and publication. Initial World-root
+drafts may remain incomplete until mapped. Map/Wall/Door/Window ownership preserves the existing
+2D and 3D representations; Instance runtime realization remains pending. Legacy travel resources remain readable with new writes disabled.
+
+World authoring now uses an executable `WorldDefinition` class for revision-content membership,
+capture requirements, root and hierarchy consistency, and World Placement reference policy. Child
+entities retain their own validation. The adapter binds child diagnostics to the exact content and
+capture, and publication reads aggregate World state validity. Captured records remain authorized
+context; repository transactions persist content and captures together. The common `WorldDefinition`
+lineage metadata contract is unchanged; lineage lifecycle and runtime World migration remain pending.
+
 Isometric is a Map orientation alongside Scenic, Overhead, and Side-on. Selecting it opens manual terrain authoring with optional generation; it is not a separate Location option.
 Accepted isometric-map target behavior is specified in [the isometric maps design](isometric-maps-design.md).
 Location-owned terrain uses at most 100 cells per axis with five-foot cell edges. Its authoring
@@ -1130,6 +1187,20 @@ rules; World revisions and downstream Campaign captures preserve exact rule prov
 execution decisions and history; mutable gameplay state remains Campaign Instance runtime.
 
 ### Event-driven rules architecture
+
+**Entity refactor priority (2026-10-11):** Experience and engine feature work is paused while
+domain behavior moves into concrete classes over a shared abstract Entity base. Entities will own
+validation, serialization, state, commands and emitted events. Immutable state will support Observable
+subscriptions for the engine and other consumers, with validity exposed through that same state
+and explicit context mapping at binding creation. The proposed contracts and migration sequence
+are in [`entity-architecture-and-migration.md`](entity-architecture-and-migration.md). The Entity
+foundation and Creature, Item, Effect, Condition, Character Template, Attribute, Skill, Modifier,
+Location Definition, World Definition, Placement, Discovery, Plot, Profession, Background, Heritage, Discipline, Feat, Action, Trait and catalog Character Definition authoring/compatibility migrations are
+implemented as initial slices.
+World lineage lifecycle, owned map-element classes, remaining concepts and engine integration are
+pending. The [concept and consumer inventory](domain-concept-consumer-inventory.md) records remaining
+owners and migration order. Common TypeScript state contracts remain authoritative.
+The gameplay policy requirements below remain applicable to the later engine adaptation.
 
 All game-engine behavior is defined by triggered rules and their effects. A World without rules is
 inert: declarations and other incoming events have no implicit gameplay outcome. Default mechanics,
@@ -2175,7 +2246,6 @@ updated `packages/common/src/types`, persistence where applicable, and
 `apps/api/src/ai/prompts/domain-model.md` together. Remaining accepted but unimplemented areas are
 tracked as gaps in `docs/README.md`; this architecture must not be mistaken for proof that every
 acceptance criterion is already implemented.
-
 
 ### GM-controlled Session exploration
 

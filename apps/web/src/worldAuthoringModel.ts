@@ -1,3 +1,4 @@
+import { WorldDefinition } from "@aow/domain";
 import type {
   EffectiveWorldModelResponse,
   EffectiveWorldModels,
@@ -489,33 +490,31 @@ export function draftWithIndexedRecord(
   draft: WorldDefinitionDraft,
   record: WorldDraftRecord,
 ): WorldDefinitionDraft {
-  const content = { ...draft.content };
+  let content = { ...draft.content };
+  const collection =
+    record.resourceType === "locations"
+      ? "locationIds"
+      : record.resourceType === "definitions"
+        ? "definitionIds"
+        : record.resourceType === "world-placements"
+          ? "worldPlacementDefinitionIds"
+          : undefined;
+  if (collection)
+    content = WorldDefinition.withMember(
+      content,
+      collection,
+      record.sourceId,
+    ) as typeof content;
   if (record.resourceType === "locations") {
-    const locationIds = stringList(content.locationIds);
-    content.locationIds = [...new Set([...locationIds, record.sourceId])];
     const placement = recordPayload(record).placement;
-    const placementRecord = placement as Record<string, unknown>;
     if (
       typeof placement === "object" &&
       placement !== null &&
       !Array.isArray(placement) &&
-      placementRecord.kind === "root"
-    ) {
+      "kind" in placement &&
+      placement.kind === "root"
+    )
       content.rootLocationId = record.sourceId;
-    }
-  }
-  if (record.resourceType === "definitions") {
-    content.definitionIds = [
-      ...new Set([...stringList(content.definitionIds), record.sourceId]),
-    ];
-  }
-  if (record.resourceType === "world-placements") {
-    content.worldPlacementDefinitionIds = [
-      ...new Set([
-        ...stringList(content.worldPlacementDefinitionIds),
-        record.sourceId,
-      ]),
-    ];
   }
   return {
     ...draft,
@@ -530,12 +529,11 @@ export function draftWithoutWorldPlacement(
 ): WorldDefinitionDraft {
   return {
     ...draft,
-    content: {
-      ...draft.content,
-      worldPlacementDefinitionIds: stringList(
-        draft.content.worldPlacementDefinitionIds,
-      ).filter((id) => id !== sourceId),
-    },
+    content: WorldDefinition.withoutMember(
+      draft.content,
+      "worldPlacementDefinitionIds",
+      sourceId,
+    ) as WorldDefinitionDraft["content"],
     records: draft.records.filter(
       (record) =>
         record.resourceType !== "world-placements" ||
@@ -661,23 +659,26 @@ export function locationParentOptions(
 ) {
   const locations = recordsForLibrary(records, "locations");
   if (!editedSourceId) return locations;
-  const unavailable = new Set([editedSourceId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const location of locations) {
-      const parentId = locationParentId(location);
-      if (
-        typeof parentId === "string" &&
-        unavailable.has(parentId) &&
-        !unavailable.has(location.sourceId)
-      ) {
-        unavailable.add(location.sourceId);
-        changed = true;
-      }
-    }
-  }
-  return locations.filter((location) => !unavailable.has(location.sourceId));
+  // Adapt retained legacy parentId for the canonical owner policy without
+  // rewriting the captured record returned to the editor.
+  const hierarchy = locations.map((record) => ({
+    ...record,
+    payload: {
+      placement: {
+        kind: "within-parent",
+        parentLocationId: locationParentId(record),
+      },
+    },
+  }));
+  return locations.filter(
+    (location) =>
+      !WorldDefinition.hierarchyPlacementIssue(
+        {},
+        hierarchy,
+        editedSourceId,
+        location.sourceId,
+      ),
+  );
 }
 
 export function effectiveModelOptions(models: EffectiveWorldModels) {

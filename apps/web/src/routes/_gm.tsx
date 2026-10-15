@@ -10,7 +10,15 @@ export const Route = createFileRoute("/_gm")({
     }
     const gm = result.session.user.role === "gm";
     const settings = location.pathname.startsWith("/settings");
-    if (!gm && !(settings && result.session.user.systemAdministrator)) {
+    const worlds =
+      location.pathname === "/" ||
+      location.pathname === "/worlds" ||
+      location.pathname.startsWith("/worlds/");
+    if (
+      !gm &&
+      !worlds &&
+      !(settings && result.session.user.systemAdministrator)
+    ) {
       throw redirect({ to: "/login", search: { returnTo: location.href } });
     }
     return result;

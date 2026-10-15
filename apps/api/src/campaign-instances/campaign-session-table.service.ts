@@ -1,5 +1,8 @@
+import { CampaignInstance, LocationDefinition } from "@aow/domain";
+import { runtimeCaptureContext } from "./campaign-instance-management.service";
 import { Prisma } from "@prisma/client";
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -33,6 +36,128 @@ const name = (value: unknown, fallback: string) => text(value) ?? fallback;
 @Injectable()
 export class CampaignSessionTableService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async changeWeather(
+    definitionId: string,
+    instanceId: string,
+    sessionId: string,
+    userId: string,
+    input: {
+      expectedRuntimeRevision: number;
+      locationId: string;
+      weather?: Record<string, unknown> | null;
+      reset?: boolean;
+    },
+  ) {
+    if (
+      !input ||
+      !Number.isSafeInteger(input.expectedRuntimeRevision) ||
+      input.expectedRuntimeRevision < 1 ||
+      typeof input.locationId !== "string" ||
+      (input.reset !== undefined && typeof input.reset !== "boolean")
+    )
+      throw new BadRequestException("Invalid weather change.");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        'LOCK TABLE "CampaignInstanceSession" IN SHARE ROW EXCLUSIVE MODE',
+      );
+      const session = await tx.campaignInstanceSession.findFirst({
+        where: {
+          id: sessionId,
+          campaignInstanceId: instanceId,
+          campaignInstance: {
+            campaignDefinitionId: definitionId,
+            ownerUserId: userId,
+          },
+        },
+        include: {
+          campaignInstance: {
+            include: {
+              runtime: true,
+              currentSnapshot: {
+                include: {
+                  campaignDefinitionSnapshot: true,
+                  worldDefinitionSnapshot: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!session)
+        throw new NotFoundException("The selected Session was not found.");
+      if (!["ACTIVE", "PAUSED"].includes(session.status))
+        throw new ConflictException(
+          "Weather can change only during active or paused play.",
+        );
+      const instance = session.campaignInstance;
+      if (
+        !instance.runtime ||
+        instance.runtime.revision !== input.expectedRuntimeRevision
+      )
+        throw new ConflictException(
+          "Instance runtime changed; refresh and retry.",
+        );
+      const owner = CampaignInstance.deserializePayload(
+        instance.runtime.state,
+        { captured: runtimeCaptureContext(instance) },
+      );
+      try {
+        const receipt = await owner.command("locationWeather", {
+          initiator: userId,
+          context: {},
+          params: {
+            locationId: input.locationId,
+            weather: input.weather,
+            reset: input.reset,
+          },
+        });
+        if (receipt.status === "rejected")
+          throw new BadRequestException("The weather change is invalid.");
+        const changed = await tx.campaignInstanceRuntime.updateMany({
+          where: {
+            id: instance.runtime.id,
+            revision: input.expectedRuntimeRevision,
+            campaignInstanceSnapshotId: instance.currentSnapshotId!,
+          },
+          data: {
+            state: owner.serializePayload() as Prisma.InputJsonObject,
+            revision: { increment: 1 },
+          },
+        });
+        if (changed.count !== 1)
+          throw new ConflictException(
+            "Instance runtime changed; refresh and retry.",
+          );
+        await tx.campaignInstanceAuditEvent.create({
+          data: {
+            campaignInstanceId: instanceId,
+            actorUserId: userId,
+            action: "instance.location-weather.changed",
+            subjectName: "Location weather",
+            subjectType: "Location",
+            detail: {
+              fromRuntimeRevision: input.expectedRuntimeRevision,
+              toRuntimeRevision: input.expectedRuntimeRevision + 1,
+            },
+          },
+        });
+      } catch (error) {
+        if (error instanceof TypeError)
+          throw new BadRequestException(error.message);
+        throw error;
+      } finally {
+        owner.dispose();
+      }
+    });
+    return this.table(
+      definitionId,
+      instanceId,
+      sessionId,
+      userId,
+      input.locationId,
+    );
+  }
 
   async table(
     definitionId: string,
@@ -225,6 +350,12 @@ export function projectSessionTable(
       id: selected.sourceId,
       name: locationNames.get(selected.sourceId)!,
       description: text(payload.description),
+      ...projectLocationPresentation(
+        payload,
+        rows(state.locationPresentationOverrides).find(
+          (entry) => entry.locationId === selected.sourceId,
+        ),
+      ),
       image,
       terrain,
       mapStatus: terrain ? "isometric" : image ? "image" : "unavailable",
@@ -409,5 +540,33 @@ function capturedImage(value: unknown): LocationImage | undefined {
     altText: name(image.altText, "Location image"),
     orientation: image.orientation as LocationImage["orientation"],
     uri: text(image.uri),
+  };
+}
+
+function projectLocationPresentation(
+  captured: Record<string, unknown>,
+  override?: Record<string, unknown>,
+) {
+  const weather =
+    override && Object.hasOwn(override, "weather")
+      ? override.weather
+      : captured.weather;
+  return {
+    ...(weather &&
+    typeof weather === "object" &&
+    !LocationDefinition.presentationIssue({ weather })
+      ? { weather: weather as unknown as import("@aow/common").LocationWeather }
+      : {}),
+    weatherOverridden: !!override && Object.hasOwn(override, "weather"),
+    ...(Array.isArray(captured.audiovisualEffects)
+      ? {
+          audiovisualEffects: captured.audiovisualEffects.filter(
+            (cue) =>
+              !LocationDefinition.presentationIssue({
+                audiovisualEffects: [cue],
+              }),
+          ) as import("@aow/common").LocationAudiovisualEffect[],
+        }
+      : {}),
   };
 }

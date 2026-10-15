@@ -1,3 +1,4 @@
+import { worldAccessWhere } from "./world-access";
 import {
   ConflictException,
   NotFoundException,
@@ -395,7 +396,7 @@ describe("WorldDefinitionsService", () => {
     });
     expect(JSON.stringify(result)).not.toMatch(/manifest|content":/);
     expect(prisma.worldDefinition.findMany).toHaveBeenCalledWith({
-      where: { ownerUserId: "gm-1" },
+      where: worldAccessWhere("gm-1"),
       select: {
         id: true,
         name: true,
@@ -497,7 +498,7 @@ describe("WorldDefinitionsService", () => {
       }),
     );
     expect(firstCallArgument(prisma.worldDefinition.findUnique)).toMatchObject({
-      where: { id: "world-lineage-1", ownerUserId: "gm-1" },
+      where: { id: "world-lineage-1", ...worldAccessWhere("gm-1") },
     });
     expect(prisma.worldDefinition.findUnique).toHaveBeenCalledTimes(1);
   });

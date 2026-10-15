@@ -37,6 +37,10 @@ export function WorldModelFacets({ children }: { children: ReactNode }) {
   const active =
     facets.find(({ id }) => location.pathname.includes(`/model/${id}/`))?.id ??
     "overview";
+  const focused =
+    location.pathname.includes("/model/") &&
+    !location.pathname.endsWith("/effective");
+  if (focused) return <>{children}</>;
   return (
     <>
       <div className="mx-auto w-full max-w-5xl min-w-0 px-6 lg:px-10">

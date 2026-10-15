@@ -1,3 +1,5 @@
+import { CharacterAuthorPage } from "../CharacterAuthorPage";
+import { characterAuthorKind } from "../characterAuthoringModel";
 import { createFileRoute } from "@tanstack/react-router";
 import { CharacterDefinitionEditor } from "../WorldAuthoringPages";
 import type { CharacterOptionKind } from "../characterOptionModel";
@@ -8,6 +10,9 @@ export const Route = createFileRoute(
 
 function CharacterDefinitionRoute() {
   const { definitionKind, definitionId } = Route.useParams();
+  const authorKind = characterAuthorKind(definitionKind);
+  if (authorKind)
+    return <CharacterAuthorPage kind={authorKind} sourceId={definitionId} />;
   const kind = singularKind(definitionKind);
   if (!kind) return <Unavailable />;
   return (

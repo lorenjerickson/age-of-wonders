@@ -1,5 +1,8 @@
+import { WorldDefinition } from "@aow/domain";
+import { LocationDefinition } from "@aow/domain";
 import type { WorldDraftRecord, JsonValue } from "./api";
 import { recordPayload, recordName } from "./worldAuthoringModel";
+import { presentationFields } from "./locationPresentationModel";
 export const LOCATION_SECTIONS = [
   "Description",
   "Map",
@@ -49,12 +52,31 @@ export function locationParentOptions(
   records: readonly WorldDraftRecord[],
   locationId: string,
 ) {
+  // Preserve this workspace's retained placement-parent projection while the
+  // owner applies the hierarchy decision to canonical read-only input.
+  const hierarchy = records.map((record) => {
+    const placement = recordPayload(record).placement;
+    const parentLocationId =
+      placement &&
+      typeof placement === "object" &&
+      !Array.isArray(placement) &&
+      "parentLocationId" in placement
+        ? placement.parentLocationId
+        : undefined;
+    return {
+      ...record,
+      payload: { placement: { kind: "within-parent", parentLocationId } },
+    };
+  });
   return records
     .filter(
       (record) =>
         record.resourceType === "locations" &&
-        !locationAncestry(records, record.sourceId).some(
-          (ancestor) => ancestor.sourceId === locationId,
+        !WorldDefinition.hierarchyPlacementIssue(
+          {},
+          hierarchy,
+          locationId,
+          record.sourceId,
         ),
     )
     .map((record) => ({
@@ -75,6 +97,7 @@ export function updateLocationFields(
 export function locationMutationInput(
   record: WorldDraftRecord,
   expectedStorageRevision: number,
+  previous?: WorldDraftRecord,
 ): import("@aow/common").CreateWorldLocationDraftRequest {
   const payload = recordPayload(record);
   const profile = (payload.profile ?? {}) as {
@@ -84,10 +107,16 @@ export function locationMutationInput(
   const scene = (payload.mapScene ?? {}) as {
     notes?: string;
     orientation?: import("@aow/common").LocationMapOrientation;
+    grid?: import("@aow/common").CreateWorldLocationDraftRequest["mapSceneGrid"];
   };
   const placement = (payload.placement ?? {}) as { parentLocationId?: string };
   return {
     expectedStorageRevision,
+    ...presentationFields(
+      payload.weather as JsonValue | undefined,
+      payload.audiovisualEffects as JsonValue | undefined,
+      previous ? recordPayload(previous) : undefined,
+    ),
     name: String(payload.name ?? recordName(record, "Unnamed Location")),
     description:
       typeof payload.description === "string" ? payload.description : undefined,
@@ -101,6 +130,8 @@ export function locationMutationInput(
     profileTags: profile.tags ?? [],
     mapSceneNotes: scene.notes ?? "",
     mapOrientation: scene.orientation,
+    mapSceneGrid: scene.grid,
+    map: payload.map as import("@aow/common").CreateWorldLocationDraftRequest["map"],
   };
 }
 
@@ -115,4 +146,40 @@ export function locationGmNotes(record: WorldDraftRecord): string {
         .filter((value): value is string => typeof value === "string")
         .join("\n\n")
     : "";
+}
+
+/** An orientation change selects the matching map representation before persistence. */
+export function locationMapForSave(
+  previousMap: unknown,
+  image: import("@aow/common").LocationImage | undefined,
+  orientation: import("@aow/common").LocationMapOrientation,
+): import("@aow/common").LocationMap {
+  return LocationDefinition.authoringMap(previousMap, image, orientation);
+}
+
+type ObjectValue = Record<string, JsonValue>;
+function object(value: unknown): value is ObjectValue {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+export function locationClaims(
+  record: WorldDraftRecord,
+): ObjectValue[] | undefined {
+  const value = recordPayload(record).discoveries;
+  if (value === undefined) return [];
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (v) =>
+        !object(v) ||
+        typeof v.id !== "string" ||
+        !v.id ||
+        typeof v.statement !== "string" ||
+        !["truth", "rumor", "belief"].includes(String(v.kind)),
+    )
+  )
+    return undefined;
+  const claims = value as ObjectValue[];
+  return new Set(claims.map((v) => v.id)).size === claims.length
+    ? claims
+    : undefined;
 }

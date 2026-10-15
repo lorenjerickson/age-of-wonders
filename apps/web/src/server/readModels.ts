@@ -123,7 +123,15 @@ export const readWorldAuthoring = createServerFn({ method: "GET" })
       ]);
       return {
         found: true as const,
-        definition,
+        // Historical manifests can contain many megabytes of captured maps. They are
+        // fetched explicitly by Export rather than serialized into every World page.
+        definition: {
+          ...definition,
+          revisions: definition.revisions.map((revision) => ({
+            ...revision,
+            snapshots: [],
+          })),
+        },
         draft: draft
           ? {
               ...draft,

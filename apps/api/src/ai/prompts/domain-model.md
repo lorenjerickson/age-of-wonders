@@ -6,6 +6,9 @@ matches these structures exactly: omit optional properties when they are unknown
 required property, use the documented discriminant values, and never add explanatory prose around
 a requested JSON payload.
 
+Feat, Heritage and Discipline are permanently outside product scope. Their existing type descriptions
+below document compatibility data only and do not authorize new authoring, acquisition or execution.
+
 There is no magic in the authoritative game system. Every apparently supernatural event is a
 physical phenomenon, biological capability, scientific process, or technology, even when people
 in the setting misunderstand it. Folkloric terms may appear in names, aliases, beliefs, and quoted
@@ -13,9 +16,210 @@ descriptions, but never as authoritative mechanical causation.
 
 ## Generic domain foundation
 
-`packages/domain` provides a separate, type-only foundation for future entity contracts.
-It does not yet replace `packages/common/src/types` or define persisted resources. Do not
-generate these contracts as application resource JSON.
+`packages/domain` now provides the executable abstract `Entity` base and concrete
+`CreatureDefinition`, `ItemDefinition`, `EffectDefinition`, `ConditionDefinition`, `CharacterTemplate`,
+`Attribute`, `SkillDefinition`, `Modifier`, `LocationDefinition`, `WorldDefinition`,
+`PlacementDefinition`, `Discovery`, `PlotDefinition`, `ProfessionDefinition`, `BackgroundDefinition`, `HeritageDefinition`, `DisciplineDefinition`, `FeatDefinition`, `ActionDefinition`, `TraitDefinition` and `CharacterDefinition` classes, plus runtime `Creature`, `Character`, `Item`,
+`ActorEquipment`, `GrantedModifier` and `ActiveEffect` owners and the `CharacterCreation` policy.
+B06 adds `LanguageDefinition`, `TableDefinition`, `CustomDefinition`, `ExtensionSchema`,
+`RuleVariant`, `ContentPack` and `GameSystem` catalog owners, with `EntityGraph` and `CatalogCapture`
+for isolated identity and reference validation.
+It does not replace `packages/common/src/types` as the authoritative
+persisted state contract or add persisted resources. Generate the existing resource JSON below,
+not entity instances, Observables, commands, or runtime serialization envelopes.
+
+- `Entity<State, Commands, Events, ValidationContext>` implements `IEntity` with immutable
+  `state.data` and `state.metadata.validity`, plus a read-only RxJS `state$` Observable. A subscriber
+  receives the current snapshot immediately and subsequent committed data or metadata changes.
+- `command(name, {initiator, params, context})` processes a typed command; `command(name)` obtains
+  an endpoint whose `.bind({map})` declares input mapping before execution. Event channels expose
+  `.listen(handler)`. A shared `EntityScope` queues causal work and bounds cycles; bound event
+  reactions across different scopes are rejected. B08 migrates the existing actor/equipment behavior;
+  B10 adds Instance, Session, participation and scoped rule-execution ownership to existing runtime consumers.
+- `serialize()` produces `{type, schemaVersion: 1, data}` for entity round trips. It excludes
+  validation caches, observers and subscriptions. This envelope is **not** the database/API resource
+  format. Concrete `deserialize()` factories reject malformed input and recompute validity.
+- `CreatureDefinition.deserialize(payload, context, options?)` also accepts the existing authored
+  Creature payload. `serializePayload()` retains its existing `definitions` resource shape and
+  extensions. Structurally decoded drafts can be incomplete; their fields are not automatically
+  treated as a valid `WorldCreatureDefinition`. Validation needs the authorized World record set
+  and Model projection. Missing context is unresolved, not valid. Trusted draft baselines preserve
+  unchanged legacy scalar issues as nonblocking; publication checks the full payload.
+- Creature construction, canonical/Codex/reference/embodiment checks and authoring Model checks
+  are owned by the class. Its first instance command is `rename`, emitting
+  `creature-definition.events.renamed`. Runtime overlays now use the separate `Creature` owner
+  described below. The API adapts entity-state issues to existing response contracts.
+- `ItemDefinition.deserialize(payload, context, options?)` accepts the existing authored Item payload
+  or its `{type: "item-definition", schemaVersion: 1, data}` entity envelope. `serializePayload()`
+  returns the unchanged `definitions` resource JSON. The class owns canonical shape, optional square
+  artwork, slot sets, weight/cost/notes, Condition grants and effective Model conformance validation.
+  Unknown extensions and legacy payloads survive codec round trips. Missing reference/Model context
+  is unresolved; trusted draft baselines tolerate only unchanged legacy scalar problems, while full
+  publication rechecks them. Validity remains in `state.metadata.validity`, never in persisted JSON.
+- Item's typed `rename` command emits `item-definition.events.renamed` after state publication.
+  `decodeAuthoringSelection` decodes textual proposal family/category/quality/slot fields against
+  the authorized vocabulary; the AI adapter translates decoding failures to its existing errors.
+  Clearing the last equipment slot set is rejected when it would discard custom equippable members;
+  the prior payload is retained. The common nonempty slot-set contract is unchanged.
+  Application media authorization is still required. This class models authored World Items; runtime
+  `ItemInstance` and container mechanics now use separate runtime owners. Legacy Item/Armor/Weapon
+  generation paths remain separate compatibility work. The common `ItemDefinition` type remains the serialized contract,
+  distinct from the executable class exported by `@aow/domain`.
+- `EffectDefinition` owns the authored `world-effects` contract: numeric-property modifier checks,
+  scoped property resolution, default/per-modifier durations and explicit override permission.
+  `ConditionDefinition` owns `world-conditions` links and overrides, consulting Effect capabilities.
+  Both expose immutable `state`/`state$`, typed `rename`/`renamed` behavior and codecs over the
+  unchanged common World Codex types. Shared `CodexDefinition` handles common identity and
+  authoring construction. These classes do not apply gameplay modifiers or replace runtime Effects.
+- `CharacterTemplate` owns authored `world-character-templates` scalar, equipment, artwork and
+  scoped Creature/Item/Condition reference validation. It exposes immutable `state`/`state$`,
+  typed `rename`/`renamed` behavior and a `character-template` serialization envelope. Trusted
+  `baseline` context enforces immutable Creature selection in Codex edits and full-draft saves.
+  The class preserves metadata for reused artwork and removes transient URIs; the API authorizes
+  media access. Existing optional/legacy payload behavior is retained. This authoring class is
+  distinct from runtime `CharacterState`, the sparse `Character` runtime owner and `CharacterCreation`.
+- `Attribute` represents an adopted Model vocabulary option as `{lineage, revision}`, using existing
+  common Model contracts. It validates kind/label, revision lineage and vocabulary/parent relationships
+  against the exact release context. `selectRevision`/`revisionSelected` selects a supplied revision
+  in memory without editing an immutable revision. The compiler consumes its validity state;
+  registry authorization, content hashes and collective dependency checks remain application policy.
+  This bundle is an entity hydration shape, not a new database resource or replacement Attribute key.
+- `SkillDefinition` owns optional Profession association shape/references, bounded Modifier grants,
+  exact Model conformance and available default Attribute selection. Its `rename` command updates
+  `identity.name`. Missing Model/reference scope remains unresolved; partial legacy Skill and
+  referenced Profession payloads retain their previous validation behavior.
+- `Modifier` represents an authored `ModifierGrantDefinition` recipe, distinct from `WorldEffectModifier`
+  and active `GrantedModifier` state. It owns target/stacking/dice validation; typed `rename` updates
+  the label and emits `renamed`. Compatibility collection adapters preserve uniqueness scope and
+  Skill/Profession/Background diagnostics while consuming child validity state. Runtime acquisition
+  and captured aggregation now belong to `GrantedModifier`. Existing common helpers remain for browser/runtime
+  compatibility; no common-to-domain dependency is introduced.
+- For these authoring classes, `deserializePayload(raw, context, options?)` is the persisted/API input
+  boundary; `serializePayload()` returns that unchanged resource shape. Use `deserialize()` for
+  deliberate entity-envelope round trips. Raw resource hydration does not reinterpret `type/schemaVersion/data`
+  fields as an envelope. Never generate an envelope where resource JSON is requested.
+- Effect/Condition validation uses the authorized World record set and reports unresolved context
+  when omitted. Condition relationship checks preserve support for partial legacy Effect records
+  with modifier declarations; they do not certify those Effects as valid. Publication validates
+  every full record independently. Empty Condition Effect lists remain permitted. Runtime captured
+  modifier grants and effect-derived conditions use the separate B08 owners below.
+
+### Scoped graphs and catalog ownership (B06)
+
+`EntityGraph` registers live entities by `{type, id}` inside one `EntityScope`. Duplicate graph
+identities and cross-scope registrations are rejected. References may cycle; persistent ownership
+may not. Owned children remain registered until removal or disposal; removing an owner disposes
+its descendants. Serialized graphs contain identities, ownership and entity envelopes, without
+subscriptions or cached validity. Hydration uses caller-supplied codecs and an isolated graph;
+it never resolves references from another request, World or global registry.
+
+Graph validity follows registered references and owned children. Missing targets are unresolved,
+invalid dependencies propagate diagnostics, and committed changes or target removal revalidate
+consumers. Explicit draft, publication and runtime validation modes remain distinct. Commands
+publish committed state before events; rejected changes do not publish candidate state. These
+facilities do not authorize automatic gameplay execution or replace Instance/Session orchestration.
+
+`CatalogCapture` applies this graph to an exact authorized record set. `catalogOwner` selects a
+concrete codec; each catalog concept owns its validation. Language, Table and Custom use the existing
+`definitions` resource with `identity`, `kind` and `components`. ExtensionSchema, RuleVariant,
+ContentPack and GameSystem retain their existing independent resource identities. Table entries,
+dice expressions, variant patches, pack dependencies and embedded pack schemas are owned values,
+not new persisted resources. An ExtensionSchema has an independent entity lifecycle when stored in
+`extension-schemas`, and is a value when embedded in a ContentPack.
+
+The internal archive-compatible `DomainService` writers hydrate these owners for structural checks.
+Replacement uses the owner's `replace` command and retains the existing resource identity; external
+persistence revision checks remain in the service. Incomplete historical records remain readable and
+are not rewritten. New writes require locally valid supplied structure; missing external reference
+context remains explicitly unresolved and nonblocking in draft mode so sequential archive imports
+can retain forward references. World publication instead validates against its exact captured closure.
+Raw codecs preserve private/imported fields; replacement payloads must retain fields that should
+survive. No source defaults or cross-World lookups are inferred.
+
+- Language script and rarity remain open text. Table entries require finite ordered minimum/maximum
+  ranges, JSON values and finite optional weights. Fractional endpoints and negative finite weights
+  are not normalized or rejected. Optional dice use the existing authored dice grammar; no table roll
+  execution is added.
+- Custom Definitions bind `components.definitionKind` and optional `schemaId` to a registered
+  ExtensionSchema in the capture. Registration identity, key, applicable kinds and schema structure
+  are checked. Multiple captured registrations sharing a key require an explicit `schemaId` at
+  publication/runtime; key-only lookup never chooses one arbitrarily. This does **not** execute JSON
+  Schema against the custom payload or certify payload
+  conformance. The existing JSON payload and extension members remain intact.
+- RuleVariant owns supported patch operation/target structure and requirement/conflict references.
+  Optional patch values remain JSON data. ContentPack owns metadata, definition/variant references,
+  dependency structure and embedded schemas. Required dependency namespaces must exist in the exact
+  publication/adoption capture; optional missing dependencies are allowed. Drafts without capture
+  context retain unresolved references. Authored semantic versions and dependency version
+  ranges remain strings; no version-range solver or automatic dependency installation is added.
+- GameSystem owns its embedded catalog and explicit enabled variants. `setEnabledVariants` rejects
+  absent, duplicated, conflicting or unsatisfied required selections atomically. It never automatically
+  enables defaults or prerequisites. Configuration and private fields remain unchanged by selection.
+
+Common catalog/game types and the resource mapping table below remain unchanged. Feat, Heritage
+and Discipline remain excluded; their retained compatibility data does not gain new catalog behavior.
+
+### Runtime actors, equipment and creation (B08)
+
+`Creature` owns the bounded `CampaignInstanceCreatureStateOverlay`; `Character extends Creature`
+shares the same placement, captured-rule resource and active-effect operations. These sparse overlays
+are deliberately distinct from the complete common `CreatureState`/`CharacterState` contracts.
+Do not fabricate health, proficiency, pools or other required full-state fields from a Definition.
+Current placement and movement consumers select the Character owner for Character provenance.
+The overlay's optional `equipment` and `activeEffects` remain absent on historical captures until
+explicitly supplied. Unknown/private fields survive owner transitions. `ActiveEffect` validates a
+captured effect and advances only caller-supplied events or elapsed units: instantaneous effects
+expire on advancement; until-event effects expire on an exact event match; measured durations
+consume matching units without conversion. Permanent and special durations do not expire by
+inference. Effective conditions combine intrinsic conditions with remaining effect contributions;
+removing one effect does not erase intrinsic or other effects' conditions. Broader scheduling and
+rule-payload execution remain Instance/Session integration work. `WorldGrantedCondition` remains an
+authored reference; it is not automatically converted into a runtime effect. Movement rule projection
+can observe the effective condition union without executing new modifier or trigger payloads.
+
+`Item` owns runtime quantity/state and `ActorEquipment` owns an actor's Item graph, complete slot
+assignments, containment and retrieval transitions. `QualitySlotCapacity` has required `quality`
+and `slots` plus optional `rarity`. `containerSlotCapacity(container, quality, rarity?)` first uses
+an exact authored quality-and-rarity row, then an explicitly authored row for that quality with
+rarity omitted. Missing matches yield no capacity; there is no game-wide table or implicit fallback.
+Capacity rows use nonnegative safe whole numbers; the current runtime rejects capacities above 1000.
+Belts accept only
+Items explicitly configured as consumables, tools or a `beltSlotCategory`; packs/bags accept any
+Item. Each occupied container slot holds one Item instance, whose quantity remains its stack count.
+All slots in a compatible equipment set are assigned atomically. Occupancy, ownership, capacity,
+containment cycles and captured definitions are validated before committing changes.
+
+For example, this Item component fragment explicitly gives standard quality two slots, or three
+when its captured rarity is rare; it supplies no capacity for other qualities:
+
+```json
+{
+  "slottedContainer": {
+    "kind": "belt",
+    "accepts": "belt-compatible-items",
+    "capacityByQuality": [
+      { "quality": "standard", "slots": 2 },
+      { "quality": "standard", "rarity": "rare", "slots": 3 }
+    ]
+  }
+}
+```
+
+Retrieval from an equipped Belt costs no bonus action; retrieval from a Pack/Bag or an unequipped
+container consumes one explicitly available bonus action, including retrieval immediately followed
+by equipping. Failed moves consume nothing. The allowance is a nonnegative integer in
+`extensions["aow:rules"]["aow:bonusActions"]`; absence grants no allowance and no turn/reset behavior
+is inferred. GM equipment operations use the Instance runtime revision for CAS and retain unrelated
+actors, Items and private data. Names are display projections; opaque identifiers remain references.
+
+`CharacterCreation` owns captured selection, required-field/artwork/roll allocation, review,
+creation equipment and import projections. The API retains authorization, schema-capture reads,
+cryptographic entropy, audit and transactional persistence. `Character.validateSheetBinding`
+checks the approved Character/Instance identity. `Character.fromApprovedSheet` is a sparse overlay
+integration port consumed by Instance activation. Approval consumption, sheet persistence, one Character embodiment and physical starting Items commit in the same transaction with runtime/capture CAS. Captured quality and approved slot assignments drive Item creation through ActorEquipment; assignment definition IDs become physical Item IDs. Reactivation preserves the existing embodiment, Items and acquired grants. The approved sheet is creation output, not a fabricated complete `CharacterState`.
+
+The original type-only compatibility contracts remain exported; they do not
+describe the new executable command/event surface:
 
 - `Command<Name, Params, Initiator, Context, Metadata>` is an action payload with required
   `initiator`, `name`, `params`, and `context`, plus optional additional `metadata`.
@@ -27,13 +231,426 @@ generate these contracts as application resource JSON.
   to emitted events but may include other entities' events. This is a type contract, not a runtime
   object or queue format. Use literal-name payload unions to preserve name/payload correlation.
 - `EventHandlers<Events>` associates each event name with optional handler lists receiving that
-  event's precise envelope. Input mapping is a design-time concern; mapping and dispatch are not
-  implemented by this package.
+  event's precise envelope. This legacy type does not implement the executable base's mapping
+  or dispatch behavior.
 - `StatePath<State>` and `StatePathValue<State, Path>` describe dotted paths and their value
   types over nested key/value state. Arrays and functions are leaves; optional or null intermediate
   objects produce possibly undefined values. These types do not implement runtime dereferencing.
 
-The existing resource table, serialization examples, and subsystem contracts below remain unchanged.
+### Catalog Character Definition and owned Traits
+
+`CharacterDefinition` owns the common `CharacterDefinition` contract: resource `definitions`, kind
+`character-template`, and `CharacterTemplateComponents`. It is distinct from the flat NPC
+`CharacterTemplate` entity/resource `world-character-templates`; their codecs are not interchangeable.
+The new entity uses a `character-definition` envelope, immutable observable state, rename/events,
+required attribute-default diagnostics and optional component shape checks. Embedded Traits delegate
+to TraitDefinition, including its owned Actions, with indexed diagnostics and scoped record context.
+Temporary children are disposed; unknown/private fields round-trip without metadata injection.
+
+Compatibility-only Codex validation projects `character-definition-codex-*` Condition-link diagnostics,
+retaining sparse captures and existing optional Model conformance. Current World draft/publication
+boundaries additionally consume supplied structural and nested diagnostics. Catalog authoring now
+exposes supported component fields; this adds no runtime Character acquisition/materialization or rule evaluation. Never generate the entity envelope as a persisted resource payload.
+
+### World authoring validation boundaries
+
+Current World draft saves and dedicated authored mutations (including applied AI proposals)
+consume owner diagnostics for supplied known structural fields. Incomplete/sparse draft values
+remain repairable. An unchanged inherited top-level mechanics field can remain while another
+field is edited; a new or changed malformed field is rejected. The baseline must have the same
+record kind. These exemptions never authorize publication.
+
+World draft validation/publication explicitly rechecks structural Action/Trait/Item and character-option
+diagnostics against the exact captured draft and Model selection. Existing completeness and
+Condition-link policy remains; generic unresolved expression/catalog references do not acquire
+new all-fields-required rules. Legacy compatibility-only Codex calls retain their existing projections;
+they are distinct from the current World publication gate. Internal legacy generators/import CLIs
+remain migration adapters, not public World-authoring save endpoints.
+
+### Item structured draft edits
+
+`CreateWorldItemDraftRequest` accepts optional `traits` and `actions` lists and an optional
+`vehicle` object. Omission preserves existing content, an empty list clears that collection,
+and `vehicle: null` explicitly removes Vehicle data. Submitted nested definitions carry their
+complete identity, components and extensions; editors must preserve unexposed fields when editing.
+The Item save boundary checks entity-owned malformed-field and reference diagnostics for supplied
+sections while permitting unresolved draft information. Unedited legacy sections remain repairable.
+Compatibility-only projections remain unchanged; current World publication explicitly includes structural diagnostics.
+
+### Item owned Trait and Action validation
+
+Item validates supplied `components.traits` through TraitDefinition, which owns embedded Action
+checks. Indexed `item-traits-*` diagnostics preserve child blocking/unresolved state and remain outside
+existing `item-canonical-*`, `item-codex-*` and `item-model-*` API projections. Context forwarding uses
+only mode and authorized record captures; Item identity, baseline and Model context do not become
+child identity or governance. Temporary child and API Item instances are disposed. Raw content and
+extensions remain preserved, including malformed repairable captures. A child exceeding its codec
+limits is diagnosed without discarding the enclosing Item payload. Existing commands reject blocking
+owned-child issues atomically. Item also delegates optional `components.actions` and
+`components.vehicle.actions` to ActionDefinition. These diagnostics use `item-actions-*` and
+`item-vehicle-actions-*` prefixes with indexed paths, keeping the API projections unchanged. Malformed
+supplied lists/members and a non-object Vehicle container receive diagnostics without data loss.
+Vehicle fields now receive complete structural checks for the current `VehicleDefinition` contract:
+required vehicleType/size/armorClass/hitPoints/speeds, optional damageThreshold/crew/passengers,
+cargoCapacity, components and actions. Missing required fields are unresolved; malformed supplied
+fields are invalid. Type and size remain open strings; numeric fields accept finite fractional/negative
+values because the common contract declares no additional bounds. Speed Distance and cargo Weight
+units use their closed common vocabularies. Vehicle component references resolve against declared
+Definitions in the captured World. Any Definition kind is permitted by `DefinitionId[]`; this is not
+an Item-only constraint. Missing targets are nonblocking draft diagnostics and block publication.
+This does not implement runtime realization or broader deep rule semantics. Catalog CharacterDefinition now owns Traits; runtime Character composition remains separate.
+
+### Trait definition grants
+
+`TraitComponents.grants` is an optional ordered array of `DefinitionId` strings.
+Trait owns its structural validation: supplied non-arrays and non-string entries
+are invalid. Omission, empty lists, empty strings, unknown references and duplicate
+strings remain accepted and round-trip unchanged; authoring does not infer catalog
+existence, uniqueness or runtime granting semantics. Item-owned Trait grant editing
+uses named references from current World `definitions` records and preserves
+unavailable imported references until explicitly replaced or removed. Definition
+records retain the existing `identity.id` / `identity.name` resource mapping.
+Compatibility `grantedConditions` entries (`{conditionId}`) are a separate field
+with existing Condition-link validation, not an alternative grant representation.
+
+### Executable Trait compatibility
+
+`TraitDefinition` owns raw/envelope codecs, immutable observable state, typed rename/events, recursive
+component diagnostics and compatibility Condition-reference checks. All fields in common
+`TraitComponents` are optional; `{}` is valid, while absent components remain unresolved. Supplied
+component fields receive recursive structural checks for known built-in fields. RuleModifier and TriggerDefinition are object
+interfaces, not kind-tagged unions. Trait delegates embedded Action validity to ActionDefinition;
+Feat and Item delegate embedded Trait validity to TraitDefinition. Indexed diagnostic paths and unresolved
+status propagate into the owner state, using the authorized record capture without inheriting the
+parent source identity. Temporary children are disposed; payloads do not gain entity metadata.
+RuleModifier, Trigger, Choice, Predicate and Action-effect built-in structures are validated recursively.
+Reference resolution beyond current Condition checks and runtime realization remain deferred. Catalog CharacterDefinition now owns Traits; runtime Character composition
+remains pending; direct Item actions and Vehicle actions now delegate validity to ActionDefinition.
+
+Compatibility-only World Codex reports project `trait-codex-*` diagnostics, preserving the previous
+Condition-link gate and sparse legacy captures. Nested diagnostics use owner-specific prefixes outside
+`trait-codex-*` and `feat-codex-*`; current World draft/publication gates consume their supplied structural
+errors. No required Trait Model concept/conformance is introduced. Owned Trait editors reuse shared controls. Generic supplied-conformance
+checks remain unchanged. Private fields/extensions survive codecs. Persisted resources remain raw
+`definitions` payloads; `trait-definition` envelopes are not AI-generated resource payloads.
+
+### Executable Action compatibility
+
+`ActionDefinition` owns raw/envelope codecs, immutable observable state, typed rename/events, recursive
+component diagnostics and existing compatibility Condition-reference checks. Missing required
+activation/outcomes are unresolved. Activation uses the closed `ActivationType` vocabulary from
+`rules.ts`. Outcomes have `id` and `effects`, plus optional `when`; they do not require a `kind`.
+Discipline outcomes and scaling additional effects use this same container contract. Action owns
+indexed field diagnostics for every built-in RuleEffect, including recursive branches, iteration,
+repeat saves and embedded choices/modifiers. Required missing fields are unresolved; malformed
+supplied fields are invalid. Shared class-owned grammar recursively validates NumericExpression,
+ScalarExpression, DiceExpression/terms/modifiers, D20 tests (including opposed tests), Duration,
+AreaShape and TargetDefinition (including filters). Numbers must be finite; no extra positivity,
+integer, ordering, range or uniqueness constraints are inferred. Attribute keys and emitted event
+keys use their common namespaced-string contracts. Custom and unknown imported tags remain opaque,
+and private fields survive codecs. Target/reference binding, choice selection, numeric evaluation,
+combat resolution and duration execution remain deferred; this is structural validation only.
+Action owns optional Outcome `when` predicates through the same recursive grammar as prerequisites,
+with `action-outcome-predicate-*` diagnostics at `components.outcomes[index].when` and its descendants.
+Omitted predicates stay omitted; missing required atomic/group/comparison fields are unresolved,
+malformed supplied fields are invalid, and unknown tagged imported predicates remain opaque.
+These diagnostics propagate through direct Item, Trait-owned and Vehicle-owned Actions; they do
+not evaluate conditions or introduce new reference-resolution semantics. Current World draft/publication
+gates consume malformed supplied structure under the boundary above.
+Action also owns indexed `action-cost-*` diagnostics for economy activation/count, resource
+resource/amount/minimumRemaining, capacity band/sourceId, item-use item/amount, hit-die amount,
+and movement Distance. Missing required cost fields are unresolved; malformed supplied fields
+are invalid. Numeric fields require finite numbers without additional positivity/integer rules;
+resource amounts use the complete recursive NumericExpression grammar.
+Custom and imported cost kinds round-trip unchanged; resource/reference binding and payment execution
+remain deferred. These checks follow `ActionCost`/`ResourceCost` in common `rules.ts` and do not
+change their wire contracts or persisted resource mapping.
+Action owns indexed `action-choice-*` structural diagnostics for `ChoiceDefinition` and nested
+`ChoiceOption` values: string IDs/prompts/labels, finite minimum/maximum, optional catalog string,
+duplicate boolean, visibility vocabulary, options list, and JSON option values (including null and
+nested arrays/objects). Missing required values are unresolved; malformed supplied values are invalid.
+Option prerequisites use the same recursive Action-owned prerequisite checks described below. No additional
+uniqueness, nonempty-string, integer, positivity, minimum/maximum ordering, catalog-resolution or
+selection semantics are imposed. Common choice contracts and persisted mappings remain unchanged.
+Action owns indexed `action-prerequisite-*` structural diagnostics for its atomic
+prerequisites and nested Choice Option prerequisites, including descendants of `all`, `any`, and `not`: always/never; has-condition, has-tag, is-proficient, is-attuned,
+is-sustaining-operation, damage-type, within-distance, visible, has-cover, and relation.
+Binding and open vocabulary fields require strings (including empty strings); optional attuned
+item remains optional. Distance uses finite values and common units. Missing required fields are
+unresolved; malformed supplied values are invalid. `all`/`any` require a `predicates` array
+(empty arrays are valid); `not` requires one tagged `predicate`. Diagnostics follow recursive
+`.predicates[index]`/`.predicate` paths under the existing bounded, acyclic JSON contract.
+Comparison prerequisites validate the closed `eq`/`ne`/`lt`/`lte`/`gt`/`gte`/`includes`/`matches`
+operator and tagged left/right scalar expressions. Constants require finite numeric values;
+literals accept every JSON value, including null and nested objects/arrays. Numeric `path`
+requires a string path and optional finite fallback; `event-value` and `collection-count`
+require a string path. Empty strings remain valid. Missing operands, tags, operators or required
+expression fields are unresolved; malformed supplied values are invalid, with exact recursive
+operand field paths. Unknown imported scalar tags preserve their internals without deeper
+validation. No operator/operand compatibility, expression evaluation, or reference resolution
+is imposed. These checks follow common `ScalarExpression`/`NumericExpression` as well as `Predicate`.
+Has-definition prerequisites require string `subject` and `definitionId` fields, including empty
+strings. Missing fields are unresolved; malformed supplied fields are invalid at their exact
+recursive paths. Definition IDs are open references: unknown/imported IDs and private data
+round-trip without catalog existence checks or inferred binding semantics.
+Custom and imported predicate internals remain opaque. Option diagnostics carry full
+`components.choices[index].options[index].prerequisites[index]` paths; an omitted Option
+prerequisites list remains valid. Trait owns the same recursive prerequisite grammar through
+the shared internal rule-entity base, with `trait-prerequisite-invalid` and
+`trait-prerequisite-unresolved` codes and `components.prerequisites[index]` paths.
+Malformed supplied values are rejected in Item Trait writes; omitted required values
+remain repairable draft diagnostics. Trait also owns indexed `trait-choice-*` diagnostics for the same Choice/Option structure,
+using the shared rule-entity base. Trait Option prerequisites report `trait-prerequisite-*`
+diagnostics beneath `components.choices[index].options[index].prerequisites[index]`.
+Omitted Choice/Option fields remain repairable draft diagnostics; supplied malformed values
+are rejected in Item Trait writes. Catalog resolution and Choice selection semantics remain deferred.
+No binding resolution or predicate evaluation is added. These checks follow common `Predicate`
+in `expressions.ts`; wire contracts and persisted resource mappings remain unchanged.
+Trait also owns indexed `trait-modifier-invalid`/`trait-modifier-unresolved` diagnostics
+under `components.modifiers[index]` for embedded `RuleModifier` value objects (distinct
+from catalog Modifier definitions). Required `id`/`target` are strings; `operation` is
+one of the common `ModifierOperation` values. Optional `priority` is finite,
+`stacking` follows the common closed union, and `sourceLabel` is a string. Empty
+strings and negative/fractional priorities are allowed; value omission is valid for
+every operation. Supplied scalar values share the comparison expression checks
+above, including all JSON literal values; unknown imported tagged expressions keep
+their internals opaque. Optional predicates use the shared recursive Predicate checks above, with exact paths
+under `components.modifiers[index].predicate` and Trait modifier diagnostic codes.
+Omission is valid; custom/imported predicate and unknown expression internals stay opaque. Missing required fields remain
+unresolved; malformed supplied fields are invalid. No stacking execution, target
+resolution, operation/value compatibility or uniqueness policy is inferred. These
+checks follow `RuleModifier` in `rules.ts` and `ScalarExpression` in `expressions.ts`;
+common types and resource mappings are unchanged.
+Trait owns indexed `trait-trigger-invalid`/`trait-trigger-unresolved` diagnostics under
+`components.triggers[index]`. Events follow the closed `EventType` union in `rules.ts`;
+optional `customEvent` follows `NamespacedKey` (a colon-containing string), `timing` is
+before/replace/after, `optional` is boolean, and `priority` is finite (including negative
+and fractional values). `customEvent` stays optional even for the custom event; no
+additional binding policy is inferred. Required omitted event/effects fields are
+repairable unresolved drafts; supplied malformed values are invalid. Effects must be
+a list of tagged objects. All built-in effects share the recursive Action
+effect grammar through the abstract rule-entity base, with `trait-effect-*` codes
+beneath each trigger's effects list. Unknown effect/expression internals and
+private fields are preserved. Optional trigger predicates use the shared
+recursive Predicate grammar at `components.triggers[index].predicate`, with
+`trait-trigger-invalid`/`trait-trigger-unresolved` diagnostics and no synthetic root
+array index. Omitted predicates are valid; missing required nested fields are unresolved,
+while malformed supplied fields are invalid. Custom/imported predicates and unknown
+expression internals remain opaque. Action and Trait share UsageLimit grammar through
+the abstract rule-entity base. Action owns `action-limit-invalid` and
+`action-limit-unresolved` diagnostics at `components.limit`, including direct, Trait-owned
+and Vehicle-owned Actions. Optional trigger usage limits are validated at
+`components.triggers[index].limit` with the same Trait trigger codes. `UsageLimit` has
+six supported kinds: `uses`, `recharge`, `once-per-turn`, `once-per-round`,
+`once-per-encounter`, and `resource`. Uses require a tagged `NumericExpression`
+maximum: constant values and path fallbacks must be finite numbers, and paths must
+be strings. Known scalar-only expression kinds (including `literal`, even numeric
+literals) are invalid here; all known NumericExpression variants are checked recursively,
+while unknown imported expression internals remain opaque. Optional `resetsOn` accepts `short`, `long`, `homebrew:*`
+or an `EventType`. Recharge requires a finite numeric die and an array of finite
+numeric success values; resource requires a string. No positivity, integer, range,
+uniqueness, nonempty-string or resource-resolution policy is inferred. Omitted
+limits are valid; missing required fields are unresolved, supplied malformed values
+invalid. Unknown imported limit kinds and private fields are preserved. Runtime
+usage counting, reset and recharge evaluation remain deferred. This follows
+`TriggerDefinition`, `RuleEffect`, `UsageLimit` and `NumericExpression` (not the
+broader `ScalarExpression`);
+common types and persisted resource mappings are unchanged.
+Item structured saves reject these invalid diagnostics through owned Trait and Action validation;
+incomplete draft fields remain repairable. Runtime execution remains deferred.
+
+Compatibility-only World Codex reports project `action-codex-*` Condition links. Current World
+draft/publication gates also consume supplied structural diagnostics as described above; sparse drafts remain allowed. No required
+Action Model concept/conformance is introduced. Structured Item-owned Action editors use these
+diagnostics at save time. Generic checks of supplied conformance remain unchanged. Private fields/extensions survive codecs. Persisted resources remain
+raw `definitions` payloads; `action-definition` envelopes are not AI-generated resource payloads.
+
+### Executable Feat compatibility
+
+`FeatDefinition` owns raw/envelope codecs, immutable observable state, typed rename/events, recursive
+component diagnostics and existing compatibility Condition-reference checks. Required traits missing
+from a capture are unresolved; supplied malformed component shapes are invalid. Category is an open
+string and traits may be empty, matching `character.ts`. Embedded Trait validity now propagates into
+Feat state through TraitDefinition, including its embedded Action diagnostics. Choice/Predicate
+structure uses the shared rule grammar; broader reference resolution and runtime acquisition/repeatability
+remain outside this slice.
+
+Compatibility-only World Codex reports project `feat-codex-*` Condition links. Current World
+draft/publication gates additionally consume structural diagnostics; missing draft data remains unresolved.
+No required Feat Model concept or conformance is introduced; generic supplied conformance checks
+remain unchanged. Extensions and private fields survive serialization. No dedicated browser editor
+is added. Draft saves consume new structural diagnostics while preserving unchanged inherited fields;
+publication rechecks structural and existing Condition-link diagnostics. Persisted resources remain raw `definitions` payloads, not `feat-definition` envelopes.
+
+### Executable Discipline compatibility
+
+`DisciplineDefinition` owns raw/envelope serialization, immutable observable state, typed rename/events,
+structural diagnostics and compatibility granted-Condition checks. Missing required component data is
+unresolved. Compatibility-only World Codex reports project `discipline-codex-*` Condition links;
+current World draft/publication gates additionally consume supplied structural diagnostics. No required Discipline Model concept or conformance is added. Existing generic validation
+of supplied conformance remains in force.
+
+The common `disciplines.ts` contract remains authoritative: operating basis and understanding are open
+strings, band is a number, and arrays may be empty. Scientific metadata, extensions and private data
+survive serialization. Nested Action cost, target, Outcome, expression and scaling structures are
+validated recursively. Reference resolution and runtime access/capacity/activation remain deferred. There is no dedicated browser
+editor in this slice. Legacy spell conversion and dual-kind catalog reads remain unchanged. Persisted
+resources remain raw `definitions` payloads; the `discipline-definition` envelope is not an AI-generated
+resource payload.
+
+### Executable Heritage compatibility and authoring
+
+`HeritageDefinition` owns raw/envelope codecs, immutable observable state, typed rename/events,
+supplied paired-modifier structure and existing compatibility Condition-reference validation. Missing
+required component information is unresolved. `heritage-components-*` and `heritage-description-unresolved` metadata describe structural
+state; compatibility-only reports project `heritage-codex-*` Condition links. Current World draft/publication
+gates also consume structural modifier/predicate diagnostics; broader reference resolution remains deferred. The `heritage-definition` envelope is never a generated resource payload.
+
+Heritage does not acquire required Model conformance or a required `aow:heritage` concept in this
+slice. Existing generic validation of supplied conformance remains unchanged. The construction helper
+preserves richer pairs and modifiers when editing foundation text and retains omitted edits/private
+extensions. Heritage stays optional historical content, not a Character creation gate, and the current
+browser still has no dedicated Heritage editor. Common fields/resources are unchanged; runtime
+selection/adoption remains separate work, including the maximum-one compatibility API versus the
+common maximum-three Heritage selection contract.
+
+### Executable Background authoring
+
+`BackgroundDefinition` owns existing authored modifier-grant checks, compatibility granted-Condition
+references and exact Model release/concept conformance (`aow:background`). It provides immutable
+observable state, raw payload codecs, a `background-definition` round-trip envelope and a typed
+`rename` command/event. Missing Model/reference context is unresolved; local grant feedback alone
+is not publication readiness. Canonical/Codex/draft-save/Model adapters read class validity and dispose
+short-lived instances. The browser Background editor uses its class for grant validation and explicit
+grant edits; component construction preserves all prior values, including malformed legacy input.
+
+Common `BackgroundComponents` fields and the `definitions` resource remain unchanged. Granted
+Conditions retain their existing compatibility-field treatment rather than becoming a newly declared
+common field. The class preserves optional attributes, skills/tools, language choices, equipment,
+feat/features, characteristics and choices; supplied known field and nested Choice shapes are recursively validated.
+Selected Background and explicit starting Profession/Skill modifier grants are acquired on Character
+activation through `GrantedModifier`; broader runtime selection remains separate work. Generate raw common JSON,
+not entity envelopes, and retain extension/private data.
+
+### Executable Profession authoring
+
+`ProfessionDefinition` owns existing authored Profession tier/grant validation, granted Condition
+references, exact Model release/concept conformance and Profession Rank selections. It composes
+Modifier validation, exposes validity through state and supports observable `state$`, raw payload
+serialization, a `profession-definition` round-trip envelope, and a typed `rename` command/event.
+Missing Model/reference context is unresolved; local grant checks do not prove publication readiness.
+
+Canonical resource, Codex, draft-save and Model-binding adapters delegate to the class. Browser
+starting-rank/default construction and level grant edits use its detached authoring helpers; browser
+grant feedback reads entity state. Sparse legacy components retain their previous validation behavior.
+Advancement-window, expression, Choice and Action progression structures are validated recursively.
+Explicit creation-tier modifier acquisition is implemented; later awards, spending, action use and
+broader reference resolution remain separate work. Common legacy modifier helpers remain for
+unmigrated consumers; common Profession payloads, resource names and generation JSON are unchanged.
+
+### Executable Placement, Discovery and Plot authoring
+
+`PlacementDefinition` uses explicit `scope: "world" | "campaign"` context. It owns local
+source/presentation/coordinate validation and scoped captured-reference checks. Campaign independent
+placements and World decorations retain their existing common discriminants and resource payloads.
+Scope-specific entity envelopes (`placement-definition:world` / `placement-definition:campaign`)
+are round-trip formats, never generated resource JSON.
+
+`Discovery` owns the composed Truth/Belief/Rumor facets, claim identities and Plot-scoped references.
+Legacy claims remain readable and serialize losslessly. Its `replaceFacets` command writes canonical
+facets and removes legacy claims; it does not guess how to convert arbitrary old claims into one
+Truth. Mixed records cannot hide malformed legacy claims behind valid facets, because current legacy
+runtime readers give claims precedence. Malformed interpreted legacy reference fields also fail
+validation instead of causing exceptions. Knowledge/reveal state remains Instance progress.
+
+`PlotDefinition` owns local members, nested Discovery validation, Campaign ownership, captured
+Location/Placement reciprocity and graph validation against the supplied Plot set. Missing reference
+scope is unresolved. Shared graph issues are exposed in each scoped Plot's validity and deduplicated
+only in the aggregate API report. Replacing Plot content preserves identity/ownership and validates
+candidate edges instead of stale captured self state. All three classes expose immutable `state$`,
+class-owned raw codecs, typed commands/events, and validity through state metadata. Shape-only
+validation is an explicit intermediate decode mode, not full publication readiness.
+
+Campaign authoring/proposal/publication adapters consume these classes. Campaign membership, Model
+release selection, preparation, rich-text safety, authorization and persistence remain aggregate or
+application responsibilities. Common hierarchy/Campaign validators and browser semantic helpers
+remain compatibility consumers pending later cutover. No common payload fields or resource mappings
+change in this slice; generate the raw contracts below and preserve extensions/private fields.
+
+### Browser authoring owner projections
+
+Browser World membership edits delegate `WorldDefinition.withMember` / `withoutMember`, and
+Location parent choices use the owner's hierarchy gate. `LocationDefinition.authoringMap` owns
+the existing image/terrain selection behavior; scenic grids remain preserved but inactive.
+`Discovery.authoringClaims`, `withAuthoredClaims` and `authoringClaimReferences` provide the
+canonical editor facet projection, explicit facet replacement and Plot-scoped reference checks.
+This deliberately retains the editor's canonical-first behavior; historical `Discovery.claims()`
+precedence remains unchanged. Location's flat DiscoveryClaim[] is a different contract.
+`PlotDefinition` provides detached authoring projections for descendant/parent candidates,
+reciprocal Location context associations, removal and parent-change guards. Browser code owns
+labels, prompts and HTTP orchestration, while these projections own the existing policy. They do
+not mutate captured runtime data or introduce new persisted fields, relationships or resource names.
+
+### Executable World authoring
+
+The domain `WorldDefinition` class owns authored revision-content validation, collection membership,
+capture requirements, root/hierarchy consistency and World Placement references. Its name does not
+replace the common `WorldDefinition` interface below, which describes stable lineage metadata.
+`serializePayload()` returns existing revision-content JSON; authorized captured records remain
+validation context and must be persisted alongside content by the repository. No resource mapping,
+identifier, or common persisted type changes in this slice.
+
+The class exposes aggregate validity through `state.metadata.validity` and observable `state$`.
+Child diagnostics must be bound to the exact content and capture checked; missing/stale evidence is
+unresolved. The API still orchestrates child, rules, terrain and Placement shape checks, then projects
+World state. `replaceContent` emits `contentReplaced` after committed state changes. Its entity envelope
+is not a World snapshot or generation format. Lineage lifecycle and runtime World remain separate work.
+
+### Location Definition
+
+`LocationDefinition` owns authored `WorldLocationDefinition` JSON, canonical validation, construction,
+private fields, scoped parent/Condition references, artwork preservation, map changes and scene grid
+policy. It uses the shared immutable `state`/`state$`, typed rename and presentation commands/events, and codecs. The
+`location-definition` envelope is for entity round trips only; persisted resources use raw payloads.
+World ownership is supplied through authorized context; no top-level `worldId` is added. Root
+membership and collective hierarchy cycle checks remain application orchestration.
+
+Every valid Location needs a real map: a complete image, or a valid isometric terrain manifest.
+Blank terrain with explicit dimensions and zero chunks is valid. Legacy image-backed records without
+an explicit map selector remain readable and acquire `{kind:"image"}` when authored again. Mapless
+records remain loadable for repair, including newly initialized World-root drafts, but their state
+is invalid and publication is blocked. Text AI proposals may omit the map only as incomplete previews;
+dedicated Location create/update enforces the map before persistence. Do not invent image assets.
+
+`mapScene.grid?: {kind:"square"|"hex", cellSizePixels:number}` uses positive image-pixel dimensions.
+The mutation field `mapSceneGrid` replaces it, `null` clears it, and omission preserves it. Scenic
+maps retain stored configuration but do not apply/render a grid. Image overlays are also inactive
+for terrain, which retains its distinct physical cell dimensions. The experimental type-only
+Location contract is replaced; its adjacency commands/events are no longer exported.
+
+Location relationships are hierarchy-only. `connectedLocationIds` and `adjacentLocationIds` are
+not new authoring fields. Old payloads can retain these for lossless reads; authored replacement
+removes them and retired references do not block deleting unrelated Locations. Legacy
+`location-connections` records remain readable but generic writes are disabled. Automated
+`begin-travel`/`advance-travel` commands have retired; travel is roleplayed at the table. Parent
+placement and same-map movement remain distinct.
+
+B09 adds `Map`, `Wall`, `Door`, and `Window` owners. Normalized 2D legacy wall/door
+payloads and cell-based 3D terrain openings remain explicit separate formats; an absent
+legacy wall kind is interpreted as wall without rewriting the captured payload. Image
+walls retain their authored blocking channels; open doors block none. Terrain doors
+accept open/closed/locked, windows open/closed, and existing geometric kernels determine
+visibility and collision. Map commands apply complete validated terrain batches and retain
+undo patches, opening identities and private imported fields. Owned element views route
+changes through their Map, update after parent commits and dispose with their owner.
+Geometry, rendering, chunk authorization and immutable hash/capture checks remain adapters.
+
+`MapExploration` owns the existing strict `TerrainExplorationSnapshot` codec and observe
+transition, separately from authored Maps. It retains Instance/snapshot/location/observer
+scope, revision conflict checks, remembered material revisions and explicitly observed
+absence. Unknown/private fields are rejected at this player-memory boundary. The existing
+server-authorized projection consumes this policy; no new participant endpoint or automatic
+visibility sharing is added. The exploration store now awaits the MapExploration observe command, preserves scope/hash/CAS and returns only the authorized projection.
 
 ## Model conventions
 
@@ -183,7 +800,11 @@ stable `worldPlacementDefinitionIds`, legacy schema selections, and required
 `modelSchemaReleaseIds` for one World revision. World Placement records use the exact snapshot
 resource name `world-placements`. Those IDs
 select exact immutable Model Schema Releases; a World never resolves a mutable registry head or
-embeds editable registry records. `CampaignDefinitionRevision` owns one complete
+embeds editable registry records. Model vocabulary elements and Schema Concepts/Fields/Relationships
+have dedicated list/Add/Edit contexts in the existing Models & taxonomies destination. Revisions
+publish immutable releases before exact adoption; failed adoption can retry the same published
+release. Archive remains an explicit registry lifecycle operation.
+`CampaignDefinitionRevision` owns one complete
 `CampaignDefinitionContent` payload—including its format version, authored premise, introduction,
 Plot and placement references, preparation defaults, extensions, and exact Campaign-scoped
 `modelSchemaReleaseIds`—and captures the replicated World snapshot against which it was authored.
@@ -194,21 +815,46 @@ Manual World authoring uses canonical source records declared in
 `packages/common/src/types/world-authoring.ts`. `WorldLocationDefinition` is the immutable source
 Location captured by a World revision; it has server-owned versioned identity, human name and
 description, open Location kind, containment placement, a human profile with discovery tags, and
-optional map/scene notes and orientation. `description` is player-facing; optional `gmDescription`
+a required map and optional scene notes/orientation/grid. `description` is player-facing; optional `gmDescription`
 is private GM authoring text. `discoveries` is an optional array of the existing `DiscoveryClaim`
 contract (`id`, `kind: "truth" | "rumor" | "belief"`, `statement`, optional provenance and claim
 relationships). These authored discoveries are not automatically revealed to participants.
+Location discovery and Creature/Item placement collections have dedicated list/Add/Edit
+authoring contexts. Location claims remain this flat `DiscoveryClaim[]` contract; they do not
+adopt the separate Plot Discovery facet schema. Claim identity, provenance and private extensions
+are preserved. Removing a placement removes its owned placement record and membership, never
+its referenced Creature/Item definition.
 Optional `image: LocationImage` references the attached media asset with alternative text, dimensions,
 MIME type, and scenic/overhead/side-on orientation; signed download URLs are resolved at read time.
 When re-saving existing Location artwork that lacks orientation, authoring repairs it from the
 existing image or map-scene orientation, falling back to `scenic`. Newly attached images must
 still supply their orientation.
+Optional `weather` contains an open, nonempty `condition`, optional finite
+`temperatureCelsius`, and optional `wind: { speedKph, directionDegrees? }`. Wind speed
+is nonnegative; direction is at least 0 and less than 360. These are authored World
+defaults; they do not automatically change mechanical rules or schedule weather.
+Optional `audiovisualEffects` contains up to 100 named cues with unique `id`, `name`,
+`kind: "audio" | "visual"`, authorized `assetId`, `enabled`, and `loop`. Optional
+`volume` is audio-only and `opacity` visual-only; both range from 0 to 1. Audio assets
+must have audio MIME types; visual assets may be images or video. Do not fabricate
+assets or persist signed URLs. These presentation cues are distinct from mechanical
+Conditions/Effects. The GM Session table provides manual local audio/video controls and image cues; enabled cues use authorized media resolution, with no persisted signed URLs or automatic cross-participant playback.
+Authoring requests preserve either field on omission and remove it on `null`; `[]`
+explicitly clears the cue list. Known fields are replaced while unknown imported keys
+survive updates to the same weather/wind or cue identity. Never expose cue/asset IDs
+as GM-facing labels. Unchanged malformed legacy configuration may be preserved during
+unrelated draft edits via a trusted baseline; new/changed values and publication remain
+strictly validated. Explicit removal allows repair without exposing a raw JSON editor.
+For example, after selecting a real authorized audio asset:
+`{weather:{condition:"Rain",temperatureCelsius:8,wind:{speedKph:12}},
+audiovisualEffects:[{id:"rainfall",name:"Rainfall",kind:"audio",assetId:"<selected-asset>",enabled:true,loop:true,volume:0.35}]}`.
 The Location remains stored as a `locations` snapshot record, with no separate persisted Map resource.
-`WorldLocationDefinition.map` optionally selects `{ kind: "image" }` or an
-`IsometricTerrainManifest` with `kind: "isometric"`. Omission retains existing image behavior;
+`WorldLocationDefinition.map` selects `{ kind: "image" }` or an
+`IsometricTerrainManifest` with `kind: "isometric"`. Legacy image-backed records remain readable;
 `LocationImage.orientation` and the older `LocationState` contract are unchanged. Source images
-remain independent illustrations. Map manifests are changed through the dedicated Location Map
-endpoint, not through the ordinary Location create/update request or AI image generation.
+remain independent illustrations. Location create/update may select a map whose terrain chunks already belong to the authorized
+draft. New uploaded chunks are attached through the dedicated Location Map endpoint with capture
+and hash checks; AI image generation does not invent terrain manifests.
 The dedicated Location mutation accepts GM description, discoveries, and image metadata and verifies
 new image references against media accessible to the GM. Location sections must use this mutation;
 the generic draft save intentionally rejects changes to protected Location records.
@@ -222,8 +868,8 @@ model-governed Attribute values and Equipment Slots, optional art direction and 
 references, movement modes, references to World Skill and Profession Definitions, progressive
 mechanics notes, and an explicit Instance embodiment policy.
 `WorldItemDefinition` is the reusable captured source for Item Instances and placements. It composes
-the canonical `ItemDefinition` without defining a parallel Item shape: its identity, category,
-construction quality, Equipment Slot compatibility, and required catalog image use the existing
+the canonical `ItemDefinition` with its artwork optional during World authoring: its identity, category,
+construction quality, Equipment Slot compatibility, and attached catalog image use the existing
 `Definition`/`ItemComponents`/`ItemImage` contracts. World-specific governance adds exact Model
 conformance and records the selected Item family in `modelValues["aow:item-family"]`. These source
 definitions are distinct from mutable `CreatureState` and `ItemInstance` runtime aggregates. Item
@@ -289,7 +935,7 @@ names both its Campaign Instance and the Instance snapshot against which its rec
 monotonic `revision` is the compare-and-swap token for runtime writes. Its canonical
 `CampaignInstanceRuntimeState` owns Instance preparation, exact root/subplot progress overlays,
 placement-realization decisions, independent Creature embodiments, Item instances, and an optional
-campaign clock. Session records—not runtime JSON—are authoritative for active Session state.
+campaign time string and optional `locationPresentationOverrides`. Each override names a captured `locationId`; omitted weather inherits its captured default, explicit `null` suppresses it, and removing the override restores inheritance. Weather uses the authored units and validation. Migration maps only the modeled Location reference; unknown/private data survives. Session records—not runtime JSON—are authoritative for active Session state.
 
 Captured placement identity is provenance, never mutable identity. A
 `CampaignInstancePlacementRealization` records a `planned`, `deferred`, `realized`, `replaced`, or
@@ -298,7 +944,8 @@ Instance-created content. Only realized/replaced decisions name an Instance-owne
 or Item. `CampaignInstanceCreatureEmbodiment` gives every realized Creature a new Instance-scoped
 runtime identity and exact source provenance. Its `creature` member is a bounded, server-owned
 runtime overlay (`identity`, `entityId`, human name, optional captured `definitionId`, optional
-current Location, optional `terrainPosition`, and namespaced extensions), not a partial `CreatureState` produced by copying a
+current Location, optional `terrainPosition`, `equipment`, `activeEffects`, and namespaced extensions),
+not a partial `CreatureState` produced by copying a
 Creature Definition. The captured Definition remains the immutable source of descriptive and rules
 content. Runtime Item creation likewise persists only defined `ItemInstance` fields and never
 spreads an authored Item Definition into mutable state. Instance-created Creature and Item
@@ -312,7 +959,7 @@ policy and count against the same per-source Instance maximum as direct World-pl
 embodiments; Campaign provenance cannot bypass `one-per-instance` cardinality.
 
 Instance migration rewrites only reference paths explicitly modeled by
-`CampaignInstanceRuntimeState`: preparation and canvas Locations, Plot identities, placement source
+`CampaignInstanceRuntimeState`: preparation, canvas and presentation-override Locations, Plot identities, placement source
 and current Locations, captured Campaign/World placement identities, Creature source and overlay
 Definition/Location identities, Item Definition/Location identities, and schema-declared Model or
 extension references. Nested Objective, discovery claim, Plot Location context, and actor/Item
@@ -850,9 +1497,10 @@ when reading older snapshots so they can be migrated without losing content. Per
 is separately discriminated as `knows-truth`, `holds-belief`, or `heard-rumor`; learning a facet never
 changes its epistemic kind.
 
-Use `validatePlotHierarchy` before accepting an authored Plot set. It reports duplicate identities,
-missing or cross-Definition parents and relationship targets, parent cycles, combined
+Authoring validates scoped `PlotDefinition` state before accepting a Plot set. It reports duplicate
+identities, missing or cross-Definition parents and relationship targets, parent cycles, combined
 prerequisite/dependency cycles, and unexplained cross-branch relationships without mutating input.
+Common `validatePlotHierarchy` remains a compatibility helper for unmigrated consumers.
 Plot and placement records are captured through the aggregate-specific Campaign Definition draft,
 revision, and snapshot workflow. They are not unversioned generic domain resources.
 
@@ -968,26 +1616,26 @@ cardinality: the relational Definition APIs support multiple World and Campaign 
 lineages. Versioned World lifecycle is archive-first; the former destructive root-Location World
 endpoint and ambiguous `campaignId` HTTP contracts have been removed.
 
-| Resource               | Aggregate                                            | Stored ID              | Stored kind/name                                |
-| ---------------------- | ---------------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| `definitions`          | `GameDefinition`                                     | `identity.id`          | `kind`, `identity.name`                         |
-| `rule-variants`        | `RuleVariant`                                        | `id`                   | `rule-variant`, `name`                          |
-| `content-packs`        | `ContentPackManifest`                                | `id`                   | `content-pack`, `name`                          |
-| `extension-schemas`    | `ExtensionSchema`                                    | `id`                   | `extension-schema`, `key`                       |
-| `systems`              | `GameSystemDefinition`                               | `id`                   | `game-system`, `name`                           |
-| `games`                | `GameState`                                          | `campaign.identity.id` | `game-state`, campaign name                     |
-| `campaigns`            | `CampaignDefinition` (legacy compatibility)          | `identity.id`          | name                                            |
-| `sessions`             | `SessionState`                                       | `identity.id`          | name                                            |
-| `characters`           | `CharacterState` or `CampaignInstanceCharacterSheet` | `identity.id`          | name                                            |
-| `creatures`            | `CreatureState`                                      | `identity.id`          | name                                            |
-| `items`                | `ItemInstance`                                       | `id`                   | `item-instance`, name override or definition ID |
-| `objects`              | `ObjectState`                                        | `identity.id`          | name                                            |
-| `scenes`               | `SceneState`                                         | `identity.id`          | name                                            |
-| `locations`            | `LocationState`                                      | `identity.id`          | `kind`, name                                    |
-| `location-connections` | `LocationConnectionState`                            | `identity.id`          | `kind`                                          |
-| `encounters`           | `EncounterState`                                     | `identity.id`          | name                                            |
-| `pending-decisions`    | `PendingDecision`                                    | `id`                   | `pending-decision`                              |
-| `game-events`          | `GameEvent`                                          | `id`                   | `type`                                          |
+| Resource                                  | Aggregate                                            | Stored ID              | Stored kind/name                                |
+| ----------------------------------------- | ---------------------------------------------------- | ---------------------- | ----------------------------------------------- |
+| `definitions`                             | `GameDefinition`                                     | `identity.id`          | `kind`, `identity.name`                         |
+| `rule-variants`                           | `RuleVariant`                                        | `id`                   | `rule-variant`, `name`                          |
+| `content-packs`                           | `ContentPackManifest`                                | `id`                   | `content-pack`, `name`                          |
+| `extension-schemas`                       | `ExtensionSchema`                                    | `id`                   | `extension-schema`, `key`                       |
+| `systems`                                 | `GameSystemDefinition`                               | `id`                   | `game-system`, `name`                           |
+| `games`                                   | `GameState`                                          | `campaign.identity.id` | `game-state`, campaign name                     |
+| `campaigns`                               | `CampaignDefinition` (legacy compatibility)          | `identity.id`          | name                                            |
+| `sessions`                                | `SessionState`                                       | `identity.id`          | name                                            |
+| `characters`                              | `CharacterState` or `CampaignInstanceCharacterSheet` | `identity.id`          | name                                            |
+| `creatures`                               | `CreatureState`                                      | `identity.id`          | name                                            |
+| `items`                                   | `ItemInstance`                                       | `id`                   | `item-instance`, name override or definition ID |
+| `objects`                                 | `ObjectState`                                        | `identity.id`          | name                                            |
+| `scenes`                                  | `SceneState`                                         | `identity.id`          | name                                            |
+| `locations`                               | `LocationState`                                      | `identity.id`          | `kind`, name                                    |
+| `location-connections` (legacy read-only) | `LocationConnectionState`                            | `identity.id`          | `kind`                                          |
+| `encounters`                              | `EncounterState`                                     | `identity.id`          | name                                            |
+| `pending-decisions`                       | `PendingDecision`                                    | `id`                   | `pending-decision`                              |
+| `game-events`                             | `GameEvent`                                          | `id`                   | `type`                                          |
 
 Fields ending in `Id` or `Ids` become graph relationships automatically. Keep references in those
 fields rather than inventing parallel reference structures.
@@ -1036,7 +1684,8 @@ Session mutation must not select or mutate canonical play state.
 
 Geography is normalized. Every world, plane, continent, ocean, region, nation, province, territory,
 wilderness, settlement, district, and site is its own `LocationState`. Parentage is expressed by
-`placement`; direct travel or adjacency is expressed by `LocationConnectionState`. Do not nest child
+`placement`. Legacy direct travel/adjacency uses `LocationConnectionState`, which is a retirement
+target under the accepted hierarchy-only migration. Do not generate new travel edges. Do not nest child
 location aggregates inside a parent `LocationState`.
 
 ### LocationState
@@ -1460,9 +2109,10 @@ type CampaignPlacementDefinition =
     };
 ```
 
-`validateCampaignDefinitionContent` checks exact record membership, Plot hierarchy and ownership,
-captured Location and content references, placement-to-Plot relationships, and World-decoration
-identity and Location consistency. Runtime authoring validation additionally compiles the captured
+The Campaign authoring adapter checks exact record membership and delegates Plot hierarchy/ownership,
+captured references, placement-to-Plot relationships and World-decoration consistency to entity state.
+Common `validateCampaignDefinitionContent` retains its compatibility contract for unmigrated consumers.
+Authoring validation additionally compiles the captured
 World and Campaign Model releases. Human-readable validation issues never expose opaque IDs.
 
 Campaign AI generation is proposal-only. The request identifies one immutable World Definition
@@ -1735,9 +2385,12 @@ Campaign Instance, with no synchronization or back-transfer. The membership's op
 active Character must occur in its Character history and resolve to an association for that same
 membership and Instance. Every Character in the membership's full history must likewise resolve to
 an association owned by that membership in that Instance. A lifecycle transition to `active`
-requires a GM-approved draft whose `ownerMembershipId` is that same Instance membership. Activation
-revalidates against the current captured World/Campaign schema and atomically materializes a
-snapshot-stamped `campaign-instance-character-sheet` with the lifecycle transition.
+from `draft` requires a GM-approved draft whose `ownerMembershipId` is that same Instance membership.
+Initial activation revalidates against the current captured World/Campaign schema, checks the current
+snapshot and approved draft revision/status transactionally, consumes that draft revision, and
+materializes a snapshot-stamped `campaign-instance-character-sheet` with the lifecycle transition.
+Its `sourceDraftRevision` records the approved source revision. Reactivating an inactive Character
+preserves the existing sheet, mutable runtime fields and acquired rolls; it does not rematerialize.
 `validateParticipationConsistency` checks these Character invariants plus
 same-Instance Session, human-membership, and Agent-participation relationships without putting
 opaque identifiers into its human-readable issues.
@@ -1748,8 +2401,9 @@ rebound. Player operations use the collection
 `/me/campaign-instances/:campaignInstanceId/characters` and member
 `/me/campaign-instances/:campaignInstanceId/characters/:characterId`; create allocates the Character
 association and draft in one transaction, reads and writes verify the authenticated active Player
-membership, and optimistic revision checks prevent lost updates. Available Background, Profession,
-and Heritage choices are read from the World snapshot captured by the Campaign Instance's current
+membership, and optimistic revision checks prevent lost updates. Available Background and Profession
+choices (with old Heritage fields retained only for compatibility) are read from the World snapshot
+captured by the Campaign Instance's current
 snapshot, never from the live evolving World Definition. Attribute requirements are resolved from
 the immutable Model Schema releases selected by the captured World revision and their locked
 dependency releases, including GM-authored Attribute elements rather than a closed built-in list.
@@ -1762,7 +2416,11 @@ Campaign Definition and Campaign Instance lists only human-labeled, previously a
 Characters from another Instance owned by the same GM whose durable Player identity matches an
 active destination Player membership. Import creates a new `in-progress` destination draft with a
 new Character identity and provenance; it never moves, links, synchronizes, or auto-approves the
-copy. The unscoped `/character-drafts` HTTP API has been removed.
+copy. The private nullable Prisma draft `sourceSheet` stores a detached original imported document;
+it is not a client-editable field or a new public domain resource. Activation retains its unknown/private
+fields, overwrites the authoritative reviewed identity/binding/content fields, and removes stale
+optional biography/grants and nested sourceSheet metadata before applying current values. Repeated
+imports do not accumulate nested source snapshots. The unscoped `/character-drafts` HTTP API has been removed.
 
 The owning GM can also edit an in-progress draft beneath
 `/campaigns/:campaignDefinitionId/instances/:campaignInstanceId/characters/:characterId/draft`,
@@ -1777,8 +2435,12 @@ fields remain readable for compatibility, and `CharacterState.heritage` is optio
 benefits. The World Background editor offers permanent rolled-once increases, per-check dice and
 Skill proficiency grants using the same editor/validation as Profession benefits. Grant IDs are unique
 within the Background. `ModifierGrantSource` accepts `{kind: "background", definitionId}` for explicit
-provenance. These are grant recipes, not already applied numeric bonuses: acquisition/runtime grant
-execution must retain rolled-once outcomes and use idempotent events. Background choice previews show
+provenance. Initial activation acquires captured Background grants, its explicitly granted Skills,
+and the selected Profession's explicit character-creation starting tier. It never guesses a tier.
+`CampaignInstanceCharacterSheet.modifierGrants` optionally stores the acquired results. Flat grants
+use server-generated dice once; per-check/proficiency recipes stay unrolled. Exact imported source
+and full recipe matches retain their original event, identity, active state and rolls; changed recipes
+acquire new results, and deselected sources contribute no grant. Background choice previews show
 the captured recipes without adding unrolled dice to the base Attribute scores.
 
 `equipmentAssignments` is an optional Item-definition-to-slot-key map in Character creation API,
@@ -2282,6 +2944,55 @@ families are:
 - `table`: optional dice roll and ranged/weighted entries.
 - `custom`: namespaced custom kind, optional schema definition, and JSON data.
 
+Authoring validation is owned by the concrete domain classes. `ItemDefinition` validates its
+prerequisites and modifiers, attunement prerequisites/flags, capacity maximum and recharge
+(`DiceExpression | NumericExpression`), and crafting time/cost/ingredients/tool requirements/
+produced Items. Crafting ingredient quantities are scalar expressions; time and produced
+quantities are numeric expressions. Ingredients may use an Item reference, a tag, both, or neither
+according to the existing optional fields; do not invent an exclusive-or requirement.
+
+`MonsterDefinition` owns the catalog `kind: "monster"` and validates `MonsterComponents`,
+including each embedded Trait/Action collection through the respective child entity. This is
+separate from governed World `kind: "creature"` and its numeric `skills` map: catalog Monsters
+use `{skillDefinitionId, bonus}[]`. Speeds/restrictions, damage adjustments, senses, communication,
+and Discipline source expressions are authored structure; no runtime evaluation is implied.
+`CharacterDefinition` owns catalog `kind: "character-template"` Choices/Options/prerequisites,
+Traits, and the existing standard-array, point-buy, roll, and custom attribute-generation variants.
+It remains separate from flat World NPC templates and runtime Characters.
+
+`ProfessionDefinition` owns recursive authoring validation for tiers, advancement windows and
+cost expressions, benefits (rule modifiers, Trait references and resource maximums), acquisition,
+Action progressions/improvements, UsageLimits, prerequisites, Choices and mutual exclusions.
+Profession ranks remain adopted namespaced option keys; repeated order/tier identities are invalid.
+Empty order/tier collections and missing nested ranks remain unresolved drafts; draft upsert still
+requires exact Model conformance and validates every supplied rank against adopted options.
+`BackgroundDefinition` validates Attribute option keys, proficiency/equipment/Feat/feature
+references, language counts, characteristic string lists and nested Choices. Existing Model-backed
+modifier grant validation remains separate from rule modifiers in both owners.
+
+`FeatDefinition`, `HeritageDefinition` and `DisciplineDefinition` also validate their known nested
+rules through the same shared grammar. Feat delegates embedded Traits to their owning class;
+Heritage keeps nonempty balanced pairs and distinct pair identities; Discipline composes Action
+costs, targets, Duration, Outcome Effects/predicates and scaling expressions. These validation
+capabilities do not imply dedicated authoring entry points for these three resources. Missing
+nested required values are repairable unresolved drafts; supplied malformed values are invalid.
+Unknown imported rule discriminants and private extensions remain opaque and preserved.
+Reference syntax validation does not assert that a referenced definition exists or implements
+runtime acquisition, advancement, grants, discipline execution or choice selection.
+For these five character-option owners, draft snapshot saves reject newly malformed fields and
+preserve unchanged inherited fields. Their existing publication Condition-link projection and
+Profession/Background Model/grant policy remain unchanged; broader publication policy is deferred.
+
+These entities preserve private/unknown JSON and optional omission during serialization. Missing
+required rule values are unresolved diagnostics; malformed supplied built-ins are invalid.
+The World draft adapter consumes Item mechanics, catalog Character and Monster diagnostics,
+rejecting invalid supplied structure while allowing incomplete drafts. During draft edits,
+unchanged inherited malformed B02 fields remain preserved; changing those owner fields requires
+valid supplied structure. Publication snapshots have no draft-baseline exemption. Unknown rule tags and
+custom payloads retain the shared preserved-only extension boundary. Reference target existence,
+publication policy, runtime evaluation and the remaining owner migration are separate work.
+Resource storage remains `definitions`; no new persisted resource or common type is introduced.
+
 A discipline uses this core structure:
 
 ```ts
@@ -2349,8 +3060,8 @@ Rules are data, not prose:
   declared unit; it does not grant a new movement mode. Units are foot, mile, square, hex, meter,
   or kilometer. Consumers must normalize compatible units before summing and must not infer a
   grid-to-distance conversion. Speed remains a flat value; per-check dice cannot target it.
-  `skillModifierGrantIssue` validates Skill modifier lists and association-list shape at save and
-  publication. Both Skill and Profession schemas remain compatible with older omitted grant lists.
+  `SkillDefinition` validates association-list shape and delegates recipe validation to `Modifier`
+  at save and publication. Both Skill and Profession schemas remain compatible with older omitted grant lists.
   These fields use existing Definition JSON storage; no resource mapping or SQL table is added.
 - `ModifierGrantDefinition` is the reusable additive grant contract, separate from legacy
   `RuleModifier` expressions. `ProfessionTierBenefits.modifierGrants` holds grants awarded once
@@ -2371,20 +3082,23 @@ Rules are data, not prose:
   dice rather than a predetermined constant; a +4 flat benefit is an acquired roll result.
 - `CreatureState.modifierGrants` (also inherited by CharacterState) stores `GrantedModifier`
   instances with a unique instance ID, `active`, `grantedByEventId`, source, and captured definition.
-  Sources are Skill (`definitionId`), profession (`definitionId`, `expertise`), equipment (`definitionId`, `itemInstanceId`),
+  Sources are Background (`definitionId`), Skill (`definitionId`), profession (`definitionId`, `expertise`), equipment (`definitionId`, `itemInstanceId`),
   or other (`definitionId`, `instanceId`). Flat resolution is `{kind: "flat", rolls: [[4]], value: 4}`;
   faces must match the recipe and the total must equal their sum. Dice/proficiency resolution is
   `{kind: "per-check"}`. Retry the same actor/source/grant/event using its existing instance;
   never reroll on reload, recalculation, source edits, or reactivation. Different source instances
   contribute independently. Deactivation removes a contribution without deleting its rolled result.
 - These are embedded JSON fields in existing Definition and Creature/Character state resources;
-  `domain-resource.ts` mappings and Prisma tables are unchanged. No published snapshot is rewritten.
-  Runtime validation is exposed through `isModifierGrantDefinition`, `isGrantedModifier`, and
-  `professionModifierGrantIssue`; World saves and publication validation reject malformed Skill and profession
-  grants. The Profession editor supports adding, editing, and removing grants at existing expertise
-  tiers, including multiple dice groups and named World Attribute/Skill targets. Modifiers appear in
-  a list; a separate inline Add/Edit form stages changes locally. Only Save Profession persists
-  the profession and its modifier list together. Cancel leaves the list unchanged. Grant execution,
+  `domain-resource.ts` mappings remain unchanged. The private Character draft `sourceSheet` column
+  is the additive B08 import-preservation migration; acquired grants remain embedded JSON. No published snapshot is rewritten.
+  Common `isModifierGrantDefinition`, `isGrantedModifier` and collection helpers remain for
+  browser/runtime compatibility. World saves and publication use `SkillDefinition` and `Modifier`
+  entity validation to reject malformed Skill, Profession and Background grants. Profession and
+  Background editors use dedicated grant list/Add/Edit contexts, including multiple dice groups
+  and named World Attribute/Skill targets. Saving a grant persists the owning Definition through
+  a revision-pinned World draft write; Cancel leaves the saved list unchanged. Profession tier
+  creation, reordering and removal synchronize the parallel expertise order without replacing
+  unrelated child or private data. Grant execution,
   roll aggregation, and profession balancing are separate work: authored grants do not by themselves
   activate bonuses in gameplay.
 
@@ -2548,7 +3262,7 @@ and Session audit remain integration work.
 and authoring helpers in `packages/common/src/spatial`. The initial GM editor uses these values;
 Instance actor setup and Player Character binding are implemented below. Participant gameplay, movement, and rules-driven visibility remain pending.
 
-`WorldLocationDefinition.map?: LocationMap` is the persisted source map selection.
+`WorldLocationDefinition.map: LocationMap` is the persisted source map selection.
 `LocationMap` is `{ kind: "image" } | IsometricTerrainManifest`. The isometric branch has
 `kind: "isometric"`, `formatVersion: 1`, dimensions, five-foot `cellSize`, `chunkSize: 16`, materials,
 and `chunks: readonly { address: TerrainAddress; contentHash: string }[]`. Each hash is lowercase
@@ -2683,7 +3397,7 @@ Example **working value only**, not a Location API payload:
 }
 ```
 
-Example persisted empty isometric map (the optional `map` field on a source Location):
+Example persisted empty isometric map (the required `map` field on a source Location):
 
 ```json
 {
@@ -2936,6 +3650,10 @@ contains `formatVersion: 1`, stable `id`, human `name`, optional `description`, 
 APIs assign lineage/revisions and creator/time metadata under expected draft identity and storage
 revision checks. Publication and migration validate the supported profile and preserve exact captures;
 old Worlds contain no implicit rule library. Generic draft saves cannot rewrite executable rules.
+World Rules authoring uses separate list, rule, ordered-effect and nested-condition contexts.
+These editors retain this strict WorldRule grammar, its dedicated APIs and expected draft/revision
+checks; they do not translate it into Action predicates or expand execution semantics. Unsupported
+imported structures remain read-only. Successful writes use the returned authoritative collection.
 
 The supported expression profile includes literals/constants, event context, per-event local values,
 scoped entity-field reads, arithmetic, and bounded equality-count queries over declared entity types.
@@ -3017,7 +3735,6 @@ current runtime nor any target capture payload references their local or scoped 
 preview still lists these removals; prior snapshots and checkpoints preserve historical resolution.
 Referenced removals continue to require explicit mappings. Restore does not use this exception.
 
-
 ### Instance opening Location choices
 
 `CampaignInstancePreparationProjection.locations` is the named Location list from the Instance's
@@ -3027,7 +3744,6 @@ revision; out-of-capture references remain invalid. The chosen Location is the S
 initial view, not a movement command or an automatic actor placement. Definition preparation
 supplies defaults on new Instance creation; existing Instances retain their own preparation.
 No persisted resource mapping changes are introduced by this projection.
-
 
 ### GM-controlled Session play
 
@@ -3045,3 +3761,83 @@ The GM Session page automatically establishes and renews the GM’s own presence
 mode is enabled in a lobby, active Session, or paused Session. Expired connections are
 rejoined; an explicit Leave stops automatic reconnection until the GM joins again or
 reopens the page. Normal Player presence still requires explicit joining.
+
+## World Codex authoring and collaboration
+
+World Codex Characters are **world-owned NPC templates**, distinct from campaign-instance playable
+Characters and realized Creature state. The TypeScript source is `types/world-codex.ts`.
+`WorldCharacterTemplate` has an immutable `creatureDefinitionId` referencing a Creature Definition
+in the same draft; numeric `attributes` and `skills`; `health` (`current`, `maximum`, `temporary`);
+`movement` keyed by walk/run/sprint/jump/swim/climb/crawl/fly/burrow; day/night `vision`; `equipment`
+entries `{slot,itemDefinitionId}`; `grantedConditions` entries `{conditionId}`; and optional
+portrait/overheadToken/paperDollToken `images` using the existing Creature image contract.
+Do not generate campaign-instance ownership fields on these templates.
+
+`WorldEffectDefinition` is an authored reusable numeric modifier recipe, not an `ActiveEffect` or
+an executable WorldRule. It contains `modifiers` with unique `id`, `propertyPath`, operation
+`add | set | multiply`, finite `value`, optional `unit`, and `allowConditionOverride`.
+Each modifier may set its own `duration`, using `{kind:"permanent"}` or
+`{kind:"timed",amount,unit}` where the positive amount uses rounds/minutes/hours/days. The Effect-level
+`duration` remains the compatibility default for any modifier that omits one; changing one
+modifier duration must not change its siblings. Numeric paths are limited to health
+(current/maximum/temporary), vision (day/night), supported movement modes, and
+`attributes.<key>.value|modifier` or `skills.<key>.value|modifier` declared by a same-World
+Creature/NPC numeric map (Skill Definition IDs/keys are also valid skill keys). Arbitrary paths
+and references to unknown Attributes/Skills are rejected. `WorldConditionDefinition.effects` contains
+`{effectId,modifierOverrides?}`; overrides map modifier IDs to numbers and are permitted only
+when the referenced Effect modifier opts in. These recipes do not execute implicitly at runtime.
+All three Codex entries have server-owned `id` and positive `revision`, `name`, and optional
+`description`. References must resolve inside the same World draft; deleting a referenced recipe
+is rejected. These collections are persisted as immutable captured snapshot components and have
+list/create/update/delete APIs under `/worlds/:worldId/codex/{characters|conditions|effects}`.
+Mutations include `expectedDraftId` and `expectedStorageRevision` for optimistic concurrency.
+
+| Snapshot resource           | Payload                    | Ownership                     |
+| --------------------------- | -------------------------- | ----------------------------- |
+| `world-character-templates` | `WorldCharacterTemplate`   | World draft/captured revision |
+| `world-conditions`          | `WorldConditionDefinition` | World draft/captured revision |
+| `world-effects`             | `WorldEffectDefinition`    | World draft/captured revision |
+
+These are dedicated World resources, intentionally excluded from generic `DOMAIN_RESOURCES` CRUD
+in `domain-resource.ts`, just like `world-rules`. AI generators must use dedicated World APIs. Generic draft replacement cannot change these
+Codex resources; their dedicated service owns identity/revision and World-scoped artwork checks.
+Unchanged inherited Character artwork references retain their captured metadata when a fork is edited.
+Example Effect: `{"name":"Haste","modifiers":[{"id":"speed","propertyPath":"movement.walk","operation":"add","value":10,"unit":"feet","allowConditionOverride":true}],"duration":{"kind":"timed","amount":1,"unit":"minutes"}}`.
+Example Condition effect link: `{"effectId":"<same-world-effect>","modifierOverrides":{"speed":20}}`.
+
+World Location types no longer expose related-Location links. Do not generate adjacency or
+travel-connection content; containment is the sole authored Location relationship. Location `grantedConditions` remain part of the authored contract. Creature and Item components optionally carry the same Condition grants.
+Creature components additionally support numeric `skills`, `health`, day/night `vision`, and
+`equipmentPool` (same-World Item Definition IDs). Item components support `weight`, `cost`, and
+private authoring `notes`; `weight` uses the existing Weight contract and cost uses CurrencyAmount
+entries. A **World** Item's artwork may be omitted until attached; the generic runtime
+`ItemDefinition.image` contract remains required. Omitted fields preserve existing authored data.
+
+`WorldAccessEntry` is relational collaboration metadata (`WorldAccessEntry` table), never a
+published World snapshot component. It links an active Player profile to a World with viewer or
+editor role and a concurrency revision. The owner manages the roster. Viewers may read shared
+Worlds; editors may change draft content. Publication, archival, fork management and access roster
+management remain owner actions. Global authentication/GM role is not changed by World sharing.
+
+Numeric Attribute/Skill display modifiers use a midpoint of **50** and steps of **10**, rounded to
+nearest with halfway values away from zero: `sign(score - 50) * floor(abs(score - 50) / 10 + 0.5)`.
+Examples: 50 → 0, 55 → +1, 45 → -1, 33 → -2, 83 → +3. Display modifiers are derived from stored
+scores; do not persist a second independently editable modifier value. World NPC equipment is a
+selected Item list: `slot: "carried"` may repeat for distinct Items; real named slots remain unique,
+and the same Item Definition may not be selected twice.
+
+B08 equipment uses exact captured Model revisions for labels and the Creature
+Definition `components.equipmentSlots` (including an explicit empty list) for
+availability. The open slot vocabulary supports authored Wrists; immutable core
+release v1 is preserved and is not automatically extended/readopted.
+
+
+### B10 runtime ownership and operational projections
+
+`CampaignInstance` owns captured initialization, placement realization/decisions, progress patches and activation composition. Decoration suppresses duplicate inherited World placements. Realize/replace preserves stable realization IDs; defer/remove detaches references without destroying physical actors or Items. Objective patches merge by captured objective identity, retaining siblings/private fields. Discovery writes validate captured claim membership, Instance entity identity and the distinction between knows-truth, holds-belief and heard-rumor. Named GM projections expose captured claims, associated Location placements and individual knowledge; IDs remain hidden selection values.
+
+`CampaignSession` owns the current lifecycle, readiness projection and presence policy: original transition/replay rules, captured start/end boundaries, ordered readiness blockers, accepted participation, lease renewal/throttling, attendance and bounded accumulated duration. `InstanceParticipation` owns human membership and Agent status/capability policy. Authentication, standing lookup, invitation delivery, lease credentials, clock/entropy acquisition, active-Session locks, relational CAS and journals remain API adapters. Editing configured/paused Agent capabilities uses old-grant/status CAS and returns the Agent to configured so authorization must be granted again.
+
+`WorldRule` owns structural validation; `RuleExecution` exposes deterministic preview/replay results through command/state$. The existing interpreter still evaluates expressions and stages conflict-checked writes. Movement commits route through Creature/Character commands; no mutable captured record is exposed. There is no production encounter, decision, rest or downtime executor to migrate: their existing legacy value contracts remain preserved, and no combat/time algorithm or competing runtime World is introduced.
+
+Weather changes use the GM-owned active/paused Session boundary, validate captured Location membership, CAS runtime and audit atomically. Local table focus remains viewing state. These changes add JSON fields and projections only: `CampaignInstanceRuntime`, Session, participation and existing rule capture storage remain authoritative. No generic DomainRecord resource or database schema migration is introduced.

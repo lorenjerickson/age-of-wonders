@@ -1,3 +1,4 @@
+import { worldAccessWhere } from "../world-definitions/world-access";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -49,7 +50,11 @@ export class MediaService {
     tags: string[],
   ) {
     const world = await this.prisma.worldDefinition.findFirst({
-      where: { id: worldDefinitionId, ownerUserId: userId },
+      where: {
+        id: worldDefinitionId,
+        status: "ACTIVE",
+        ...worldAccessWhere(userId, true),
+      },
       select: { id: true },
     });
     if (!world) {
@@ -92,7 +97,7 @@ export class MediaService {
   }
 
   async get(id: string, userId?: string) {
-    const asset = await this.prisma.mediaAsset.findFirst({
+    let asset = await this.prisma.mediaAsset.findFirst({
       where: {
         id,
         ...(userId
@@ -100,6 +105,19 @@ export class MediaService {
           : {}),
       },
     });
+    if (!asset && userId) {
+      const shared = await this.prisma.mediaAsset.findFirst({
+        where: { id, scopeType: "world-definition" },
+      });
+      if (
+        shared?.scopeId &&
+        (await this.prisma.worldDefinition.findFirst({
+          where: { id: shared.scopeId, ...worldAccessWhere(userId) },
+          select: { id: true },
+        }))
+      )
+        asset = shared;
+    }
     if (!asset)
       throw new NotFoundException("The selected media asset was not found.");
     return asset;
@@ -119,7 +137,16 @@ export class MediaService {
   }
 
   async remove(id: string, userId?: string): Promise<void> {
-    const asset = await this.get(id, userId);
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: {
+        id,
+        ...(userId
+          ? { OR: [{ createdByUserId: userId }, { createdByUserId: null }] }
+          : {}),
+      },
+    });
+    if (!asset)
+      throw new NotFoundException("The selected media asset was not found.");
     await this.storage.delete(asset.objectKey);
     await this.prisma.mediaAsset.delete({ where: { id } });
   }

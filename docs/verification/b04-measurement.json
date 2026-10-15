@@ -1,0 +1,30 @@
+{
+  "category_seconds": {
+    "tests": 57.881802,
+    "build": 71.602019,
+    "typecheck": 11.410752,
+    "browser": 239.125304,
+    "lint": 40.19057
+  },
+  "counts": {
+    "tests": 13,
+    "build": 3,
+    "typecheck": 1,
+    "browser": 21,
+    "lint": 17
+  },
+  "flagged_reruns": {
+    "tests": 3,
+    "build": 2,
+    "typecheck": 0,
+    "browser": 10,
+    "lint": 4
+  },
+  "command_seconds": 420.210447,
+  "union_seconds": 325.77134,
+  "recorded_active_start": "2026-10-14T03:56:14+00:00",
+  "recorded_active_end": "2026-10-14T04:12:19.372697+00:00",
+  "recorded_active_seconds": 965.372697,
+  "verification_interval_share": 0.33745655021358034,
+  "captured_manual_review_seconds": 122.120072
+}

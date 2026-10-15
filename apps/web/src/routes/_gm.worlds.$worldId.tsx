@@ -1,12 +1,25 @@
+import { AstraFrame } from "../AstraWorkspace";
 import { ContextualBreadcrumbs } from "../ContextualNavigation";
-import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
-import { readWorldAuthoring } from "../server/readModels";
 import {
-  WorldAuthoringProvider,
-  WorldContextBar,
-} from "../WorldAuthoringShell";
+  Link,
+  Outlet,
+  createFileRoute,
+  redirect,
+  useLocation,
+} from "@tanstack/react-router";
+import { astraWorldCompatibilityHref } from "../astraCompatibility";
+import { readWorldAuthoring } from "../server/readModels";
+import { WorldAuthoringProvider } from "../WorldAuthoringShell";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId")({
+  beforeLoad: ({ params, location }) => {
+    const href = astraWorldCompatibilityHref(
+      params.worldId,
+      location.pathname,
+      location.searchStr,
+    );
+    if (href) throw redirect({ href, replace: true });
+  },
   loader: ({ params }) =>
     readWorldAuthoring({ data: { worldDefinitionId: params.worldId } }),
   component: WorldLayout,
@@ -14,6 +27,8 @@ export const Route = createFileRoute("/_gm/worlds/$worldId")({
 
 function WorldLayout() {
   const result = Route.useLoaderData();
+  const pathname = useLocation().pathname;
+  const base = `/worlds/${encodeURIComponent(Route.useParams().worldId)}`;
   if (!result.found) {
     return (
       <>
@@ -42,12 +57,19 @@ function WorldLayout() {
       definition={result.definition}
       initialDraft={result.draft}
     >
-      <div className="min-h-full">
-        <div className="min-w-0">
-          <WorldContextBar />
+      {pathname.replace(/\/$/, "") === base ? (
+        <Outlet />
+      ) : (
+        <AstraFrame
+          name={result.definition.name}
+          base={base}
+          title="World authoring"
+          view="authoring"
+        >
+          <ContextualBreadcrumbs />
           <Outlet />
-        </div>
-      </div>
+        </AstraFrame>
+      )}
     </WorldAuthoringProvider>
   );
 }

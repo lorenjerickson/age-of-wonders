@@ -1,3 +1,4 @@
+import { PlotDefinition } from "@aow/domain";
 import type { JsonValue } from "./api";
 
 export interface CampaignDraftRecord {
@@ -423,42 +424,15 @@ export function plotDescendantIds(
   records: readonly CampaignDraftRecord[],
   plotId: string,
 ) {
-  const children = new Map<string, string[]>();
-  for (const record of records.filter(
-    ({ resourceType }) => resourceType === "plots",
-  )) {
-    const parentId = plotParentId(record);
-    if (parentId)
-      children.set(parentId, [
-        ...(children.get(parentId) ?? []),
-        record.sourceId,
-      ]);
-  }
-  const descendants = new Set<string>();
-  const visit = (id: string) => {
-    for (const childId of children.get(id) ?? []) {
-      if (descendants.has(childId)) continue;
-      descendants.add(childId);
-      visit(childId);
-    }
-  };
-  visit(plotId);
-  return descendants;
+  return PlotDefinition.authoringDescendantIds(records, plotId);
 }
 
 export function campaignPlotParentCandidates(
   records: readonly CampaignDraftRecord[],
   plotId: string,
 ) {
-  const descendants = plotDescendantIds(records, plotId);
-  return records
-    .filter(
-      (record) =>
-        record.resourceType === "plots" &&
-        record.sourceId !== plotId &&
-        !descendants.has(record.sourceId),
-    )
-    .sort((left, right) =>
+  return PlotDefinition.authoringParentCandidates(records, plotId).sort(
+    (left, right) =>
       campaignRecordLabel(left).localeCompare(campaignRecordLabel(right), "en"),
-    );
+  );
 }

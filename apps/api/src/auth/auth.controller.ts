@@ -14,6 +14,7 @@ import { ApiProperty, ApiTags } from "@nestjs/swagger";
 import {
   IsBoolean,
   IsEmail,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -32,7 +33,40 @@ class BootstrapGmSessionDto {
   token!: string;
 }
 
+class PasswordLoginDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(64)
+  accountName!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password!: string;
+}
+
+class ConfigureCredentialsDto extends PasswordLoginDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  currentPassword?: string;
+}
+
 class EstablishAdministratorDto extends BootstrapGmSessionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(64)
+  accountName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  password?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(120)
@@ -69,6 +103,40 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly auth0: Auth0Service,
   ) {}
+
+  @Post("login")
+  @HttpCode(HttpStatus.OK)
+  async passwordLogin(
+    @Body() dto: PasswordLoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const user = await this.auth.authenticatePassword(
+      dto.accountName,
+      dto.password,
+      request.ip ?? request.socket.remoteAddress ?? "unknown",
+    );
+    setSessionCookie(response, await this.auth.issueSession(user.id));
+    return { user: await this.auth.publicUser(user) };
+  }
+
+  @Get("credentials/me")
+  @UseGuards(SessionGuard)
+  credentialStatus(@Req() request: Request & AuthenticatedRequest) {
+    return this.auth.credentialStatus(request.user!.id);
+  }
+
+  @Post("credentials")
+  @UseGuards(SessionGuard)
+  async configureCredentials(
+    @Body() dto: ConfigureCredentialsDto,
+    @Req() request: Request & AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.auth.configureCredentials(request.user!.id, dto);
+    setSessionCookie(response, await this.auth.issueSession(request.user!.id));
+    return result;
+  }
 
   @Get("providers")
   providers() {

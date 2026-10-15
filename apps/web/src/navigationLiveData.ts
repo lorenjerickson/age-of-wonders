@@ -3,6 +3,7 @@ import type { WorldDraftRecord } from "./api";
 export interface LiveNavigationWorld {
   worldId: string;
   records: WorldDraftRecord[];
+  modelElements?: readonly { elementId: string; name: string }[];
 }
 export interface LiveNavigationCampaign {
   campaignId: string;

@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   locationAncestry,
+  locationClaims,
   locationGmNotes,
   locationMutationInput,
   locationParentOptions,
+  locationMapForSave,
   LOCATION_SECTIONS,
 } from "./locationWorkspaceModel";
 import {
   contextualBreadcrumbs,
   contextualNavigationStack,
 } from "./contextualNavigationModel";
-import type { WorldDraftRecord } from "./api";
+import type { JsonValue, WorldDraftRecord } from "./api";
 const record = (
   id: string,
   name: string,
@@ -110,7 +112,12 @@ describe("Location workspace", () => {
         mimeType: "image/webp",
         orientation: "overhead",
       },
-      mapScene: { notes: "Fog", orientation: "overhead" },
+      map: { kind: "image" },
+      mapScene: {
+        notes: "Fog",
+        orientation: "scenic",
+        grid: { kind: "hex", cellSizePixels: 60 },
+      },
     };
     const mutation = locationMutationInput({ ...records[0], payload }, 8);
     expect(mutation).toMatchObject({
@@ -121,6 +128,95 @@ describe("Location workspace", () => {
       image: payload.image,
       discoveries: payload.discoveries,
       mapSceneNotes: "Fog",
+      map: payload.map,
+      mapSceneGrid: payload.mapScene.grid,
+      mapOrientation: "scenic",
     });
   });
+});
+
+describe("Location map representation during orientation changes", () => {
+  const terrain = {
+    kind: "isometric",
+    formatVersion: 1,
+    dimensions: { x: 16, y: 16, z: 8 },
+    cellSize: { value: 5, unit: "ft" },
+    chunkSize: 16,
+    materials: [],
+    chunks: [],
+  };
+  const image = {
+    assetId: "map",
+    width: 1024,
+    height: 768,
+    mimeType: "image/png",
+    altText: "A coast",
+    orientation: "overhead",
+  } as unknown as import("@aow/common").LocationImage;
+  it.each(["scenic", "overhead", "side-on"] as const)(
+    "replaces terrain with an image map for %s",
+    (orientation) => {
+      expect(locationMapForSave(terrain, image, orientation)).toEqual({
+        kind: "image",
+      });
+      expect(() => locationMapForSave(terrain, undefined, orientation)).toThrow(
+        "Choose a map image",
+      );
+    },
+  );
+  it("retains existing terrain only for isometric and rejects a fake terrain transition", () => {
+    expect(locationMapForSave(terrain, undefined, "isometric")).toBe(terrain);
+    expect(() =>
+      locationMapForSave({ kind: "image" }, image, "isometric"),
+    ).toThrow("Create a terrain map");
+    expect(() => locationMapForSave(undefined, image, "isometric")).toThrow(
+      "Create a terrain map",
+    );
+  });
+});
+
+describe("Location claim collection boundaries", () => {
+  it("preserves identity, provenance, relationships and extensions", () => {
+    const claims: JsonValue[] = [
+      {
+        id: "truth",
+        kind: "truth",
+        statement: "A gate",
+        provenance: "Keeper",
+        extensions: { private: true },
+      },
+      {
+        id: "rumor",
+        kind: "rumor",
+        statement: "Another gate",
+        relatedTruthClaimId: "truth",
+        conflictsWithClaimIds: ["unknown"],
+      },
+    ];
+    expect(
+      locationClaims({
+        ...record("location", "Harbor"),
+        payload: { discoveries: claims },
+      }),
+    ).toEqual(claims);
+  });
+  it.each([
+    null,
+    {},
+    "import",
+    [
+      { id: "same", kind: "truth", statement: "One" },
+      { id: "same", kind: "truth", statement: "Two" },
+    ],
+    [{ id: "missing", kind: "custom", statement: "Preserved" }],
+  ])("blocks malformed or ambiguous imported claims %j", (discoveries) => {
+    expect(
+      locationClaims({
+        ...record("location", "Harbor"),
+        payload: { discoveries },
+      }),
+    ).toBeUndefined();
+  });
+  it("allows adding to an omitted collection without inventing claims", () =>
+    expect(locationClaims(record("location", "Harbor"))).toEqual([]));
 });

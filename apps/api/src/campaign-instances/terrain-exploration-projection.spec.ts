@@ -72,11 +72,11 @@ function project(
   });
 }
 describe("safe current and remembered terrain composition", () => {
-  it("remembers an unseen closed door after it opens, without remembering creatures", () => {
-    const first = project(1, closed, [panel], ["hero", "other"]);
+  it("remembers an unseen closed door after it opens, without remembering creatures", async () => {
+    const first = await project(1, closed, [panel], ["hero", "other"]);
     if (first.status !== "ready")
       throw new Error("Expected initial projection");
-    const next = project(
+    const next = await project(
       2,
       opened,
       [],
@@ -93,21 +93,21 @@ describe("safe current and remembered terrain composition", () => {
     expect(JSON.stringify(next.projection)).not.toMatch(
       /secret|Creature|opening|lastSeen|observedAbsent/,
     );
-    const observed = project(3, opened, [], ["hero"], next.exploration, [
+    const observed = await project(3, opened, [], ["hero"], next.exploration, [
       panel,
     ]);
     if (observed.status !== "ready")
       throw new Error("Expected observed disappearance");
     expect(observed.projection.rememberedSurfaces).toEqual([]);
   });
-  it("does not authorize absence of an existing surface or expose memory without a current decision", () => {
-    const first = project(1);
+  it("does not authorize absence of an existing surface or expose memory without a current decision", async () => {
+    const first = await project(1);
     if (first.status !== "ready") throw new Error();
     expect(
-      project(2, closed, [], ["hero"], first.exploration, [panel]),
+      await project(2, closed, [], ["hero"], first.exploration, [panel]),
     ).toEqual({ status: "awaiting-visibility" });
     expect(
-      projectTerrainWithExploration({
+      await projectTerrainWithExploration({
         context,
         volume: closed,
         actors,
@@ -115,8 +115,8 @@ describe("safe current and remembered terrain composition", () => {
       }),
     ).toEqual({ status: "awaiting-visibility" });
   });
-  it("rejects corrupt, cross-observer, future, and conflicting memory without partial output", () => {
-    const first = project(1);
+  it("rejects corrupt, cross-observer, future, and conflicting memory without partial output", async () => {
+    const first = await project(1);
     if (first.status !== "ready") throw new Error();
     for (const memory of [
       { ...first.exploration, context: { ...context, observerId: "other" } },
@@ -127,21 +127,21 @@ describe("safe current and remembered terrain composition", () => {
       { ...first.exploration, context: { ...context, runtimeRevision: 9 } },
       { ...first.exploration, gmNotes: "secret" },
     ])
-      expect(project(2, closed, [], ["hero"], memory)).toEqual({
+      expect(await project(2, closed, [], ["hero"], memory)).toEqual({
         status: "awaiting-visibility",
       });
-    expect(project(1, closed, [], ["hero"], first.exploration)).toEqual({
+    expect(await project(1, closed, [], ["hero"], first.exploration)).toEqual({
       status: "awaiting-visibility",
     });
   });
-  it("retains old material revisions independently of currently visible surfaces", () => {
-    const first = project(1);
+  it("retains old material revisions independently of currently visible surfaces", async () => {
+    const first = await project(1);
     if (first.status !== "ready") throw new Error();
     const updated = {
       ...closed,
       materials: closed.materials.map((m) => ({ ...m, revision: 2 })),
     };
-    const next = project(
+    const next = await project(
       2,
       updated,
       ["2,2,1/frame/0"],

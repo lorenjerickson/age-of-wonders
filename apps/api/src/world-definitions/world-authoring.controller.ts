@@ -1,8 +1,13 @@
-import { SaveLocationTerrainDto, UploadTerrainChunkDto } from "./dto/location-terrain.dto";
+import { CodexRevisionDto } from "./world-codex.controller";
+import {
+  SaveLocationTerrainDto,
+  UploadTerrainChunkDto,
+} from "./dto/location-terrain.dto";
 import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -17,7 +22,7 @@ import {
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { GmGuard } from "../auth/auth.guard";
+import { WorldAccessGuard } from "./world-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import {
   CreateWorldDraftDto,
@@ -42,7 +47,7 @@ interface DraftRecord {
 
 @ApiTags("worlds")
 @Controller("worlds")
-@UseGuards(GmGuard)
+@UseGuards(WorldAccessGuard)
 export class WorldAuthoringController {
   constructor(
     @Inject(WorldDefinitionsService)
@@ -122,6 +127,14 @@ export class WorldAuthoringController {
     @Req() request: Request & AuthenticatedRequest,
   ) {
     return this.authoring.getDraft(worldId, request.user!.id);
+  }
+
+  @Get(":worldId/draft/export")
+  exportDraft(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.authoring.exportDraft(worldId, request.user!.id);
   }
 
   @Post(":worldId/draft")
@@ -406,6 +419,110 @@ export class WorldAuthoringController {
     @Body() dto: UpsertWorldItemDraftDto,
   ) {
     return this.authoring.updateItem(worldId, itemId, dto, request.user!.id);
+  }
+
+  @Delete(":worldId/atlas/locations/:id")
+  deleteLocations(
+    @Param("worldId") worldId: string,
+    @Param("id") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      "locations",
+      id,
+      dto,
+    );
+  }
+
+  @Delete(":worldId/bestiary/creatures/:id")
+  deleteCreature(
+    @Param("worldId") worldId: string,
+    @Param("id") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      "creature",
+      id,
+      dto,
+    );
+  }
+
+  @Delete(":worldId/item-compendium/items/:id")
+  deleteItem(
+    @Param("worldId") worldId: string,
+    @Param("id") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      "item",
+      id,
+      dto,
+    );
+  }
+
+  @Delete(":worldId/bestiary/catalog-monsters/:id")
+  deleteCatalogMonster(
+    @Param("worldId") worldId: string,
+    @Param("id") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      "monster",
+      id,
+      dto,
+    );
+  }
+
+  @Delete(":worldId/characters/catalog-characters/:id")
+  deleteCatalogCharacter(
+    @Param("worldId") worldId: string,
+    @Param("id") id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      "character-template",
+      id,
+      dto,
+    );
+  }
+
+  @Delete(":worldId/characters/:definitionKind/:definitionId")
+  deleteCharacterOption(
+    @Param("worldId") worldId: string,
+    @Param("definitionKind") definitionKind: string,
+    @Param("definitionId") definitionId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CodexRevisionDto,
+  ) {
+    const kinds = {
+      skills: "skill",
+      professions: "profession",
+      backgrounds: "background",
+    } as const;
+    if (!Object.hasOwn(kinds, definitionKind))
+      throw worldChildNotFound("Character option");
+    return this.authoring.deleteAuthoredRecord(
+      worldId,
+      request.user!.id,
+      kinds[definitionKind as keyof typeof kinds],
+      definitionId,
+      dto,
+    );
   }
 
   @Get(":worldId/character-model/:definitionKind")

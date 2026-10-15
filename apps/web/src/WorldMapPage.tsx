@@ -1,8 +1,10 @@
+import { LocationPresentationFields } from "./LocationPresentationFields";
+import { presentationFields } from "./locationPresentationModel";
 import { ShellTools } from "./AppShellTools";
 import { LocationTerrainEditor } from "./LocationTerrainEditor";
 import { ZoomableImage } from "./ZoomableImage";
 import { MediaImage } from "./MediaImage";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import {
   Alert,
@@ -32,7 +34,14 @@ function object(value: unknown): ImageRecord {
     ? (value as ImageRecord)
     : {};
 }
-export function WorldMapPage({ locationId }: { locationId: string }) {
+export function WorldMapPage({
+  locationId,
+  inlineTools = false,
+}: {
+  locationId: string;
+  inlineTools?: boolean;
+}) {
+  const MapTools = inlineTools ? Fragment : ShellTools;
   const { definition, draft, saveRecord, canEdit, markDirty } =
     useWorldAuthoring();
   const record = draft?.records.find(
@@ -42,6 +51,13 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
   const payload = record ? recordPayload(record) : {};
   const scene = object(payload.mapScene);
   const [image, setImage] = useState<ImageRecord>(object(payload.image));
+  const [weather, setWeather] = useState<JsonValue | undefined>(
+    payload.weather as JsonValue | undefined,
+  );
+  const [audiovisualEffects, setAudiovisualEffects] = useState<
+    JsonValue | undefined
+  >(payload.audiovisualEffects as JsonValue | undefined);
+  const [presentationBusy, setPresentationBusy] = useState(false);
   const [notes, setNotes] = useState(String(scene.notes ?? ""));
   const [orientation, setOrientation] = useState(
     String(
@@ -57,10 +73,24 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
     ),
   );
   const [baseline, setBaseline] = useState(
-    JSON.stringify({ image, notes, orientation, altText }),
+    JSON.stringify({
+      image,
+      notes,
+      orientation,
+      altText,
+      weather,
+      audiovisualEffects,
+    }),
   );
   const dirty =
-    JSON.stringify({ image, notes, orientation, altText }) !== baseline;
+    JSON.stringify({
+      image,
+      notes,
+      orientation,
+      altText,
+      weather,
+      audiovisualEffects,
+    }) !== baseline;
   useEffect(() => {
     if (dirty) markDirty();
   }, [dirty, markDirty]);
@@ -101,9 +131,10 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
   }, [assetId]);
   useBlocker({
     shouldBlockFn: () =>
-      (dirty || terrainDirty || terrainBusy || !!busy) &&
+      (dirty || terrainDirty || terrainBusy || presentationBusy || !!busy) &&
       !window.confirm("Leave without saving these Map changes?"),
-    enableBeforeUnload: dirty || terrainDirty || terrainBusy || !!busy,
+    enableBeforeUnload:
+      dirty || terrainDirty || terrainBusy || presentationBusy || !!busy,
   });
   async function selectAsset(asset: Pick<MediaAsset, "id" | "mimeType">) {
     const { url } = await getMediaDownloadUrl(asset.id);
@@ -144,6 +175,10 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
     }
   }
   async function upload(file: File) {
+    if (file.size === 0) {
+      setMessage("This image file is empty. Choose a non-empty image file.");
+      return;
+    }
     if (!file.type.startsWith("image/") || file.size > 20 * 1024 * 1024) {
       setMessage("Choose an image smaller than 20 MB.");
       return;
@@ -213,7 +248,11 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
             className="min-h-11"
             loading={busy === "Saving"}
             disabled={
-              !dirty || !!busy || !canEdit || (!!assetId && !altText.trim())
+              !dirty ||
+              !!busy ||
+              presentationBusy ||
+              !canEdit ||
+              (!!assetId && !altText.trim())
             }
           >
             Save map
@@ -224,12 +263,12 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
         {orientation === "overhead" ? "Top-down" : orientation} ·{" "}
         {dirty || terrainDirty ? "Unsaved changes" : "Draft"}
       </p>
-      <ShellTools>
+      <MapTools>
         <h2 className="mt-6 text-lg font-semibold">Map setup</h2>
         <Field label="Map orientation" className="mt-4">
           <Select
             value={orientation}
-            disabled={!!busy || terrainBusy || !canEdit}
+            disabled={!!busy || terrainBusy || presentationBusy || !canEdit}
             onChange={(event) => {
               const next = event.target.value;
               if (
@@ -243,6 +282,8 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
               setImage(previous.image);
               setNotes(previous.notes);
               setAltText(previous.altText);
+              setWeather(previous.weather);
+              setAudiovisualEffects(previous.audiovisualEffects);
               setTerrainDirty(false);
               setTerrainBusy(false);
               setSaved(false);
@@ -255,22 +296,80 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
             <option value="isometric">Isometric</option>
           </Select>
         </Field>
-      </ShellTools>
+      </MapTools>
       {orientation === "isometric" ? (
-        <LocationTerrainEditor
-          locationId={locationId}
-          disabled={!!busy}
-          onDirtyChange={setTerrainDirty}
-          onBusyChange={setTerrainBusy}
-          onSaved={() =>
-            setBaseline((previous) =>
-              JSON.stringify({
-                ...JSON.parse(previous),
-                orientation: "isometric",
-              }),
-            )
-          }
-        />
+        <>
+          <LocationTerrainEditor
+            locationId={locationId}
+            disabled={!!busy}
+            onDirtyChange={setTerrainDirty}
+            onBusyChange={setTerrainBusy}
+            onSaved={() =>
+              setBaseline((previous) =>
+                JSON.stringify({
+                  ...JSON.parse(previous),
+                  orientation: "isometric",
+                }),
+              )
+            }
+          />
+          <form
+            className="mt-6 space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (
+                !record ||
+                busy ||
+                presentationBusy ||
+                terrainBusy ||
+                !canEdit
+              )
+                return;
+              setBusy("Saving");
+              setSaved(false);
+              const success = await saveRecord({
+                ...record,
+                payload: {
+                  ...object(payload),
+                  ...presentationFields(weather, audiovisualEffects, payload),
+                },
+              });
+              setBusy("");
+              if (success) {
+                setBaseline((previous) =>
+                  JSON.stringify({
+                    ...JSON.parse(previous),
+                    weather,
+                    audiovisualEffects,
+                  }),
+                );
+                setSaved(true);
+              }
+            }}
+          >
+            <Fieldset
+              disabled={!!busy || terrainBusy || presentationBusy || !canEdit}
+              className="space-y-4"
+            >
+              <LocationPresentationFields
+                worldId={definition.id}
+                weather={weather}
+                audiovisualEffects={audiovisualEffects}
+                onWeather={setWeather}
+                onEffects={setAudiovisualEffects}
+                onBusyChange={setPresentationBusy}
+              />
+              <Button
+                type="submit"
+                tone="primary"
+                className="min-h-11"
+                disabled={!dirty}
+              >
+                Save presentation
+              </Button>
+            </Fieldset>
+          </form>
+        </>
       ) : (
         <>
           <div className="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-200">
@@ -292,12 +391,14 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
               </p>
             )}
           </div>
-          <ShellTools>
+          <MapTools>
             <DraftRequired>
               {record && (
                 <>
                   <Fieldset
-                    disabled={!!busy || terrainBusy || !canEdit}
+                    disabled={
+                      !!busy || terrainBusy || presentationBusy || !canEdit
+                    }
                     className="mt-6 space-y-5"
                   >
                     <div className="flex flex-wrap gap-3">
@@ -326,6 +427,11 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                       />
                     </Field>
                   </Fieldset>
+                  {message && (
+                    <Alert className="mt-4" aria-live="polite">
+                      {message}
+                    </Alert>
+                  )}
                   {pickerOpen && (
                     <section
                       className="mt-6 rounded-box border border-base-300 p-5"
@@ -427,6 +533,7 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                     className="mt-8 space-y-6"
                     onSubmit={async (event) => {
                       event.preventDefault();
+                      if (busy || presentationBusy || !canEdit) return;
                       setBusy("Saving");
                       setSaved(false);
                       setMessage("");
@@ -443,6 +550,17 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                             image: { ...image, altText, orientation },
                           },
                         };
+                      next = {
+                        ...next,
+                        payload: {
+                          ...object(next.payload),
+                          ...presentationFields(
+                            weather,
+                            audiovisualEffects,
+                            payload,
+                          ),
+                        },
+                      };
                       const success = await saveRecord(next);
                       setBusy("");
                       if (success) {
@@ -452,6 +570,8 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                             notes,
                             orientation,
                             altText,
+                            weather,
+                            audiovisualEffects,
                           }),
                         );
                         setSaved(true);
@@ -459,9 +579,19 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                     }}
                   >
                     <Fieldset
-                      disabled={!!busy || terrainBusy || !canEdit}
+                      disabled={
+                        !!busy || terrainBusy || presentationBusy || !canEdit
+                      }
                       className="space-y-6"
                     >
+                      <LocationPresentationFields
+                        worldId={definition.id}
+                        weather={weather}
+                        audiovisualEffects={audiovisualEffects}
+                        onWeather={setWeather}
+                        onEffects={setAudiovisualEffects}
+                        onBusyChange={setPresentationBusy}
+                      />
                       <Field label="Alternative text">
                         <Input
                           className="mt-2 w-full"
@@ -492,18 +622,13 @@ export function WorldMapPage({ locationId }: { locationId: string }) {
                 </>
               )}
             </DraftRequired>
-          </ShellTools>
+          </MapTools>
         </>
       )}
       {busy && (
         <p className="mt-4" role="status">
           {busy}…
         </p>
-      )}
-      {message && (
-        <Alert className="mt-4" aria-live="polite">
-          {message}
-        </Alert>
       )}
       {saved && !dirty && (
         <Alert className="mt-4" tone="success" aria-live="polite">

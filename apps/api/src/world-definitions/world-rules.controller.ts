@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -26,7 +27,7 @@ import type {
   RuleStateView,
   RecordedRuleRoll,
 } from "@aow/common";
-import { GmGuard } from "../auth/auth.guard";
+import { WorldAccessGuard } from "./world-access.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { WorldRulesService } from "./world-rules.service";
 
@@ -47,7 +48,7 @@ class PreviewWorldRulesDto {
 }
 
 @Controller("worlds/:worldId/rules")
-@UseGuards(GmGuard)
+@UseGuards(WorldAccessGuard)
 export class WorldRulesController {
   constructor(private readonly rules: WorldRulesService) {}
   @Get() list(
@@ -70,6 +71,14 @@ export class WorldRulesController {
     @Body() dto: SaveWorldRuleDto,
   ) {
     return this.rules.upsert(worldId, request.user!.id, dto, dto.rule, ruleId);
+  }
+  @Delete(":ruleId") remove(
+    @Param("worldId") worldId: string,
+    @Param("ruleId") ruleId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: RuleRevisionDto,
+  ) {
+    return this.rules.remove(worldId, request.user!.id, dto, ruleId);
   }
   @Post(":ruleId/duplicate") duplicate(
     @Param("worldId") worldId: string,

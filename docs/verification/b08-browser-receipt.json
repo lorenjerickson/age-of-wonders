@@ -1,0 +1,39 @@
+{
+  "seed": {
+    "ownerId": "738b61f1-c827-40ca-a9d0-7c04c9625723",
+    "campaignId": "b4772bfd-6879-4ad5-b70d-a5a3ffc76747",
+    "instanceId": "8c870d05-7f86-4ef2-82bd-faf3b89b2dd9",
+    "actorId": "actor"
+  },
+  "checks": [
+    {
+      "check": "actual-placements-equipment-navigation",
+      "pass": true
+    },
+    {
+      "check": "pack-retrieve-and-equip-consumes-one",
+      "pass": true
+    },
+    {
+      "check": "responsive-1440",
+      "pass": true
+    },
+    {
+      "check": "hard-reload-equipment-and-allowance-persist",
+      "pass": true
+    },
+    {
+      "check": "mobile-equipped-belt-retrieve-costs-zero",
+      "pass": true
+    },
+    {
+      "check": "responsive-390",
+      "pass": true
+    },
+    {
+      "check": "mobile-hard-reload-persists",
+      "pass": true
+    }
+  ],
+  "pageErrors": []
+}

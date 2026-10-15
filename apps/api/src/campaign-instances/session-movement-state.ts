@@ -1,3 +1,4 @@
+import { Creature, Character } from "@aow/domain";
 import { BadRequestException } from "@nestjs/common";
 import {
   createTerrainSightIndex,
@@ -219,22 +220,9 @@ export function movementStateView(
   add(runtime, "aow:instance", "instance", instanceFields);
   for (const entry of array(state.creatureEmbodiments)) {
     const creature = object(entry.creature);
-    const base = { ...creature };
-    delete base.terrainPosition;
-    delete base.currentLocationId;
-    const extensionFields = { ...object(creature.extensions) };
-    delete extensionFields["aow:rules"];
-    if (creature.extensions !== undefined) base.extensions = extensionFields;
-    const fields = {
-      ...base,
-      ...object(object(creature.extensions)["aow:rules"]),
-      ...(creature.terrainPosition === undefined
-        ? {}
-        : { position: creature.terrainPosition }),
-      ...(creature.currentLocationId === undefined
-        ? {}
-        : { locationId: creature.currentLocationId }),
-    };
+    const owner =
+      object(entry.source).kind === "character" ? Character : Creature;
+    const fields = owner.ruleFields(creature);
     add(runtime, String(entry.runtimeCreatureId), "actor", fields);
   }
   schema.actor ??= {};
@@ -242,6 +230,7 @@ export function movementStateView(
   schema.actor.locationId = { type: "string", writable: false };
   schema.actor["aow:movementRemaining"] = { type: "number", writable: true };
   schema.actor["aow:moves"] = { type: "number", writable: true };
+  schema.actor["aow:bonusActions"] = { type: "number", writable: true };
   for (const [index, entry] of array(state.itemInstances).entries())
     add(runtime, `aow:item:${index}`, "item", entry);
   for (const [index, entry] of array(state.plotProgress).entries())
@@ -260,7 +249,7 @@ export function movementStateView(
 }
 
 /** Only registered mutable actor fields can be mapped back to persisted runtime. */
-export function applyMovementState(
+export async function applyMovementState(
   state: Record<string, unknown>,
   before: RuleStateView,
   after: RuleStateView,
@@ -274,41 +263,30 @@ export function applyMovementState(
       throw new BadRequestException(
         "Rule execution changed the runtime entity structure.",
       );
-    const creature = object(embodiment.creature);
-    let changed = false;
-    for (const [field, value] of Object.entries(result.fields)) {
-      if (JSON.stringify(value) === JSON.stringify(previous.fields[field]))
-        continue;
-      changed = true;
-      if (field === "position") creature.terrainPosition = value;
-      else if (field === "aow:movementRemaining" || field === "aow:moves") {
-        creature.extensions = {
-          ...object(creature.extensions),
-          "aow:rules": {
-            ...object(object(creature.extensions)["aow:rules"]),
-            [field]: value,
+    try {
+      const Actor =
+        object(embodiment.source).kind === "character" ? Character : Creature;
+      const owner = Actor.deserializePayload(object(embodiment.creature));
+      try {
+        const receipt = await owner.command("applyRuleFields", {
+          initiator: "rule-execution",
+          params: {
+            before: previous.fields,
+            after: result.fields,
+            updatedAt: new Date().toISOString(),
           },
-        };
-      } else
-        throw new BadRequestException(
-          "A rule wrote an unsupported runtime field.",
-        );
-    }
-    if (changed) {
-      const identity = object(creature.identity);
-      const version = object(identity.version);
-      if (!Number.isSafeInteger(version.revision))
-        throw new BadRequestException(
-          "The actor has no valid runtime revision.",
-        );
-      creature.identity = {
-        ...identity,
-        version: {
-          ...version,
-          revision: Number(version.revision) + 1,
-          updatedAt: new Date().toISOString(),
-        },
-      };
+          context: {},
+        });
+        if (receipt.status === "rejected")
+          throw new TypeError(receipt.reason ?? "Invalid actor rule write.");
+        embodiment.creature = owner.serialize().data;
+      } finally {
+        owner.dispose();
+      }
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Invalid actor rule write.",
+      );
     }
   }
   return next;

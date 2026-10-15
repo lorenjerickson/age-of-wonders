@@ -1,3 +1,4 @@
+import { worldAccessWhere } from "./world-access";
 import {
   BadRequestException,
   ConflictException,
@@ -53,6 +54,13 @@ const listSelect = {
 
 const detailSelect = {
   id: true,
+  ownerUserId: true,
+  accessEntries: {
+    select: {
+      role: true,
+      player: { select: { userId: true, standing: true } },
+    },
+  },
   name: true,
   description: true,
   status: true,
@@ -163,7 +171,7 @@ export class WorldDefinitionsService {
     let rows: readonly ListRow[];
     try {
       rows = await this.prisma.worldDefinition.findMany({
-        where: { ownerUserId },
+        where: worldAccessWhere(ownerUserId),
         select: listSelect,
         orderBy: [{ status: "asc" }, { name: "asc" }, { id: "asc" }],
       });
@@ -217,7 +225,7 @@ export class WorldDefinitionsService {
     let row: DetailRow | null;
     try {
       row = await this.prisma.worldDefinition.findUnique({
-        where: { id, ownerUserId },
+        where: { id, ...worldAccessWhere(ownerUserId) },
         select: detailSelect,
       });
     } catch {
@@ -232,6 +240,16 @@ export class WorldDefinitionsService {
 
     return {
       id: row.id,
+      accessRole:
+        row.ownerUserId === ownerUserId
+          ? ("owner" as const)
+          : row.accessEntries?.find(
+                (entry) =>
+                  entry.player.userId === ownerUserId &&
+                  entry.player.standing === "ACTIVE",
+              )?.role === "editor"
+            ? ("editor" as const)
+            : ("viewer" as const),
       name: row.name,
       description: row.description ?? undefined,
       status: row.status.toLowerCase() as "active" | "archived",

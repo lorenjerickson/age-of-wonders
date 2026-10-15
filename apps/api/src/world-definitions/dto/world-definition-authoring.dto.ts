@@ -103,6 +103,10 @@ export class ExpectedWorldMetadataRevisionDto {
 }
 
 export class WorldDraftMutationDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  grantedConditions?: import("@aow/common").WorldGrantedCondition[];
   @IsInt()
   @Min(1)
   expectedStorageRevision!: number;
@@ -120,6 +124,23 @@ export class WorldDraftMutationDto {
 }
 
 export class UpsertWorldLocationDraftDto extends WorldDraftMutationDto {
+  @IsOptional()
+  @IsObject()
+  weather?: import("@aow/common").LocationWeather | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  audiovisualEffects?: import("@aow/common").LocationAudiovisualEffect[] | null;
+
+  @IsOptional()
+  @IsObject()
+  map?: import("@aow/common").LocationMap;
+
+  @IsOptional()
+  @IsObject()
+  mapSceneGrid?: import("@aow/common").LocationSceneGrid | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(20_000)
@@ -168,6 +189,14 @@ export class UpsertWorldLocationDraftDto extends WorldDraftMutationDto {
 }
 
 export class UpsertWorldCreatureDraftDto extends WorldDraftMutationDto {
+  @IsOptional() @IsObject() skills?: Record<string, number>;
+  @IsOptional() @IsObject() health?: {
+    current: number;
+    maximum: number;
+    temporary: number;
+  };
+  @IsOptional() @IsObject() vision?: { day: number; night: number };
+  @IsOptional() @IsArray() @ArrayMaxSize(200) equipmentPool?: string[];
   @IsOptional()
   @IsObject()
   images?: Record<string, unknown>;
@@ -212,6 +241,29 @@ export class UpsertWorldCreatureDraftDto extends WorldDraftMutationDto {
 }
 
 export class UpsertWorldItemDraftDto extends WorldDraftMutationDto {
+  @IsOptional() @IsObject() slottedContainer?:
+    import("@aow/common").SlottedContainerDefinition | null;
+  @IsOptional() @IsString() @MaxLength(120) beltSlotCategory?:
+    import("@aow/common").BeltSlotCategory | null;
+  @IsOptional() @IsString() @MaxLength(120) rarity?:
+    import("@aow/common").ItemRarity | null;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  traits?: import("@aow/common").TraitDefinition[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  actions?: import("@aow/common").ActionDefinition[];
+  @IsOptional()
+  @IsObject()
+  vehicle?: import("@aow/common").VehicleDefinition | null;
+  @IsOptional() @IsObject() weight?: import("@aow/common").Weight;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  cost?: import("@aow/common").CurrencyAmount[];
+  @IsOptional() @IsString() @MaxLength(20000) notes?: string;
   @IsString()
   @MinLength(3)
   @MaxLength(240)
@@ -231,8 +283,9 @@ export class UpsertWorldItemDraftDto extends WorldDraftMutationDto {
   @IsArray({ each: true })
   compatibleEquipmentSlotSets!: string[][];
 
+  @IsOptional()
   @IsObject()
-  image!: Record<string, unknown>;
+  image?: Record<string, unknown>;
 }
 
 export class ForkWorldDefinitionDto {

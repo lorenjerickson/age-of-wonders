@@ -1,0 +1,36 @@
+{
+  "batch": "B06",
+  "active_session_start": "2026-10-15T00:44:55+00:00",
+  "active_session_end": "2026-10-15T00:54:33.500476+00:00",
+  "active_wall_seconds": 578.5,
+  "command_seconds": 250.252,
+  "verification_interval_union_seconds": 158.648,
+  "verification_wall_share_percent": 27.42,
+  "categories": {
+    "typecheck": {
+      "command_seconds": 41.851,
+      "commands": 7,
+      "marked_reruns": 0,
+      "failed_attempts": 0
+    },
+    "lint": {
+      "command_seconds": 37.634,
+      "commands": 5,
+      "marked_reruns": 3,
+      "failed_attempts": 2
+    },
+    "build": {
+      "command_seconds": 39.064,
+      "commands": 5,
+      "marked_reruns": 2,
+      "failed_attempts": 1
+    },
+    "tests": {
+      "command_seconds": 131.703,
+      "commands": 12,
+      "marked_reruns": 3,
+      "failed_attempts": 1
+    }
+  },
+  "instrumentation_gaps": "Initial instruction reading before marker excluded. Manual review, fixture preparation, coordination and cleanup not separately timed; included after marker in active wall. Implementation continued during parallel checks; blocked-only time unknown."
+}

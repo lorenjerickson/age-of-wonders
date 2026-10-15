@@ -21,7 +21,7 @@ import {
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import type { Request } from "express";
-import { GmGuard } from "../auth/auth.guard";
+import { SessionGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { WorldDefinitionAuthoringService } from "../world-definitions/world-definition-authoring.service";
 import { MediaService } from "../media/media.service";
@@ -41,7 +41,7 @@ export class GenerateWorldArtworkDto {
 }
 
 @Controller("ai/worlds/:worldId/artwork-proposals")
-@UseGuards(GmGuard)
+@UseGuards(SessionGuard)
 export class WorldArtworkController {
   constructor(
     private readonly authoring: WorldDefinitionAuthoringService,

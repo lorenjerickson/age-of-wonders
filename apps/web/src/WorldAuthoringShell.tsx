@@ -77,12 +77,23 @@ export function WorldAuthoringProvider({
     setNavigationWorld?.({
       worldId: definition.id,
       records: draft?.records ?? [],
+      modelElements: draft?.effectiveModels?.elements?.flatMap((element) =>
+        element.elementId
+          ? [{ elementId: element.elementId, name: element.name }]
+          : [],
+      ),
     });
     return () => setNavigationWorld?.(undefined);
-  }, [definition.id, draft?.records, setNavigationWorld]);
+  }, [
+    definition.id,
+    draft?.records,
+    draft?.effectiveModels?.elements,
+    setNavigationWorld,
+  ]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
   const canEdit =
+    definition.accessRole !== "viewer" &&
     definition.status.toLocaleLowerCase() !== "archived" &&
     draft?.status !== "stale";
 
@@ -127,7 +138,15 @@ export function WorldAuthoringProvider({
     try {
       const saved = await saveWorldLocation(
         definition.id,
-        locationMutationInput(record, draft.storageRevision),
+        locationMutationInput(
+          record,
+          draft.storageRevision,
+          draft.records.find(
+            (previous) =>
+              previous.resourceType === record.resourceType &&
+              previous.sourceId === record.sourceId,
+          ),
+        ),
         record.sourceId,
       );
       setDraft({ ...saved, effectiveModels: draft.effectiveModels });

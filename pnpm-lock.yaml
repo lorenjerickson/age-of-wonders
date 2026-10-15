@@ -20,6 +20,9 @@ importers:
       '@aow/common':
         specifier: workspace:*
         version: link:../../packages/common
+      '@aow/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@aws-sdk/client-s3':
         specifier: ^3.1115.0
         version: 3.1115.0
@@ -123,6 +126,9 @@ importers:
       '@aow/common':
         specifier: workspace:*
         version: link:../../packages/common
+      '@aow/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@aow/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -213,6 +219,13 @@ importers:
         version: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)
 
   packages/domain:
+    dependencies:
+      '@aow/common':
+        specifier: workspace:*
+        version: link:../common
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
     devDependencies:
       typescript:
         specifier: ^5.9.2

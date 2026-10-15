@@ -1,0 +1,30 @@
+{
+  "category_seconds": {
+    "typecheck": 63.829508,
+    "tests": 67.08908000000001,
+    "browser": 70.14507,
+    "lint": 7.379318,
+    "build": 60.903999000000006
+  },
+  "counts": {
+    "typecheck": 7,
+    "tests": 18,
+    "browser": 5,
+    "lint": 3,
+    "build": 5
+  },
+  "reruns": {
+    "typecheck": 2,
+    "tests": 7,
+    "browser": 4,
+    "lint": 0,
+    "build": 3
+  },
+  "command_seconds": 269.34697500000004,
+  "union_seconds": 231.556012,
+  "recorded_active_start": "2026-10-14T03:39:18+00:00",
+  "recorded_active_end": "2026-10-14T03:53:14.897735+00:00",
+  "recorded_active_seconds": 836.897735,
+  "verification_interval_share": 0.27668375993394223,
+  "invalid_record_count": 2
+}

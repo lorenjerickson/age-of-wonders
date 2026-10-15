@@ -1,3 +1,4 @@
+import { CharacterCreation } from "@aow/domain";
 import { useBlocker } from "@tanstack/react-router";
 import { CharacterEquipment } from "./CharacterEquipment";
 import { MediaImage } from "./MediaImage";
@@ -461,11 +462,7 @@ export function CharacterDraftEditor({
         label={message || "Loading character…"}
       />
     );
-  const editable = draft.status === "in-progress";
-  const rollCounts = draft.attributeRolls.reduce<Map<number, number>>(
-    (counts, score) => counts.set(score, (counts.get(score) ?? 0) + 1),
-    new Map(),
-  );
+  const editable = CharacterCreation.editable(draft.status);
 
   const background = options.backgrounds.find(
     (option) => option.id === selections.backgroundId,
@@ -715,13 +712,11 @@ export function CharacterDraftEditor({
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
               {options.attributes.map((attribute) => {
                 const current = attributeAssignments[attribute.id];
-                const used = Object.entries(attributeAssignments)
-                  .filter(([id]) => id !== attribute.id)
-                  .reduce<Map<number, number>>(
-                    (map, [, score]) =>
-                      map.set(score, (map.get(score) ?? 0) + 1),
-                    new Map(),
-                  );
+                const available = CharacterCreation.availableRolls(
+                  draft.attributeRolls,
+                  attributeAssignments,
+                  attribute.id,
+                );
                 return (
                   <div
                     key={attribute.id}
@@ -756,9 +751,7 @@ export function CharacterDraftEditor({
                           key={score}
                           value={score}
                           disabled={
-                            score !== current &&
-                            (used.get(score) ?? 0) >=
-                              (rollCounts.get(score) ?? 0)
+                            score !== current && !available.includes(score)
                           }
                         >
                           {score}

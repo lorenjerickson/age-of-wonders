@@ -1,3 +1,5 @@
+import { InstanceAgentCapabilities } from "./InstanceAgentCapabilities";
+import { ActorEquipmentPanel } from "./ActorEquipmentPanel";
 import type { LocationId } from "@aow/common";
 import { ActorPlacementForm } from "./ActorPlacementForm";
 import {
@@ -683,12 +685,29 @@ function InstancePreparationForm() {
   );
 }
 
-export function CampaignInstancePlotsPage() {
+function knowledgeInput(
+  entry: import("@aow/common").CreatureDiscoveryKnowledge,
+) {
+  return {
+    kind: entry.kind,
+    creatureId: entry.creatureId,
+    claimId: entry.claimId,
+    ...(entry.learnedAt ? { learnedAt: entry.learnedAt } : {}),
+    ...(entry.provenance ? { provenance: entry.provenance } : {}),
+  };
+}
+
+export function CampaignInstancePlotsPage({
+  selectedPlotId,
+}: { selectedPlotId?: string } = {}) {
   const { instance } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstancePlotProjection>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [knowledgeActor, setKnowledgeActor] = useState("");
+  const [knowledgeClaim, setKnowledgeClaim] = useState("");
+
   useEffect(() => {
     void getCampaignInstancePlots(instance.campaignDefinitionId, instance.id)
       .then(setData, () =>
@@ -733,6 +752,33 @@ export function CampaignInstancePlotsPage() {
       setBusy("");
     }
   }
+  const plotUrl = (id?: string) =>
+    `/campaigns/instances/${encodeURIComponent(instance.id)}/plots${id ? `/${encodeURIComponent(id)}` : ""}`;
+  const flatten = (
+    plots: CampaignInstancePlotProjection["roots"],
+  ): CampaignInstancePlotProjection["roots"] =>
+    plots.flatMap((plot) => [plot, ...flatten(plot.children)]);
+  const selectedPlot =
+    data && selectedPlotId
+      ? flatten(data.roots).find(
+          (plot) => plot.plotDefinitionId === selectedPlotId,
+        )
+      : undefined;
+  const links = (plots: CampaignInstancePlotProjection["roots"]) => (
+    <ul className="mt-5 space-y-3">
+      {plots.map((plot) => (
+        <li key={plot.plotDefinitionId}>
+          <RouterButtonLink
+            className="min-h-11"
+            href={plotUrl(plot.plotDefinitionId)}
+          >
+            {plot.name || "Unnamed Plot"}
+          </RouterButtonLink>
+          <span className="ml-3 text-sm">{statusLabel(plot.status)}</span>
+        </li>
+      ))}
+    </ul>
+  );
   const renderPlots = (
     plots: CampaignInstancePlotProjection["roots"],
   ): ReactNode => (
@@ -752,7 +798,7 @@ export function CampaignInstancePlotsPage() {
             <Label className="min-w-40">
               Progress
               <Select
-                className="mt-2"
+                className="mt-2 min-h-11"
                 value={plot.status}
                 disabled={busy === plot.plotDefinitionId}
                 onChange={(event) =>
@@ -791,10 +837,35 @@ export function CampaignInstancePlotsPage() {
                     <span className="text-sm font-medium">
                       {objective.objectiveName || "Unnamed objective"}
                     </span>
+                    <Label className="w-full">
+                      Objective notes
+                      <Textarea
+                        className="mt-2 w-full min-h-11"
+                        defaultValue={objective.notes ?? ""}
+                        disabled={!!busy}
+                        onBlur={(event) => {
+                          const notes = event.currentTarget.value;
+                          if (notes !== (objective.notes ?? ""))
+                            void update(
+                              plot.plotDefinitionId,
+                              {
+                                objectiveProgress: [
+                                  {
+                                    objectiveId: objective.objectiveId,
+                                    status: objective.status,
+                                    notes,
+                                  },
+                                ],
+                              },
+                              objectiveBusyKey,
+                            );
+                        }}
+                      />
+                    </Label>
                     <Label className="min-w-40">
                       Objective progress
                       <Select
-                        className="mt-1"
+                        className="mt-1 min-h-11"
                         value={objective.status}
                         disabled={busy === objectiveBusyKey}
                         onChange={(event) =>
@@ -828,9 +899,178 @@ export function CampaignInstancePlotsPage() {
               })}
             </ul>
           )}
+          {!!plot.claims?.length && (
+            <section className="mt-6">
+              <h2 className="font-semibold">Discovery knowledge</h2>
+              <ul className="mt-3 space-y-3">
+                {plot.claims.map((claim) => (
+                  <li key={claim.id} className="flex min-h-11 items-center">
+                    <Checkbox
+                      label={`${statusLabel(claim.kind)}: ${claim.name}`}
+                      checked={
+                        plot.revealedClaimIds?.includes(claim.id) ?? false
+                      }
+                      disabled={!!busy}
+                      onChange={(event) =>
+                        void update(plot.plotDefinitionId, {
+                          revealedClaimIds: event.currentTarget.checked
+                            ? [...(plot.revealedClaimIds ?? []), claim.id]
+                            : (plot.revealedClaimIds ?? []).filter(
+                                (id) => id !== claim.id,
+                              ),
+                        })
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-sm">
+                Checked claims are revealed in Instance progress. Individual
+                knowledge remains separate.
+              </p>
+              <ul className="mt-4 space-y-2">
+                {plot.creatureKnowledge?.map((entry) => (
+                  <li
+                    key={`${entry.creatureId}:${entry.claimId}`}
+                    className="flex flex-wrap gap-3 items-center"
+                  >
+                    <span>
+                      {entry.creatureName} · {statusLabel(entry.kind)} ·{" "}
+                      {plot.claims?.find((claim) => claim.id === entry.claimId)
+                        ?.name ?? "Unavailable claim"}
+                    </span>
+                    <Button
+                      className="min-h-11"
+                      disabled={!!busy}
+                      onClick={() =>
+                        void update(plot.plotDefinitionId, {
+                          creatureKnowledge: plot.creatureKnowledge
+                            ?.filter((other) => other !== entry)
+                            .map(knowledgeInput),
+                        })
+                      }
+                    >
+                      Remove knowledge
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <form
+                className="mt-4 grid gap-3 sm:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const claim = plot.claims?.find(
+                    (claim) => claim.id === knowledgeClaim,
+                  );
+                  if (!claim || !knowledgeActor) return;
+                  const kind = (
+                    {
+                      truth: "knows-truth",
+                      belief: "holds-belief",
+                      rumor: "heard-rumor",
+                    } as const
+                  )[claim.kind];
+                  void update(plot.plotDefinitionId, {
+                    creatureKnowledge: [
+                      ...(plot.creatureKnowledge ?? [])
+                        .filter(
+                          (entry) =>
+                            entry.creatureId !== knowledgeActor ||
+                            entry.claimId !== knowledgeClaim,
+                        )
+                        .map(knowledgeInput),
+                      {
+                        kind,
+                        creatureId:
+                          knowledgeActor as import("@aow/common").EntityId,
+                        claimId: knowledgeClaim,
+                      },
+                    ],
+                  });
+                }}
+              >
+                <Label>
+                  Actor
+                  <Select
+                    className="mt-2 w-full min-h-11"
+                    aria-label="Actor"
+                    value={knowledgeActor}
+                    onChange={(event) =>
+                      setKnowledgeActor(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">Choose an actor</option>
+                    {plot.actors?.map((actor) => (
+                      <option key={actor.id} value={actor.id}>
+                        {actor.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+                <Label>
+                  Claim
+                  <Select
+                    className="mt-2 w-full min-h-11"
+                    aria-label="Claim"
+                    value={knowledgeClaim}
+                    onChange={(event) =>
+                      setKnowledgeClaim(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">Choose a claim</option>
+                    {plot.claims?.map((claim) => (
+                      <option key={claim.id} value={claim.id}>
+                        {statusLabel(claim.kind)}: {claim.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+                <Button
+                  type="submit"
+                  className="min-h-11"
+                  disabled={!!busy || !knowledgeActor || !knowledgeClaim}
+                >
+                  Record knowledge
+                </Button>
+              </form>
+            </section>
+          )}
+          {!!plot.locations?.length && (
+            <section className="mt-6">
+              <h2 className="font-semibold">Location realizations</h2>
+              <ul className="mt-3 space-y-4">
+                {plot.locations.map((location) => (
+                  <li key={location.id}>
+                    <h3 className="font-medium">{location.name}</h3>
+                    {location.placements.length ? (
+                      <ul>
+                        {location.placements.map((placement) => (
+                          <li key={placement.id}>
+                            <RouterButtonLink
+                              className="min-h-11"
+                              href={`/campaigns/instances/${encodeURIComponent(instance.id)}/placements/${encodeURIComponent(placement.id)}`}
+                            >
+                              {placement.name}
+                            </RouterButtonLink>{" "}
+                            · {statusLabel(placement.status)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm">
+                        No placement realizations are associated with this
+                        context.
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {plot.children.length > 0 && (
             <div className="mt-3 ml-5 border-l border-base-300 pl-4">
-              {renderPlots(plot.children)}
+              <h2 className="font-semibold">Subplots</h2>
+              {links(plot.children)}
             </div>
           )}
         </li>
@@ -841,7 +1081,7 @@ export function CampaignInstancePlotsPage() {
     <main className={pageClass}>
       <PageIntro
         eyebrow="Campaign Instance · Preparation"
-        title="Plots & staging"
+        title={selectedPlot?.name || "Plots & staging"}
       >
         <p>
           Track progress for captured root Plots and subplots. Their authored
@@ -849,9 +1089,20 @@ export function CampaignInstancePlotsPage() {
         </p>
       </PageIntro>
       <LoadState loading={loading} error={error} />
+      {selectedPlotId && (
+        <RouterButtonLink className="mt-4 min-h-11" href={plotUrl()}>
+          All Plots
+        </RouterButtonLink>
+      )}
       {data &&
-        (data.roots.length ? (
-          renderPlots(data.roots)
+        (selectedPlotId ? (
+          selectedPlot ? (
+            renderPlots([selectedPlot])
+          ) : (
+            <Alert className="mt-8">The selected Plot is unavailable.</Alert>
+          )
+        ) : data.roots.length ? (
+          links(data.roots)
         ) : (
           <Alert className="mt-8">No captured Plots are available.</Alert>
         ))}
@@ -859,7 +1110,10 @@ export function CampaignInstancePlotsPage() {
   );
 }
 
-export function CampaignInstancePlacementsPage() {
+export function CampaignInstancePlacementsPage({
+  selectedRealizationId,
+  selectedActorId,
+}: { selectedRealizationId?: string; selectedActorId?: string } = {}) {
   const { instance } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstancePlacementProjection>();
   const [embodiments, setEmbodiments] =
@@ -946,107 +1200,142 @@ export function CampaignInstancePlacementsPage() {
       <LoadState loading={loading} error={error} />
       {data && (
         <div className="mt-8 space-y-4">
-          {data.items.map((placement) => (
-            <article
-              key={placement.realizationId}
-              className="card border border-base-300 bg-base-200"
+          {!selectedRealizationId &&
+            !selectedActorId &&
+            data.items.map((placement) => (
+              <article
+                key={placement.realizationId}
+                className="rounded-box border border-base-300 p-4"
+              >
+                <RouterButtonLink
+                  className="min-h-11"
+                  href={`/campaigns/instances/${encodeURIComponent(instance.id)}/placements/${encodeURIComponent(placement.realizationId)}`}
+                >
+                  {placement.name || "Unnamed placement"}
+                </RouterButtonLink>
+                <p className="mt-2">
+                  {placement.sourceLocationName} ·{" "}
+                  {statusLabel(placement.status)}
+                </p>
+              </article>
+            ))}
+          {selectedRealizationId && (
+            <RouterButtonLink
+              className="min-h-11"
+              href={`/campaigns/instances/${encodeURIComponent(instance.id)}/placements`}
             >
-              <div className="card-body">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <h2 className="card-title">
-                      {placement.name || "Unnamed placement"}
-                    </h2>
-                    <p className="mt-1 text-sm text-base-content/60">
-                      Source: {placement.sourceName || "Captured content"}
-                      {placement.sourceLocationName
-                        ? ` · ${placement.sourceLocationName}`
-                        : ""}
-                    </p>
-                    <p className="mt-1 text-xs">
-                      {placement.sourceTypeLabel} →{" "}
-                      {statusLabel(placement.status)}
-                    </p>
+              All placements
+            </RouterButtonLink>
+          )}
+          {selectedRealizationId &&
+            !data.items.some(
+              (placement) => placement.realizationId === selectedRealizationId,
+            ) && <Alert>The selected placement is unavailable.</Alert>}
+          {data.items
+            .filter(
+              (placement) => placement.realizationId === selectedRealizationId,
+            )
+            .map((placement) => (
+              <article
+                key={placement.realizationId}
+                className="card border border-base-300 bg-base-200"
+              >
+                <div className="card-body">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h2 className="card-title">
+                        {placement.name || "Unnamed placement"}
+                      </h2>
+                      <p className="mt-1 text-sm text-base-content/60">
+                        Source: {placement.sourceName || "Captured content"}
+                        {placement.sourceLocationName
+                          ? ` · ${placement.sourceLocationName}`
+                          : ""}
+                      </p>
+                      <p className="mt-1 text-xs">
+                        {placement.sourceTypeLabel} →{" "}
+                        {statusLabel(placement.status)}
+                      </p>
+                    </div>
+                    <Badge outline>{statusLabel(placement.status)}</Badge>
                   </div>
-                  <Badge outline>{statusLabel(placement.status)}</Badge>
-                </div>
-                <div className="card-actions mt-3">
-                  {(["realize", "defer", "remove"] as const).map((action) => (
+                  <div className="card-actions mt-3">
+                    {(["realize", "defer", "remove"] as const).map((action) => (
+                      <Button
+                        key={action}
+                        size="sm"
+                        tone={action === "remove" ? "outline" : "ghost"}
+                        disabled={busy === placement.realizationId}
+                        onClick={() =>
+                          void decide(placement.realizationId, action)
+                        }
+                      >
+                        {statusLabel(action)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-base-300 pt-4">
+                    <Label className="min-w-64 flex-1">
+                      Replacement
+                      <Select
+                        className="mt-2 w-full"
+                        value={
+                          replacementSelections[placement.realizationId] ?? ""
+                        }
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          setReplacementSelections((current) => ({
+                            ...current,
+                            [placement.realizationId]: value,
+                          }));
+                        }}
+                      >
+                        <option value="">Choose a replacement</option>
+                        <optgroup label="Existing Instance entities">
+                          {data.replacementOptions.map((option) => (
+                            <option
+                              key={
+                                option.kind === "existing-creature"
+                                  ? option.runtimeCreatureId
+                                  : option.runtimeItemId
+                              }
+                              value={`${option.kind}\u0000${
+                                option.kind === "existing-creature"
+                                  ? option.runtimeCreatureId
+                                  : option.runtimeItemId
+                              }`}
+                            >
+                              {option.name} · {option.typeLabel}
+                              {option.context ? ` · ${option.context}` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </Select>
+                    </Label>
                     <Button
-                      key={action}
                       size="sm"
-                      tone={action === "remove" ? "outline" : "ghost"}
-                      disabled={busy === placement.realizationId}
+                      tone="outline"
+                      disabled={
+                        busy === placement.realizationId ||
+                        !replacementSelections[placement.realizationId]
+                      }
                       onClick={() =>
-                        void decide(placement.realizationId, action)
+                        void decide(placement.realizationId, "replace")
                       }
                     >
-                      {statusLabel(action)}
+                      Replace
                     </Button>
-                  ))}
+                  </div>
+                  {data.replacementOptionsTruncated && (
+                    <p className="mt-2 text-xs text-base-content/55">
+                      Showing 200 of {data.totalReplacementOptions} eligible
+                      Instance entities. Narrowing and paging will be added with
+                      the larger runtime inventory surface.
+                    </p>
+                  )}
                 </div>
-                <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-base-300 pt-4">
-                  <Label className="min-w-64 flex-1">
-                    Replacement
-                    <Select
-                      className="mt-2 w-full"
-                      value={
-                        replacementSelections[placement.realizationId] ?? ""
-                      }
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setReplacementSelections((current) => ({
-                          ...current,
-                          [placement.realizationId]: value,
-                        }));
-                      }}
-                    >
-                      <option value="">Choose a replacement</option>
-                      <optgroup label="Existing Instance entities">
-                        {data.replacementOptions.map((option) => (
-                          <option
-                            key={
-                              option.kind === "existing-creature"
-                                ? option.runtimeCreatureId
-                                : option.runtimeItemId
-                            }
-                            value={`${option.kind}\u0000${
-                              option.kind === "existing-creature"
-                                ? option.runtimeCreatureId
-                                : option.runtimeItemId
-                            }`}
-                          >
-                            {option.name} · {option.typeLabel}
-                            {option.context ? ` · ${option.context}` : ""}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </Select>
-                  </Label>
-                  <Button
-                    size="sm"
-                    tone="outline"
-                    disabled={
-                      busy === placement.realizationId ||
-                      !replacementSelections[placement.realizationId]
-                    }
-                    onClick={() =>
-                      void decide(placement.realizationId, "replace")
-                    }
-                  >
-                    Replace
-                  </Button>
-                </div>
-                {data.replacementOptionsTruncated && (
-                  <p className="mt-2 text-xs text-base-content/55">
-                    Showing 200 of {data.totalReplacementOptions} eligible
-                    Instance entities. Narrowing and paging will be added with
-                    the larger runtime inventory surface.
-                  </p>
-                )}
-              </div>
-            </article>
-          ))}
+              </article>
+            ))}
           {!data.items.length && (
             <Alert>No captured placement plans are available.</Alert>
           )}
@@ -1056,41 +1345,61 @@ export function CampaignInstancePlacementsPage() {
               Each is mutable only within this Campaign Instance.
             </p>
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-              {(embodiments?.items ?? []).map((embodiment) => (
-                <li
-                  key={embodiment.runtimeCreatureId}
-                  className="rounded-box border border-base-300 bg-base-200 p-4"
-                >
-                  <p className="font-semibold">
-                    {embodiment.name || "Unnamed creature"}
-                  </p>
-                  <p className="mt-1 text-sm text-base-content/55">
-                    From {embodiment.sourceName || "captured Creature"}
-                    {embodiment.currentLocationName
-                      ? ` · ${embodiment.currentLocationName}`
-                      : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-base-content/55">
-                    {embodiment.policyLabel}
-                    {embodiment.policyDefaulted ? " · legacy default" : ""}
-                  </p>
-                  {embodiments && (
-                    <ActorPlacementForm
-                      key={embodiment.runtimeCreatureId}
-                      actor={embodiment}
-                      data={embodiments}
-                      campaignDefinitionId={instance.campaignDefinitionId}
-                      onSaved={(next) => {
-                        setEmbodiments(next);
-                        void getCampaignInstancePlacements(
-                          instance.campaignDefinitionId,
-                          instance.id,
-                        ).then(setData);
-                      }}
+              {!selectedActorId &&
+                !selectedRealizationId &&
+                (embodiments?.items ?? []).map((actor) => (
+                  <li key={actor.runtimeCreatureId}>
+                    <RouterButtonLink
+                      className="min-h-11"
+                      href={`/campaigns/instances/${encodeURIComponent(instance.id)}/actors/${encodeURIComponent(actor.runtimeCreatureId)}`}
+                    >
+                      {actor.name || "Unnamed actor"}
+                    </RouterButtonLink>
+                  </li>
+                ))}
+              {(embodiments?.items ?? [])
+                .filter((actor) => actor.runtimeCreatureId === selectedActorId)
+                .map((embodiment) => (
+                  <li
+                    key={embodiment.runtimeCreatureId}
+                    className="rounded-box border border-base-300 bg-base-200 p-4"
+                  >
+                    <p className="font-semibold">
+                      {embodiment.name || "Unnamed creature"}
+                    </p>
+                    <p className="mt-1 text-sm text-base-content/55">
+                      From {embodiment.sourceName || "captured Creature"}
+                      {embodiment.currentLocationName
+                        ? ` · ${embodiment.currentLocationName}`
+                        : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-base-content/55">
+                      {embodiment.policyLabel}
+                      {embodiment.policyDefaulted ? " · legacy default" : ""}
+                    </p>
+                    <ActorEquipmentPanel
+                      itemDetailLinks
+                      campaignId={instance.campaignDefinitionId}
+                      instanceId={instance.id}
+                      actorId={embodiment.runtimeCreatureId}
                     />
-                  )}
-                </li>
-              ))}
+                    {embodiments && (
+                      <ActorPlacementForm
+                        key={embodiment.runtimeCreatureId}
+                        actor={embodiment}
+                        data={embodiments}
+                        campaignDefinitionId={instance.campaignDefinitionId}
+                        onSaved={(next) => {
+                          setEmbodiments(next);
+                          void getCampaignInstancePlacements(
+                            instance.campaignDefinitionId,
+                            instance.id,
+                          ).then(setData);
+                        }}
+                      />
+                    )}
+                  </li>
+                ))}
             </ul>
           </section>
         </div>
@@ -1127,7 +1436,13 @@ export function ImportSelectionSummary({
   );
 }
 
-export function CampaignInstanceRosterPage() {
+export function CampaignInstanceRosterPage({
+  section,
+  selectedRecordId,
+}: {
+  section?: "members" | "invitations" | "characters";
+  selectedRecordId?: string;
+} = {}) {
   const { instance } = useCampaignInstance();
   const suffix = quickStartSuffix(useLocation().searchStr);
   const [data, setData] = useState<CampaignInstanceRoster>();
@@ -1517,644 +1832,739 @@ export function CampaignInstanceRosterPage() {
           readiness separately from Session attendance.
         </p>
       </PageIntro>
+      <nav
+        className="mt-4 flex flex-wrap gap-2"
+        aria-label="Instance participation"
+      >
+        {(["members", "invitations", "characters"] as const).map(
+          (destination) => (
+            <RouterButtonLink
+              className="min-h-11"
+              key={destination}
+              href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/${destination}${suffix}`}
+            >
+              {statusLabel(destination)}
+            </RouterButtonLink>
+          ),
+        )}
+        <RouterButtonLink
+          className="min-h-11"
+          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents${suffix}`}
+        >
+          Agents
+        </RouterButtonLink>
+      </nav>
       <LoadState loading={loading} error={error} />
       {data && (
         <div className="mt-8 space-y-10">
-          <section aria-labelledby="members-heading">
-            <h2 id="members-heading" className="text-2xl font-semibold">
-              People
-            </h2>
-            <ul className="mt-4 grid gap-3 md:grid-cols-2">
-              {data.memberships.map((member) => (
-                <li
-                  key={member.membershipId}
-                  className="rounded-box border border-base-300 bg-base-200 p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">
-                        {member.displayName || "Unnamed member"}
-                      </p>
-                      <p className="mt-1 text-sm">
-                        {statusLabel(member.role)} ·{" "}
-                        {statusLabel(member.status)}
-                      </p>
-                    </div>
-                    <Badge outline>{statusLabel(member.status)}</Badge>
-                  </div>
-                  {member.activeCharacterName && (
-                    <p className="mt-3 text-sm">
-                      Character: {member.activeCharacterName}
-                    </p>
-                  )}
-                  {member.role !== "gm" && (
-                    <Select
-                      className="mt-4 w-full"
-                      aria-label={`${member.displayName} membership status`}
-                      disabled={busy === `membership:${member.membershipId}`}
-                      value={member.status}
-                      onChange={(event) =>
-                        void membershipStatus(
-                          member.membershipId,
-                          member.status,
-                          event.currentTarget.value as typeof member.status,
-                        )
-                      }
-                    >
-                      {[member.status, ...membershipTargets(member.status)].map(
-                        (status) => (
-                          <option key={status} value={status}>
-                            {statusLabel(status)}
-                          </option>
-                        ),
-                      )}
-                    </Select>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section
-            className="grid gap-5 lg:grid-cols-[minmax(18rem,0.85fr)_1.15fr]"
-            aria-labelledby="invitations-heading"
-          >
-            <form
-              className="rounded-box border border-base-300 bg-base-200 p-5"
-              onSubmit={invite}
-            >
-              <h2 id="invitations-heading" className="text-xl font-semibold">
-                Invite a person
+          {(section === "members" || !section) && (
+            <section aria-labelledby="members-heading">
+              <h2 id="members-heading" className="text-2xl font-semibold">
+                People
               </h2>
-              <div className="mt-4 grid gap-4">
-                <Label>
-                  Existing Player
-                  <Select
-                    className="mt-2 w-full"
-                    value={selectedPlayerId}
-                    onChange={(event) => {
-                      setSelectedPlayerId(event.currentTarget.value);
-                      if (event.currentTarget.value) setRole("player");
-                    }}
-                  >
-                    <option value="">Invite someone new</option>
-                    {existingPlayers.map((player) => (
-                      <option key={player.playerId} value={player.playerId}>
-                        {player.displayName}
-                      </option>
-                    ))}
-                  </Select>
-                </Label>
-                <Label>
-                  Name
-                  <Input
-                    className="mt-2 w-full"
-                    value={invitedName}
-                    onChange={(event) =>
-                      setInvitedName(event.currentTarget.value)
-                    }
-                    required={!selectedPlayerId}
-                    disabled={Boolean(selectedPlayerId)}
-                  />
-                </Label>
-                <Label>
-                  Role
-                  <Select
-                    className="mt-2 w-full"
-                    value={role}
-                    disabled={Boolean(selectedPlayerId)}
-                    onChange={(event) =>
-                      setRole(
-                        event.currentTarget.value as
-                          "gm" | "player" | "spectator",
-                      )
-                    }
-                  >
-                    <option value="player">Player</option>
-                    <option value="spectator">Spectator</option>
-                    <option value="gm">Game Master</option>
-                  </Select>
-                </Label>
-                <Label>
-                  Email
-                  <Input
-                    className="mt-2 w-full"
-                    type="email"
-                    value={email}
-                    disabled={Boolean(selectedPlayerId)}
-                    onChange={(event) => setEmail(event.currentTarget.value)}
-                  />
-                </Label>
-                <Label>
-                  Mobile phone
-                  <Input
-                    className="mt-2 w-full"
-                    type="tel"
-                    value={phone}
-                    disabled={Boolean(selectedPlayerId)}
-                    onChange={(event) => setPhone(event.currentTarget.value)}
-                  />
-                </Label>
-                <Button
-                  type="submit"
-                  tone="primary"
-                  loading={busy === "invite"}
-                >
-                  Send invitation
-                </Button>
-              </div>
-            </form>
-            <div>
-              <h2 className="text-xl font-semibold">Invitations</h2>
-              <ul className="mt-4 space-y-3">
-                {data.invitations.map((invitation) => (
-                  <li
-                    key={invitation.invitationId}
-                    className="rounded-box border border-base-300 bg-base-200 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">
-                          {invitation.invitedName ||
-                            `Invited ${statusLabel(invitation.role)}`}
-                        </p>
-                        <p className="mt-1 text-sm">
-                          {statusLabel(invitation.status)} · expires{" "}
-                          {dateLabel(invitation.expiresAt)}
-                        </p>
-                        {invitation.delivery.map((delivery) => (
-                          <p
-                            key={delivery.channel}
-                            className="mt-1 text-xs text-base-content/55"
-                          >
-                            {statusLabel(delivery.channel)} destination
-                            protected · {statusLabel(delivery.status)}
-                          </p>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        {invitation.status === "pending" && (
-                          <Button
-                            size="sm"
-                            tone="ghost"
-                            disabled={busy === invitation.invitationId}
-                            onClick={() =>
-                              void invitationAction(
-                                invitation.invitationId,
-                                "revoke",
-                              )
-                            }
-                          >
-                            Revoke
-                          </Button>
-                        )}
-                        {campaignInstanceInvitationCanRetry(
-                          invitation.status,
-                        ) && (
-                          <Button
-                            size="sm"
-                            tone="outline"
-                            disabled={busy === invitation.invitationId}
-                            onClick={() =>
-                              void invitationAction(
-                                invitation.invitationId,
-                                "retry",
-                              )
-                            }
-                          >
-                            Retry
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              {!data.invitations.length && (
-                <p className="mt-3 text-sm text-base-content/55">
-                  No invitations have been created.
-                </p>
-              )}
-            </div>
-          </section>
-          <section aria-labelledby="characters-heading">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 id="characters-heading" className="text-2xl font-semibold">
-                  Characters
-                </h2>
-                <p className="mt-2 text-sm text-base-content/60">
-                  Characters are bound to one Player membership in this
-                  Instance. Imports create a distinct destination Character with
-                  provenance.
-                </p>
-              </div>
-              <Button
-                type="button"
-                tone="outline"
-                loading={busy === "load-character-imports"}
-                aria-expanded={showCharacterImport}
-                aria-controls="character-import-panel"
-                onClick={() => void openCharacterImport()}
-              >
-                {showCharacterImport ? "Cancel import" : "Import Character"}
-              </Button>
-            </div>
-            <form
-              className="mt-4 grid gap-3 rounded-box border border-base-300 bg-base-200 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
-              onSubmit={createCharacter}
-            >
-              <Label>
-                Character name
-                <Input
-                  className="mt-2 w-full"
-                  required
-                  maxLength={120}
-                  value={characterName}
-                  onChange={(event) =>
-                    setCharacterName(event.currentTarget.value)
-                  }
-                />
-              </Label>
-              <Label>
-                Player
-                <Select
-                  className="mt-2 w-full"
-                  required
-                  value={characterMembershipId}
-                  onChange={(event) =>
-                    setCharacterMembershipId(event.currentTarget.value)
-                  }
-                >
-                  <option value="">Select a Player</option>
-                  {data.memberships
-                    .filter(
-                      (member) =>
-                        member.role === "player" && member.status === "active",
-                    )
-                    .map((member) => (
-                      <option
-                        key={member.membershipId}
-                        value={member.membershipId}
+              <ul className="mt-4 grid gap-3 md:grid-cols-2">
+                {!selectedRecordId &&
+                  data.memberships.map((member) => (
+                    <li key={member.membershipId}>
+                      <RouterButtonLink
+                        className="min-h-11"
+                        href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/members/${encodeURIComponent(member.membershipId)}${suffix}`}
                       >
-                        {member.displayName}
-                      </option>
-                    ))}
-                </Select>
-              </Label>
-              <Button
-                type="submit"
-                tone="primary"
-                loading={busy === "create-character"}
-              >
-                Create draft
-              </Button>
-            </form>
-            {characterImportNotice && (
-              <Alert tone="success" className="mt-4">
-                {characterImportNotice}
-              </Alert>
-            )}
-            {showCharacterImport && (
-              <form
-                id="character-import-panel"
-                className="mt-4 rounded-box border border-secondary/30 bg-secondary/[0.06] p-5"
-                onSubmit={importCharacter}
-              >
-                <p className="text-xs font-semibold tracking-[0.16em] text-secondary uppercase">
-                  One-way copy
-                </p>
-                <h3 className="mt-1 text-xl font-semibold">
-                  Import from another Campaign Instance
-                </h3>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-base-content/65">
-                  Import creates a new Character bound to this Instance. It does
-                  not move, link, or later synchronize the source. Only approved
-                  source sheets belonging to the same Player are available.
-                </p>
-                {characterImportOptions &&
-                characterImportOptions.items.length > 0 ? (
-                  <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                        {member.displayName || "Unnamed member"}
+                      </RouterButtonLink>{" "}
+                      · {statusLabel(member.role)} ·{" "}
+                      {statusLabel(member.status)}
+                    </li>
+                  ))}
+                {data.memberships
+                  .filter((member) => member.membershipId === selectedRecordId)
+                  .map((member) => (
+                    <li
+                      key={member.membershipId}
+                      className="rounded-box border border-base-300 bg-base-200 p-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">
+                            {member.displayName || "Unnamed member"}
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {statusLabel(member.role)} ·{" "}
+                            {statusLabel(member.status)}
+                          </p>
+                        </div>
+                        <Badge outline>{statusLabel(member.status)}</Badge>
+                      </div>
+                      {member.activeCharacterName && (
+                        <p className="mt-3 text-sm">
+                          Character: {member.activeCharacterName}
+                        </p>
+                      )}
+                      {member.role !== "gm" && (
+                        <Select
+                          className="mt-4 w-full"
+                          aria-label={`${member.displayName} membership status`}
+                          disabled={
+                            busy === `membership:${member.membershipId}`
+                          }
+                          value={member.status}
+                          onChange={(event) =>
+                            void membershipStatus(
+                              member.membershipId,
+                              member.status,
+                              event.currentTarget.value as typeof member.status,
+                            )
+                          }
+                        >
+                          {[
+                            member.status,
+                            ...membershipTargets(member.status),
+                          ].map((status) => (
+                            <option key={status} value={status}>
+                              {statusLabel(status)}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          )}
+          {section === "invitations" && (
+            <section
+              className="grid gap-5 lg:grid-cols-[minmax(18rem,0.85fr)_1.15fr]"
+              aria-labelledby="invitations-heading"
+            >
+              {!selectedRecordId && (
+                <RouterButtonLink
+                  className="min-h-11"
+                  href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/invitations/new${suffix}`}
+                >
+                  Invite a person
+                </RouterButtonLink>
+              )}
+              {selectedRecordId === "new" && (
+                <form
+                  className="rounded-box border border-base-300 bg-base-200 p-5"
+                  onSubmit={invite}
+                >
+                  <h2
+                    id="invitations-heading"
+                    className="text-xl font-semibold"
+                  >
+                    Invite a person
+                  </h2>
+                  <div className="mt-4 grid gap-4">
                     <Label>
-                      Source Character
+                      Existing Player
                       <Select
                         className="mt-2 w-full"
-                        required
-                        value={sourceCharacterId}
+                        value={selectedPlayerId}
                         onChange={(event) => {
-                          const selected = characterImportOptions.items.find(
-                            (candidate) =>
-                              candidate.sourceCharacterId ===
-                              event.currentTarget.value,
-                          );
-                          setSourceCharacterId(event.currentTarget.value);
-                          setImportedCharacterName(
-                            selected?.sourceCharacterName ?? "",
-                          );
+                          setSelectedPlayerId(event.currentTarget.value);
+                          if (event.currentTarget.value) setRole("player");
                         }}
                       >
-                        <option value="">Select an approved Character</option>
-                        {characterImportOptions.items.map((candidate) => (
-                          <option
-                            key={candidate.sourceCharacterId}
-                            value={candidate.sourceCharacterId}
-                          >
-                            {candidate.sourceCharacterName} —{" "}
-                            {candidate.playerName} —{" "}
-                            {candidate.sourceCampaignInstanceName}
+                        <option value="">Invite someone new</option>
+                        {existingPlayers.map((player) => (
+                          <option key={player.playerId} value={player.playerId}>
+                            {player.displayName}
                           </option>
                         ))}
                       </Select>
                     </Label>
                     <Label>
-                      Destination name
+                      Name
                       <Input
                         className="mt-2 w-full"
-                        required
-                        maxLength={120}
-                        value={importedCharacterName}
+                        value={invitedName}
                         onChange={(event) =>
-                          setImportedCharacterName(event.currentTarget.value)
+                          setInvitedName(event.currentTarget.value)
+                        }
+                        required={!selectedPlayerId}
+                        disabled={Boolean(selectedPlayerId)}
+                      />
+                    </Label>
+                    <Label>
+                      Role
+                      <Select
+                        className="mt-2 w-full"
+                        value={role}
+                        disabled={Boolean(selectedPlayerId)}
+                        onChange={(event) =>
+                          setRole(
+                            event.currentTarget.value as
+                              "gm" | "player" | "spectator",
+                          )
+                        }
+                      >
+                        <option value="player">Player</option>
+                        <option value="spectator">Spectator</option>
+                        <option value="gm">Game Master</option>
+                      </Select>
+                    </Label>
+                    <Label>
+                      Email
+                      <Input
+                        className="mt-2 w-full"
+                        type="email"
+                        value={email}
+                        disabled={Boolean(selectedPlayerId)}
+                        onChange={(event) =>
+                          setEmail(event.currentTarget.value)
+                        }
+                      />
+                    </Label>
+                    <Label>
+                      Mobile phone
+                      <Input
+                        className="mt-2 w-full"
+                        type="tel"
+                        value={phone}
+                        disabled={Boolean(selectedPlayerId)}
+                        onChange={(event) =>
+                          setPhone(event.currentTarget.value)
                         }
                       />
                     </Label>
                     <Button
+                      type="submit"
                       tone="primary"
-                      loading={busy === "import-character"}
-                      disabled={!sourceCharacterId}
+                      loading={busy === "invite"}
                     >
-                      Copy as draft
+                      Send invitation
                     </Button>
                   </div>
-                ) : characterImportOptions ? (
-                  <Alert className="mt-4">
-                    No approved Characters from another owned Instance match an
-                    active Player in this roster.
-                  </Alert>
-                ) : (
-                  <p
-                    className="mt-4 text-sm text-base-content/55"
-                    aria-live="polite"
+                </form>
+              )}
+              <div>
+                <h2 className="text-xl font-semibold">Invitations</h2>
+                <ul className="mt-4 space-y-3">
+                  {!selectedRecordId &&
+                    data.invitations.map((invitation) => (
+                      <li key={invitation.invitationId}>
+                        <RouterButtonLink
+                          className="min-h-11"
+                          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/invitations/${encodeURIComponent(invitation.invitationId)}${suffix}`}
+                        >
+                          {invitation.invitedName || "Invited participant"}
+                        </RouterButtonLink>{" "}
+                        · {statusLabel(invitation.status)}
+                      </li>
+                    ))}
+                  {data.invitations
+                    .filter(
+                      (invitation) =>
+                        invitation.invitationId === selectedRecordId,
+                    )
+                    .map((invitation) => (
+                      <li
+                        key={invitation.invitationId}
+                        className="rounded-box border border-base-300 bg-base-200 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">
+                              {invitation.invitedName ||
+                                `Invited ${statusLabel(invitation.role)}`}
+                            </p>
+                            <p className="mt-1 text-sm">
+                              {statusLabel(invitation.status)} · expires{" "}
+                              {dateLabel(invitation.expiresAt)}
+                            </p>
+                            {invitation.delivery.map((delivery) => (
+                              <p
+                                key={delivery.channel}
+                                className="mt-1 text-xs text-base-content/55"
+                              >
+                                {statusLabel(delivery.channel)} destination
+                                protected · {statusLabel(delivery.status)}
+                              </p>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            {invitation.status === "pending" && (
+                              <Button
+                                size="sm"
+                                tone="ghost"
+                                disabled={busy === invitation.invitationId}
+                                onClick={() =>
+                                  void invitationAction(
+                                    invitation.invitationId,
+                                    "revoke",
+                                  )
+                                }
+                              >
+                                Revoke
+                              </Button>
+                            )}
+                            {campaignInstanceInvitationCanRetry(
+                              invitation.status,
+                            ) && (
+                              <Button
+                                size="sm"
+                                tone="outline"
+                                disabled={busy === invitation.invitationId}
+                                onClick={() =>
+                                  void invitationAction(
+                                    invitation.invitationId,
+                                    "retry",
+                                  )
+                                }
+                              >
+                                Retry
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+                {!data.invitations.length && (
+                  <p className="mt-3 text-sm text-base-content/55">
+                    No invitations have been created.
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+          {section === "characters" && (
+            <section aria-labelledby="characters-heading">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2
+                    id="characters-heading"
+                    className="text-2xl font-semibold"
                   >
-                    Loading eligible Characters…
+                    Characters
+                  </h2>
+                  <p className="mt-2 text-sm text-base-content/60">
+                    Characters are bound to one Player membership in this
+                    Instance. Imports create a distinct destination Character
+                    with provenance.
                   </p>
-                )}
-                {characterImportOptions &&
-                  characterImportOptions.total >
-                    characterImportOptions.items.length && (
-                    <p className="mt-3 text-xs text-base-content/55">
-                      Showing the first {characterImportOptions.items.length} of{" "}
-                      {characterImportOptions.total} eligible Characters.
-                    </p>
-                  )}
-                {characterImportOptions && sourceCharacterId && (
-                  <ImportSelectionSummary
-                    selected={characterImportOptions.items.find(
-                      (candidate) =>
-                        candidate.sourceCharacterId === sourceCharacterId,
-                    )}
-                  />
-                )}
-              </form>
-            )}
-            {characterReview && (
-              <section className="mt-4 rounded-box border border-primary/30 bg-primary/[0.06] p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
-                      Character review
-                    </p>
-                    <h3 className="mt-1 text-xl font-semibold">
-                      {characterReview.characterName}
-                    </h3>
-                    <p className="mt-1 text-sm text-base-content/60">
-                      Player: {characterReview.playerName} ·{" "}
-                      {statusLabel(characterReview.reviewStatus)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    tone="ghost"
-                    onClick={() => setCharacterReview(undefined)}
-                  >
-                    Close review
-                  </Button>
                 </div>
-                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                  <div>
-                    <dt className="text-base-content/55">Background</dt>
-                    <dd className="font-medium">
-                      {characterReview.backgroundName ?? "Not selected"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-base-content/55">Profession</dt>
-                    <dd className="font-medium">
-                      {characterReview.professionName ?? "Not selected"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-base-content/55">Heritage</dt>
-                    <dd className="font-medium">
-                      {characterReview.heritageNames.join(", ") ||
-                        "Not selected"}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {characterReview.attributes.map((attribute) => (
-                    <div
-                      key={attribute.name}
-                      className="rounded-box bg-base-100 px-3 py-2 text-sm"
-                    >
-                      <span className="text-base-content/55">
-                        {attribute.name}
-                      </span>{" "}
-                      <strong>{attribute.score ?? "Unassigned"}</strong>
-                    </div>
-                  ))}
-                </div>
-                {characterReview.startingEquipmentNames.length > 0 && (
-                  <p className="mt-4 text-sm">
-                    <span className="text-base-content/55">
-                      Starting equipment:
-                    </span>
-                    {characterReview.startingEquipmentNames.join(", ")}
-                  </p>
-                )}
-                {characterReview.biography && (
-                  <p className="mt-4 whitespace-pre-wrap text-sm">
-                    {characterReview.biography}
-                  </p>
-                )}
-                {characterReview.validationIssues.length > 0 && (
-                  <Alert tone="warning" className="mt-4">
-                    {characterReview.validationIssues
-                      .map((issue) => issue.message)
-                      .join(" ")}
-                  </Alert>
-                )}
-                <Label className="mt-4 block">
-                  Review note
-                  <Textarea
+                <Button
+                  type="button"
+                  tone="outline"
+                  loading={busy === "load-character-imports"}
+                  aria-expanded={showCharacterImport}
+                  aria-controls="character-import-panel"
+                  onClick={() => void openCharacterImport()}
+                >
+                  {showCharacterImport ? "Cancel import" : "Import Character"}
+                </Button>
+              </div>
+              <form
+                className="mt-4 grid gap-3 rounded-box border border-base-300 bg-base-200 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
+                onSubmit={createCharacter}
+              >
+                <Label>
+                  Character name
+                  <Input
                     className="mt-2 w-full"
-                    maxLength={2_000}
-                    value={characterReviewNote}
+                    required
+                    maxLength={120}
+                    value={characterName}
                     onChange={(event) =>
-                      setCharacterReviewNote(event.currentTarget.value)
+                      setCharacterName(event.currentTarget.value)
                     }
                   />
                 </Label>
-                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                  {(characterReview.reviewStatus === "ready-for-review" ||
-                    characterReview.reviewStatus === "complete") && (
-                    <Button
-                      type="button"
-                      tone="outline"
-                      loading={busy === `review:${characterReview.characterId}`}
-                      onClick={() =>
-                        void decideCharacterReview("request-changes")
-                      }
-                    >
-                      Request changes
-                    </Button>
-                  )}
-                  {characterReview.reviewStatus === "ready-for-review" && (
-                    <Button
-                      type="button"
-                      tone="primary"
-                      loading={busy === `review:${characterReview.characterId}`}
-                      disabled={characterReview.validationIssues.length > 0}
-                      onClick={() => void decideCharacterReview("approve")}
-                    >
-                      Approve Character
-                    </Button>
-                  )}
-                </div>
-              </section>
-            )}
-            <ul className="mt-4 grid gap-3 md:grid-cols-2">
-              {data.characters.map((character) => (
-                <li
-                  key={character.characterId}
-                  className="rounded-box border border-base-300 bg-base-200 p-4"
+                <Label>
+                  Player
+                  <Select
+                    className="mt-2 w-full"
+                    required
+                    value={characterMembershipId}
+                    onChange={(event) =>
+                      setCharacterMembershipId(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">Select a Player</option>
+                    {data.memberships
+                      .filter(
+                        (member) =>
+                          member.role === "player" &&
+                          member.status === "active",
+                      )
+                      .map((member) => (
+                        <option
+                          key={member.membershipId}
+                          value={member.membershipId}
+                        >
+                          {member.displayName}
+                        </option>
+                      ))}
+                  </Select>
+                </Label>
+                <Button
+                  type="submit"
+                  tone="primary"
+                  loading={busy === "create-character"}
                 >
-                  <p className="font-semibold">
-                    <InternalLink
-                      href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
+                  Create draft
+                </Button>
+              </form>
+              {characterImportNotice && (
+                <Alert tone="success" className="mt-4">
+                  {characterImportNotice}
+                </Alert>
+              )}
+              {showCharacterImport && (
+                <form
+                  id="character-import-panel"
+                  className="mt-4 rounded-box border border-secondary/30 bg-secondary/[0.06] p-5"
+                  onSubmit={importCharacter}
+                >
+                  <p className="text-xs font-semibold tracking-[0.16em] text-secondary uppercase">
+                    One-way copy
+                  </p>
+                  <h3 className="mt-1 text-xl font-semibold">
+                    Import from another Campaign Instance
+                  </h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-base-content/65">
+                    Import creates a new Character bound to this Instance. It
+                    does not move, link, or later synchronize the source. Only
+                    approved source sheets belonging to the same Player are
+                    available.
+                  </p>
+                  {characterImportOptions &&
+                  characterImportOptions.items.length > 0 ? (
+                    <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                      <Label>
+                        Source Character
+                        <Select
+                          className="mt-2 w-full"
+                          required
+                          value={sourceCharacterId}
+                          onChange={(event) => {
+                            const selected = characterImportOptions.items.find(
+                              (candidate) =>
+                                candidate.sourceCharacterId ===
+                                event.currentTarget.value,
+                            );
+                            setSourceCharacterId(event.currentTarget.value);
+                            setImportedCharacterName(
+                              selected?.sourceCharacterName ?? "",
+                            );
+                          }}
+                        >
+                          <option value="">Select an approved Character</option>
+                          {characterImportOptions.items.map((candidate) => (
+                            <option
+                              key={candidate.sourceCharacterId}
+                              value={candidate.sourceCharacterId}
+                            >
+                              {candidate.sourceCharacterName} —{" "}
+                              {candidate.playerName} —{" "}
+                              {candidate.sourceCampaignInstanceName}
+                            </option>
+                          ))}
+                        </Select>
+                      </Label>
+                      <Label>
+                        Destination name
+                        <Input
+                          className="mt-2 w-full"
+                          required
+                          maxLength={120}
+                          value={importedCharacterName}
+                          onChange={(event) =>
+                            setImportedCharacterName(event.currentTarget.value)
+                          }
+                        />
+                      </Label>
+                      <Button
+                        tone="primary"
+                        loading={busy === "import-character"}
+                        disabled={!sourceCharacterId}
+                      >
+                        Copy as draft
+                      </Button>
+                    </div>
+                  ) : characterImportOptions ? (
+                    <Alert className="mt-4">
+                      No approved Characters from another owned Instance match
+                      an active Player in this roster.
+                    </Alert>
+                  ) : (
+                    <p
+                      className="mt-4 text-sm text-base-content/55"
+                      aria-live="polite"
                     >
-                      {character.name || "Unnamed Character"}
-                    </InternalLink>
-                  </p>
-                  <p className="mt-1 text-sm">
-                    Player: {character.playerName || "Player unavailable"}
-                  </p>
-                  <p className="mt-1 text-xs">
-                    {statusLabel(character.status)} ·{" "}
-                    {statusLabel(character.sheetStatus)}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <RouterButtonLink
-                      href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
-                      size="sm"
-                      tone="primary"
-                    >
-                      {character.sheetStatus === "in-progress"
-                        ? "Edit Character"
-                        : "View Character"}
-                    </RouterButtonLink>
+                      Loading eligible Characters…
+                    </p>
+                  )}
+                  {characterImportOptions &&
+                    characterImportOptions.total >
+                      characterImportOptions.items.length && (
+                      <p className="mt-3 text-xs text-base-content/55">
+                        Showing the first {characterImportOptions.items.length}{" "}
+                        of {characterImportOptions.total} eligible Characters.
+                      </p>
+                    )}
+                  {characterImportOptions && sourceCharacterId && (
+                    <ImportSelectionSummary
+                      selected={characterImportOptions.items.find(
+                        (candidate) =>
+                          candidate.sourceCharacterId === sourceCharacterId,
+                      )}
+                    />
+                  )}
+                </form>
+              )}
+              {characterReview && (
+                <section className="mt-4 rounded-box border border-primary/30 bg-primary/[0.06] p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
+                        Character review
+                      </p>
+                      <h3 className="mt-1 text-xl font-semibold">
+                        {characterReview.characterName}
+                      </h3>
+                      <p className="mt-1 text-sm text-base-content/60">
+                        Player: {characterReview.playerName} ·{" "}
+                        {statusLabel(characterReview.reviewStatus)}
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       size="sm"
                       tone="ghost"
-                      disabled={busy === `review:${character.characterId}`}
-                      onClick={() =>
-                        void openCharacterReview(character.characterId)
-                      }
+                      onClick={() => setCharacterReview(undefined)}
                     >
-                      Review sheet
+                      Close review
                     </Button>
-                    {characterTargets(character.status)
-                      .filter(
-                        (target) =>
-                          target !== "active" ||
-                          character.readiness === "ready",
-                      )
-                      .map((target) => (
-                        <Button
-                          key={target}
-                          type="button"
-                          size="sm"
-                          tone="outline"
-                          disabled={
-                            busy === `character:${character.characterId}`
-                          }
-                          onClick={() =>
-                            void characterStatus(
-                              character.characterId,
-                              character.status,
-                              target,
-                            )
-                          }
-                        >
-                          {statusLabel(target)}
-                        </Button>
-                      ))}
-                    {character.status === "draft" &&
-                      character.readiness !== "ready" && (
-                        <span className="text-xs text-base-content/60">
-                          Complete the Character sheet before activation.
-                        </span>
-                      )}
-                    {character.status === "active" && (
+                  </div>
+                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-base-content/55">Background</dt>
+                      <dd className="font-medium">
+                        {characterReview.backgroundName ?? "Not selected"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-base-content/55">Profession</dt>
+                      <dd className="font-medium">
+                        {characterReview.professionName ?? "Not selected"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-base-content/55">Heritage</dt>
+                      <dd className="font-medium">
+                        {characterReview.heritageNames.join(", ") ||
+                          "Not selected"}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {characterReview.attributes.map((attribute) => (
+                      <div
+                        key={attribute.name}
+                        className="rounded-box bg-base-100 px-3 py-2 text-sm"
+                      >
+                        <span className="text-base-content/55">
+                          {attribute.name}
+                        </span>{" "}
+                        <strong>{attribute.score ?? "Unassigned"}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  {characterReview.startingEquipmentNames.length > 0 && (
+                    <p className="mt-4 text-sm">
+                      <span className="text-base-content/55">
+                        Starting equipment:
+                      </span>
+                      {characterReview.startingEquipmentNames.join(", ")}
+                    </p>
+                  )}
+                  {characterReview.biography && (
+                    <p className="mt-4 whitespace-pre-wrap text-sm">
+                      {characterReview.biography}
+                    </p>
+                  )}
+                  {characterReview.validationIssues.length > 0 && (
+                    <Alert tone="warning" className="mt-4">
+                      {characterReview.validationIssues
+                        .map((issue) => issue.message)
+                        .join(" ")}
+                    </Alert>
+                  )}
+                  <Label className="mt-4 block">
+                    Review note
+                    <Textarea
+                      className="mt-2 w-full"
+                      maxLength={2_000}
+                      value={characterReviewNote}
+                      onChange={(event) =>
+                        setCharacterReviewNote(event.currentTarget.value)
+                      }
+                    />
+                  </Label>
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    {(characterReview.reviewStatus === "ready-for-review" ||
+                      characterReview.reviewStatus === "complete") && (
+                      <Button
+                        type="button"
+                        tone="outline"
+                        loading={
+                          busy === `review:${characterReview.characterId}`
+                        }
+                        onClick={() =>
+                          void decideCharacterReview("request-changes")
+                        }
+                      >
+                        Request changes
+                      </Button>
+                    )}
+                    {characterReview.reviewStatus === "ready-for-review" && (
+                      <Button
+                        type="button"
+                        tone="primary"
+                        loading={
+                          busy === `review:${characterReview.characterId}`
+                        }
+                        disabled={characterReview.validationIssues.length > 0}
+                        onClick={() => void decideCharacterReview("approve")}
+                      >
+                        Approve Character
+                      </Button>
+                    )}
+                  </div>
+                </section>
+              )}
+              <ul className="mt-4 grid gap-3 md:grid-cols-2">
+                {data.characters.map((character) => (
+                  <li
+                    key={character.characterId}
+                    className="rounded-box border border-base-300 bg-base-200 p-4"
+                  >
+                    <p className="font-semibold">
+                      <InternalLink
+                        href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
+                      >
+                        {character.name || "Unnamed Character"}
+                      </InternalLink>
+                    </p>
+                    <p className="mt-1 text-sm">
+                      Player: {character.playerName || "Player unavailable"}
+                    </p>
+                    <p className="mt-1 text-xs">
+                      {statusLabel(character.status)} ·{" "}
+                      {statusLabel(character.sheetStatus)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <RouterButtonLink
+                        href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/characters/${encodeURIComponent(character.characterId)}${suffix}`}
+                        size="sm"
+                        tone="primary"
+                      >
+                        {character.sheetStatus === "in-progress"
+                          ? "Edit Character"
+                          : "View Character"}
+                      </RouterButtonLink>
                       <Button
                         type="button"
                         size="sm"
                         tone="ghost"
-                        disabled={busy === `character:${character.characterId}`}
+                        disabled={busy === `review:${character.characterId}`}
                         onClick={() =>
-                          void selectCharacter(
-                            character.playerMembershipId,
-                            character.characterId,
-                          )
+                          void openCharacterReview(character.characterId)
                         }
                       >
-                        Select for play
+                        Review sheet
                       </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold">Agents</h2>
-                <p className="mt-2 text-sm text-base-content/60">
-                  Non-human processes have explicit, separate Observe and Act
-                  grants.
-                </p>
+                      {characterTargets(character.status)
+                        .filter(
+                          (target) =>
+                            target !== "active" ||
+                            character.readiness === "ready",
+                        )
+                        .map((target) => (
+                          <Button
+                            key={target}
+                            type="button"
+                            size="sm"
+                            tone="outline"
+                            disabled={
+                              busy === `character:${character.characterId}`
+                            }
+                            onClick={() =>
+                              void characterStatus(
+                                character.characterId,
+                                character.status,
+                                target,
+                              )
+                            }
+                          >
+                            {statusLabel(target)}
+                          </Button>
+                        ))}
+                      {character.status === "draft" &&
+                        character.readiness !== "ready" && (
+                          <span className="text-xs text-base-content/60">
+                            Complete the Character sheet before activation.
+                          </span>
+                        )}
+                      {character.status === "active" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          tone="ghost"
+                          disabled={
+                            busy === `character:${character.characterId}`
+                          }
+                          onClick={() =>
+                            void selectCharacter(
+                              character.playerMembershipId,
+                              character.characterId,
+                            )
+                          }
+                        >
+                          Select for play
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {!section && (
+            <section>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold">Agents</h2>
+                  <p className="mt-2 text-sm text-base-content/60">
+                    Non-human processes have explicit, separate Observe and Act
+                    grants.
+                  </p>
+                </div>
+                <RouterButtonLink
+                  href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents${suffix}`}
+                  tone="outline"
+                >
+                  Manage Agents
+                </RouterButtonLink>
               </div>
-              <RouterButtonLink
-                href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents${suffix}`}
-                tone="outline"
-              >
-                Manage Agents
-              </RouterButtonLink>
-            </div>
-            <p className="mt-3 text-sm">
-              {data.agents.length} configured Agent
-              {data.agents.length === 1 ? "" : "s"}.
-            </p>
-          </section>
+              <p className="mt-3 text-sm">
+                {data.agents.length} configured Agent
+                {data.agents.length === 1 ? "" : "s"}.
+              </p>
+            </section>
+          )}
         </div>
       )}
     </main>
   );
 }
 
-export function CampaignInstanceAgentsPage() {
+export function CampaignInstanceAgentsPage({
+  selectedParticipationId,
+}: { selectedParticipationId?: string } = {}) {
   const { instance } = useCampaignInstance();
   const [data, setData] = useState<CampaignInstanceRoster>();
   const [available, setAvailable] = useState<CampaignInstanceAvailableAgents>();
@@ -2268,149 +2678,192 @@ export function CampaignInstanceAgentsPage() {
         </p>
       </PageIntro>
       <AsyncErrorSummary error={error} />
-      <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <form
-          className="rounded-box border border-base-300 bg-base-200 p-5"
-          onSubmit={configure}
+      <nav className="mt-4 flex gap-3">
+        <RouterButtonLink
+          className="min-h-11"
+          href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents`}
         >
-          <h2 className="text-xl font-semibold">Configure Agent</h2>
-          <div className="mt-4 grid gap-4">
-            <Label>
-              Registered Agent
-              <Select
-                className="mt-2 w-full"
-                value={agentId}
-                onChange={(event) => setAgentId(event.currentTarget.value)}
-                required
+          All Agents
+        </RouterButtonLink>
+        {!selectedParticipationId && (
+          <RouterButtonLink
+            className="min-h-11"
+            href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents/new`}
+          >
+            Add Agent
+          </RouterButtonLink>
+        )}
+      </nav>
+      <div className="mt-8 grid gap-6">
+        {selectedParticipationId === "new" && (
+          <form
+            className="rounded-box border border-base-300 bg-base-200 p-5"
+            onSubmit={configure}
+          >
+            <h2 className="text-xl font-semibold">Configure Agent</h2>
+            <div className="mt-4 grid gap-4">
+              <Label>
+                Registered Agent
+                <Select
+                  className="mt-2 w-full"
+                  value={agentId}
+                  onChange={(event) => setAgentId(event.currentTarget.value)}
+                  required
+                >
+                  <option value="">Choose a registered Agent</option>
+                  {available?.items.map((agent) => (
+                    <option
+                      key={agent.agentId}
+                      value={agent.agentId}
+                      disabled={agent.status !== "active"}
+                    >
+                      {agent.name || "Unnamed registered Agent"}
+                      {agent.status === "disabled" ? " (disabled)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Label>
+              <Label>
+                Observe capabilities, one namespaced key per line
+                <Textarea
+                  className="mt-2 min-h-28 w-full"
+                  value={observe}
+                  onChange={(event) => setObserve(event.currentTarget.value)}
+                  placeholder="aow:event-stream"
+                />
+              </Label>
+              <Label>
+                Act capabilities, one namespaced key per line
+                <Textarea
+                  className="mt-2 min-h-28 w-full"
+                  value={act}
+                  onChange={(event) => setAct(event.currentTarget.value)}
+                  placeholder="aow:suggest-plot-twist"
+                  aria-describedby="agent-capability-help"
+                />
+              </Label>
+              <p
+                id="agent-capability-help"
+                className="text-xs text-base-content/55"
               >
-                <option value="">Choose a registered Agent</option>
-                {available?.items.map((agent) => (
-                  <option
-                    key={agent.agentId}
-                    value={agent.agentId}
-                    disabled={agent.status !== "active"}
-                  >
-                    {agent.name || "Unnamed registered Agent"}
-                    {agent.status === "disabled" ? " (disabled)" : ""}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            <Label>
-              Observe capabilities, one namespaced key per line
-              <Textarea
-                className="mt-2 min-h-28 w-full"
-                value={observe}
-                onChange={(event) => setObserve(event.currentTarget.value)}
-                placeholder="aow:event-stream"
-              />
-            </Label>
-            <Label>
-              Act capabilities, one namespaced key per line
-              <Textarea
-                className="mt-2 min-h-28 w-full"
-                value={act}
-                onChange={(event) => setAct(event.currentTarget.value)}
-                placeholder="aow:suggest-plot-twist"
-                aria-describedby="agent-capability-help"
-              />
-            </Label>
-            <p
-              id="agent-capability-help"
-              className="text-xs text-base-content/55"
-            >
-              Capability keys use the form namespace:capability.
-            </p>
-            {!capabilitiesValid && (
-              <Alert tone="warning">
-                Every capability needs a namespace and name.
-              </Alert>
-            )}
-            <Button
-              tone="primary"
-              loading={busy === "new"}
-              disabled={!agentId || !capabilitiesValid}
-            >
-              Configure Agent
-            </Button>
-          </div>
-        </form>
+                Capability keys use the form namespace:capability.
+              </p>
+              {!capabilitiesValid && (
+                <Alert tone="warning">
+                  Every capability needs a namespace and name.
+                </Alert>
+              )}
+              <Button
+                tone="primary"
+                loading={busy === "new"}
+                disabled={!agentId || !capabilitiesValid}
+              >
+                Configure Agent
+              </Button>
+            </div>
+          </form>
+        )}
         <section aria-labelledby="configured-agents">
           <h2 id="configured-agents" className="text-xl font-semibold">
             Configured Agents
           </h2>
           <ul className="mt-4 space-y-3">
-            {data?.agents.map((agent) => (
-              <li
-                key={agent.participationId}
-                className="rounded-box border border-base-300 bg-base-200 p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold">
+            {!selectedParticipationId &&
+              data?.agents.map((agent) => (
+                <li key={agent.participationId}>
+                  <RouterButtonLink
+                    className="min-h-11"
+                    href={`/campaigns/instances/${encodeURIComponent(instance.id)}/roster/agents/${encodeURIComponent(agent.participationId)}`}
+                  >
                     {agent.name || "Unnamed Agent"}
+                  </RouterButtonLink>{" "}
+                  · {statusLabel(agent.status)}
+                </li>
+              ))}
+            {data?.agents
+              .filter(
+                (agent) => agent.participationId === selectedParticipationId,
+              )
+              .map((agent) => (
+                <li
+                  key={agent.participationId}
+                  className="rounded-box border border-base-300 bg-base-200 p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold">
+                      {agent.name || "Unnamed Agent"}
+                    </p>
+                    <Badge outline>{statusLabel(agent.status)}</Badge>
+                  </div>
+                  <p className="mt-3 text-sm">
+                    <strong>Observe:</strong>{" "}
+                    {agent.observeCapabilities.join(", ") || "None"}
                   </p>
-                  <Badge outline>{statusLabel(agent.status)}</Badge>
-                </div>
-                <p className="mt-3 text-sm">
-                  <strong>Observe:</strong>{" "}
-                  {agent.observeCapabilities.join(", ") || "None"}
-                </p>
-                <p className="mt-2 text-sm">
-                  <strong>Act:</strong>{" "}
-                  {agent.actCapabilities.join(", ") || "None"}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {agent.status === "configured" && (
-                    <Button
-                      size="sm"
-                      disabled={busy === agent.participationId}
-                      onClick={() =>
-                        void action(
-                          agent.participationId,
-                          "configured",
-                          "authorized",
-                        )
-                      }
-                    >
-                      Authorize
-                    </Button>
+                  <p className="mt-2 text-sm">
+                    <strong>Act:</strong>{" "}
+                    {agent.actCapabilities.join(", ") || "None"}
+                  </p>
+                  {["configured", "paused"].includes(agent.status) && (
+                    <InstanceAgentCapabilities
+                      key={`${agent.participationId}:${agent.observeCapabilities.join()}:${agent.actCapabilities.join()}`}
+                      campaignId={instance.campaignDefinitionId}
+                      instanceId={instance.id}
+                      agent={agent}
+                      onSaved={setData}
+                    />
                   )}
-                  {["authorized", "active"].includes(agent.status) && (
-                    <Button
-                      size="sm"
-                      tone="outline"
-                      disabled={busy === agent.participationId}
-                      onClick={() =>
-                        void action(
-                          agent.participationId,
-                          agent.status as "authorized" | "active",
-                          "paused",
-                        )
-                      }
-                    >
-                      Pause
-                    </Button>
-                  )}
-                  {agent.status !== "revoked" && (
-                    <Button
-                      size="sm"
-                      tone="ghost"
-                      disabled={busy === agent.participationId}
-                      onClick={() =>
-                        void action(
-                          agent.participationId,
-                          agent.status as
-                            "configured" | "authorized" | "active" | "paused",
-                          "revoked",
-                        )
-                      }
-                    >
-                      Revoke
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {agent.status === "configured" && (
+                      <Button
+                        size="sm"
+                        disabled={busy === agent.participationId}
+                        onClick={() =>
+                          void action(
+                            agent.participationId,
+                            "configured",
+                            "authorized",
+                          )
+                        }
+                      >
+                        Authorize
+                      </Button>
+                    )}
+                    {["authorized", "active"].includes(agent.status) && (
+                      <Button
+                        size="sm"
+                        tone="outline"
+                        disabled={busy === agent.participationId}
+                        onClick={() =>
+                          void action(
+                            agent.participationId,
+                            agent.status as "authorized" | "active",
+                            "paused",
+                          )
+                        }
+                      >
+                        Pause
+                      </Button>
+                    )}
+                    {agent.status !== "revoked" && (
+                      <Button
+                        size="sm"
+                        tone="ghost"
+                        disabled={busy === agent.participationId}
+                        onClick={() =>
+                          void action(
+                            agent.participationId,
+                            agent.status as
+                              "configured" | "authorized" | "active" | "paused",
+                            "revoked",
+                          )
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
           </ul>
         </section>
       </div>
@@ -2418,7 +2871,9 @@ export function CampaignInstanceAgentsPage() {
   );
 }
 
-export function CampaignInstanceSessionsPage() {
+export function CampaignInstanceSessionsPage({
+  planning = false,
+}: { planning?: boolean } = {}) {
   const { instance, continuation } = useCampaignInstance();
   const campaignDefinitionId = instance.campaignDefinitionId;
   const [data, setData] = useState<CampaignInstanceSessions>();
@@ -2576,83 +3031,109 @@ export function CampaignInstanceSessionsPage() {
       <LoadState loading={loading} error={error} />
       {data && (
         <>
-          <section
-            className="mt-9 rounded-box border border-base-300 bg-base-200 p-6"
-            aria-labelledby="plan-session-heading"
-          >
-            <h2 id="plan-session-heading" className="text-2xl font-semibold">
-              Plan a Session
-            </h2>
-            <form
-              className="mt-5 grid gap-5"
-              onSubmit={(event) => void plan(event)}
+          {!planning && (
+            <RouterButtonLink
+              className="mt-6 min-h-11"
+              tone="primary"
+              href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions/new${suffix}`}
             >
-              <Label>
-                Session name
-                <Input
-                  className="mt-2 w-full"
-                  value={name}
-                  maxLength={120}
-                  required
-                  onChange={(event) => setName(event.currentTarget.value)}
-                />
-              </Label>
-              <Label>
-                Scheduled date and time
-                <Input
-                  className="mt-2 w-full"
-                  type="datetime-local"
-                  value={scheduledFor}
-                  onChange={(event) =>
-                    setScheduledFor(event.currentTarget.value)
-                  }
-                />
-              </Label>
-              {roster &&
-                roster.memberships.some(
-                  (entry) => entry.role !== "gm" && entry.status === "active",
-                ) && (
-                  <Fieldset className="grid gap-3">
-                    <Legend className="font-semibold">
-                      Invite existing Instance participants
-                    </Legend>
-                    {roster.memberships
-                      .filter(
-                        (entry) =>
-                          entry.role !== "gm" && entry.status === "active",
-                      )
-                      .map((entry) => (
-                        <Checkbox
-                          key={entry.membershipId}
-                          label={`${entry.displayName} · ${statusLabel(entry.role)}`}
-                          checked={selected.has(entry.membershipId)}
-                          onChange={(event) => {
-                            const checked = event.currentTarget.checked;
-                            setSelected((current) => {
-                              const next = new Set(current);
-                              if (checked)
-                                next.add(entry.membershipId);
-                              else next.delete(entry.membershipId);
-                              return next;
-                            });
-                          }}
-                        />
-                      ))}
-                  </Fieldset>
-                )}
-              <Button
-                type="submit"
-                tone="primary"
-                loading={busy}
-                disabled={!name.trim()}
+              Plan a Session
+            </RouterButtonLink>
+          )}
+          {planning && (
+            <>
+              <RouterButtonLink
+                className="mt-4 min-h-11"
+                href={`/campaigns/instances/${encodeURIComponent(instance.id)}/sessions${suffix}`}
               >
-                Plan Session
-              </Button>
-            </form>
-          </section>
-          {section("Current", data.current)}
-          {section("Planned", data.planned)}
-          {section("History", data.history)}
+                Cancel
+              </RouterButtonLink>
+              <section
+                className="mt-9 rounded-box border border-base-300 bg-base-200 p-6"
+                aria-labelledby="plan-session-heading"
+              >
+                <h2
+                  id="plan-session-heading"
+                  className="text-2xl font-semibold"
+                >
+                  Plan a Session
+                </h2>
+                <form
+                  className="mt-5 grid gap-5"
+                  onSubmit={(event) => void plan(event)}
+                >
+                  <Label>
+                    Session name
+                    <Input
+                      className="mt-2 w-full"
+                      value={name}
+                      maxLength={120}
+                      required
+                      onChange={(event) => setName(event.currentTarget.value)}
+                    />
+                  </Label>
+                  <Label>
+                    Scheduled date and time
+                    <Input
+                      className="mt-2 w-full"
+                      type="datetime-local"
+                      value={scheduledFor}
+                      onChange={(event) =>
+                        setScheduledFor(event.currentTarget.value)
+                      }
+                    />
+                  </Label>
+                  {roster &&
+                    roster.memberships.some(
+                      (entry) =>
+                        entry.role !== "gm" && entry.status === "active",
+                    ) && (
+                      <Fieldset className="grid gap-3">
+                        <Legend className="font-semibold">
+                          Invite existing Instance participants
+                        </Legend>
+                        {roster.memberships
+                          .filter(
+                            (entry) =>
+                              entry.role !== "gm" && entry.status === "active",
+                          )
+                          .map((entry) => (
+                            <Checkbox
+                              key={entry.membershipId}
+                              label={`${entry.displayName} · ${statusLabel(entry.role)}`}
+                              checked={selected.has(entry.membershipId)}
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked;
+                                setSelected((current) => {
+                                  const next = new Set(current);
+                                  if (checked) next.add(entry.membershipId);
+                                  else next.delete(entry.membershipId);
+                                  return next;
+                                });
+                              }}
+                            />
+                          ))}
+                      </Fieldset>
+                    )}
+                  <Button
+                    type="submit"
+                    tone="primary"
+                    loading={busy}
+                    disabled={!name.trim()}
+                  >
+                    Plan Session
+                  </Button>
+                </form>
+              </section>
+            </>
+          )}
+          {!planning && (
+            <>
+              {section("Current", data.current)}
+              {section("Planned", data.planned)}
+              {section("History", data.history)}
+            </>
+          )}
         </>
       )}
     </main>

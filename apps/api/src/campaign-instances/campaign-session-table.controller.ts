@@ -1,4 +1,6 @@
 import {
+  Body,
+  Patch,
   Controller,
   Get,
   Inject,
@@ -23,6 +25,29 @@ export class CampaignSessionTableController {
     @Inject(CampaignSessionTableService)
     private readonly tables: CampaignSessionTableService,
   ) {}
+
+  @Patch(":sessionId/table/weather")
+  weather(
+    @Param("campaignDefinitionId") definitionId: string,
+    @Param("campaignInstanceId") instanceId: string,
+    @Param("sessionId") sessionId: string,
+    @Body()
+    input: {
+      expectedRuntimeRevision: number;
+      locationId: string;
+      weather?: Record<string, unknown> | null;
+      reset?: boolean;
+    },
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    return this.tables.changeWeather(
+      definitionId,
+      instanceId,
+      sessionId,
+      request.user!.id,
+      input,
+    );
+  }
 
   @Get(":sessionId/table")
   table(

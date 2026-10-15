@@ -1,0 +1,42 @@
+{
+  "batch": "B08",
+  "active_session_start": "2026-10-14T05:00:36+00:00",
+  "active_session_end": "2026-10-14T05:27:24.208454+00:00",
+  "active_wall_seconds": 1608.208,
+  "command_seconds": 526.09,
+  "verification_interval_union_seconds": 400.32,
+  "verification_wall_share_percent": 24.89,
+  "categories": {
+    "build": {
+      "command_seconds": 67.935,
+      "commands": 9,
+      "marked_reruns": 4,
+      "failed_attempts": 2
+    },
+    "tests": {
+      "command_seconds": 240.283,
+      "commands": 30,
+      "marked_reruns": 15,
+      "failed_attempts": 11
+    },
+    "typecheck": {
+      "command_seconds": 83.476,
+      "commands": 6,
+      "marked_reruns": 2,
+      "failed_attempts": 3
+    },
+    "lint": {
+      "command_seconds": 71.002,
+      "commands": 15,
+      "marked_reruns": 6,
+      "failed_attempts": 6
+    },
+    "browser": {
+      "command_seconds": 63.394,
+      "commands": 5,
+      "marked_reruns": 3,
+      "failed_attempts": 2
+    }
+  },
+  "instrumentation_gaps": "Manual review, fixture preparation, server startup/debugging and cleanup not independently timed. Active wall includes them; command timing does not. Parallel implementation continued; blocked-only time was not captured. One crossed-message domain build duplicated work."
+}

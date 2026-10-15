@@ -10,6 +10,7 @@ export default defineConfig({
       formats: ["es", "cjs"],
     },
     sourcemap: true,
+    rollupOptions: { external: ["rxjs", "@aow/common"] },
     emptyOutDir: true,
   },
 });

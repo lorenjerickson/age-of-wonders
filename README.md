@@ -238,7 +238,7 @@ High-quality image generation has a separate four-minute provider deadline; text
 its existing bounded deadlines. Image timeouts return HTTP 504 with a retryable editor message,
 and automatic provider retries remain disabled to avoid duplicating paid image requests.
 
-The OpenAI API key exists only in the API container. `OPENAI_MODEL` defaults to `gpt-5.6-terra` and can be changed in `.env` without rebuilding.
+The OpenAI API key exists only in the API container. `OPENAI_MODEL` defaults to `gpt-5.6-terra`. All image generation requests select their image tool model from `OPENAI_IMAGE_MODEL`, which defaults to `gpt-image-2.5-flare`. Change these in `.env` and recreate the API container with `docker compose up -d --no-deps api`; no image rebuild is needed.
 
 Example pipeline request:
 

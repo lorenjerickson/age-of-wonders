@@ -1,5 +1,10 @@
+import { worldAccessWhere } from "./world-access";
 import { SaveWorldDraftDto } from "./dto/world-definition-authoring.dto";
-import { BadRequestException, ConflictException, ValidationPipe } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ValidationPipe,
+} from "@nestjs/common";
 import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import { createEditableCoreModelSeed } from "../model-registry/editable-core-model-seed";
 import { compileModelSchemaRelease } from "../model-registry/model-registry-compiler";
@@ -7,6 +12,23 @@ import {
   assertGovernedRecordConformance,
   WorldDefinitionAuthoringService,
 } from "./world-definition-authoring.service";
+
+const blankMap = {
+  kind: "isometric" as const,
+  formatVersion: 1 as const,
+  dimensions: { x: 16, y: 16, z: 8 },
+  cellSize: { value: 5 as const, unit: "ft" as const },
+  chunkSize: 16 as const,
+  materials: [
+    {
+      key: "terrain:grass" as const,
+      revision: 1,
+      name: "Grass",
+      terrainType: "terrain:grass" as const,
+    },
+  ],
+  chunks: [],
+};
 
 const now = new Date("2026-09-05T12:00:00.000Z");
 const draft = {
@@ -33,6 +55,7 @@ const draft = {
           version: { revision: 1, updatedAt: now.toISOString() },
         },
         name: "Root",
+        map: blankMap,
         kind: "world",
         placement: { kind: "root" },
       },
@@ -98,7 +121,6 @@ function itemAuthoringHarness(asset?: {
       Promise.resolve(
         asset &&
           asset.id === where.id &&
-          asset.createdByUserId === where.createdByUserId &&
           asset.scopeType === where.scopeType &&
           asset.scopeId === where.scopeId
           ? { id: asset.id, mimeType: asset.mimeType }
@@ -139,45 +161,84 @@ describe("WorldDefinitionAuthoringService", () => {
       const recoveredDraft = {
         ...draft,
         snapshotRecords: draft.snapshotRecords.map((record) => ({
-          ...record, sourceRevision: 1, contentHash: "snapshot-only-hash",
+          ...record,
+          sourceRevision: 1,
+          contentHash: "snapshot-only-hash",
         })),
       };
       const updateMany = jest.fn().mockResolvedValue({ count: 1 });
       const service = serviceWith({
-        worldDefinition: { findUnique: jest.fn().mockResolvedValue({
-          id: "world-1", status: "ACTIVE", draft: recoveredDraft,
-        }) },
+        worldDefinition: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "world-1",
+            status: "ACTIVE",
+            draft: recoveredDraft,
+          }),
+        },
         worldDefinitionDraft: { updateMany },
       });
       const response = await service.getDraft("world-1", "gm-1");
       expect(response.records[0]).not.toHaveProperty("contentHash");
       expect(response.records[0].sourceRevision).toBe(1);
-      expect(response.records[0].payload).toEqual(draft.snapshotRecords[0].payload);
+      expect(response.records[0].payload).toEqual(
+        draft.snapshotRecords[0].payload,
+      );
       const record = {
-        resourceType: kind === "character-option" ? "definitions" : "world-placements",
+        resourceType:
+          kind === "character-option" ? "definitions" : "world-placements",
         sourceId: "new-record",
-        payload: kind === "character-option"
-          ? { kind: "skill", name: "Tracking" }
-          : { name: "Harbor placement", locationId: "root", source: kind === "world-item"
-            ? { kind, itemDefinitionId: "item" } : { kind: "world-creature", creatureId: "guard" } },
+        payload:
+          kind === "character-option"
+            ? { kind: "skill", name: "Tracking" }
+            : {
+                name: "Harbor placement",
+                locationId: "root",
+                source:
+                  kind === "world-item"
+                    ? { kind, itemDefinitionId: "item" }
+                    : { kind: "world-creature", creatureId: "guard" },
+              },
       };
       const records = [...response.records, record];
-      const content = { ...response.content as object,
-        ...(kind === "character-option" ? { definitionIds: [record.sourceId] }
+      const content = {
+        ...(response.content as object),
+        ...(kind === "character-option"
+          ? { definitionIds: [record.sourceId] }
           : { worldPlacementDefinitionIds: [record.sourceId] }),
       };
-      const input = await new ValidationPipe({
-        whitelist: true, transform: true, forbidNonWhitelisted: true,
-      }).transform({
-        expectedStorageRevision: response.storageRevision,
-        revisionName: response.revisionName, content, records,
-      }, { type: "body", metatype: SaveWorldDraftDto }) as SaveWorldDraftDto;
+      const input = (await new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }).transform(
+        {
+          expectedStorageRevision: response.storageRevision,
+          revisionName: response.revisionName,
+          content,
+          records,
+        },
+        { type: "body", metatype: SaveWorldDraftDto },
+      )) as SaveWorldDraftDto;
       await service.save("world-1", input, "gm-1");
-      expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: draft.id, storageRevision: 3 },
-        data: expect.objectContaining({ snapshotRecords: records, content }) as unknown,
-      }));
-      expect(recoveredDraft.snapshotRecords[0].contentHash).toBe("snapshot-only-hash");
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: draft.id,
+            storageRevision: 3,
+            worldDefinition: {
+              status: "ACTIVE",
+              ...worldAccessWhere("gm-1", true),
+            },
+          },
+          data: expect.objectContaining({
+            snapshotRecords: records,
+            content,
+          }) as unknown,
+        }),
+      );
+      expect(recoveredDraft.snapshotRecords[0].contentHash).toBe(
+        "snapshot-only-hash",
+      );
     },
   );
 
@@ -442,7 +503,6 @@ describe("WorldDefinitionAuthoringService", () => {
     expect(tx.mediaAsset.findFirst).toHaveBeenCalledWith({
       where: {
         id: "asset-1",
-        createdByUserId: "gm-1",
         scopeType: "world-definition",
         scopeId: "world-1",
         mimeType: { startsWith: "image/" },
@@ -468,7 +528,12 @@ describe("WorldDefinitionAuthoringService", () => {
           sourceRevision: 7,
           payload: {
             name: "Bell Keeper",
-            attributes: { standard: { might: { score: 42, modifier: -1 }, will: { score: 67, modifier: 2 } } },
+            attributes: {
+              standard: {
+                might: { score: 42, modifier: -1 },
+                will: { score: 67, modifier: 2 },
+              },
+            },
             worldId: "world-1",
             relationships: [{ kind: "guards", targetId: "root" }],
           },
@@ -491,7 +556,11 @@ describe("WorldDefinitionAuthoringService", () => {
         }),
       },
       worldDefinitionDraft: { updateMany },
-      mediaAsset: { findFirst: jest.fn().mockResolvedValue({ id: "new-art", mimeType: "image/webp" }) },
+      mediaAsset: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "new-art", mimeType: "image/webp" }),
+      },
     };
     const service = serviceWith(prisma, {
       resolveEffectiveRoots: jest.fn().mockResolvedValue({
@@ -508,7 +577,15 @@ describe("WorldDefinitionAuthoringService", () => {
         name: "Bell Keeper",
         attributes: { "aow:attribute-might": 42, "aow:attribute-wisdom": 67 },
         equipmentSlots: [],
-        images: { overheadToken: { assetId: "new-art", altText: "Keeper overhead", width: 1024, height: 1024, mimeType: "image/webp" } },
+        images: {
+          overheadToken: {
+            assetId: "new-art",
+            altText: "Keeper overhead",
+            width: 1024,
+            height: 1024,
+            mimeType: "image/webp",
+          },
+        },
         instanceEmbodimentPolicy: { strategy: "one-per-instance" },
         movement: [],
         skillDefinitionIds: [],
@@ -517,7 +594,15 @@ describe("WorldDefinitionAuthoringService", () => {
       "gm-1",
     );
 
-    expect(prisma.mediaAsset.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "new-art", createdByUserId: "gm-1", scopeType: "world-definition", scopeId: "world-1" } }));
+    expect(prisma.mediaAsset.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "new-art",
+          scopeType: "world-definition",
+          scopeId: "world-1",
+        },
+      }),
+    );
     const updateCalls = updateMany.mock.calls as unknown[][];
     const write = updateCalls[0]?.[0] as {
       data: {
@@ -564,11 +649,21 @@ describe("WorldDefinitionAuthoringService", () => {
     );
 
     prisma.mediaAsset.findFirst.mockResolvedValue(null as never);
-    await expect(service.upgradeLegacyCreature("world-1", "legacy-creature", {
-      expectedStorageRevision: 3, name: "Keeper", attributes: {}, equipmentSlots: [],
-      instanceEmbodimentPolicy: { strategy: "one-per-instance" },
-      images: { portrait: { assetId: "foreign-art" } },
-    }, "gm-1")).rejects.toThrow("Choose an image belonging to this World.");
+    await expect(
+      service.upgradeLegacyCreature(
+        "world-1",
+        "legacy-creature",
+        {
+          expectedStorageRevision: 3,
+          name: "Keeper",
+          attributes: {},
+          equipmentSlots: [],
+          instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+          images: { portrait: { assetId: "foreign-art" } },
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("Choose an image belonging to this World.");
     expect(updateMany).toHaveBeenCalledTimes(1);
 
     const upgradedDraft = {
@@ -607,6 +702,34 @@ describe("WorldDefinitionAuthoringService", () => {
     ).resolves.toEqual({ valid: true, issues: [] });
   });
 
+  it("rejects mapless Location creation before advancing the draft", async () => {
+    const updateMany = jest.fn();
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          metadataRevision: 1,
+          draft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    });
+    await expect(
+      service.createLocation(
+        "world-1",
+        {
+          expectedStorageRevision: 3,
+          name: "Unmapped harbor",
+          kind: "settlement",
+          parentLocationId: "root",
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("requires an image map or an isometric terrain map");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it("creates a canonical nested Location through one optimistic draft advance", async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
@@ -626,6 +749,7 @@ describe("WorldDefinitionAuthoringService", () => {
       {
         expectedStorageRevision: 3,
         name: "Glass Harbor",
+        map: blankMap,
         kind: "settlement",
         parentLocationId: "root",
       },
@@ -650,11 +774,1386 @@ describe("WorldDefinitionAuthoringService", () => {
       placement: { kind: "within-parent", parentLocationId: "root" },
     });
     expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "draft-1", storageRevision: 3 } }),
+      expect.objectContaining({
+        where: {
+          id: "draft-1",
+          storageRevision: 3,
+          worldDefinition: {
+            status: "ACTIVE",
+            ...worldAccessWhere("gm-1", true),
+          },
+        },
+      }),
     );
   });
 
-  it("accepts an Item image owned by the GM and scoped to the selected World", async () => {
+  it.each([
+    { traits: [{ kind: "trait", components: { actions: "invalid" } }] },
+    {
+      actions: [
+        { kind: "action", components: { activation: "invalid", outcomes: [] } },
+      ],
+    },
+    {
+      vehicle: {
+        vehicleType: "land",
+        size: "large",
+        armorClass: "invalid",
+        hitPoints: 20,
+        speeds: {},
+      },
+    },
+  ])(
+    "rejects malformed explicitly supplied Item content: %j",
+    async (content) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...content } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { kind: "narrative", text: "Bell rings", visibility: "secret" },
+    {
+      kind: "damage",
+      target: "target",
+      damageType: "steam",
+      amount: { terms: [{ kind: "constant", value: "bad" }] },
+    },
+    { kind: "heal", target: "self", amount: { terms: [] }, upToMaximum: "yes" },
+    { kind: "move", target: "self", distance: { value: 5, unit: "league" } },
+  ])(
+    "rejects malformed Action effect fields before an Item write: %j",
+    async (effect) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          {
+            ...itemRequest,
+            actions: [
+              {
+                kind: "action",
+                components: {
+                  activation: "action",
+                  outcomes: [{ id: "hit", effects: [effect] }],
+                },
+              },
+            ],
+          } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "rejects malformed %s Action cost fields before an Item write",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const action = {
+        kind: "action",
+        components: {
+          activation: "action",
+          outcomes: [],
+          costs: [
+            {
+              kind: "resource",
+              cost: {
+                resource: "steam",
+                amount: { kind: "constant", value: "bad" },
+              },
+            },
+          ],
+        },
+      };
+      const content =
+        owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          {
+            ...itemRequest,
+            ...content,
+          } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle", "trait-owned"])(
+    "validates %s choices before writes while allowing incomplete draft fields",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (choice: unknown) => {
+        const action = {
+          kind: "action",
+          components: { activation: "action", outcomes: [], choices: [choice] },
+        };
+        return owner === "trait-owned"
+          ? { traits: [{ kind: "trait", components: { choices: [choice] } }] }
+          : owner === "direct"
+            ? { actions: [action] }
+            : owner === "trait"
+              ? {
+                  traits: [
+                    { kind: "trait", components: { actions: [action] } },
+                  ],
+                }
+              : { vehicle: { actions: [action] } };
+      };
+      const base = { id: "choice", prompt: "Choose", minimum: 0, maximum: 1 };
+      for (const choice of [
+        { ...base, maximum: "bad" },
+        { ...base, options: [{ id: "option", label: false, value: null }] },
+        {
+          ...base,
+          options: [
+            {
+              id: "option",
+              label: "Option",
+              value: null,
+              prerequisites: [
+                {
+                  kind: "not",
+                  predicate: { kind: "has-definition", subject: false },
+                },
+              ],
+            },
+          ],
+        },
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(choice) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      await harness.service.createItem(
+        "world-1",
+        {
+          ...itemRequest,
+          ...wrap({
+            id: "choice",
+            options: [{ id: "option", private: { preserve: true } }],
+          }),
+        } as never,
+        "gm-1",
+      );
+      expect(harness.updateMany).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+        '"private":{"preserve":true}',
+      );
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates %s Action prerequisites before writes while allowing incomplete drafts",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (prerequisites: unknown) => {
+        const action = {
+          kind: "action",
+          components: { activation: "action", outcomes: [], prerequisites },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      for (const prerequisite of [
+        { kind: "has-condition", subject: false, condition: "world:custom" },
+        {
+          kind: "within-distance",
+          source: "",
+          target: "",
+          distance: { value: 3, unit: "league" },
+        },
+        { kind: "is-attuned", subject: "", item: null },
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap([prerequisite]) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      const prerequisites = [
+        { kind: "has-tag", private: { preserve: true } },
+        { kind: "within-distance", source: "", target: "", distance: {} },
+        { kind: "all", private: { preserve: true } },
+      ];
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...wrap(prerequisites) } as never,
+        "gm-1",
+      );
+      expect(harness.updateMany).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+        JSON.stringify(prerequisites),
+      );
+    },
+  );
+
+  it("validates Trait trigger metadata and effects before writes while preserving incomplete and advanced drafts", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (triggers: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          private: true,
+          components: {
+            triggers,
+            grants: ["unknown"],
+            actions: [],
+            choices: [],
+            private: { preserved: true },
+          },
+        },
+        { kind: "trait", components: {} },
+      ],
+    });
+    for (const triggers of [
+      false,
+      [false],
+      [{ event: "unknown", effects: [] }],
+      [{ event: "hit", effects: [], optional: "yes" }],
+      [{ event: "hit", effects: [{ kind: "damage", target: false }] }],
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(triggers) } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    for (const triggers of [
+      [],
+      [{}],
+      [{ event: "hit", effects: [{ kind: "damage" }] }],
+      [
+        {
+          event: "custom",
+          customEvent: "test:hit",
+          priority: -0.5,
+          effects: [{ kind: "future", private: true }],
+          predicate: { kind: "custom", private: true },
+          limit: { kind: "uses", maximum: { kind: "future" } },
+        },
+      ],
+    ]) {
+      const patch = wrap(triggers);
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...patch } as never,
+        "gm-1",
+      );
+      expect(
+        JSON.stringify(harness.updateMany.mock.calls.at(-1)?.[0]),
+      ).toContain(JSON.stringify(patch.traits));
+    }
+    expect(harness.updateMany).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(["direct", "trait", "vehicle"] as const)(
+    "validates %s Action usage limits before writes and preserves incomplete and opaque drafts",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (limit: unknown) => {
+        const actions = [
+          {
+            kind: "action",
+            components: {
+              activation: "action",
+              outcomes: [],
+              prerequisites: [{ kind: "always" }],
+              private: true,
+              ...(limit === undefined ? {} : { limit }),
+            },
+          },
+        ];
+        return owner === "direct"
+          ? { actions }
+          : owner === "trait"
+            ? {
+                traits: [
+                  {
+                    kind: "trait",
+                    components: { actions, grants: ["unknown"], private: true },
+                  },
+                ],
+              }
+            : { vehicle: { actions, private: true } };
+      };
+      for (const limit of [
+        false,
+        { kind: "uses", maximum: { kind: "literal", value: 2 } },
+        { kind: "uses", maximum: { kind: "path", path: "", fallback: false } },
+        { kind: "recharge", die: 6, succeedsOn: ["2"] },
+        { kind: "resource", resource: 1 },
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(limit) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      for (const limit of [
+        undefined,
+        {},
+        { kind: "uses" },
+        { kind: "uses", maximum: {} },
+        { kind: "uses", maximum: { kind: "future", private: true } },
+        { kind: "recharge", die: -2.5, succeedsOn: [0, 0] },
+        { kind: "once-per-turn" },
+      ]) {
+        const patch = wrap(limit);
+        await harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...patch } as never,
+          "gm-1",
+        );
+        for (const value of Object.values(patch))
+          expect(
+            JSON.stringify(harness.updateMany.mock.calls.at(-1)?.[0]),
+          ).toContain(JSON.stringify(value));
+      }
+      expect(harness.updateMany).toHaveBeenCalledTimes(7);
+    },
+  );
+
+  it("validates Trait usage limits before writes and preserves incomplete and opaque drafts", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (limit: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          components: {
+            triggers: [
+              {
+                event: "hit",
+                effects: [],
+                predicate: { kind: "always" },
+                private: true,
+                ...(limit === undefined ? {} : { limit }),
+              },
+            ],
+            actions: [],
+            grants: ["unknown"],
+            private: true,
+          },
+        },
+      ],
+    });
+    for (const limit of [
+      false,
+      { kind: "uses", maximum: { kind: "literal", value: 2 } },
+      { kind: "uses", maximum: { kind: "path", path: "", fallback: false } },
+      { kind: "recharge", die: 6, succeedsOn: ["2"] },
+      { kind: "resource", resource: 1 },
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(limit) } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    for (const limit of [
+      undefined,
+      { kind: "uses" },
+      { kind: "uses", maximum: { kind: "future", private: true } },
+      { kind: "recharge", die: -2.5, succeedsOn: [0, 0] },
+      { kind: "once-per-turn" },
+    ]) {
+      const patch = wrap(limit);
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...patch } as never,
+        "gm-1",
+      );
+      expect(
+        JSON.stringify(harness.updateMany.mock.calls.at(-1)?.[0]),
+      ).toContain(JSON.stringify(patch.traits));
+    }
+    expect(harness.updateMany).toHaveBeenCalledTimes(5);
+  });
+
+  it("validates recursive Trait trigger predicates before writes and preserves omitted and opaque rules", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (predicate: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          components: {
+            triggers: [
+              {
+                event: "hit",
+                effects: [],
+                ...(predicate === undefined ? {} : { predicate }),
+                limit: {
+                  kind: "uses",
+                  maximum: { kind: "future", private: true },
+                },
+                private: { retained: true },
+              },
+            ],
+            actions: [],
+            grants: ["unknown"],
+            private: true,
+          },
+        },
+      ],
+    });
+    for (const predicate of [
+      false,
+      {
+        kind: "all",
+        predicates: [
+          { kind: "not", predicate: { kind: "has-tag", subject: false } },
+        ],
+      },
+      {
+        kind: "compare",
+        operator: "eq",
+        left: { kind: "constant", value: "2" },
+      },
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(predicate) } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    for (const predicate of [
+      undefined,
+      { kind: "not" },
+      {
+        kind: "all",
+        predicates: [
+          { kind: "has-definition", subject: "self", definitionId: "unknown" },
+          { kind: "custom", private: true },
+          {
+            kind: "compare",
+            operator: "eq",
+            left: { kind: "future", private: true },
+            right: { kind: "literal", value: { nested: true } },
+          },
+        ],
+      },
+    ]) {
+      const patch = wrap(predicate);
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...patch } as never,
+        "gm-1",
+      );
+      expect(
+        JSON.stringify(harness.updateMany.mock.calls.at(-1)?.[0]),
+      ).toContain(JSON.stringify(patch.traits));
+    }
+    expect(harness.updateMany).toHaveBeenCalledTimes(3);
+  });
+
+  it("validates Trait definition grants before Item writes and preserves optional and imported references", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (grants: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          identity: { id: "trait-1", name: "Gift" },
+          private: { keep: true },
+          components: {
+            ...(grants === undefined ? {} : { grants }),
+            grantedConditions: [],
+            prerequisites: [{ kind: "always" }],
+            actions: [],
+            choices: [],
+            private: { nested: [false, null] },
+          },
+        },
+        { kind: "trait", components: { grants: ["sibling"] } },
+      ],
+    });
+    for (const grants of [
+      null,
+      "definition",
+      {},
+      [null],
+      [false],
+      [1],
+      [{ definitionId: "definition" }],
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(grants) } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow("Provide a valid Trait grants value.");
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    for (const grants of [
+      undefined,
+      [],
+      ["", "unknown", "unknown", "definition/with/slash"],
+    ]) {
+      const patch = wrap(grants);
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...patch } as never,
+        "gm-1",
+      );
+      const call = harness.updateMany.mock.calls.at(-1);
+      expect(JSON.stringify(call?.[0])).toContain(JSON.stringify(patch.traits));
+    }
+    expect(harness.updateMany).toHaveBeenCalledTimes(3);
+  });
+
+  it("validates Trait modifiers before Item writes and preserves incomplete and advanced rules", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (modifiers: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          private: { keep: true },
+          components: {
+            modifiers,
+            choices: [],
+            actions: [],
+            prerequisites: [{ kind: "always" }],
+          },
+        },
+      ],
+    });
+    const base = { id: "m", target: "actor.health", operation: "add" };
+    for (const modifier of [
+      { ...base, predicate: false },
+      {
+        ...base,
+        predicate: {
+          kind: "not",
+          predicate: { kind: "has-tag", subject: false },
+        },
+      },
+      {
+        ...base,
+        predicate: {
+          kind: "all",
+          predicates: [
+            {
+              kind: "compare",
+              operator: "eq",
+              left: { kind: "constant", value: "bad" },
+            },
+          ],
+        },
+      },
+      { ...base, operation: "bad" },
+      { ...base, priority: "1" },
+      { ...base, stacking: false },
+      { ...base, target: null },
+      { ...base, sourceLabel: 3 },
+      { ...base, value: { kind: "constant", value: "2" } },
+      { ...base, value: { kind: "path", path: "", fallback: false } },
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap([modifier]) } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    const patch = wrap([
+      {},
+      base,
+      { ...base, predicate: { kind: "not" } },
+      {
+        ...base,
+        predicate: {
+          kind: "all",
+          predicates: [{ kind: "has-tag", subject: "" }],
+        },
+      },
+      {
+        ...base,
+        priority: -1.5,
+        value: { kind: "future-expression", private: true },
+        predicate: { kind: "custom", private: true },
+        private: { keep: true },
+      },
+      { ...base, value: { kind: "literal", value: { nested: [null, false] } } },
+    ]);
+    await harness.service.createItem(
+      "world-1",
+      { ...itemRequest, ...patch } as never,
+      "gm-1",
+    );
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+      JSON.stringify(patch.traits),
+    );
+  });
+
+  it("validates Trait prerequisites recursively before Item writes and preserves unresolved drafts", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const wrap = (prerequisites: unknown) => ({
+      traits: [
+        {
+          kind: "trait",
+          private: { secret: true },
+          components: {
+            prerequisites,
+            actions: [],
+            choices: [{ private: true }],
+          },
+        },
+      ],
+    });
+    for (const predicate of [
+      { kind: "has-tag", subject: false },
+      { kind: "has-definition", subject: "", definitionId: null },
+      {
+        kind: "compare",
+        operator: "eq",
+        left: { kind: "constant", value: "2" },
+        right: { kind: "literal", value: null },
+      },
+      { kind: "not", predicate: false },
+    ]) {
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          {
+            ...itemRequest,
+            ...wrap([
+              {
+                kind: "all",
+                predicates: [{ kind: "any", predicates: [predicate] }],
+              },
+            ]),
+          } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+    }
+    const prerequisites = [
+      {
+        kind: "all",
+        predicates: [
+          { kind: "not", predicate: { kind: "has-definition", subject: "" } },
+        ],
+      },
+      {
+        kind: "compare",
+        operator: "eq",
+        left: { kind: "path", path: "" },
+        right: { kind: "future-expression", secret: true },
+      },
+      { kind: "custom", payload: { private: true } },
+    ];
+    const patch = wrap(prerequisites);
+    await harness.service.createItem(
+      "world-1",
+      { ...itemRequest, ...patch } as never,
+      "gm-1",
+    );
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+      JSON.stringify(patch.traits),
+    );
+  });
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates %s Choice Option prerequisites recursively and preserves incomplete drafts",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (prerequisites?: unknown) => {
+        const option = {
+          id: "option",
+          label: "Option",
+          value: { nested: [null, false, { preserve: true }] },
+          private: { keep: true },
+          ...(prerequisites === undefined ? {} : { prerequisites }),
+        };
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [],
+            choices: [
+              {
+                id: "choice",
+                prompt: "Pick",
+                minimum: 0,
+                maximum: 1,
+                options: [
+                  option,
+                  { id: "sibling", label: "Sibling", value: null },
+                ],
+              },
+            ],
+          },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      const nest = (predicate: unknown) => [
+        {
+          kind: "all",
+          predicates: [
+            { kind: "any", predicates: [{ kind: "not", predicate }] },
+          ],
+        },
+      ];
+      for (const prerequisites of [
+        false,
+        [null],
+        nest({ kind: "has-tag", subject: 1, tag: "ready" }),
+        nest({ kind: "has-definition", subject: "actor", definitionId: false }),
+        nest({
+          kind: "compare",
+          operator: "eq",
+          left: { kind: "constant", value: "bad" },
+          right: { kind: "literal", value: null },
+        }),
+        nest({ kind: "any", predicates: false }),
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(prerequisites) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      for (const prerequisites of [
+        undefined,
+        [],
+        nest({ kind: "has-tag" }),
+        nest({ kind: "has-definition", subject: "actor" }),
+        nest({ kind: "compare", operator: "eq" }),
+        nest({
+          kind: "has-definition",
+          subject: "",
+          definitionId: "unknown-imported",
+          private: { keep: true },
+        }),
+        nest({
+          kind: "custom",
+          key: "world:future",
+          payload: { preserve: true },
+        }),
+      ]) {
+        const patch = wrap(prerequisites);
+        await harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...patch } as never,
+          "gm-1",
+        );
+        const written = JSON.stringify(
+          harness.updateMany.mock.calls.at(-1)?.[0],
+        );
+        expect(written).toContain(
+          JSON.stringify({ nested: [null, false, { preserve: true }] }),
+        );
+        expect(written).toContain(
+          JSON.stringify({ id: "sibling", label: "Sibling", value: null }),
+        );
+        expect(written).toContain('"private":{"keep":true}');
+        if (prerequisites !== undefined)
+          expect(written).toContain(JSON.stringify(prerequisites));
+      }
+      expect(harness.updateMany).toHaveBeenCalledTimes(7);
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle", "trigger"])(
+    "validates recursive built-in rules for %s owners before persistence",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (value: unknown) => {
+        const effects = [
+          {
+            kind: "for-each",
+            collection: { kind: "literal", value: [] },
+            bindAs: "entry",
+            effects: [
+              {
+                kind: "branch",
+                predicate: { kind: "always" },
+                whenTrue: [
+                  {
+                    kind: "temporary-hit-points",
+                    target: "entry",
+                    amount: {
+                      kind: "lookup",
+                      table: "table",
+                      key: {
+                        kind: "arithmetic",
+                        operator: "add",
+                        operands: [
+                          {
+                            kind: "constant",
+                            ...(value === undefined ? {} : { value }),
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ];
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [{ id: "outcome", effects, private: { keep: true } }],
+          },
+        };
+        if (owner === "trigger")
+          return {
+            traits: [
+              {
+                kind: "trait",
+                components: {
+                  triggers: [
+                    { event: "hit", effects, private: { keep: true } },
+                  ],
+                },
+              },
+            ],
+          };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      await expect(
+        harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap("bad") } as never,
+          "gm-1",
+        ),
+      ).rejects.toThrow();
+      expect(harness.updateMany).not.toHaveBeenCalled();
+      for (const value of [undefined, -0.5]) {
+        await harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(value) } as never,
+          "gm-1",
+        );
+        const written = JSON.stringify(
+          harness.updateMany.mock.calls.at(-1)?.[0],
+        );
+        expect(written).toContain('"private":{"keep":true}');
+        expect(written).toContain(JSON.stringify(wrap(value)).slice(1, -1));
+      }
+      expect(harness.updateMany).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates %s Action Outcome predicates recursively while preserving incomplete and imported rules",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (when: unknown) => {
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [
+              {
+                id: "outcome",
+                effects: [],
+                ...(when === undefined ? {} : { when }),
+                private: { keep: true },
+              },
+              { id: "sibling", effects: [] },
+            ],
+          },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      const nest = (predicate: unknown) => ({
+        kind: "all",
+        predicates: [{ kind: "any", predicates: [{ kind: "not", predicate }] }],
+      });
+      for (const when of [
+        false,
+        null,
+        nest({ kind: "has-tag", subject: 1 }),
+        nest({
+          kind: "compare",
+          operator: "eq",
+          left: { kind: "constant", value: "bad" },
+          right: { kind: "literal", value: null },
+        }),
+        nest({ kind: "all", predicates: false }),
+        nest({ kind: "has-definition", subject: "actor", definitionId: false }),
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(when) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      for (const when of [
+        undefined,
+        nest({ kind: "has-tag" }),
+        nest({ kind: "compare", operator: "eq" }),
+        nest({
+          kind: "has-definition",
+          subject: "actor",
+          definitionId: "imported-unresolved-reference",
+        }),
+        nest({
+          kind: "homebrew:future",
+          predicate: false,
+          private: { keep: true },
+        }),
+      ]) {
+        await harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(when) } as never,
+          "gm-1",
+        );
+        const written = JSON.stringify(
+          harness.updateMany.mock.calls.at(-1)?.[0],
+        );
+        expect(written).toContain('"private":{"keep":true}');
+        expect(written).toContain('"id":"sibling","effects":[]');
+        if (when !== undefined) expect(written).toContain(JSON.stringify(when));
+      }
+      expect(harness.updateMany).toHaveBeenCalledTimes(5);
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates nested %s Action definition references while preserving unresolved and imported references",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (predicate: unknown) => {
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [],
+            prerequisites: [
+              {
+                kind: "all",
+                predicates: [
+                  { kind: "any", predicates: [{ kind: "not", predicate }] },
+                ],
+              },
+            ],
+          },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      for (const fields of [
+        { subject: false },
+        { definitionId: 2 },
+        { definitionId: null },
+        { definitionId: {} },
+      ]) {
+        const predicate = {
+          kind: "has-definition",
+          subject: "actor",
+          definitionId: "unknown-imported",
+          ...fields,
+        };
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(predicate) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      for (const predicate of [
+        { kind: "has-definition", private: { keep: true } },
+        {
+          kind: "has-definition",
+          subject: "actor",
+          definitionId: "unknown-imported",
+          private: { keep: true },
+        },
+        { kind: "has-definition", subject: "", definitionId: "" },
+      ]) {
+        await harness.service.createItem(
+          "world-1",
+          { ...itemRequest, ...wrap(predicate) } as never,
+          "gm-1",
+        );
+        expect(
+          JSON.stringify(harness.updateMany.mock.calls.at(-1)?.[0]),
+        ).toContain(JSON.stringify(predicate));
+      }
+      expect(harness.updateMany).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates nested %s Action comparisons before writes while preserving incomplete operands",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (predicate: unknown) => {
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [],
+            prerequisites: [
+              {
+                kind: "all",
+                predicates: [
+                  { kind: "any", predicates: [{ kind: "not", predicate }] },
+                ],
+              },
+            ],
+          },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      for (const fields of [
+        { operator: "unknown" },
+        { left: null },
+        { left: { kind: "constant", value: "2" } },
+        { right: { kind: "path", path: "actor.hp", fallback: false } },
+        { right: { kind: "event-value", path: false } },
+        { right: { kind: "collection-count", path: [] } },
+      ]) {
+        const predicate = {
+          kind: "compare",
+          operator: "eq",
+          left: { kind: "constant", value: 1 },
+          right: { kind: "literal", value: null },
+          ...fields,
+        };
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            { ...itemRequest, ...wrap(predicate) } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      const predicate = {
+        kind: "compare",
+        left: { kind: "constant" },
+        right: { kind: "literal" },
+        private: { keep: true },
+      };
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...wrap(predicate) } as never,
+        "gm-1",
+      );
+      expect(harness.updateMany).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+        JSON.stringify(predicate),
+      );
+    },
+  );
+
+  it.each(["direct", "trait", "vehicle"])(
+    "validates nested %s Action compound prerequisites and preserves unresolved descendants",
+    async (owner) => {
+      const harness = itemAuthoringHarness({
+        id: "asset-1",
+        createdByUserId: "gm-1",
+        scopeType: "world-definition",
+        scopeId: "world-1",
+        mimeType: "image/png",
+      });
+      const wrap = (predicate: unknown) => {
+        const action = {
+          kind: "action",
+          components: {
+            activation: "action",
+            outcomes: [],
+            prerequisites: [
+              {
+                kind: "all",
+                predicates: [
+                  { kind: "any", predicates: [{ kind: "not", predicate }] },
+                ],
+              },
+            ],
+          },
+        };
+        return owner === "direct"
+          ? { actions: [action] }
+          : owner === "trait"
+            ? { traits: [{ kind: "trait", components: { actions: [action] } }] }
+            : { vehicle: { actions: [action] } };
+      };
+      for (const predicate of [
+        { kind: "has-tag", subject: false },
+        { kind: "all", predicates: null },
+        { kind: "not", predicate: [] },
+        { kind: "any", predicates: [false] },
+      ]) {
+        await expect(
+          harness.service.createItem(
+            "world-1",
+            {
+              ...itemRequest,
+              ...wrap(predicate),
+            } as never,
+            "gm-1",
+          ),
+        ).rejects.toThrow();
+        expect(harness.updateMany).not.toHaveBeenCalled();
+      }
+      const input = wrap({
+        kind: "all",
+        private: { keep: true },
+        predicates: [
+          { kind: "has-tag" },
+          { kind: "not" },
+          { kind: "any" },
+          { kind: "all", predicates: [] },
+          { kind: "custom", predicate: false },
+        ],
+      });
+      await harness.service.createItem(
+        "world-1",
+        { ...itemRequest, ...input } as never,
+        "gm-1",
+      );
+      expect(harness.updateMany).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(harness.updateMany.mock.calls[0][0])).toContain(
+        JSON.stringify({
+          kind: "all",
+          private: { keep: true },
+          predicates: [
+            { kind: "has-tag" },
+            { kind: "not" },
+            { kind: "any" },
+            { kind: "all", predicates: [] },
+            { kind: "custom", predicate: false },
+          ],
+        }),
+      );
+    },
+  );
+
+  it("saves structured owned Item content and permits unresolved draft information", async () => {
+    const harness = itemAuthoringHarness({
+      id: "asset-1",
+      createdByUserId: "gm-1",
+      scopeType: "world-definition",
+      scopeId: "world-1",
+      mimeType: "image/png",
+    });
+    const content = {
+      traits: [
+        {
+          kind: "trait",
+          components: {},
+          extensions: { "world:private": "Keep" },
+        },
+      ],
+      actions: [
+        {
+          kind: "action",
+          components: {
+            activation: "action",
+            costs: [
+              {
+                kind: "resource",
+                cost: { resource: "steam", amount: { kind: "constant" } },
+              },
+            ],
+            outcomes: [
+              {
+                id: "unfinished",
+                effects: [
+                  {
+                    kind: "damage",
+                    target: "target",
+                    amount: { terms: [{ kind: "dice", size: 6 }] },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      vehicle: { vehicleType: "land" },
+    };
+    await harness.service.createItem(
+      "world-1",
+      { ...itemRequest, ...content } as never,
+      "gm-1",
+    );
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+    const written = harness.updateMany.mock.calls[0][0];
+    expect(JSON.stringify(written)).toContain('"world:private":"Keep"');
+    expect(JSON.stringify(written)).toContain('"vehicleType":"land"');
+  });
+
+  it("accepts an Item image scoped to the selected World", async () => {
     const harness = itemAuthoringHarness({
       id: "asset-1",
       createdByUserId: "gm-1",
@@ -668,7 +2167,6 @@ describe("WorldDefinitionAuthoringService", () => {
     expect(harness.findFirst).toHaveBeenCalledWith({
       where: {
         id: "asset-1",
-        createdByUserId: "gm-1",
         scopeType: "world-definition",
         scopeId: "world-1",
       },
@@ -677,17 +2175,76 @@ describe("WorldDefinitionAuthoringService", () => {
     expect(harness.updateMany).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    [
-      "another owner",
-      {
-        id: "asset-1",
-        createdByUserId: "gm-2",
-        scopeType: "world-definition",
-        scopeId: "world-1",
-        mimeType: "image/png",
+  it("creates a Creature without revalidating an unchanged legacy Item cost", async () => {
+    const existingItem = {
+      resourceType: "definitions",
+      sourceId: "item-1",
+      payload: {
+        identity: {
+          id: "item-1",
+          key: "world:item-1",
+          name: "Old Key",
+          source: { namespace: "world", edition: "1" },
+        },
+        kind: "item",
+        components: {
+          category: "tool",
+          quality: "standard",
+          weight: { value: 1, unit: "pound" },
+          cost: { value: 50, currency: "credit" },
+        },
+        image: itemImage,
+        conformance: {
+          conceptId: "old-concept",
+          modelSchemaReleaseIds: ["aow:model-schema-release:core:1"],
+        },
+        modelValues: { "aow:item-family": "aow:item-family-tool" },
       },
-    ],
+    };
+    const harness = itemAuthoringHarness();
+    harness.worldFindUnique.mockResolvedValue({
+      id: "world-1",
+      status: "ACTIVE",
+      metadataRevision: 1,
+      draft: {
+        ...draft,
+        content: { ...draft.content, definitionIds: [existingItem.sourceId] },
+        snapshotRecords: [...draft.snapshotRecords, existingItem],
+      },
+    });
+
+    await harness.service.createCreature(
+      "world-1",
+      {
+        expectedStorageRevision: 3,
+        name: "Bell Keeper",
+        attributes: {},
+        equipmentSlots: [],
+        instanceEmbodimentPolicy: { strategy: "one-per-instance" },
+      },
+      "gm-1",
+    );
+
+    expect(harness.updateMany).toHaveBeenCalledTimes(1);
+    const calls = harness.updateMany.mock.calls as unknown[][];
+    const write = calls[0]?.[0] as {
+      data: {
+        snapshotRecords: Array<{
+          resourceType: string;
+          sourceId: string;
+          payload: Record<string, unknown>;
+        }>;
+      };
+    };
+    expect(write.data.snapshotRecords).toContainEqual(existingItem);
+    const creature = write.data.snapshotRecords.find(
+      (record) => record.payload.kind === "creature",
+    );
+    expect(creature?.resourceType).toBe("definitions");
+    expect(creature?.payload.identity).toMatchObject({ name: "Bell Keeper" });
+  });
+
+  it.each([
     [
       "another World",
       {
@@ -1175,7 +2732,14 @@ describe("WorldDefinitionAuthoringService", () => {
     ).resolves.toEqual({ valid: true, issues: [] });
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "draft-1", storageRevision: 3 },
+        where: {
+          id: "draft-1",
+          storageRevision: 3,
+          worldDefinition: {
+            status: "ACTIVE",
+            ...worldAccessWhere("gm-1", true),
+          },
+        },
         // Jest's asymmetric matcher is intentionally dynamic at this mock boundary.
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({
@@ -1388,6 +2952,228 @@ describe("WorldDefinitionAuthoringService", () => {
 });
 
 describe("Location section persistence", () => {
+  it("saves unrelated Location edits while preserving unchanged legacy weather, but rejects changing it to invalid weather", async () => {
+    const legacyDraft = {
+      ...draft,
+      snapshotRecords: [
+        {
+          ...draft.snapshotRecords[0],
+          payload: {
+            ...draft.snapshotRecords[0].payload,
+            weather: { climate: "foggy" },
+          },
+        },
+      ],
+    };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            id: "world-1",
+            status: "ACTIVE",
+            draft: legacyDraft,
+          }),
+      },
+      worldDefinitionDraft: { updateMany },
+    });
+    const request = {
+      expectedStorageRevision: 3,
+      name: "New Root name",
+      kind: "world",
+    };
+    await service.updateLocation("world-1", "root", request, "gm-1");
+    await service.updateLocation(
+      "world-1",
+      "root",
+      { ...request, weather: { climate: "foggy" } as never },
+      "gm-1",
+    );
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotRecords: expect.arrayContaining([
+            expect.objectContaining({
+              payload: expect.objectContaining({
+                weather: { climate: "foggy" },
+              }),
+            }),
+          ]),
+        }),
+      }),
+    );
+    await expect(
+      service.updateLocation(
+        "world-1",
+        "root",
+        { ...request, weather: { climate: "changed" } as never },
+        "gm-1",
+      ),
+    ).rejects.toThrow("condition description");
+    expect(updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("persists authored weather and authorized audio cues while rejecting mismatched media and invalid weather", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const media = jest
+      .fn()
+      .mockResolvedValue({ id: "rain-audio", mimeType: "audio/ogg" });
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: "world-1", status: "ACTIVE", draft }),
+      },
+      worldDefinitionDraft: { updateMany },
+      mediaAsset: { findFirst: media },
+    });
+    const cue = {
+      id: "rain",
+      name: "Rainfall",
+      kind: "audio" as const,
+      assetId: "rain-audio" as never,
+      enabled: true,
+      loop: true,
+      volume: 0.4,
+      uri: "never-persist",
+    };
+    const request = {
+      expectedStorageRevision: 3,
+      name: "Root",
+      kind: "world",
+      weather: {
+        condition: "Rain",
+        temperatureCelsius: 8,
+        wind: { speedKph: 10 },
+      },
+      audiovisualEffects: [cue],
+    };
+    await service.updateLocation("world-1", "root", request, "gm-1");
+    const payload = (
+      updateMany.mock.calls as unknown as [
+        {
+          data: {
+            snapshotRecords: [
+              { payload: { weather: unknown; audiovisualEffects: unknown[] } },
+            ];
+          };
+        },
+      ][]
+    )[0][0].data.snapshotRecords[0].payload;
+    expect(payload.weather).toEqual(request.weather);
+    expect(payload.audiovisualEffects[0]).toMatchObject({
+      name: "Rainfall",
+      volume: 0.4,
+    });
+    expect(payload.audiovisualEffects[0]).not.toHaveProperty("uri");
+    expect(
+      (media.mock.calls as unknown as [{ where: { OR: unknown[] } }][])[0][0]
+        .where.OR,
+    ).toContainEqual({
+      scopeType: "world-definition",
+      scopeId: "world-1",
+    });
+    media.mockResolvedValue({ id: "rain-audio", mimeType: "image/png" });
+    await expect(
+      service.updateLocation("world-1", "root", request, "gm-1"),
+    ).rejects.toThrow("matching the audiovisual cue type");
+    await expect(
+      service.updateLocation(
+        "world-1",
+        "root",
+        { ...request, weather: { condition: "Wind", wind: { speedKph: -1 } } },
+        "gm-1",
+      ),
+    ).rejects.toThrow("nonnegative speed");
+    expect(updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces an existing map asset and returns the replacement on save and reload", async () => {
+    const oldImage = {
+      assetId: "old-map",
+      altText: "Old map",
+      width: 100,
+      height: 100,
+      mimeType: "image/png",
+      orientation: "overhead",
+    };
+    const grid = { kind: "square", cellSizePixels: 32 };
+    let stored = {
+      ...draft,
+      snapshotRecords: [
+        {
+          ...draft.snapshotRecords[0],
+          payload: {
+            ...draft.snapshotRecords[0].payload,
+            map: { kind: "image" },
+            image: oldImage,
+            mapScene: { orientation: "overhead", grid },
+            gmDescription: "Private map notes",
+            extensions: { "test:private": { hidden: true } },
+          },
+        },
+      ],
+    };
+    const updateMany = jest.fn(({ data }: { data: Partial<typeof stored> }) => {
+      stored = {
+        ...stored,
+        ...data,
+        storageRevision: stored.storageRevision + 1,
+      };
+      return Promise.resolve({ count: 1 });
+    });
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest.fn(() =>
+          Promise.resolve({
+            id: "world-1",
+            status: "ACTIVE",
+            draft: stored,
+          }),
+        ),
+      },
+      worldDefinitionDraft: { updateMany },
+      mediaAsset: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "new-map", mimeType: "image/webp" }),
+      },
+    });
+    const replacement = {
+      assetId: "new-map",
+      altText: "Replacement map",
+      width: 800,
+      height: 600,
+      mimeType: "image/webp",
+      orientation: "overhead",
+    };
+    const saved = await service.updateLocation(
+      "world-1",
+      "root",
+      {
+        expectedStorageRevision: 3,
+        name: "Root",
+        kind: "world",
+        map: { kind: "image" },
+        image: { ...replacement, uri: "transient-url" },
+      },
+      "gm-1",
+    );
+    const reloaded = await service.getDraft("world-1", "gm-1");
+    for (const response of [saved, reloaded]) {
+      expect(response.storageRevision).toBe(4);
+      expect(response.records[0].payload).toMatchObject({
+        image: replacement,
+        mapScene: { grid },
+        gmDescription: "Private map notes",
+        extensions: { "test:private": { hidden: true } },
+      });
+      expect(response.records[0].payload).not.toHaveProperty("image.uri");
+    }
+    expect(updateMany).toHaveBeenCalledTimes(1);
+  });
   it("saves public/private prose, discoveries, and an authorized map through the Location command", async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const findFirst = jest
@@ -1429,7 +3215,11 @@ describe("Location section persistence", () => {
     expect(findFirst).toHaveBeenCalledWith({
       where: {
         id: "map",
-        OR: [{ createdByUserId: "gm-1" }, { createdByUserId: null }],
+        OR: [
+          { createdByUserId: "gm-1" },
+          { createdByUserId: null },
+          { scopeType: "world-definition", scopeId: "world-1" },
+        ],
         mimeType: { startsWith: "image/" },
       },
     });
@@ -1474,3 +3264,135 @@ describe("Location section persistence", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
+it("rejects raw Codex insertion through generic draft replacement", async () => {
+  const updateMany = jest.fn();
+  const service = serviceWith({
+    worldDefinition: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ id: "world-1", status: "ACTIVE", draft }),
+    },
+    worldDefinitionDraft: { updateMany },
+  });
+  await expect(
+    service.save(
+      "world-1",
+      {
+        expectedStorageRevision: 3,
+        revisionName: draft.revisionName,
+        content: draft.content,
+        records: [
+          ...draft.snapshotRecords,
+          {
+            resourceType: "world-effects",
+            sourceId: "effect",
+            payload: {
+              id: "effect",
+              revision: 1,
+              name: "Haste",
+              modifiers: [
+                {
+                  id: "speed",
+                  propertyPath: "movement.walk",
+                  operation: "add",
+                  value: 10,
+                  allowConditionOverride: true,
+                },
+              ],
+              duration: { kind: "permanent" },
+            },
+          },
+        ],
+      },
+      "gm-1",
+    ),
+  ).rejects.toThrow("World Codex workspace");
+  expect(updateMany).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "enforces the trusted Character Creature baseline during full draft save (changed: %s)",
+  async (changed) => {
+    const character = {
+      id: "guide",
+      name: "Guide",
+      revision: 1,
+      creatureDefinitionId: "creature-original",
+      attributes: {},
+      skills: {},
+      health: { current: 10, maximum: 10, temporary: 0 },
+      vision: { day: 60, night: 0 },
+      movement: { walk: 30 },
+      equipment: [],
+      grantedConditions: [],
+    };
+    const characterRecord = {
+      resourceType: "world-character-templates",
+      sourceId: character.id,
+      payload: character,
+    };
+    // Both same-World references are available. The replacement fails only
+    // because the stored Character's selected Creature is immutable.
+    const creatureRecords = ["creature-original", "creature-alternative"].map(
+      (sourceId) => ({
+        resourceType: "definitions",
+        sourceId,
+        payload: { kind: "creature", name: sourceId },
+      }),
+    );
+    const storedDraft = {
+      ...draft,
+      snapshotRecords: [
+        ...draft.snapshotRecords,
+        ...creatureRecords,
+        characterRecord,
+      ],
+    };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const service = serviceWith({
+      worldDefinition: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          draft: storedDraft,
+        }),
+      },
+      worldDefinitionDraft: { updateMany },
+    });
+    const operation = service.save(
+      "world-1",
+      {
+        expectedStorageRevision: 3,
+        revisionName: draft.revisionName,
+        content: draft.content,
+        records: [
+          ...draft.snapshotRecords,
+          ...creatureRecords,
+          {
+            ...characterRecord,
+            payload: {
+              ...character,
+              name: "Renamed guide",
+              revision: 2,
+              creatureDefinitionId: changed
+                ? "creature-alternative"
+                : "creature-original",
+            },
+          },
+        ],
+      },
+      "gm-1",
+      false,
+      true,
+    );
+    if (changed) {
+      await expect(operation).rejects.toThrow(
+        "A Character's Creature template cannot be changed after creation.",
+      );
+      expect(updateMany).not.toHaveBeenCalled();
+    } else {
+      await expect(operation).resolves.toBeDefined();
+      expect(updateMany).toHaveBeenCalledTimes(1);
+    }
+  },
+);

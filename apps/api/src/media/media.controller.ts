@@ -27,17 +27,18 @@ import {
 import { MediaService } from "./media.service";
 import type { MediaUploadRequest } from "./media-upload.types";
 import { S3UploadInterceptor } from "./s3-upload.interceptor";
-import { GmGuard } from "../auth/auth.guard";
+import { GmGuard, SessionGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import type { Request } from "express";
 
 @ApiTags("media")
 @Controller("media")
-@UseGuards(GmGuard)
+@UseGuards(SessionGuard)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
 
   @Get()
+  @UseGuards(GmGuard)
   @ApiOperation({ summary: "Search and filter uploaded files" })
   list(
     @Query() query: ListMediaQueryDto,
@@ -62,6 +63,7 @@ export class MediaController {
   }
 
   @Delete(":id")
+  @UseGuards(GmGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Delete uploaded content and metadata" })
   async remove(
@@ -74,7 +76,7 @@ export class MediaController {
 
 @ApiTags("world media")
 @Controller("worlds/:worldId/media")
-@UseGuards(GmGuard)
+@UseGuards(SessionGuard)
 export class WorldMediaController {
   constructor(private readonly media: MediaService) {}
 

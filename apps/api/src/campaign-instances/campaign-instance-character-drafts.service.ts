@@ -1,4 +1,12 @@
 import {
+  Character,
+  CharacterCreation,
+  GrantedModifier,
+  type CharacterCreationOption,
+  type CharacterCreationContext,
+  type CharacterAttributeOption,
+} from "@aow/domain";
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -14,39 +22,6 @@ import type {
   CreatePlayerCampaignInstanceCharacterDto,
   UpdatePlayerCampaignInstanceCharacterDraftDto,
 } from "./dto/campaign-instance-character-draft.dto";
-
-type CharacterCreationOption = {
-  id: string;
-  name: string;
-  description?: string;
-  compatibleSlotSets?: string[][];
-};
-
-type CharacterAttributeOption = {
-  id: string;
-  name: string;
-  minimum: number;
-  maximum: number;
-};
-
-type CharacterCreationContext = {
-  campaignInstanceSnapshotId: string;
-  worldDefinitionId?: string;
-  backgrounds: CharacterCreationOption[];
-  professions: CharacterCreationOption[];
-  heritages: CharacterCreationOption[];
-  attributes: CharacterAttributeOption[];
-  startingEquipment: CharacterCreationOption[];
-  equipmentSlots: { id: string; name: string }[];
-  maximumHeritages: number;
-  attributeRollCount: number;
-};
-
-type CharacterValidationIssue = {
-  code: string;
-  field: string;
-  message: string;
-};
 
 @Injectable()
 export class CampaignInstanceCharacterDraftsService {
@@ -138,7 +113,7 @@ export class CampaignInstanceCharacterDraftsService {
       userId,
       asGm,
     );
-    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
+    if (!CharacterCreation.editable(draft.status)) {
       throw new BadRequestException(
         "A Character sheet under review or already approved is immutable.",
       );
@@ -261,7 +236,7 @@ export class CampaignInstanceCharacterDraftsService {
       userId,
       asGm,
     );
-    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
+    if (!CharacterCreation.editable(draft.status)) {
       throw new BadRequestException(
         "A Character sheet under review or already approved is immutable.",
       );
@@ -305,7 +280,7 @@ export class CampaignInstanceCharacterDraftsService {
       userId,
       asGm,
     );
-    if (draft.status !== CharacterDraftStatus.IN_PROGRESS) {
+    if (!CharacterCreation.editable(draft.status)) {
       throw new ConflictException(
         "This Character sheet is not available for submission.",
       );
@@ -441,20 +416,12 @@ export class CampaignInstanceCharacterDraftsService {
       characterId,
       ownerUserId,
     );
-    if (draft.character.status === "ACTIVE") {
-      throw new ConflictException(
-        "An active Character sheet cannot return to review.",
-      );
-    }
-    const allowed =
-      draft.status === CharacterDraftStatus.READY_FOR_REVIEW ||
-      (input.decision === "request-changes" &&
-        draft.status === CharacterDraftStatus.COMPLETE);
-    if (!allowed) {
-      throw new ConflictException(
-        "The Character sheet is not in a reviewable state.",
-      );
-    }
+    const reviewIssue = CharacterCreation.reviewIssue(
+      draft.status,
+      input.decision,
+      draft.character.status,
+    );
+    if (reviewIssue) throw new ConflictException(reviewIssue);
     if (input.decision === "approve") {
       const issues = validateCompleteDraft(
         draft,
@@ -533,32 +500,97 @@ export class CampaignInstanceCharacterDraftsService {
       );
     }
     const approvedAt = draft.reviewedAt ?? new Date();
+    let modifierGrants;
+    try {
+      const recipes = GrantedModifier.creationRecipes(
+        creation.grantRecords,
+        draft.backgroundDefinitionId!,
+        draft.professionDefinitionId!,
+      );
+      const importedGrants = isObject(draft.sourceSheet)
+        ? draft.sourceSheet.modifierGrants
+        : undefined;
+      modifierGrants = recipes.map(
+        ({ source, definition }) =>
+          GrantedModifier.reusableCreationGrant(
+            importedGrants,
+            source,
+            definition,
+          ) ??
+          GrantedModifier.acquire({
+            id: randomUUID(),
+            eventId: `character-creation:${draft.characterId}:${draft.revision}`,
+            source,
+            definition,
+            ...(definition.kind === "rolled-flat"
+              ? {
+                  rolls: definition.dice.map((die) =>
+                    Array.from({ length: die.count }, () =>
+                      randomInt(1, die.sides + 1),
+                    ),
+                  ),
+                }
+              : {}),
+          }),
+      );
+    } catch (error) {
+      throw new ConflictException(
+        error instanceof Error
+          ? error.message
+          : "Character benefits could not be acquired.",
+      );
+    }
+    const data = {
+      ...new CharacterCreation(creation).activationSheet(draft, {
+        characterId: draft.characterId,
+        campaignInstanceId,
+        ownerMembershipId: draft.playerMembershipId,
+        sourceDraftRevision: draft.revision,
+        approvedAt: approvedAt.toISOString(),
+      }),
+      ...(modifierGrants.length ? { modifierGrants } : {}),
+    };
+    Character.validateSheetBinding(data, draft.characterId, campaignInstanceId);
     return {
       snapshotId: creation.campaignInstanceSnapshotId,
       sourceDraftRevision: draft.revision,
-      data: {
-        identity: {
-          id: draft.characterId,
-          version: {
-            revision: 1,
-            updatedAt: approvedAt.toISOString(),
-          },
-        },
-        campaignInstanceId,
-        campaignInstanceSnapshotId: creation.campaignInstanceSnapshotId,
-        ownerMembershipId: draft.playerMembershipId,
-        sourceDraftRevision: draft.revision,
-        name: draft.name!,
-        backgroundDefinitionId: draft.backgroundDefinitionId!,
-        professionDefinitionId: draft.professionDefinitionId!,
-        heritageDefinitionIds: stringArray(draft.heritageDefinitionIds),
-        attributeAssignments: numberRecord(draft.attributeAssignments),
-        startingEquipmentDefinitionIds: stringArray(draft.startingEquipmentIds),
-        equipmentAssignments: draft.equipmentAssignments ?? {},
-        ...(draft.biography ? { biography: draft.biography } : {}),
-        imageAssetIds: stringRecord(draft.imageAssetIds),
-        approvedAt: approvedAt.toISOString(),
-      } satisfies Prisma.InputJsonObject,
+      equipmentContext: {
+        definitions: creation.grantRecords
+          .filter(
+            (record) =>
+              (record.payload as Record<string, unknown>).kind === "item",
+          )
+          .map((record) => {
+            const payload = record.payload as Record<string, unknown>;
+            const components = (payload.components ?? {}) as Record<
+              string,
+              unknown
+            >;
+            return {
+              ...payload,
+              identity: {
+                ...(payload.identity as object),
+                id: record.sourceId,
+              },
+              components: {
+                ...components,
+                ...(components.equippable
+                  ? {
+                      equippable: {
+                        ...(components.equippable),
+                        compatibleSlotSets:
+                          creation.startingEquipment.find(
+                            (item) => item.id === record.sourceId,
+                          )?.compatibleSlotSets ?? [],
+                      },
+                    }
+                  : {}),
+              },
+            };
+          }),
+        availableSlots: creation.equipmentSlots.map((slot) => slot.id),
+      },
+      data: data as unknown as Prisma.InputJsonObject,
     };
   }
 
@@ -580,60 +612,15 @@ export class CampaignInstanceCharacterDraftsService {
     if (asGm) await this.gmInstance(campaignInstanceId, userId);
     else await this.playerMembership(campaignInstanceId, userId);
     const allowed = await this.creationContext(campaignInstanceId);
-    const selections = [
-      ["background", dto.backgroundDefinitionId, allowed.backgrounds],
-      ["profession", dto.professionDefinitionId, allowed.professions],
-    ] as const;
-    for (const [kind, id, options] of selections) {
-      if (id && !options.some((option) => option.id === id)) {
-        throw new BadRequestException(
-          `Selected ${kind} is not available in this Campaign Instance snapshot.`,
-        );
-      }
-    }
-    for (const id of dto.heritageDefinitionIds ?? []) {
-      if (!allowed.heritages.some((option) => option.id === id)) {
-        throw new BadRequestException(
-          "Selected heritage is not available in this Campaign Instance snapshot.",
-        );
-      }
-    }
-    if (
-      dto.heritageDefinitionIds &&
-      dto.heritageDefinitionIds.length > allowed.maximumHeritages
-    ) {
-      throw new BadRequestException(
-        `Choose no more than ${allowed.maximumHeritages} heritage option.`,
-      );
-    }
-    const attributeById = new Map(
-      allowed.attributes.map((attribute) => [attribute.id, attribute]),
-    );
-    for (const [id, score] of Object.entries(dto.attributeAssignments ?? {})) {
-      const attribute = attributeById.get(id);
-      if (
-        !attribute ||
-        !Number.isInteger(score) ||
-        score < attribute.minimum ||
-        score > attribute.maximum
-      ) {
-        throw new BadRequestException(
-          "An Attribute assignment is not valid for this Campaign Instance snapshot.",
-        );
-      }
-    }
-    for (const id of dto.startingEquipmentIds ?? []) {
-      if (!allowed.startingEquipment.some((option) => option.id === id)) {
-        throw new BadRequestException(
-          "Selected starting equipment is not available in this Campaign Instance snapshot.",
-        );
-      }
-    }
+    const issue = new CharacterCreation(allowed).selectionIssue(dto);
+    if (issue) throw new BadRequestException(issue);
   }
 
-  private async creationContext(
-    campaignInstanceId: string,
-  ): Promise<CharacterCreationContext> {
+  private async creationContext(campaignInstanceId: string): Promise<
+    CharacterCreationContext & {
+      grantRecords: readonly { sourceId: string; payload: unknown }[];
+    }
+  > {
     const instance = await this.prisma.campaignInstance.findUnique({
       where: { id: campaignInstanceId },
       select: {
@@ -776,6 +763,9 @@ export class CampaignInstanceCharacterDraftsService {
         ),
     }));
     return {
+      grantRecords: manifest.records.filter(
+        (record) => record.resourceType === "definitions",
+      ),
       worldDefinitionId:
         snapshot.worldDefinitionSnapshot.worldDefinitionRevision
           .worldDefinitionId,
@@ -902,6 +892,7 @@ type CharacterDraftRow = {
   revision: number;
   status: CharacterDraftStatus;
   name: string | null;
+  sourceSheet?: Prisma.JsonValue;
   backgroundDefinitionId: string | null;
   professionDefinitionId: string | null;
   heritageDefinitionIds: Prisma.JsonValue;
@@ -1087,166 +1078,8 @@ function title(value: string): string {
     .join(" ");
 }
 
-function validateCompleteDraft(
+const validateCompleteDraft = (
   draft: CharacterDraftRow,
   creation: CharacterCreationContext,
-): CharacterValidationIssue[] {
-  const issues: CharacterValidationIssue[] = [];
-  const add = (code: string, field: string, message: string) =>
-    issues.push({ code, field, message });
-  if (!draft.name?.trim()) {
-    add("name-required", "name", "Enter a Character name.");
-  }
-  if (
-    !draft.backgroundDefinitionId ||
-    !creation.backgrounds.some(
-      (option) => option.id === draft.backgroundDefinitionId,
-    )
-  ) {
-    add(
-      "background-required",
-      "backgroundDefinitionId",
-      "Choose an available Background.",
-    );
-  }
-  if (
-    !draft.professionDefinitionId ||
-    !creation.professions.some(
-      (option) => option.id === draft.professionDefinitionId,
-    )
-  ) {
-    add(
-      "profession-required",
-      "professionDefinitionId",
-      "Choose an available Profession.",
-    );
-  }
-  const equipmentIssue = characterEquipmentIssue(
-    draft.equipmentAssignments ?? {},
-    stringArray(draft.startingEquipmentIds),
-    creation.startingEquipment,
-    creation.equipmentSlots,
-  );
-  if (equipmentIssue)
-    add("equipment-invalid", "equipmentAssignments", equipmentIssue);
-  const art = stringRecord(draft.imageAssetIds);
-  const roles = ["portrait", "overheadToken", "paperDollToken"];
-  if (
-    roles.some((role) => !art[role]) ||
-    new Set(roles.map((role) => art[role])).size !== 3
-  )
-    add(
-      "artwork-required",
-      "imageAssetIds",
-      "Attach three distinct images: portrait, overhead token, and side-on token.",
-    );
-  const rolls = numberArray(draft.attributeRolls);
-  if (
-    rolls.length !== creation.attributeRollCount ||
-    rolls.some((score) => !Number.isInteger(score) || score < 1 || score > 100)
-  ) {
-    add(
-      "attribute-rolls-required",
-      "attributeRolls",
-      `Generate all ${creation.attributeRollCount} Attribute rolls.`,
-    );
-  }
-  const assignments = numberRecord(draft.attributeAssignments);
-  const allowedAttributeIds = new Set(
-    creation.attributes.map((attribute) => attribute.id),
-  );
-  if (
-    Object.keys(assignments).length !== creation.attributes.length ||
-    Object.keys(assignments).some((id) => !allowedAttributeIds.has(id))
-  ) {
-    add(
-      "attribute-assignments-incomplete",
-      "attributeAssignments",
-      "Assign one roll to every captured Attribute.",
-    );
-  }
-  for (const attribute of creation.attributes) {
-    const score = assignments[attribute.id];
-    if (
-      score === undefined ||
-      !Number.isInteger(score) ||
-      score < attribute.minimum ||
-      score > attribute.maximum
-    ) {
-      add(
-        "attribute-score-invalid",
-        "attributeAssignments",
-        `${attribute.name} requires a score between ${attribute.minimum} and ${attribute.maximum}.`,
-      );
-    }
-  }
-  if (rolls.length === creation.attributeRollCount) {
-    const available = new Map<number, number>();
-    rolls.forEach((roll) =>
-      available.set(roll, (available.get(roll) ?? 0) + 1),
-    );
-    const invalidAssignment = Object.values(assignments).some((score) => {
-      const remaining = available.get(score) ?? 0;
-      if (remaining < 1) return true;
-      available.set(score, remaining - 1);
-      return false;
-    });
-    if (invalidAssignment) {
-      add(
-        "attribute-roll-mismatch",
-        "attributeAssignments",
-        "Every assigned Attribute score must use one generated roll.",
-      );
-    }
-  }
-  const equipment = stringArray(draft.startingEquipmentIds);
-  if (
-    equipment.some(
-      (id) => !creation.startingEquipment.some((option) => option.id === id),
-    )
-  ) {
-    add(
-      "starting-equipment-invalid",
-      "startingEquipmentIds",
-      "Starting equipment must come from this Campaign Instance snapshot.",
-    );
-  }
-  return issues;
-}
-
-export function characterEquipmentIssue(
-  assignments: unknown,
-  selected: readonly string[],
-  items: readonly CharacterCreationOption[],
-  slots: readonly { id: string; name: string }[],
-): string | undefined {
-  if (!isObject(assignments)) return "Equipment assignments must be an object.";
-  const occupied = new Set<string>();
-  for (const [id, assigned] of Object.entries(assignments)) {
-    const item = items.find((item) => item.id === id);
-    if (
-      !selected.includes(id) ||
-      !item ||
-      !Array.isArray(assigned) ||
-      !assigned.length ||
-      !assigned.every((s) => typeof s === "string")
-    )
-      return "Choose a carried Item and valid equipment slots.";
-    if (
-      new Set(assigned).size !== assigned.length ||
-      !item.compatibleSlotSets?.some(
-        (set) =>
-          set.length === assigned.length &&
-          set.every((s) => assigned.includes(s)),
-      )
-    )
-      return "This Item does not fit the selected equipment slots.";
-    for (const slot of assigned) {
-      if (!slots.some((s) => s.id === slot))
-        return "An equipment slot is unavailable in this capture.";
-      if (occupied.has(slot))
-        return "Two Items cannot occupy the same equipment slot.";
-      occupied.add(slot);
-    }
-  }
-}
+) => new CharacterCreation(creation).completeIssues(draft);
+export const characterEquipmentIssue = CharacterCreation.equipmentIssue;

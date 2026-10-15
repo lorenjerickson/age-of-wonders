@@ -82,7 +82,8 @@ payload.
   by the concept; the API supplies authoritative parent placement.
 - Make the location spatially and thematically legible. Explain major barriers, routes, contested
   borders, or poorly understood physical transitions without fabricating separate
-  `LocationConnectionState` records.
+  `LocationConnectionState` records. Location relationships are containment-only; travel is
+  roleplayed at the table. Do not generate adjacency fields or automated cross-Location transfers.
 - For any portal-like transition, describe its observed operation and physical infrastructure or
   activation requirements; unexplained transitions must remain explicitly unresolved.
 - If `kind` is `plane`, include `physicalEnvironment` with a physical environment `kind`,

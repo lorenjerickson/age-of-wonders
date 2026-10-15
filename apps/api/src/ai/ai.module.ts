@@ -1,5 +1,8 @@
 import { WorldArtworkController } from "./world-artwork.controller";
-import { WorldLocationMapController } from "./world-location-map.controller";
+import {
+  WorldLocationMapController,
+  WorldDraftLocationMapController,
+} from "./world-location-map.controller";
 import { Module } from "@nestjs/common";
 import { DomainModule } from "../domain/domain.module";
 import { MediaModule } from "../media/media.module";
@@ -30,7 +33,12 @@ import { WorldDraftProposalService } from "./world-draft-proposal.service";
     WorldDefinitionsModule,
     ModelRegistryModule,
   ],
-  controllers: [AiController, WorldLocationMapController, WorldArtworkController],
+  controllers: [
+    AiController,
+    WorldLocationMapController,
+    WorldDraftLocationMapController,
+    WorldArtworkController,
+  ],
   providers: [
     AiPromptService,
     OpenAiService,

@@ -38,6 +38,8 @@ function useNavigation(override?: NavigationData) {
     if (typeof instance.name === "string") data.instanceName = instance.name;
     const records = object(result.draft).records;
     if (Array.isArray(records)) data.records = records;
+    const elements = object(object(result.draft).effectiveModels).elements;
+    if (Array.isArray(elements)) data.modelElements = elements;
     const locations = object(
       object(result.draft).capturedWorldContent,
     ).locations;
@@ -48,8 +50,10 @@ function useNavigation(override?: NavigationData) {
     location.pathname.startsWith(
       `/worlds/${encodeURIComponent(live.world.worldId)}/`,
     )
-  )
+  ) {
     data.records = live.world.records;
+    data.modelElements = live.world.modelElements;
+  }
   if (
     live?.campaign &&
     location.pathname.startsWith(

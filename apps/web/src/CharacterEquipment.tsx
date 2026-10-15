@@ -1,3 +1,4 @@
+import { CharacterCreation } from "@aow/domain";
 import { useState } from "react";
 import { Button, Input, Label } from "@aow/ui";
 import { MediaImage } from "./MediaImage";
@@ -59,8 +60,17 @@ export function CharacterEquipment({
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
-  const fits = (set: readonly string[], itemId: string) =>
-    set.every((slot) => !occupied(slot) || occupied(slot) === itemId);
+  const fits = (set: readonly string[], itemId: string) => {
+    const item = items.find((item) => item.id === itemId);
+    return (
+      !!item &&
+      CharacterCreation.fittingSlotSets(item, assignments, slots).some(
+        (candidate) =>
+          candidate.length === set.length &&
+          candidate.every((slot) => set.includes(slot)),
+      )
+    );
+  };
   function equip(item: CharacterOption, set: readonly string[]) {
     if (!fits(set, item.id)) return;
     onChange([...new Set([...selected, item.id])], {
@@ -76,7 +86,7 @@ export function CharacterEquipment({
       <h2 className="font-serif text-2xl font-semibold">Equipment</h2>
       <p className="mt-1 text-sm text-base-content/65">
         Choose a slot on the paper doll, then equip a compatible Item. Carried
-        Items stay in your pack.
+        Items remain in your inventory.
       </p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(280px,1fr)]">
         <div>

@@ -1,0 +1,29 @@
+{
+  "active_start": "2026-10-15T01:14:02+00:00",
+  "active_end": "2026-10-15T01:22:22.171948+00:00",
+  "wall_seconds": 500.171948,
+  "command_seconds": 205.421834,
+  "verification_interval_union_seconds": 173.061832,
+  "verification_share_percent": 34.60046743765006,
+  "categories": {
+    "tests": {
+      "command_seconds": 17.471976,
+      "commands": 3,
+      "reruns": 0,
+      "failed": 0
+    },
+    "browser": {
+      "command_seconds": 182.442245,
+      "commands": 15,
+      "reruns": 8,
+      "failed": 7
+    },
+    "lint": {
+      "command_seconds": 5.507613,
+      "commands": 2,
+      "reruns": 0,
+      "failed": 0
+    }
+  },
+  "notes": "B09 began during final MAPFIX verification. Setup/manual review not separately timed; no estimated durations added."
+}

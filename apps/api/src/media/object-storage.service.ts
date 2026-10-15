@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Readable } from "node:stream";
 import { generateMediaKey, type GeneratedMediaKey } from "./media-key";
@@ -97,6 +97,13 @@ export class ObjectStorageService implements OnModuleInit {
       partSize: 5 * 1024 * 1024,
       leavePartsOnError: false,
     }).done();
+
+    if (size === 0) {
+      await this.delete(generated.objectKey);
+      throw new BadRequestException(
+        "The selected file is empty. Choose a file containing image or media data.",
+      );
+    }
 
     return {
       ...generated,

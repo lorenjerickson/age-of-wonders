@@ -1,3 +1,4 @@
+import { CharacterCreation } from "@aow/domain";
 export interface CharacterSelections {
   backgroundId?: string;
   professionId?: string;
@@ -54,14 +55,11 @@ export function applyCharacterSelections(
   draft: CharacterDraft,
   selections: CharacterSelections,
 ): CharacterDraft {
-  return { ...draft, selections: { ...selections } };
+  return CharacterCreation.applySelections(draft, selections);
 }
 
 export function selectionsComplete(selections: CharacterSelections): boolean {
-  return Boolean(
-    selections.backgroundId &&
-    selections.professionId,
-  );
+  return CharacterCreation.selectionsComplete(selections);
 }
 
 export function characterDisplayName(draft: CharacterDraft): string {

@@ -1,3 +1,4 @@
+import { CampaignInstance } from "@aow/domain";
 import { canonicalCreatureMigrationSources } from "../domain/canonical-creature-migration";
 import {
   checkpointExplorationSeal,
@@ -15,7 +16,6 @@ import {
 import { Prisma } from "@prisma/client";
 import {
   resolveCreatureInstanceEmbodimentPolicy,
-  validateCampaignInstanceRuntimeState,
   plotDiscoveryClaims,
   type PlotDiscovery,
 } from "@aow/common";
@@ -1216,6 +1216,7 @@ export function rewriteRuntimeReferences(
   return {
     ...state,
     formatVersion: 1,
+    ...(Array.isArray(state.locationPresentationOverrides) ? { locationPresentationOverrides: state.locationPresentationOverrides.map(value => { const entry = requiredRecord(value, "Location presentation"); return {...entry, locationId: mapped(mappings, "locations", requiredString(entry.locationId, "Location presentation"))}; }) } : {}),
     preparation: rewriteGoverned(
       {
         ...preparation,
@@ -1848,7 +1849,7 @@ export function validateTargetRuntime(
     capturedCreaturePolicies.set(record.sourceId, policy);
   }
   try {
-    const result = validateCampaignInstanceRuntimeState(
+    const result = CampaignInstance.validateRuntime(
       state as never,
       {
         campaignInstanceId,

@@ -80,6 +80,7 @@ export class OpenAiService {
       );
     }
 
+    const imageModel = this.configuration.openAiImageModel();
     const boundary = providerBoundary(
       undefined,
       IMAGE_PROVIDER_DEADLINE_MS,
@@ -94,6 +95,9 @@ export class OpenAiService {
           tools: [
             {
               type: "image_generation",
+              // The installed SDK predates newer image models supported by the API.
+              model:
+                imageModel as OpenAI.Responses.Tool.ImageGeneration["model"],
               background: options.background ?? "opaque",
               output_format: "webp",
               quality: "high",

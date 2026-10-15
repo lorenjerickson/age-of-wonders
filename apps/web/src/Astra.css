@@ -1,0 +1,903 @@
+@import "./AstraFonts.css";
+.astra-shell,
+.astra-login {
+  --color-base-100: #232426;
+  --color-base-200: #2b2c2f;
+  --color-base-300: #46474b;
+  --color-base-content: #f1ede5;
+  --color-primary: #e6b85c;
+  --color-primary-content: #242018;
+  --radius-field: 5px;
+  --radius-box: 7px;
+  background: #232426;
+  color: #f1ede5;
+  font:
+    12px/1.7 "DM Sans",
+    sans-serif;
+  min-height: 100dvh;
+}
+.astra-shell *,
+.astra-login * {
+  box-sizing: border-box;
+}
+.astra-shell h1,
+.astra-shell h2,
+.astra-shell h3,
+.astra-login h1 {
+  font-family: "Libre Caslon Display", serif;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.astra-shell h1,
+.astra-login h1 {
+  font-size: 46px;
+}
+.astra-shell h2 {
+  font-size: 30px;
+}
+.astra-shell h3 {
+  font-size: 23px;
+}
+.astra-shell p {
+  margin: 0;
+}
+.astra-shell a {
+  color: inherit;
+  text-decoration: none;
+}
+.astra-shell button,
+.astra-login button {
+  cursor: pointer;
+}
+.astra-shell button:disabled,
+.astra-login button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.astra-shell :focus-visible,
+.astra-login :focus-visible {
+  outline: 2px solid #e6b85c;
+  outline-offset: 3px;
+}
+.astra-shell .btn,
+.astra-login .btn {
+  border-radius: 5px;
+  min-height: 38px;
+  height: auto;
+  padding: 10px 16px;
+  font:
+    500 11px/16px "DM Sans",
+    sans-serif;
+  box-shadow: none;
+  text-transform: none;
+  border: 1px solid #797b80;
+  background: transparent;
+  color: #f1ede5;
+}
+.astra-shell .btn-primary,
+.astra-login .btn-primary {
+  background: #e6b85c;
+  border-color: #e6b85c;
+  color: #242018;
+}
+.astra-shell .btn-ghost {
+  border-color: transparent;
+}
+.astra-shell .input,
+.astra-shell .select,
+.astra-shell .textarea,
+.astra-login .input {
+  background: #232426;
+  border: 1px solid #797b80;
+  border-radius: 6px;
+  color: #f1ede5;
+  font:
+    400 13px/1.6 "DM Sans",
+    sans-serif;
+  min-height: 44px;
+  width: 100%;
+  box-shadow: none;
+  padding: 10px 12px;
+}
+.astra-shell .textarea {
+  min-height: 90px;
+}
+.astra-shell label,
+.astra-login label {
+  color: #f1ede5;
+}
+.astra-shell fieldset {
+  min-width: 0;
+}
+.astra-shell .checkbox {
+  width: 16px;
+  height: 16px;
+  border-color: #797b80;
+  border-radius: 2px;
+}
+.astra-shell .checkbox:checked {
+  background: #e6b85c;
+}
+.astra-muted {
+  color: #b4b1aa;
+}
+.astra-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #e6b85c;
+}
+.astra-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 238px;
+  background: #1c1d1f;
+  border-right: 1px solid #46474b;
+  padding: 30px 21px;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+.astra-brand {
+  font-size: 30px;
+  letter-spacing: 7px;
+  line-height: 44px;
+}
+.astra-brand span {
+  color: #e6b85c;
+  font-size: 34px;
+  letter-spacing: 0;
+  margin-right: 10px;
+}
+.astra-tagline {
+  font-size: 9px;
+  letter-spacing: 2.4px;
+  color: #b4b1aa;
+  padding: 4px 0 31px 46px;
+}
+.astra-world-picker {
+  padding: 13px;
+  background: #2b2c2f;
+  border: 1px solid #46474b;
+  border-radius: 7px;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.astra-world-picker strong {
+  font-size: 12px;
+  display: block;
+}
+.astra-world-picker small {
+  font-size: 10px;
+  color: #b4b1aa;
+}
+.astra-nav-label {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+  color: #b4b1aa;
+  margin: 30px 13px 11px;
+}
+.astra-sidebar nav {
+  display: grid;
+  gap: 2px;
+}
+.astra-sidebar nav a,
+.astra-sidebar nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: #b4b1aa;
+  text-align: left;
+  font-size: 12px;
+}
+.astra-sidebar nav a.active {
+  background: #403728;
+  color: #e6b85c;
+  font-weight: 700;
+}
+.astra-nav-icon {
+  font-size: 17px;
+  width: 18px;
+}
+.astra-nav-count {
+  margin-left: auto;
+  font-size: 10px;
+}
+.astra-sidebar-bottom {
+  margin-top: auto;
+  padding-top: 35px;
+}
+.astra-account {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 20px;
+  border-top: 1px solid #46474b;
+}
+.astra-avatar {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  background: #403728;
+  color: #e6b85c;
+  font:
+    18px "Libre Caslon Display",
+    serif;
+}
+.astra-account small {
+  display: block;
+  color: #b4b1aa;
+  font-size: 10px;
+}
+.astra-main {
+  margin-left: 238px;
+  min-width: 0;
+}
+.astra-topbar {
+  height: 75px;
+  padding: 0 43px;
+  border-bottom: 1px solid #46474b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #b4b1aa;
+}
+.astra-topbar strong {
+  color: #f1ede5;
+  font-weight: 500;
+}
+.astra-mode {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.astra-mode b {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: #e6b85c;
+  background: #403728;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.astra-mobile-menu {
+  display: none !important;
+}
+.astra-page {
+  padding: 50px 43px 44px;
+  max-width: 1440px;
+  margin: auto;
+}
+.astra-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.astra-heading h1 {
+  margin: 7px 0 10px;
+}
+.astra-heading p {
+  color: #b4b1aa;
+}
+.astra-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.astra-panel {
+  background: #2b2c2f;
+  border: 1px solid #46474b;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.astra-form-page {
+  max-width: 986px;
+  padding: 50px 43px 44px;
+  margin: auto;
+}
+.astra-form-page h1 {
+  margin: 7px 0 35px;
+}
+.astra-back {
+  display: inline-block;
+  color: #e6b85c !important;
+  margin-bottom: 24px;
+  font-size: 11px;
+}
+.astra-form {
+  padding: 32px;
+  display: grid;
+  gap: 22px;
+}
+.astra-form fieldset {
+  border: 1px solid #797b80;
+  border-radius: 7px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+.astra-form legend {
+  font-size: 16px;
+}
+.astra-form .astra-actions {
+  border-top: 1px solid #46474b;
+  margin-top: 16px;
+  padding-top: 20px;
+  justify-content: flex-end;
+}
+.astra-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 23px;
+}
+.astra-card {
+  display: block;
+  transition: border-color 0.15s;
+}
+.astra-card:hover {
+  border-color: #8b7346;
+}
+.astra-card-body {
+  padding: 20px;
+}
+.astra-card h3 {
+  margin: 10px 0;
+}
+.astra-card p {
+  font-size: 11px;
+  color: #b4b1aa;
+}
+.astra-card-image {
+  height: 144px;
+  width: 100%;
+  object-fit: cover;
+}
+.astra-badge {
+  display: inline-block;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #b4b1aa;
+  background: #333438;
+  border: 1px solid #46474b;
+  border-radius: 3px;
+  padding: 2px 5px;
+  margin-top: 12px;
+}
+.astra-card-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 5px;
+  background: #403728;
+  color: #e6b85c;
+  font-size: 24px;
+}
+.astra-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #46474b;
+  margin-top: 35px;
+  padding-top: 18px;
+  color: #b4b1aa;
+  font-size: 9px;
+  gap: 16px;
+}
+.astra-tabs {
+  display: flex;
+  gap: 24px;
+  overflow: auto;
+  border-bottom: 1px solid #46474b;
+  margin-top: 26px;
+}
+.astra-tabs a {
+  white-space: nowrap;
+  padding: 0 0 13px;
+  color: #b4b1aa;
+  border-bottom: 2px solid transparent;
+}
+.astra-tabs a.active {
+  color: #e6b85c;
+  border-color: #e6b85c;
+}
+.astra-search {
+  margin-top: 25px;
+  max-width: 340px;
+}
+.astra-empty {
+  text-align: center;
+  padding: 34px 25px;
+  margin-top: 23px;
+}
+.astra-empty h3 {
+  margin: 12px 0 8px;
+}
+.astra-empty p {
+  color: #b4b1aa;
+  margin-bottom: 17px;
+}
+.astra-hero {
+  position: relative;
+  overflow: hidden;
+  height: 300px;
+  background: #1c1d1f;
+  border-radius: 8px;
+  margin-top: 26px;
+}
+.astra-hero-art {
+  position: absolute;
+  inset: 0 auto auto 0;
+  opacity: 0.88;
+}
+.astra-hero-content {
+  position: relative;
+  width: 65%;
+  height: 100%;
+  padding: 47px;
+  background: linear-gradient(90deg, rgba(25, 27, 30, 0.94), transparent);
+}
+.astra-hero h2 {
+  font-size: 40px;
+  margin: 18px 0;
+}
+.astra-hero p {
+  max-width: 330px;
+  font-size: 12px;
+  margin-bottom: 24px;
+}
+.astra-hero-caption {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  font-size: 8px;
+  letter-spacing: 1.7px;
+}
+.astra-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin-top: 22px;
+}
+.astra-stat {
+  padding: 20px;
+  position: relative;
+}
+.astra-stat strong {
+  font:
+    34px "Libre Caslon Display",
+    serif;
+  display: block;
+  margin-bottom: 12px;
+}
+.astra-stat span {
+  font-size: 10px;
+  color: #b4b1aa;
+}
+.astra-stat i {
+  position: absolute;
+  right: 20px;
+  top: 16px;
+  color: #e6b85c;
+  font-size: 22px;
+  font-style: normal;
+}
+.astra-overview-columns {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 26px;
+  margin-top: 36px;
+}
+.astra-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.astra-section-heading a {
+  font-size: 10px;
+  color: #e6b85c;
+}
+.astra-list-row {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  align-items: center;
+  border-bottom: 1px solid #46474b;
+}
+.astra-list-row:last-child {
+  border: 0;
+}
+.astra-list-row strong {
+  font-size: 11px;
+}
+.astra-list-row small {
+  display: block;
+  color: #b4b1aa;
+  font-size: 10px;
+}
+.astra-wisdom {
+  margin-top: 20px;
+  padding: 20px;
+  background: #333438;
+}
+.astra-error {
+  color: #f0a69c;
+  padding: 12px;
+  border: 1px solid #b5685e;
+  border-radius: 5px;
+}
+.astra-delete {
+  color: #e3a397 !important;
+  background: none;
+  border: 0;
+  text-align: left;
+  font-size: 10px;
+  padding: 8px 0;
+}
+.astra-login {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.astra-login-art {
+  position: relative;
+  overflow: hidden;
+  min-height: 100dvh;
+  padding: 55px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #1c1d1f;
+}
+.astra-login-art > img {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.astra-login-art .astra-brand,
+.astra-login-story {
+  position: relative;
+}
+.astra-login-story h1 {
+  font-size: 67px;
+  max-width: 440px;
+  line-height: 1.05;
+  margin: 0;
+}
+.astra-login-story p {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.astra-login-main {
+  display: grid;
+  place-items: center;
+  padding: 48px;
+}
+.astra-login-form {
+  width: 350px;
+  max-width: 100%;
+  display: grid;
+  gap: 20px;
+}
+.astra-login-form h1 {
+  font-size: 44px;
+  margin: 0 0 12px;
+}
+.astra-login-form .astra-eyebrow {
+  font-size: 10px;
+  margin-bottom: 20px;
+}
+.astra-login-form p {
+  font-size: 12px;
+  color: #b4b1aa;
+}
+.astra-login-form .btn {
+  width: 100%;
+  margin-top: 16px;
+}
+.astra-login-form > small {
+  color: #b4b1aa;
+  font-size: 11px;
+  margin-top: 8px;
+}
+.astra-mobile-close {
+  display: none;
+}
+.astra-stat-fields {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.astra-stat-fields label {
+  font-size: 10px;
+}
+.astra-stat-fields .input {
+  min-height: 36px;
+  padding: 6px;
+}
+.astra-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.astra-checks {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.astra-checks label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #333438;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.astra-dialog {
+  background: #2b2c2f;
+  color: #f1ede5;
+  border: 1px solid #797b80;
+  border-radius: 7px;
+  padding: 24px;
+  max-width: 480px;
+  width: calc(100% - 32px);
+}
+.astra-dialog::backdrop {
+  background: #0009;
+}
+@media (max-width: 900px) {
+  .astra-sidebar {
+    display: none;
+  }
+  .astra-main {
+    margin-left: 0;
+  }
+  .astra-mobile-menu {
+    display: inline-flex !important;
+  }
+  .astra-topbar {
+    height: 64px;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  .astra-topbar .astra-mode {
+    display: none;
+  }
+  .astra-sidebar[data-open="true"] {
+    display: flex;
+    width: min(320px, 90vw);
+    box-shadow: 0 0 0 100vmax #0009;
+  }
+  .astra-mobile-close {
+    display: block;
+  }
+  .astra-page,
+  .astra-form-page {
+    padding: 28px 20px;
+  }
+  .astra-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .astra-shell h1 {
+    font-size: 38px;
+  }
+  .astra-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .astra-hero-content {
+    padding: 30px;
+    width: 90%;
+  }
+  .astra-overview-columns {
+    grid-template-columns: 1fr;
+  }
+  .astra-login-art {
+    padding: 32px;
+  }
+  .astra-login-story h1 {
+    font-size: 46px;
+  }
+  .astra-login-main {
+    padding: 28px;
+  }
+  .astra-shell .btn,
+  .astra-tabs a,
+  .astra-login .btn {
+    min-height: 44px;
+  }
+  .astra-stat-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .astra-grid {
+    grid-template-columns: 1fr;
+  }
+  .astra-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .astra-form {
+    padding: 20px;
+  }
+  .astra-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .astra-stat-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .astra-hero-content {
+    width: 100%;
+    padding: 28px;
+  }
+  .astra-hero h2 {
+    font-size: 34px;
+  }
+  .astra-hero-caption {
+    display: none;
+  }
+  .astra-login {
+    grid-template-columns: 1fr;
+  }
+  .astra-login-art {
+    min-height: 220px;
+    height: 220px;
+    padding: 24px;
+  }
+  .astra-login-story {
+    display: none;
+  }
+  .astra-login-main {
+    padding: 44px 24px;
+  }
+  .astra-login-form {
+    width: 100%;
+  }
+  .astra-footer {
+    flex-wrap: wrap;
+  }
+  .astra-tabs {
+    gap: 20px;
+  }
+  .astra-search {
+    max-width: none;
+  }
+  .astra-heading .astra-actions {
+    width: 100%;
+  }
+  .astra-heading .astra-actions .btn {
+    flex: 1;
+  }
+}
+.astra-codex-thumbnail {
+  height: 144px;
+  aspect-ratio: auto !important;
+  border-radius: 0 !important;
+}
+.astra-codex-thumbnail img {
+  object-fit: cover !important;
+  padding: 0 !important;
+}
+.astra-character-images {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+.astra-image-portrait {
+  grid-row: span 2;
+}
+.astra-character-images .astra-image-paperDollToken > div,
+.astra-character-images .astra-image-overheadToken > div {
+  max-height: 220px;
+}
+.astra-form legend {
+  font-family: "DM Sans", sans-serif;
+}
+.astra-form fieldset fieldset {
+  border-color: #46474b;
+}
+.astra-form .text-lg {
+  font-size: 16px !important;
+  font-family: "DM Sans", sans-serif !important;
+}
+.astra-form .text-sm {
+  font-size: 12px !important;
+}
+@media (max-width: 560px) {
+  .astra-character-images {
+    grid-template-columns: 1fr;
+  }
+  .astra-image-portrait {
+    grid-row: auto;
+  }
+}
+.astra-shell [data-slot="label"],
+.astra-login [data-slot="label"],
+.astra-shell .label,
+.astra-login .label {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #f1ede5;
+}
+.astra-shell [data-slot="field"],
+.astra-login [data-slot="field"] {
+  gap: 6px;
+}
+.astra-login .label .text-error,
+.astra-shell .label .text-error {
+  display: none;
+}
+.astra-login-art > img {
+  max-width: none;
+  height: 100%;
+  width: auto;
+}
+.astra-shell .aow-field__label,
+.astra-login .aow-field__label {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.astra-shell .aow-field,
+.astra-login .aow-field {
+  gap: 6px;
+}
+.astra-shell .aow-field__required,
+.astra-login .aow-field__required {
+  display: none;
+}
+.astra-shell .aow-field__help,
+.astra-login .aow-field__help {
+  font-size: 10px;
+  color: #b4b1aa;
+}
+.astra-sidebar nav a,
+.astra-sidebar nav button {
+  line-height: 16px;
+}
+.astra-nav-icon {
+  line-height: 22px;
+  flex-shrink: 0;
+}
+.astra-brand {
+  font-weight: 400;
+}
+.astra-stat strong {
+  line-height: 36px;
+  margin-bottom: 6px;
+}
+.astra-list-row .astra-card-icon {
+  flex-shrink: 0;
+}
+@media (max-width: 900px) {
+  .astra-checks label {
+    min-height: 44px;
+  }
+  .astra-shell .astra-delete {
+    min-height: 44px;
+  }
+  .astra-sidebar .astra-account .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .astra-back {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}

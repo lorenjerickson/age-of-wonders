@@ -10,10 +10,17 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { IsIn } from "class-validator";
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 import { createHash } from "node:crypto";
 import type { Request } from "express";
-import { GmGuard } from "../auth/auth.guard";
+import { SessionGuard } from "../auth/auth.guard";
 import type { AuthenticatedRequest } from "../auth/auth.types";
 import { isObject } from "../domain/domain-resource";
 import { WorldDefinitionAuthoringService } from "../world-definitions/world-definition-authoring.service";
@@ -27,8 +34,14 @@ export class GenerateLocationMapDto extends CreateWorldDraftProposalDto {
   orientation!: "scenic" | "overhead" | "side-on";
 }
 
+export class GenerateDraftLocationMapDto extends GenerateLocationMapDto {
+  @IsString() @MinLength(1) @MaxLength(120) @Matches(/\S/) name!: string;
+  @IsString() @MinLength(1) @MaxLength(120) @Matches(/\S/) kind!: string;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
+}
+
 @Controller("ai/worlds/:worldId/atlas/locations/:locationId/map-proposals")
-@UseGuards(GmGuard)
+@UseGuards(SessionGuard)
 export class WorldLocationMapController {
   constructor(
     private readonly authoring: WorldDefinitionAuthoringService,
@@ -61,6 +74,13 @@ export class WorldLocationMapController {
               dto.expectedStorageRevision,
               dto.direction.trim(),
               dto.orientation,
+              ...(locationId
+                ? []
+                : [
+                    (dto as GenerateDraftLocationMapDto).name,
+                    (dto as GenerateDraftLocationMapDto).description,
+                    (dto as GenerateDraftLocationMapDto).kind,
+                  ]),
             ]),
           )
           .digest("hex"),
@@ -71,6 +91,15 @@ export class WorldLocationMapController {
           throw new ConflictException(
             "This World draft changed. Reload before generating a Map.",
           );
+        if (!locationId && "name" in dto && "kind" in dto) {
+          const proposed = dto as GenerateDraftLocationMapDto;
+          return {
+            name: proposed.name.trim(),
+            description: proposed.description ?? "",
+            kind: proposed.kind,
+            image: { orientation: dto.orientation },
+          };
+        }
         const records: unknown[] = Array.isArray(draft.records)
           ? draft.records
           : [];
@@ -121,5 +150,35 @@ export class WorldLocationMapController {
         });
       },
     );
+  }
+}
+
+/** Preview for an unsaved Location; generation never creates or updates the Location. */
+@Controller("ai/worlds/:worldId/atlas/location-map-proposals")
+@UseGuards(SessionGuard)
+export class WorldDraftLocationMapController {
+  private readonly existing: WorldLocationMapController;
+  constructor(
+    authoring: WorldDefinitionAuthoringService,
+    maps: GeneratedMapService,
+    paidRequests: PaidAiRequestGate,
+    audit: GenerationAuditService,
+  ) {
+    this.existing = new WorldLocationMapController(
+      authoring,
+      maps,
+      paidRequests,
+      audit,
+    );
+  }
+  @Post()
+  @HttpCode(200)
+  generate(
+    @Param("worldId") worldId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() dto: GenerateDraftLocationMapDto,
+  ) {
+    return this.existing.generate(worldId, "", request, key, dto);
   }
 }

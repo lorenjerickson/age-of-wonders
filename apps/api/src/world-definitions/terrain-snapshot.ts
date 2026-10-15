@@ -1,7 +1,6 @@
+import { Map as DomainMap } from "@aow/domain";
 import { BadRequestException } from "@nestjs/common";
 import {
-  locationMapIssue,
-  terrainVolumeIssue,
   type IsometricTerrainManifest,
   type IsometricTerrainVolume,
   type TerrainChunk,
@@ -32,7 +31,7 @@ export function validateUploadedTerrainChunk(value: unknown): TerrainChunk {
       ),
     ),
   ];
-  const issue = terrainVolumeIssue({
+  const issue = DomainMap.terrainIssue({
     kind: "isometric-terrain",
     formatVersion: 1,
     dimensions: { x: 100, y: 100, z: 100 },
@@ -49,7 +48,7 @@ export function validateUploadedTerrainChunk(value: unknown): TerrainChunk {
   if (issue) throw new BadRequestException(issue);
   // Canonical ordering makes repeated uploads independent of incidental editor order.
   return {
-    address: value.address as unknown as TerrainChunk["address"],
+    address: value.address as TerrainChunk["address"],
     cells: [...(value.cells as TerrainChunk["cells"])].sort(
       (a, b) => a.offset - b.offset,
     ),
@@ -60,7 +59,7 @@ export function resolveTerrainManifest(
   map: IsometricTerrainManifest,
   records: readonly SnapshotRecordInput[],
 ): IsometricTerrainVolume {
-  const issue = locationMapIssue(map);
+  const issue = DomainMap.mapIssue(map);
   if (issue) throw new BadRequestException(issue);
   const available = new Map(
     records
@@ -85,7 +84,7 @@ export function resolveTerrainManifest(
     kind: "isometric-terrain",
     chunks,
   };
-  const volumeIssue = terrainVolumeIssue(volume);
+  const volumeIssue = DomainMap.terrainIssue(volume);
   if (volumeIssue) throw new BadRequestException(volumeIssue);
   return volume;
 }
@@ -102,7 +101,7 @@ export function captureTerrainRecords(
       record.payload.map === undefined
     )
       continue;
-    const issue = locationMapIssue(record.payload.map);
+    const issue = DomainMap.mapIssue(record.payload.map);
     if (issue) throw new BadRequestException(issue);
     const map = record.payload.map as
       IsometricTerrainManifest | { kind: "image" };

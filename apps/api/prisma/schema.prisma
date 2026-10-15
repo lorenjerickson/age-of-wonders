@@ -330,6 +330,7 @@ model User {
   role                                       UserRole
   createdAt                                  DateTime                                @default(now())
   updatedAt                                  DateTime                                @updatedAt
+  localCredential                            LocalCredential?
   authSessions                               AuthSession[]
   createdGenerations                         Generation[]                            @relation("GenerationCreator")
   uploadedMedia                              MediaAsset[]                            @relation("MediaAssetCreator")
@@ -431,6 +432,7 @@ model PlayerProfile {
   user                 User                                @relation(fields: [userId], references: [id], onDelete: Restrict)
   providerAssociations AuthenticationProviderAssociation[]
   campaignMemberships  CampaignInstanceHumanMembership[]
+  worldAccessEntries   WorldAccessEntry[]
 
   @@unique([id, userId])
   @@index([standing, displayName])
@@ -477,6 +479,15 @@ model AgentIdentity {
 
   @@index([ownerUserId, status])
   @@index([name])
+}
+
+model LocalCredential {
+  userId       String   @id
+  accountName  String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuthSession {
@@ -644,6 +655,7 @@ model WorldDefinition {
   forkProvenance    WorldDefinitionForkProvenance?  @relation("ForkTargetWorld")
   forkSources       WorldDefinitionForkProvenance[] @relation("ForkSourceWorld")
   metadataRevision  Int                             @default(1)
+  accessEntries      WorldAccessEntry[]
 
   @@unique([id, currentRevisionId])
   @@index([status, updatedAt])
@@ -1465,6 +1477,8 @@ model CampaignInstanceCharacterDraft {
   attributeAssignments   Json                                 @default("{}")
   startingEquipmentIds   Json                                 @default("[]")
   equipmentAssignments   Json                                 @default("{}")
+  /// Detached original imported sheet for lossless extension/provenance preservation.
+  sourceSheet            Json?
   biography              String?
   imageAssetIds          Json                                 @default("{}")
   submittedAt            DateTime?
@@ -1754,4 +1768,18 @@ model CampaignSessionMovementProposal {
 
   @@unique([sessionId, requestKey])
   @@index([sessionId, createdAt])
+}
+
+/// Owner-maintained collaboration roster: viewers read and editors mutate World drafts.
+model WorldAccessEntry {
+  id String @id @default(uuid())
+  worldDefinitionId String
+  playerId String
+  role String
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  world WorldDefinition @relation(fields: [worldDefinitionId], references: [id], onDelete: Cascade)
+  player PlayerProfile @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  @@unique([worldDefinitionId, playerId])
 }

@@ -15,7 +15,9 @@ describe("OpenAiService", () => {
         id: "response",
         output_text: "result",
       });
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
       value: jest.fn().mockResolvedValue({
         client: { responses: { create } },
@@ -42,7 +44,9 @@ describe("OpenAiService", () => {
           ),
         ),
     );
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
       value: jest.fn().mockResolvedValue({
         client: { responses: { create } },
@@ -78,14 +82,14 @@ describe("OpenAiService", () => {
           expect(options.timeout).toBe(240_000);
         }),
     );
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
-      value: jest
-        .fn()
-        .mockResolvedValue({
-          client: { responses: { create } },
-          model: "gpt-test",
-        }),
+      value: jest.fn().mockResolvedValue({
+        client: { responses: { create } },
+        model: "gpt-test",
+      }),
     });
     const result = service.generateImage("Strict overhead token", {
       size: "1024x1024",
@@ -101,7 +105,16 @@ describe("OpenAiService", () => {
     });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        tools: [expect.objectContaining({ quality: "high" })],
+        model: "gpt-test",
+        tools: [
+          expect.objectContaining({
+            model: "configured-image-model",
+            quality: "high",
+            background: "transparent",
+            size: "1024x1024",
+            output_format: "webp",
+          }),
+        ],
       }),
       expect.objectContaining({ timeout: 240_000, maxRetries: 0 }),
     );
@@ -118,14 +131,14 @@ describe("OpenAiService", () => {
           ),
         ),
     );
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
-      value: jest
-        .fn()
-        .mockResolvedValue({
-          client: { responses: { create } },
-          model: "gpt-test",
-        }),
+      value: jest.fn().mockResolvedValue({
+        client: { responses: { create } },
+        model: "gpt-test",
+      }),
     });
     const result = service.generateImage("image");
     const rejection = expect(result).rejects.toMatchObject({ status: 504 });
@@ -139,14 +152,14 @@ describe("OpenAiService", () => {
     const create = jest
       .fn()
       .mockRejectedValue(new OpenAI.APIConnectionTimeoutError());
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
-      value: jest
-        .fn()
-        .mockResolvedValue({
-          client: { responses: { create } },
-          model: "gpt-test",
-        }),
+      value: jest.fn().mockResolvedValue({
+        client: { responses: { create } },
+        model: "gpt-test",
+      }),
     });
     await expect(service.generateImage("image")).rejects.toMatchObject({
       status: 504,
@@ -163,7 +176,9 @@ describe("OpenAiService", () => {
           ),
         ),
     );
-    const service = new OpenAiService({} as HostedConfigurationService);
+    const service = new OpenAiService({
+      openAiImageModel: () => "configured-image-model",
+    } as HostedConfigurationService);
     Object.defineProperty(service, "connection", {
       value: jest.fn().mockResolvedValue({
         client: { responses: { create } },

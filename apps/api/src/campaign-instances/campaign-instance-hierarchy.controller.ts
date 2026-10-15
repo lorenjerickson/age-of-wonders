@@ -1,3 +1,4 @@
+import { ChangeActorEquipmentDto } from "./dto/campaign-instance-management.dto";
 import { PlaceCampaignInstanceActorDto } from "./dto/campaign-instance-management.dto";
 import {
   BadRequestException,
@@ -81,6 +82,34 @@ export class CampaignInstanceHierarchyController {
       campaignDefinitionId,
       campaignInstanceId,
       request.user!.id,
+    );
+  }
+
+  @Get(":campaignInstanceId/creature-embodiments/:actorId/equipment")
+  async equipment(
+    @Param("campaignDefinitionId") campaignId: string,
+    @Param("campaignInstanceId") instanceId: string,
+    @Param("actorId") actorId: string,
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(campaignId, instanceId, request);
+    return this.management.equipment(instanceId, request.user!.id, actorId);
+  }
+  @Post(":campaignInstanceId/creature-embodiments/:actorId/equipment")
+  @HttpCode(HttpStatus.OK)
+  async changeEquipment(
+    @Param("campaignDefinitionId") campaignId: string,
+    @Param("campaignInstanceId") instanceId: string,
+    @Param("actorId") actorId: string,
+    @Req() request: Request & AuthenticatedRequest,
+    @Body() dto: ChangeActorEquipmentDto,
+  ) {
+    await this.scope(campaignId, instanceId, request);
+    return this.management.changeEquipment(
+      instanceId,
+      request.user!.id,
+      actorId,
+      dto,
     );
   }
 
@@ -634,6 +663,29 @@ export class CampaignInstanceHierarchyController {
       campaignInstanceId,
       request.user!.id,
       dto,
+    );
+  }
+
+  @Patch(":campaignInstanceId/agents/:agentParticipationId/capabilities")
+  async agentCapabilities(
+    @Param("campaignDefinitionId") definitionId: string,
+    @Param("campaignInstanceId") instanceId: string,
+    @Param("agentParticipationId") participationId: string,
+    @Body()
+    input: {
+      expectedObserve: string[];
+      expectedAct: string[];
+      observe: string[];
+      act: string[];
+    },
+    @Req() request: Request & AuthenticatedRequest,
+  ) {
+    await this.scope(definitionId, instanceId, request);
+    return this.management.updateAgentCapabilities(
+      instanceId,
+      participationId,
+      request.user!.id,
+      input,
     );
   }
 

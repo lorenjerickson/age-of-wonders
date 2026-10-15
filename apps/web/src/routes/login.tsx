@@ -1,4 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LoginPage } from "../LoginPage";
+import { AstraLogin } from "../AstraLogin";
 
-export const Route = createFileRoute("/login")({ component: LoginPage });
+export const Route = createFileRoute("/login")({ component: AstraLogin });

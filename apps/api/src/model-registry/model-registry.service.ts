@@ -1,3 +1,4 @@
+import { worldAccessWhere } from "../world-definitions/world-access";
 import {
   BadRequestException,
   ConflictException,
@@ -642,15 +643,15 @@ export class ModelRegistryService {
 
   async effective(worldDefinitionId: string, userId: string) {
     const world = await this.prisma.worldDefinition.findUnique({
-      where: { id: worldDefinitionId, ownerUserId: userId },
-      select: { draft: { select: { content: true } } },
+      where: { id: worldDefinitionId, ...worldAccessWhere(userId) },
+      select: { ownerUserId: true, draft: { select: { content: true } } },
     });
     if (!world?.draft)
       throw new NotFoundException("The selected World was not found.");
     const rootReleaseIds = modelReleaseIdsFromContent(world.draft.content);
     const resolved = await this.resolveEffectiveRoots(
       rootReleaseIds,
-      userId,
+      world.ownerUserId ?? userId,
       worldDefinitionId,
     );
     const elements = resolved.elements.map((element) => ({

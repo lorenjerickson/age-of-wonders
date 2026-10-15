@@ -72,6 +72,7 @@ export const CORE_EQUIPMENT_SLOT_KEYS = [
   "aow:equipment-slot-shoulders",
   "aow:equipment-slot-arms",
   "aow:equipment-slot-hands",
+  "aow:equipment-slot-wrists",
   "aow:equipment-slot-legs",
   "aow:equipment-slot-feet",
   "aow:equipment-slot-waist",
@@ -112,6 +113,8 @@ export interface QualitySlotCapacity<
   Quality extends ItemQuality = ItemQuality,
 > {
   readonly quality: Quality;
+  /** Optional exact rarity match; omission is an explicitly authored quality fallback. */
+  readonly rarity?: ItemRarity;
   readonly slots: number;
 }
 
@@ -144,9 +147,11 @@ export function isBeltSlotCompatible(components: ItemComponents): boolean {
 export function containerSlotCapacity<Quality extends ItemQuality>(
   container: SlottedContainerDefinition<Quality>,
   quality: Quality,
+  rarity?: ItemRarity,
 ): number | undefined {
-  return container.capacityByQuality.find((entry) => entry.quality === quality)
-    ?.slots;
+  const rows = container.capacityByQuality;
+  return (rows.find((entry) => entry.quality === quality && entry.rarity !== undefined && entry.rarity === rarity)
+    ?? rows.find((entry) => entry.quality === quality && entry.rarity === undefined))?.slots;
 }
 
 export type WeaponCategory = OpenString<
@@ -303,9 +308,11 @@ export interface ItemComponents<
   Slot extends EquipmentSlot = EquipmentSlot,
   Quality extends ItemQuality = ItemQuality,
 > {
+  readonly grantedConditions?: readonly import("./world-codex").WorldGrantedCondition[];
   readonly category: ItemCategory;
   /** Required construction and workmanship rating for this item definition. */
   readonly quality: Quality;
+  readonly notes?: string;
   readonly weight?: Weight;
   readonly cost?: readonly CurrencyAmount[];
   readonly stackable?: boolean;

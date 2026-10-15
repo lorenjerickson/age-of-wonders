@@ -138,6 +138,11 @@ export interface UpdateCampaignInstancePreparationRequest {
 }
 
 export interface CampaignInstancePlotProjection {
+  readonly revealedClaimIds?: readonly string[];
+  readonly claims?: readonly { readonly id: string; readonly kind: "truth" | "belief" | "rumor"; readonly name: string }[];
+  readonly creatureKnowledge?: readonly (import("./plots").CreatureDiscoveryKnowledge & { readonly creatureName: string })[];
+  readonly actors?: readonly { readonly id: string; readonly name: string }[];
+  readonly locations?: readonly { readonly id: string; readonly name: string; readonly placements: readonly { readonly id: string; readonly name: string; readonly status: string }[] }[];
   readonly plotDefinitionId: PlotDefinitionId;
   readonly name: string;
   readonly parentPlotDefinitionId?: PlotDefinitionId;
@@ -161,6 +166,7 @@ export interface CampaignInstancePlotListProjection {
 }
 
 export interface UpdateCampaignInstancePlotRequest {
+  readonly creatureKnowledge?: readonly import("./plots").CreatureDiscoveryKnowledge[];
   readonly expectedRuntimeRevision: number;
   readonly status?: CampaignInstancePlotProgressStatus;
   readonly objectiveProgress?: readonly {

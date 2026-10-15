@@ -1,3 +1,4 @@
+import { Map as DomainMap } from "@aow/domain";
 import {
   terrainAddressKey,
   terrainCellAddress,
@@ -116,52 +117,14 @@ export type OpeningSettings = TerrainOpening extends infer O
     : never
   : never;
 
-/** Reject the entire selection if any cell cannot accept an opening. */
+/** The Map owner validates opening compatibility and the complete candidate. */
 export function terrainOpeningWrites(
   volume: IsometricTerrainVolume,
   selection: readonly TerrainAddress[],
   settings: OpeningSettings | null,
   newId: () => string = () => crypto.randomUUID(),
 ): TerrainCellWrite[] {
-  const index = terrainCellIndex(volume);
-  const cells = mergeTerrainSelection([], selection, "replace").flatMap(
-    (address) => {
-      const cell = index.get(terrainAddressKey(address));
-      return cell ? [{ address, cell }] : [];
-    },
-  );
-  if (
-    settings &&
-    cells.some(
-      ({ cell }) =>
-        cell.shape.top.some((h) => h !== 1) || (cell.smoothing ?? 0) !== 0,
-    )
-  )
-    throw new TypeError(
-      "Doors and windows require cube cells with no smoothing. Select only compatible cells.",
-    );
-  return cells
-    .filter(({ cell }) => settings || cell.opening)
-    .map(({ address, cell }) => {
-      const { opening, materialKey, shape, smoothing } = cell;
-      const rest = {
-        materialKey,
-        shape,
-        ...(smoothing === undefined ? {} : { smoothing }),
-      };
-      return {
-        address,
-        cell: settings
-          ? {
-              ...rest,
-              opening: {
-                ...settings,
-                id: opening?.id ?? newId(),
-              } as TerrainOpening,
-            }
-          : rest,
-      };
-    });
+  return DomainMap.openingWrites(volume, selection, settings, newId);
 }
 
 export function terrainSmoothingWrites(
@@ -169,26 +132,5 @@ export function terrainSmoothingWrites(
   selection: readonly TerrainAddress[],
   strength: number,
 ): TerrainCellWrite[] {
-  if (!Number.isFinite(strength) || strength < 0 || strength > 1)
-    throw new TypeError("Choose smoothing between zero and one.");
-  const index = terrainCellIndex(volume);
-  const selected = mergeTerrainSelection([], selection, "replace").flatMap(
-    (address) => {
-      const cell = index.get(terrainAddressKey(address));
-      return cell ? [{ address, cell }] : [];
-    },
-  );
-  if (strength > 0 && selected.some(({ cell }) => cell.opening))
-    throw new TypeError(
-      "Doors and windows cannot be smoothed. Remove openings from the selection first.",
-    );
-  return selected.map(({ address, cell }) => ({
-    address,
-    cell: {
-      materialKey: cell.materialKey,
-      shape: cell.shape,
-      ...(cell.opening ? { opening: cell.opening } : {}),
-      smoothing: strength,
-    },
-  }));
+  return DomainMap.smoothingWrites(volume, selection, strength);
 }

@@ -41,3 +41,5 @@ export * from "./session-table";
 export * from "./movement-execution-api";
 
 export * from "./world-rules";
+
+export * from "./world-codex";

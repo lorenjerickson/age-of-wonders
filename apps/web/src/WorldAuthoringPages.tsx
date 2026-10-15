@@ -1,3 +1,14 @@
+import { ItemStorageFields, type ItemStorageEdits } from "./ItemStorageFields";
+import { visibleRecordName, visibleRecordDescription } from "./recordDisplay";
+import { protectedComparisonText } from "./protectedAuthoringText";
+import { RuleTextField } from "./RuleValueFields";
+import { WorldRecordRemoval } from "./WorldRecordRemoval";
+import {
+  LocationCollectionPage,
+  LocationPreservedPlacements,
+} from "./LocationCollectionPages";
+import { BackgroundDefinition } from "@aow/domain";
+import { backgroundModifiersValid } from "./backgroundModifierModel";
 import { RecordTabs, recordTabId } from "./RecordTabs";
 import { ShellTools } from "./AppShellTools";
 import { ArtworkGenerator } from "./ArtworkGenerator";
@@ -36,11 +47,7 @@ import {
 } from "@aow/ui";
 import {
   ApiRequestError,
-  createModelRegistry,
   deleteMedia,
-  extendModelRegistryRelease,
-  getModelRegistry,
-  listModelRegistries,
   publishWorldDefinitionDraft,
   proposeWorldDraftRecord,
   saveWorldCreature,
@@ -49,9 +56,7 @@ import {
   uploadWorldMedia,
   upgradeLegacyWorldCreature,
   validateWorldDefinitionDraft,
-  type ModelRegistrySummary,
   type JsonValue,
-  type WorldModelOption,
   type WorldDraftImpact,
   type WorldDraftRecord,
 } from "./api";
@@ -69,21 +74,14 @@ import {
   attributeNumberConfig,
   definitionConformance,
   creatureEmbodimentPolicyForSave,
-  draftAdoptingRegistryRelease,
   locationParentOptions,
-  modelExtensionKey,
-  recordName,
   recordDescription,
   recordPayload,
   requestedDraftRecordMissing,
-  recoverableRegistryRelease,
   savedNavigationAllowanceForRoute,
   savedWorldRecordEditorSnapshot,
   squareItemImageIssue,
   recordsForLibrary,
-  worldPlacementRecordsForLocation,
-  worldPlacementSourceId,
-  worldPlacementSourceIsEditable,
   worldDraftMutationRevision,
   worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
@@ -99,6 +97,51 @@ const objectValue = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+function AuthoringTextField({
+  label,
+  value,
+  onChange,
+  recordIds,
+  multiline = false,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  recordIds: ReadonlySet<string>;
+  multiline?: boolean;
+  required?: boolean;
+}) {
+  if (protectedComparisonText(value, recordIds))
+    return (
+      <RuleTextField
+        label={label}
+        value={value}
+        onChange={onChange}
+        recordIds={recordIds}
+      />
+    );
+  return (
+    <Field label={label} required={required}>
+      {multiline ? (
+        <Textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          rows={5}
+          className="mt-2 w-full"
+        />
+      ) : (
+        <Input
+          required={required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-2 w-full"
+        />
+      )}
+    </Field>
+  );
+}
 
 function imageDimensions(
   file: File,
@@ -496,7 +539,7 @@ export function WorldOverviewPage() {
                 className="link min-h-11 text-sm"
                 href={`${base}/${record.resourceType === "locations" ? "atlas/locations" : record.resourceType === "creatures" || recordPayload(record).kind === "creature" ? "bestiary/creatures" : "item-compendium/items"}/${encodeURIComponent(record.sourceId)}${guideSuffix}`}
               >
-                Describe {recordName(record, "this record")} →
+                Describe {visibleRecordName(record, "this record")} →
               </InternalLink>
             ))}
             {checked &&
@@ -784,7 +827,7 @@ export function AtlasPage() {
   const base = `/worlds/${encodeURIComponent(definition.id)}/atlas/locations`;
   const visible = locations.filter((record) =>
     query.trim()
-      ? `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+      ? `${visibleRecordName(record, "")} ${visibleRecordDescription(record) ?? ""}`
           .toLocaleLowerCase()
           .includes(query.toLocaleLowerCase())
       : record.sourceId !== current?.sourceId &&
@@ -803,16 +846,25 @@ export function AtlasPage() {
   return (
     <LibraryPage
       eyebrow="Locations"
-      title={current ? recordName(current, "World map") : "World map"}
+      title={current ? visibleRecordName(current, "World map") : "World map"}
       description={
         current
-          ? (recordDescription(current) ?? "Browse contained locations.")
+          ? (visibleRecordDescription(current) ?? "Browse contained locations.")
           : "Browse the places in this World."
       }
       createHref={`${base}/new${current ? `?parentLocationId=${encodeURIComponent(current.sourceId)}` : ""}`}
     >
       <DraftRequired>
         <div className="mt-5 flex flex-wrap gap-2">
+          {current && (
+            <RouterButtonLink
+              className="min-h-11"
+              tone="outline"
+              href={`${base}/${encodeURIComponent(current.sourceId)}${guideSuffix}`}
+            >
+              Edit current location
+            </RouterButtonLink>
+          )}
           <Button
             tone="outline"
             className="min-h-11"
@@ -844,7 +896,7 @@ export function AtlasPage() {
                   setQuery("");
                 }}
               >
-                {recordName(record, "Location")}
+                {visibleRecordName(record, "Location")}
               </Button>
             ))}
           </nav>
@@ -869,10 +921,10 @@ export function AtlasPage() {
                 className="rounded-box border border-base-300 bg-base-200 p-4"
               >
                 <h2 className="font-semibold">
-                  {recordName(record, "Unnamed Location")}
+                  {visibleRecordName(record, "Unnamed Location")}
                 </h2>
                 <p className="mt-1 text-sm text-base-content/65">
-                  {recordDescription(record) || "No description yet."}
+                  {visibleRecordDescription(record) || "No description yet."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
@@ -909,11 +961,12 @@ export function AtlasPage() {
 }
 
 export function BestiaryPage() {
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const { definition, draft } = useWorldAuthoring();
   const [query, setQuery] = useState("");
   const creatures = recordsForLibrary(draft?.records ?? [], "creatures").filter(
     (record) =>
-      `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+      `${visibleRecordName(record, "")} ${visibleRecordDescription(record) ?? ""}`
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
@@ -925,6 +978,12 @@ export function BestiaryPage() {
       createHref={`/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/new`}
     >
       <DraftRequired>
+        <RouterButtonLink
+          className="min-h-11"
+          href={`/worlds/${encodeURIComponent(definition.id)}/bestiary/catalog-monsters${guideSuffix}`}
+        >
+          Catalog creatures
+        </RouterButtonLink>
         <Field label="Search creatures" className="mt-5">
           <Input
             type="search"
@@ -977,7 +1036,7 @@ export function ItemCompendiumPage() {
   const items = allItems.filter((record) => {
     const values = facets(record);
     return (
-      `${recordName(record, "")} ${recordDescription(record) ?? ""}`
+      `${visibleRecordName(record, "")} ${visibleRecordDescription(record) ?? ""}`
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()) &&
       (!category || values.category === category) &&
@@ -1146,16 +1205,16 @@ function CardGrid({
           {showImages && (
             <RecordThumbnail
               payload={recordPayload(record)}
-              name={recordName(record, "Unnamed record")}
+              name={visibleRecordName(record, "Unnamed record")}
               className="w-16 shrink-0"
             />
           )}
           <div className="min-w-0">
             <h2 className="font-semibold">
-              {recordName(record, "Unnamed record")}
+              {visibleRecordName(record, "Unnamed record")}
             </h2>
             <p className="line-clamp-2 text-sm text-base-content/55">
-              {recordDescription(record) ?? "No description yet."}
+              {visibleRecordDescription(record) ?? "No description yet."}
             </p>
           </div>
         </InternalLink>
@@ -1348,6 +1407,9 @@ export function DraftRecordEditor({
   const [itemQuality, setItemQuality] = useState(
     String(initialComponents.quality ?? initial.quality ?? "standard"),
   );
+  const [itemStorageEdits, setItemStorageEdits] = useState<ItemStorageEdits>(
+    {},
+  );
   const [itemImageFile, setItemImageFile] = useState<File>();
   const [itemImageAltText, setItemImageAltText] = useState(
     String(initialImage.altText ?? ""),
@@ -1403,6 +1465,7 @@ export function DraftRecordEditor({
     progressiveMechanicsNotes,
     itemCategory,
     itemQuality,
+    itemStorageEdits,
     itemImageFileName: itemImageFile?.name ?? "",
     itemArtwork,
     creatureArtwork,
@@ -1570,6 +1633,9 @@ export function DraftRecordEditor({
                     quality: itemQuality as
                       "ramshackle" | "standard" | "fine" | "exquisite",
                     compatibleEquipmentSlotSets: slotSets as never,
+                    ...(itemStorageEdits as Partial<
+                      import("@aow/common").CreateWorldItemDraftRequest
+                    >),
                     image,
                   },
                   existing?.sourceId,
@@ -1769,7 +1835,7 @@ export function DraftRecordEditor({
     return (
       <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
         <h1 className="text-4xl font-semibold">
-          {recordName(
+          {visibleRecordName(
             existing ?? {
               resourceType: kind,
               sourceId: "unavailable",
@@ -1783,8 +1849,10 @@ export function DraftRecordEditor({
             ? "This World draft changed elsewhere or its published base advanced. Reload the latest draft before editing."
             : "This World is archived and read only. Restore it from the World header before editing."}
         </Alert>
-        {description && (
-          <p className="mt-6 text-base-content/70">{description}</p>
+        {existing && visibleRecordDescription(existing) && (
+          <p className="mt-6 text-base-content/70">
+            {visibleRecordDescription(existing)}
+          </p>
         )}
         {kind === "locations" && existing && (
           <WorldLocationPlacements location={existing} />
@@ -1802,7 +1870,7 @@ export function DraftRecordEditor({
       </p>
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">
         {existing
-          ? recordName(existing, "Unnamed record")
+          ? visibleRecordName(existing, "Unnamed record")
           : `Create ${kind === "items" ? "Item" : kind === "locations" ? "Location" : "Creature"}`}
       </h1>
       {kind !== "locations" && (
@@ -1817,6 +1885,27 @@ export function DraftRecordEditor({
           activeTab={editorSection}
           onTabChange={setEditorSection}
         />
+      )}
+      {kind === "items" && existing && (
+        <nav aria-label="Item mechanics" className="mt-4 flex flex-wrap gap-2">
+          {(["traits", "actions", "vehicle", "owner"] as const).map(
+            (section) => (
+              <RouterButtonLink
+                key={section}
+                className="min-h-11"
+                href={`${libraryHref}/items/${encodeURIComponent(existing.sourceId)}/${section}${guideSuffix}`}
+              >
+                {section === "traits"
+                  ? "Traits"
+                  : section === "actions"
+                    ? "Actions"
+                    : section === "owner"
+                      ? "Item rules"
+                      : "Vehicle"}
+              </RouterButtonLink>
+            ),
+          )}
+        </nav>
       )}
       <DraftRequired>
         {!existing && (
@@ -1871,22 +1960,24 @@ export function DraftRecordEditor({
             className="space-y-5"
           >
             <h2 className="text-xl font-semibold">Overview</h2>
-            <Field label="Name" required>
-              <Input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Description">
-              <Textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={5}
-                className="mt-2 w-full"
-              />
-            </Field>
+            <AuthoringTextField
+              label="Name"
+              required
+              value={name}
+              onChange={setName}
+              recordIds={
+                new Set(draft?.records.map((record) => record.sourceId))
+              }
+            />
+            <AuthoringTextField
+              label="Description"
+              multiline
+              value={description}
+              onChange={setDescription}
+              recordIds={
+                new Set(draft?.records.map((record) => record.sourceId))
+              }
+            />
             {proposalPending && (
               <Alert aria-live="polite">
                 Proposal context is locked until the request finishes.
@@ -2183,7 +2274,7 @@ export function DraftRecordEditor({
                     skillOptions.map((record) => (
                       <Checkbox
                         key={record.sourceId}
-                        label={recordName(record, "Unnamed Skill")}
+                        label={visibleRecordName(record, "Unnamed Skill")}
                         checked={skillDefinitionIds.includes(record.sourceId)}
                         onChange={(event) =>
                           setSkillDefinitionIds((current) =>
@@ -2207,7 +2298,7 @@ export function DraftRecordEditor({
                     professionOptions.map((record) => (
                       <Checkbox
                         key={record.sourceId}
-                        label={recordName(record, "Unnamed Profession")}
+                        label={visibleRecordName(record, "Unnamed Profession")}
                         checked={professionDefinitionIds.includes(
                           record.sourceId,
                         )}
@@ -2265,7 +2356,7 @@ export function DraftRecordEditor({
                 </option>
                 {locations.map((location) => (
                   <option key={location.sourceId} value={location.sourceId}>
-                    {recordName(location, "Unnamed Location")}
+                    {visibleRecordName(location, "Unnamed Location")}
                   </option>
                 ))}
               </Select>
@@ -2363,6 +2454,13 @@ export function DraftRecordEditor({
               </Fieldset>
             )}
           </div>
+          {kind === "items" && editorSection === "Equipment" && (
+            <ItemStorageFields
+              initial={initialComponents}
+              edits={itemStorageEdits}
+              onChange={setItemStorageEdits}
+            />
+          )}
           <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-base-300 bg-base-100 py-4">
             {kind === "items" &&
               editorSection !== "Artwork" &&
@@ -2426,6 +2524,20 @@ export function DraftRecordEditor({
           )}
         </form>
       </DraftRequired>
+      {existing && (
+        <WorldRecordRemoval
+          record={existing}
+          path={
+            kind === "locations"
+              ? "atlas/locations"
+              : kind === "creatures"
+                ? "bestiary/creatures"
+                : "item-compendium/items"
+          }
+          returnPath={libraryHref}
+          disabled={editorSave.dirty || editorSave.saving || artworkBusy}
+        />
+      )}
       {kind === "locations" && existing && (
         <WorldLocationPlacements location={existing} />
       )}
@@ -2440,446 +2552,19 @@ export function WorldLocationPlacements({
   location: WorldDraftRecord;
   filter?: "creatures" | "items";
 }) {
-  const { draft, canEdit, saveRecord, removeWorldPlacement, markDirty } =
-    useWorldAuthoring();
-  const placements = worldPlacementRecordsForLocation(
-    draft?.records ?? [],
-    location.sourceId,
-  ).filter(
-    (record) =>
-      !filter ||
-      objectValue(recordPayload(record).source).kind ===
-        (filter === "items" ? "world-item" : "world-creature"),
-  );
-  const creatures =
-    filter === "items"
-      ? []
-      : recordsForLibrary(draft?.records ?? [], "creatures");
-  const items =
-    filter === "creatures"
-      ? []
-      : recordsForLibrary(draft?.records ?? [], "items");
-  const [editingId, setEditingId] = useState("");
-  const [name, setName] = useState("");
-  const [sourceKey, setSourceKey] = useState("");
-  const [x, setX] = useState("");
-  const [y, setY] = useState("");
-  const [scale, setScale] = useState("");
-  const [notes, setNotes] = useState("");
-  const [message, setMessage] = useState("");
-  const blankSnapshot = JSON.stringify({
-    editingId: "",
-    name: "",
-    sourceKey: "",
-    x: "",
-    y: "",
-    scale: "",
-    notes: "",
-  });
-  const editorSnapshot = JSON.stringify({
-    editingId,
-    name,
-    sourceKey,
-    x,
-    y,
-    scale,
-    notes,
-  });
-  const [savedSnapshot, setSavedSnapshot] = useState(blankSnapshot);
-  const dirty = editorSnapshot !== savedSnapshot;
-  useBlocker({
-    shouldBlockFn: () =>
-      dirty && !window.confirm("Leave without saving this World placement?"),
-    enableBeforeUnload: dirty,
-  });
-  useEffect(() => {
-    if (dirty) markDirty();
-  }, [dirty, markDirty]);
-
-  const labelForSource = (record: WorldDraftRecord) => {
-    const id = worldPlacementSourceId(record);
-    const source = [...creatures, ...items].find(
-      (candidate) => candidate.sourceId === id,
-    );
-    return source
-      ? recordName(source, "Unnamed World content")
-      : "Unavailable World content";
-  };
-
-  function resetEditor() {
-    setEditingId("");
-    setName("");
-    setSourceKey("");
-    setX("");
-    setY("");
-    setScale("");
-    setNotes("");
-    setMessage("");
-    setSavedSnapshot(blankSnapshot);
-  }
-
-  function edit(record: WorldDraftRecord) {
-    const payload = recordPayload(record);
-    const source = objectValue(payload.source);
-    const position = objectValue(payload.mapPosition);
-    const sourceId = worldPlacementSourceId(record) ?? "";
-    const next = {
-      editingId: record.sourceId,
-      name: recordName(record, "Unnamed World placement"),
-      sourceKey: `${String(source.kind ?? "world-creature")}\u0000${sourceId}`,
-      x: typeof position.x === "number" ? String(position.x) : "",
-      y: typeof position.y === "number" ? String(position.y) : "",
-      scale: typeof payload.scale === "number" ? String(payload.scale) : "",
-      notes: typeof payload.notes === "string" ? payload.notes : "",
-    };
-    setEditingId(next.editingId);
-    setName(next.name);
-    setSourceKey(next.sourceKey);
-    setX(next.x);
-    setY(next.y);
-    setScale(next.scale);
-    setNotes(next.notes);
-    setMessage("");
-    setSavedSnapshot(JSON.stringify(next));
-  }
-
-  async function remove(record: WorldDraftRecord) {
-    if (
-      !window.confirm(
-        `Remove ${recordName(record, "this World placement")} from the working World revision?`,
-      )
-    )
-      return;
-    if (await removeWorldPlacement(record.sourceId)) {
-      if (editingId === record.sourceId) resetEditor();
-      setMessage("World placement removed from the working revision.");
-    }
-  }
-
-  const [sourceKind, sourceId] = sourceKey.split("\u0000");
-  const positionValid =
-    (!x && !y) ||
-    (x !== "" &&
-      y !== "" &&
-      Number(x) >= 0 &&
-      Number(x) <= 1 &&
-      Number(y) >= 0 &&
-      Number(y) <= 1);
-  const scaleValid = scale === "" || Number(scale) > 0;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (
-      !draft ||
-      !canEdit ||
-      !name.trim() ||
-      !sourceId ||
-      !positionValid ||
-      !scaleValid
-    )
-      return;
-    const id = editingId || `world-placement:${crypto.randomUUID()}`;
-    const existing = placements.find((record) => record.sourceId === editingId);
-    const payload: Record<string, unknown> = {
-      ...recordPayload(
-        existing ?? {
-          resourceType: "world-placements",
-          sourceId: id,
-          payload: {},
-        },
-      ),
-      id,
-      locationId: location.sourceId,
-      name: name.trim(),
-      source:
-        sourceKind === "world-item"
-          ? { kind: "world-item", itemDefinitionId: sourceId }
-          : { kind: "world-creature", creatureId: sourceId },
-    };
-    if (x && y) {
-      payload.mapPosition = {
-        kind: "normalized-map",
-        x: Number(x),
-        y: Number(y),
-      };
-    } else delete payload.mapPosition;
-    if (scale) payload.scale = Number(scale);
-    else delete payload.scale;
-    if (notes.trim()) payload.notes = notes.trim();
-    else delete payload.notes;
-    const didSave = await saveRecord({
-      resourceType: "world-placements",
-      sourceId: id,
-      payload: payload as WorldDraftRecord["payload"],
-    });
-    if (!didSave) return;
-    resetEditor();
-    setMessage("World placement saved to the working revision.");
-  }
-
-  return (
-    <section
-      className="mt-10 border-t border-base-300 pt-8"
-      aria-labelledby="world-placement-heading"
-    >
-      <div>
-        <p className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
-          Atlas · Location content
-        </p>
-        <h2
-          id="world-placement-heading"
-          className="mt-2 text-2xl font-semibold"
-        >
-          {filter === "creatures"
-            ? "Creatures"
-            : filter === "items"
-              ? "Items"
-              : "World placements"}
-        </h2>
-        <p className="mt-2 text-sm text-base-content/60">
-          Place a named World Creature or Item in{" "}
-          {recordName(location, "this Location")}. These stable placements are
-          captured with published World revisions.
-        </p>
-      </div>
-      <div className="mt-5 space-y-3">
-        {placements.length ? (
-          placements.map((record) => {
-            const payload = recordPayload(record);
-            const position = objectValue(payload.mapPosition);
-            const sourceRecord = [...creatures, ...items].find(
-              (candidate) =>
-                candidate.sourceId === worldPlacementSourceId(record),
-            );
-            return (
-              <article
-                key={record.sourceId}
-                className="rounded-box border border-base-300 bg-base-200 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    {sourceRecord && (
-                      <RecordThumbnail
-                        payload={recordPayload(sourceRecord)}
-                        name={labelForSource(record)}
-                        className="mb-3 w-28"
-                        onlyIfPresent
-                      />
-                    )}
-                    <h3 className="font-semibold">
-                      {recordName(record, "Unnamed World placement")}
-                    </h3>
-                    <p className="mt-1 text-sm text-base-content/60">
-                      {labelForSource(record)}
-                    </p>
-                    {(typeof position.x === "number" &&
-                      typeof position.y === "number") ||
-                    typeof payload.scale === "number" ? (
-                      <p className="mt-1 text-xs text-base-content/55">
-                        {typeof position.x === "number" &&
-                        typeof position.y === "number"
-                          ? `Map position ${Math.round(position.x * 100)}% × ${Math.round(position.y * 100)}%`
-                          : "No map position"}
-                        {typeof payload.scale === "number"
-                          ? ` · Scale ${payload.scale}`
-                          : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                  {canEdit && (
-                    <div className="flex flex-wrap gap-2">
-                      {worldPlacementSourceIsEditable(record) ? (
-                        <Button
-                          type="button"
-                          tone="outline"
-                          size="sm"
-                          onClick={() => edit(record)}
-                        >
-                          Edit placement
-                        </Button>
-                      ) : (
-                        <Badge tone="warning">
-                          Source preserved · read only
-                        </Badge>
-                      )}
-                      <Button
-                        type="button"
-                        tone="danger"
-                        size="sm"
-                        onClick={() => void remove(record)}
-                      >
-                        Remove placement
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                {typeof payload.notes === "string" && payload.notes.trim() && (
-                  <p className="mt-3 text-sm">{payload.notes}</p>
-                )}
-              </article>
-            );
-          })
-        ) : (
-          <Alert>
-            {filter === "creatures"
-              ? "No Creatures are placed at this Location."
-              : filter === "items"
-                ? "No Items are placed at this Location."
-                : "No World placements are authored at this Location."}
-          </Alert>
-        )}
-      </div>
-      {canEdit && (
-        <form
-          onSubmit={(event) => void submit(event)}
-          className="mt-6 rounded-box border border-base-300 bg-base-200 p-5"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold">
-              {editingId ? "Edit World placement" : "Add World placement"}
-            </h3>
-            {editingId && (
-              <Button
-                type="button"
-                tone="ghost"
-                size="sm"
-                onClick={resetEditor}
-              >
-                Cancel editing
-              </Button>
-            )}
-          </div>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <Field label="Placement name" required className="sm:col-span-2">
-              <Input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field
-              label={
-                filter === "creatures"
-                  ? "Creature"
-                  : filter === "items"
-                    ? "Item"
-                    : "Creature or Item"
-              }
-              required
-              className="sm:col-span-2"
-            >
-              <Select
-                required
-                value={sourceKey}
-                onChange={(event) => setSourceKey(event.target.value)}
-                className="mt-2 w-full"
-              >
-                <option value="">Choose named World content</option>
-                <optgroup label="Creatures">
-                  {creatures.map((record) => (
-                    <option
-                      key={record.sourceId}
-                      value={`world-creature\u0000${record.sourceId}`}
-                    >
-                      {recordName(record, "Unnamed Creature")}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Items">
-                  {items.map((record) => (
-                    <option
-                      key={record.sourceId}
-                      value={`world-item\u0000${record.sourceId}`}
-                    >
-                      {recordName(record, "Unnamed Item")}
-                    </option>
-                  ))}
-                </optgroup>
-              </Select>
-            </Field>
-            <Field
-              label="Horizontal map position"
-              help="Optional value from 0 to 1. Enter both coordinates or leave both blank."
-            >
-              <Input
-                type="number"
-                min="0"
-                max="1"
-                step="0.01"
-                value={x}
-                onChange={(event) => setX(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field
-              label="Vertical map position"
-              help="Optional value from 0 to 1. Enter both coordinates or leave both blank."
-            >
-              <Input
-                type="number"
-                min="0"
-                max="1"
-                step="0.01"
-                value={y}
-                onChange={(event) => setY(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field
-              label="Token scale"
-              help="Optional positive multiplier, such as 1 or 1.5."
-            >
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={scale}
-                onChange={(event) => setScale(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Presentation notes" className="sm:col-span-2">
-              <Textarea
-                rows={4}
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-          </div>
-          {!positionValid && (
-            <Alert tone="warning" className="mt-4">
-              Enter both map coordinates between 0 and 1, or leave both blank.
-            </Alert>
-          )}
-          {!scaleValid && (
-            <Alert tone="warning" className="mt-4">
-              Token scale must be greater than zero.
-            </Alert>
-          )}
-          <Button
-            type="submit"
-            tone="primary"
-            className="mt-5"
-            disabled={
-              !name.trim() || !sourceId || !positionValid || !scaleValid
-            }
-          >
-            {editingId ? "Save placement" : "Add placement"}
-          </Button>
-        </form>
-      )}
-      {message && (
-        <p className="mt-4 text-sm" aria-live="polite">
-          {message}
-        </p>
-      )}
-    </section>
+  return filter ? (
+    <LocationCollectionPage location={location} collection={filter} />
+  ) : (
+    <>
+      <LocationCollectionPage location={location} collection="creatures" />
+      <LocationCollectionPage location={location} collection="items" />
+      <LocationPreservedPlacements location={location} />
+    </>
   );
 }
 
 export function CharactersPage() {
+  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
   const { definition, draft } = useWorldAuthoring();
   const base = `/worlds/${encodeURIComponent(definition.id)}/characters`;
   const names = (kind: Exclude<CharacterOptionKind, "heritage">) =>
@@ -2889,13 +2574,19 @@ export function CharactersPage() {
           record.resourceType === "definitions" &&
           recordPayload(record).kind === kind,
       )
-      .map((record) => recordName(record, "Unnamed option"));
+      .map((record) => visibleRecordName(record, "Unnamed option"));
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         World authoring
       </p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">Characters</h1>
+      <RouterButtonLink
+        className="min-h-11"
+        href={`${base}/catalog-characters${guideSuffix}`}
+      >
+        Catalog Character templates
+      </RouterButtonLink>
       <p className="mt-4 max-w-3xl text-base-content/65">
         Author the choices that shape Characters. Open model structure only when
         you need to change the vocabulary behind these editors.
@@ -3025,8 +2716,9 @@ export function CharacterDefinitionEditor({
   );
   const [modifierEdit, setModifierEdit] = useState<ModifierEdit | null>(null);
   const modifiersValid =
-    !["profession", "background"].includes(kind) ||
-    professionModifiersValid(modifierLevels);
+    kind === "background"
+      ? backgroundModifiersValid(levelModifierGrants(modifierLevels[0]))
+      : kind !== "profession" || professionModifiersValid(modifierLevels);
   const conformance = draft ? definitionConformance(draft, kind) : undefined;
   const snapshot = JSON.stringify({
     name,
@@ -3081,10 +2773,10 @@ export function CharacterDefinitionEditor({
               expertiseLevels: modifierLevels,
             }
           : kind === "background"
-            ? {
-                ...(components as Record<string, JsonValue>),
-                modifierGrants: levelModifierGrants(modifierLevels[0]),
-              }
+            ? BackgroundDefinition.withModifierGrants(
+                components as Record<string, JsonValue>,
+                levelModifierGrants(modifierLevels[0]),
+              )
             : (components as Record<string, JsonValue>),
     });
     const didSave = await saveRecord({
@@ -3117,7 +2809,9 @@ export function CharacterDefinitionEditor({
   if (!canEdit)
     return (
       <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
-        <h1 className="text-4xl font-semibold">{name || title}</h1>
+        <h1 className="text-4xl font-semibold">
+          {existing ? visibleRecordName(existing, title) : title}
+        </h1>
         <Alert tone="warning" className="mt-8">
           This World is read only. Restore it or refresh its draft before
           editing Character options.
@@ -3188,22 +2882,24 @@ export function CharacterDefinitionEditor({
               hasModifiers && facet !== "overview" ? "hidden" : "grid gap-5"
             }
           >
-            <Field label="Name" required>
-              <Input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label={kind === "background" ? "Backstory" : "Description"}>
-              <Textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={5}
-                className="mt-2 w-full"
-              />
-            </Field>
+            <AuthoringTextField
+              label="Name"
+              required
+              value={name}
+              onChange={setName}
+              recordIds={
+                new Set(draft?.records.map((record) => record.sourceId))
+              }
+            />
+            <AuthoringTextField
+              label={kind === "background" ? "Backstory" : "Description"}
+              multiline
+              value={description}
+              onChange={setDescription}
+              recordIds={
+                new Set(draft?.records.map((record) => record.sourceId))
+              }
+            />
             {kind === "skill" && (
               <Field label="Default Attribute">
                 <Select
@@ -3271,7 +2967,7 @@ export function CharacterDefinitionEditor({
                   )
                   .map((r) => ({
                     key: r.sourceId,
-                    name: recordName(r, "Unnamed Skill"),
+                    name: visibleRecordName(r, "Unnamed Skill"),
                   }))}
                 statistics={(draft?.effectiveModels?.elements ?? [])
                   .filter(
@@ -3315,7 +3011,21 @@ export function CharacterDefinitionEditor({
           >
             {editorSave.saving ? "Saving…" : `Save ${title}`}
           </Button>
+          <RouterButtonLink
+            className="min-h-11"
+            href={`/worlds/${encodeURIComponent(definition.id)}/characters/${kind}s${guideSuffix}`}
+          >
+            Cancel
+          </RouterButtonLink>
         </form>
+        {existing && (
+          <WorldRecordRemoval
+            record={existing}
+            path={`characters/${kind}s`}
+            returnPath={`/worlds/${encodeURIComponent(definition.id)}/characters/${kind}s`}
+            disabled={editorSave.dirty || editorSave.saving}
+          />
+        )}
       </DraftRequired>
     </main>
   );
@@ -3397,638 +3107,4 @@ function ModelCard({
   );
 }
 
-export function WorldModelEditor({
-  kind,
-}: {
-  kind: "attributes" | "equipment-slots" | "profession-ranks";
-}) {
-  const { draft, saveDraft, refreshEffectiveModels, canEdit, markDirty } =
-    useWorldAuthoring();
-  const [registries, setRegistries] = useState<ModelRegistrySummary[]>([]);
-  const [registryId, setRegistryId] = useState("");
-  const [name, setName] = useState("");
-  const [minimum, setMinimum] = useState(0);
-  const [maximum, setMaximum] = useState(100);
-  const [defaultValue, setDefaultValue] = useState(50);
-  const [order, setOrder] = useState(0);
-  const [editing, setEditing] = useState<WorldModelOption>();
-  const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState("");
-  const [pending, setPending] = useState<{
-    release: {
-      id: string;
-      registryId: string;
-      predecessorRevisionId?: string;
-      dependencyReleaseIds: string[];
-    };
-    label: string;
-  }>();
-  const options =
-    kind === "attributes"
-      ? draft?.effectiveModels?.attributes
-      : kind === "equipment-slots"
-        ? draft?.effectiveModels?.equipmentSlots
-        : draft?.effectiveModels?.professionRanks;
-  const modelLabel =
-    kind === "attributes"
-      ? "Attribute"
-      : kind === "equipment-slots"
-        ? "Equipment Slot"
-        : "Profession Rank";
-  const gmRegistries = registries.filter(
-    (registry) => registry.provenance.kind === "gm",
-  );
-  const modelMetadataValid =
-    Number.isInteger(order) &&
-    (kind !== "attributes" ||
-      (Number.isInteger(minimum) &&
-        Number.isInteger(maximum) &&
-        Number.isInteger(defaultValue) &&
-        minimum <= defaultValue &&
-        defaultValue <= maximum));
-  const modelDirty =
-    Boolean(name.trim()) ||
-    Boolean(editing) ||
-    order !== 0 ||
-    (kind === "attributes" &&
-      (minimum !== 0 || maximum !== 100 || defaultValue !== 50));
-  useBlocker({
-    shouldBlockFn: () =>
-      modelDirty &&
-      !window.confirm("Leave without publishing this Model option?"),
-    enableBeforeUnload: modelDirty,
-  });
-  useEffect(() => {
-    if (modelDirty) markDirty();
-  }, [markDirty, modelDirty]);
-  useEffect(() => {
-    void listModelRegistries()
-      .then(({ items }) => {
-        const editable = items.filter(
-          (registry) => registry.provenance.kind === "gm",
-        );
-        setRegistries(items);
-        setRegistryId((current) => current || editable[0]?.identity.id || "");
-      })
-      .catch(() =>
-        setMessage(
-          "Editable Model Registries could not be loaded. No release was changed.",
-        ),
-      );
-  }, []);
-  useEffect(() => {
-    if (!draft || !registryId || pending) return;
-    let active = true;
-    void getModelRegistry(registryId)
-      .then((registry) => {
-        if (!active) return;
-        const recovery = recoverableRegistryRelease(
-          draft.content,
-          draft.effectiveModels?.releases ?? [],
-          registryId,
-          registry.releases,
-        );
-        if (!recovery) return;
-        setPending({
-          release: {
-            id: recovery.identity.id,
-            registryId: recovery.identity.lineageId,
-            predecessorRevisionId: recovery.identity.predecessorRevisionId,
-            dependencyReleaseIds: (recovery.dependencies ?? []).map(
-              ({ releaseId }) => releaseId,
-            ),
-          },
-          label: recovery.name || "Published Model release",
-        });
-        setMessage(
-          "A published Model release is ready to adopt into this World draft. Adopt it before publishing another option.",
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [draft, pending, registryId]);
-
-  if (!canEdit)
-    return (
-      <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
-        <h1 className="text-4xl font-semibold">{modelLabel}s</h1>
-        <Alert tone="warning" className="mt-8">
-          {draft?.status === "stale"
-            ? "This World draft changed elsewhere. Reload it before publishing or adopting Model releases."
-            : "This World is archived and read only. Restore it before publishing or adopting Model releases."}
-        </Alert>
-      </main>
-    );
-
-  async function adopt(
-    release: {
-      id: string;
-      registryId: string;
-      predecessorRevisionId?: string;
-      dependencyReleaseIds: string[];
-    },
-    label: string,
-  ) {
-    if (!draft) return false;
-    const adoptedDraft = draftAdoptingRegistryRelease(
-      draft,
-      draft.effectiveModels?.releases ?? [],
-      release,
-    );
-    if (!adoptedDraft) {
-      setMessage(
-        "The World’s selected Model release changed. Reload this workspace before adopting the new release.",
-      );
-      return false;
-    }
-    const saved = await saveDraft(adoptedDraft);
-    if (!saved) {
-      setPending({ release, label });
-      setMessage(
-        `${label} was published in the Model Registry, but this World did not adopt that release. Review the draft conflict, then retry adoption.`,
-      );
-      return false;
-    }
-    try {
-      await refreshEffectiveModels();
-    } catch {
-      setPending(undefined);
-      setMessage(
-        `${label} was published and adopted. Reload the workspace to see the refreshed editor fields.`,
-      );
-      return true;
-    }
-    setPending(undefined);
-    setMessage(
-      `${label} is now part of this World’s selected Model release and is available in compatible editors.`,
-    );
-    return true;
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!draft || !name.trim()) return;
-    const vocabularyRole =
-      kind === "attributes"
-        ? "aow:attribute-registry"
-        : kind === "equipment-slots"
-          ? "aow:equipment-slot-registry"
-          : "aow:profession-rank-registry";
-    const semanticRole =
-      kind === "attributes"
-        ? "aow:attribute"
-        : kind === "equipment-slots"
-          ? "aow:equipment-slot"
-          : "aow:profession-rank";
-    const vocabulary = draft.effectiveModels?.elements?.find(
-      (element) =>
-        element.semanticRole === vocabularyRole &&
-        element.payload?.kind === "vocabulary",
-    );
-    if (!vocabulary?.elementId) {
-      setMessage(
-        `The effective ${modelLabel} vocabulary could not be resolved. No release was changed.`,
-      );
-      return;
-    }
-    setWorking(true);
-    setMessage("");
-    try {
-      let selected = gmRegistries.find(
-        (registry) => registry.identity.id === registryId,
-      );
-      if (!selected) {
-        selected = await createModelRegistry({
-          key: "custom:models",
-          name: "Custom Models",
-        });
-        setRegistries((current) => [...current, selected!]);
-        setRegistryId(selected.identity.id);
-      }
-      const registry = await getModelRegistry(selected.identity.id);
-      const recovery = recoverableRegistryRelease(
-        draft.content,
-        draft.effectiveModels?.releases ?? [],
-        selected.identity.id,
-        registry.releases,
-      );
-      if (recovery) {
-        await adopt(
-          {
-            id: recovery.identity.id,
-            registryId: recovery.identity.lineageId,
-            predecessorRevisionId: recovery.identity.predecessorRevisionId,
-            dependencyReleaseIds: (recovery.dependencies ?? []).map(
-              ({ releaseId }) => releaseId,
-            ),
-          },
-          recovery.name || "Published Model release",
-        );
-        return;
-      }
-      const predecessor = registry.releases[0];
-      const currentElement = editing
-        ? registry.elements.find((element) => element.id === editing.elementId)
-        : undefined;
-      if (editing && !currentElement?.currentRevision) {
-        setMessage(
-          "That Model option changed or is no longer editable. Reload and try again.",
-        );
-        return;
-      }
-      const valueMetadata =
-        kind === "attributes"
-          ? {
-              "aow:minimum": minimum,
-              "aow:maximum": maximum,
-              "aow:default": defaultValue,
-            }
-          : undefined;
-      const presentation = {
-        ...(currentElement?.currentRevision?.presentation ?? {}),
-        label: name.trim(),
-        order,
-      };
-      const payload = currentElement?.currentRevision
-        ? {
-            ...currentElement.currentRevision.payload,
-            ...(valueMetadata ? { valueMetadata } : {}),
-          }
-        : {
-            kind: "vocabulary-option",
-            vocabularyId: vocabulary.elementId,
-            ...(valueMetadata ? { valueMetadata } : {}),
-          };
-      const result = await extendModelRegistryRelease(selected.identity.id, {
-        name: `${editing ? "Revise" : "Add"} ${name.trim()}`,
-        predecessorRevisionId: predecessor?.identity.id,
-        ...(editing && currentElement?.currentRevision
-          ? {
-              revisions: [
-                {
-                  elementId: currentElement.id,
-                  predecessorRevisionId:
-                    currentElement.currentRevision.identity.id,
-                  payload,
-                  presentation,
-                  dependencies: currentElement.currentRevision.dependencies,
-                },
-              ],
-            }
-          : {
-              elements: [
-                {
-                  key: modelExtensionKey(kind, name),
-                  kind: "vocabulary-option" as const,
-                  semanticRole,
-                  applicability: { kind: "global" },
-                  payload,
-                  presentation,
-                },
-              ],
-            }),
-      });
-      const label = name.trim();
-      const adopted = await adopt(
-        {
-          id: result.release.identity.id,
-          registryId: result.release.identity.lineageId,
-          predecessorRevisionId: result.release.identity.predecessorRevisionId,
-          dependencyReleaseIds: (result.release.dependencies ?? []).map(
-            ({ releaseId }) => releaseId,
-          ),
-        },
-        label,
-      );
-      if (adopted) {
-        setName("");
-        setMinimum(0);
-        setMaximum(100);
-        setDefaultValue(50);
-        setOrder(0);
-        setEditing(undefined);
-      }
-    } catch (error) {
-      setMessage(
-        error instanceof ApiRequestError && error.status === 409
-          ? "The Model Registry advanced before this release was published. Reload and try again."
-          : "The Model release could not be published. No World draft selection was changed.",
-      );
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  function editOption(option: WorldModelOption) {
-    const metadata = objectValue(option.payload?.valueMetadata);
-    setEditing(option);
-    setRegistryId(option.registryId ?? "");
-    setName(option.name);
-    setMinimum(
-      typeof metadata["aow:minimum"] === "number" ? metadata["aow:minimum"] : 0,
-    );
-    setMaximum(
-      typeof metadata["aow:maximum"] === "number"
-        ? metadata["aow:maximum"]
-        : 100,
-    );
-    setDefaultValue(
-      typeof metadata["aow:default"] === "number"
-        ? metadata["aow:default"]
-        : 50,
-    );
-    setOrder(
-      typeof option.presentation?.order === "number"
-        ? option.presentation.order
-        : 0,
-    );
-    setMessage("");
-  }
-
-  async function archiveOption(option: WorldModelOption) {
-    if (
-      !draft ||
-      !option.registryId ||
-      !option.elementId ||
-      !window.confirm(
-        `Archive ${option.name}? Existing releases will retain it, but the new release will omit it.`,
-      )
-    )
-      return;
-    setWorking(true);
-    setMessage("");
-    try {
-      const registry = await getModelRegistry(option.registryId);
-      const recovery = recoverableRegistryRelease(
-        draft.content,
-        draft.effectiveModels?.releases ?? [],
-        option.registryId,
-        registry.releases,
-      );
-      if (recovery) {
-        await adopt(
-          {
-            id: recovery.identity.id,
-            registryId: recovery.identity.lineageId,
-            predecessorRevisionId: recovery.identity.predecessorRevisionId,
-            dependencyReleaseIds: (recovery.dependencies ?? []).map(
-              ({ releaseId }) => releaseId,
-            ),
-          },
-          recovery.name || "Published Model release",
-        );
-        return;
-      }
-      const result = await extendModelRegistryRelease(option.registryId, {
-        name: `Archive ${option.name}`,
-        predecessorRevisionId: registry.releases[0]?.identity.id,
-        archiveElementIds: [option.elementId],
-      });
-      await adopt(
-        {
-          id: result.release.identity.id,
-          registryId: result.release.identity.lineageId,
-          predecessorRevisionId: result.release.identity.predecessorRevisionId,
-          dependencyReleaseIds: (result.release.dependencies ?? []).map(
-            ({ releaseId }) => releaseId,
-          ),
-        },
-        option.name,
-      );
-    } catch (error) {
-      setMessage(
-        error instanceof ApiRequestError && error.status === 409
-          ? "The Model Registry advanced before this option was archived. Reload and try again."
-          : "The Model option could not be archived. No World draft selection was changed.",
-      );
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  return (
-    <main className="mx-auto max-w-4xl px-6 py-12 lg:px-10">
-      <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        Characters · Model &amp; Taxonomies
-      </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-        {modelLabel}s
-      </h1>
-      <p className="mt-4 text-base-content/65">
-        These values come from the exact immutable Model Schema release selected
-        by this World draft.
-      </p>
-      <ul className="mt-6 grid gap-2 sm:grid-cols-2">
-        {(options ?? []).map((option) => (
-          <li
-            key={option.key}
-            className="rounded-box border border-base-300 bg-base-200 p-4"
-          >
-            <span className="font-semibold">{option.name}</span>
-            {option.description && (
-              <p className="mt-1 text-sm text-base-content/55">
-                {option.description}
-              </p>
-            )}
-            {gmRegistries.some(
-              (registry) => registry.identity.id === option.registryId,
-            ) && (
-              <div className="mt-3 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  tone="outline"
-                  disabled={working}
-                  onClick={() => editOption(option)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  tone="outline"
-                  disabled={working}
-                  onClick={() => void archiveOption(option)}
-                >
-                  Archive
-                </Button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-      {!options?.length && (
-        <Alert tone="warning" className="mt-6">
-          No effective options are available for this World.
-        </Alert>
-      )}
-      <DraftRequired>
-        <form
-          onSubmit={(event) => void submit(event)}
-          className="mt-8 rounded-box border border-base-300 p-5"
-        >
-          <h2 className="text-xl font-semibold">
-            {editing ? "Edit" : "Add"} {modelLabel}
-          </h2>
-          <p className="mt-2 text-sm text-base-content/60">
-            This publishes a successor release, then explicitly adopts that
-            exact release in the working World draft.
-          </p>
-          {gmRegistries.length > 1 ? (
-            <Field label="Editable Model Registry" className="mt-4">
-              <Select
-                value={registryId}
-                disabled={Boolean(editing)}
-                onChange={(event) => setRegistryId(event.target.value)}
-                className="mt-2 w-full"
-              >
-                {gmRegistries.map((registry) => (
-                  <option
-                    key={registry.identity.id}
-                    value={registry.identity.id}
-                  >
-                    {registry.name || "Unnamed Model Registry"}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : (
-            <p className="mt-4 text-sm text-base-content/55">
-              {gmRegistries[0]
-                ? `Publishing to ${gmRegistries[0].name || "your editable Model Registry"}.`
-                : "Your editable Custom Models registry will be created when you publish the first option."}
-            </p>
-          )}
-          <Field label="Display name" required className="mt-4">
-            <Input
-              required
-              maxLength={80}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={
-                kind === "attributes"
-                  ? "Likeable"
-                  : kind === "equipment-slots"
-                    ? "Wings"
-                    : "Initiate"
-              }
-              className="mt-2 w-full"
-            />
-          </Field>
-          {kind === "attributes" && (
-            <Fieldset className="mt-5 rounded-box border border-base-300 p-4">
-              <Legend className="px-2 font-semibold">Numeric behavior</Legend>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Minimum" required>
-                  <Input
-                    required
-                    type="number"
-                    value={minimum}
-                    onChange={(event) => setMinimum(Number(event.target.value))}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Maximum" required>
-                  <Input
-                    required
-                    type="number"
-                    value={maximum}
-                    onChange={(event) => setMaximum(Number(event.target.value))}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Default" required>
-                  <Input
-                    required
-                    type="number"
-                    value={defaultValue}
-                    onChange={(event) =>
-                      setDefaultValue(Number(event.target.value))
-                    }
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Display order" required>
-                  <Input
-                    required
-                    type="number"
-                    value={order}
-                    onChange={(event) => setOrder(Number(event.target.value))}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-              </div>
-              {!modelMetadataValid && (
-                <p className="mt-3 text-sm text-error" role="alert">
-                  Use whole numbers and keep the default between the minimum and
-                  maximum.
-                </p>
-              )}
-            </Fieldset>
-          )}
-          {kind !== "attributes" && (
-            <Field label="Display order" required className="mt-4">
-              <Input
-                required
-                type="number"
-                value={order}
-                onChange={(event) => setOrder(Number(event.target.value))}
-                className="mt-2 w-full"
-              />
-            </Field>
-          )}
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              type="submit"
-              tone="primary"
-              loading={working}
-              disabled={
-                working ||
-                Boolean(pending) ||
-                draft?.status === "stale" ||
-                !name.trim() ||
-                !modelMetadataValid
-              }
-            >
-              {editing ? "Publish revision and adopt" : "Publish and adopt"}
-            </Button>
-            {editing && (
-              <Button
-                type="button"
-                tone="outline"
-                disabled={working}
-                onClick={() => {
-                  setEditing(undefined);
-                  setName("");
-                  setMinimum(0);
-                  setMaximum(100);
-                  setDefaultValue(50);
-                  setOrder(0);
-                }}
-              >
-                Cancel edit
-              </Button>
-            )}
-            {pending && (
-              <Button
-                type="button"
-                tone="outline"
-                disabled={draft?.status === "stale"}
-                onClick={() => void adopt(pending.release, pending.label)}
-              >
-                Retry adoption
-              </Button>
-            )}
-          </div>
-          {message && (
-            <Alert className="mt-4" aria-live="polite">
-              {message}
-            </Alert>
-          )}
-        </form>
-      </DraftRequired>
-    </main>
-  );
-}
+export { WorldModelEditor } from "./WorldModelEditor";

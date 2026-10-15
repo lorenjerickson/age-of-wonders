@@ -1,3 +1,4 @@
+import { Map as DomainMap } from "@aow/domain";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -9,10 +10,7 @@ import {
   Select,
 } from "@aow/ui";
 import {
-  applyTerrainWrites,
-  assertTerrainVolume,
   createTerrainVolume,
-  editTerrainSelection,
   terrainCellIndex,
   terrainShapePreset,
   terrainRegionAddresses,
@@ -187,7 +185,7 @@ export function LocationTerrainEditor({
     setBusy("Loading terrain");
     void (async () => {
       const next = await getLocationTerrain(definition.id, locationId);
-      assertTerrainVolume(next);
+      DomainMap.assertTerrain(next);
       if (!cancelled) {
         loadedMap.current = mapKey;
         setVolume(next);
@@ -260,8 +258,8 @@ export function LocationTerrainEditor({
       }
       commit(
         tool === "erase"
-          ? editTerrainSelection(volume, cells, { kind: "remove" })
-          : applyTerrainWrites(
+          ? DomainMap.editTerrainSelection(volume, cells, { kind: "remove" })
+          : DomainMap.applyTerrainWrites(
               volume,
               terrainPlacementWrites(
                 volume,
@@ -308,7 +306,7 @@ export function LocationTerrainEditor({
         setMessage("Select occupied cells to change their openings.");
         return;
       }
-      commit(applyTerrainWrites(volume, writes));
+      commit(DomainMap.applyTerrainWrites(volume, writes));
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -321,7 +319,7 @@ export function LocationTerrainEditor({
     if (!volume) return;
     try {
       commit(
-        editTerrainSelection(
+        DomainMap.editTerrainSelection(
           volume,
           selection,
           remove
@@ -342,7 +340,10 @@ export function LocationTerrainEditor({
     if (!volume) return;
     const entry = (forward ? redo : history).at(-1);
     if (!entry) return;
-    const next = applyTerrainWrites(volume, forward ? entry.redo : entry.undo);
+    const next = DomainMap.applyTerrainWrites(
+      volume,
+      forward ? entry.redo : entry.undo,
+    );
     setVolume(next.volume);
     setSelection(forward ? entry.selectionAfter : entry.selectionBefore);
     setActor((a) => terrainPreviewActor(next.volume, a.x, a.y));
@@ -614,7 +615,8 @@ export function LocationTerrainEditor({
                     selection,
                     smoothing,
                   );
-                  if (writes.length) commit(applyTerrainWrites(volume, writes));
+                  if (writes.length)
+                    commit(DomainMap.applyTerrainWrites(volume, writes));
                 } catch (error) {
                   setMessage(
                     error instanceof Error

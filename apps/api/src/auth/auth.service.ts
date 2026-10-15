@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -9,6 +10,7 @@ import { UserRole } from "@prisma/client";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ContactProtector } from "../invitations/invitation-security";
 import { PrismaService } from "../prisma/prisma.service";
+import { hashPassword, verifyPassword } from "./password-security";
 import type { AuthenticatedUser } from "./auth.types";
 
 export interface EstablishAdministratorInput {
@@ -16,10 +18,16 @@ export interface EstablishAdministratorInput {
   email: string;
   phone: string;
   grantGameMaster: boolean;
+  accountName?: string;
+  password?: string;
 }
 
 @Injectable()
 export class AuthService {
+  private readonly passwordAttempts = new Map<
+    string,
+    { count: number; expiresAt: number }
+  >();
   private readonly bootstrapFailures = new Map<
     string,
     { count: number; windowStartedAt: number }
@@ -29,6 +37,129 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly contacts: ContactProtector,
   ) {}
+
+  async credentialStatus(userId: string) {
+    const credential = await this.prisma.localCredential.findUnique({
+      where: { userId },
+      select: { accountName: true },
+    });
+    return credential
+      ? { configured: true, accountName: credential.accountName }
+      : { configured: false };
+  }
+
+  private reservePasswordAttempt(key: string): void {
+    const now = Date.now();
+    for (const [entry, value] of this.passwordAttempts) {
+      if (value.expiresAt <= now) this.passwordAttempts.delete(entry);
+    }
+    const current = this.passwordAttempts.get(key);
+    if (
+      (current?.count ?? 0) >= 10 ||
+      (!current && this.passwordAttempts.size >= 10000)
+    ) {
+      throw new HttpException(
+        "Too many sign-in attempts. Try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    this.passwordAttempts.set(key, {
+      count: (current?.count ?? 0) + 1,
+      expiresAt: current?.expiresAt ?? now + 15 * 60 * 1000,
+    });
+  }
+
+  private validateCredentials(accountName: string, password: string): string {
+    const normalized = accountName.trim().toLowerCase();
+    if (
+      !/^[a-z0-9._-]{3,64}$/.test(normalized) ||
+      password.length < 12 ||
+      password.length > 128
+    ) {
+      throw new BadRequestException(
+        "Use an account name of 3–64 letters, numbers, dots, underscores or hyphens and a password of 12–128 characters.",
+      );
+    }
+    return normalized;
+  }
+
+  async authenticatePassword(
+    accountName: string,
+    password: string,
+    attemptKey = "unknown",
+  ): Promise<AuthenticatedUser> {
+    this.reservePasswordAttempt(`login:${attemptKey}`);
+    const credential = await this.prisma.localCredential.findUnique({
+      where: { accountName: accountName.trim().toLowerCase() },
+      include: { user: true },
+    });
+    if (
+      !(await verifyPassword(password, credential?.passwordHash)) ||
+      !credential
+    ) {
+      throw new UnauthorizedException("Account name or password is incorrect.");
+    }
+    return {
+      id: credential.user.id,
+      displayName: credential.user.displayName,
+      role: credential.user.role,
+    };
+  }
+
+  async configureCredentials(
+    userId: string,
+    input: { accountName: string; password: string; currentPassword?: string },
+  ) {
+    this.reservePasswordAttempt(`configure:${userId}`);
+    const accountName = this.validateCredentials(
+      input.accountName,
+      input.password,
+    );
+    const existing = await this.prisma.localCredential.findUnique({
+      where: { userId },
+    });
+    if (
+      existing &&
+      !(await verifyPassword(
+        input.currentPassword ?? "",
+        existing.passwordHash,
+      ))
+    ) {
+      throw new UnauthorizedException("Current password is incorrect.");
+    }
+    const passwordHash = await hashPassword(input.password);
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (existing) {
+          const updated = await tx.localCredential.updateMany({
+            where: { userId, passwordHash: existing.passwordHash },
+            data: { accountName, passwordHash },
+          });
+          if (updated.count !== 1)
+            throw new HttpException(
+              "Credentials changed. Try again.",
+              HttpStatus.CONFLICT,
+            );
+          await tx.authSession.updateMany({
+            where: { userId, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+        } else {
+          await tx.localCredential.create({
+            data: { userId, accountName, passwordHash },
+          });
+        }
+      });
+    } catch (error) {
+      if (isPrismaCode(error, "P2002"))
+        throw new HttpException(
+          "These credentials cannot be configured. Choose another account name or refresh and try again.",
+          HttpStatus.CONFLICT,
+        );
+      throw error;
+    }
+    return { configured: true, accountName };
+  }
 
   bootstrapToken(): string {
     const configured = this.config.get<string>("GM_BOOTSTRAP_TOKEN");
@@ -96,6 +227,21 @@ export class AuthService {
     attemptKey = "unknown",
   ): Promise<AuthenticatedUser> {
     this.verifyBootstrapCredential(token, attemptKey);
+    if ((input.accountName === undefined) !== (input.password === undefined)) {
+      throw new BadRequestException(
+        "Account name and password must be supplied together.",
+      );
+    }
+    const credentials =
+      input.accountName !== undefined && input.password !== undefined
+        ? {
+            accountName: this.validateCredentials(
+              input.accountName,
+              input.password,
+            ),
+            passwordHash: await hashPassword(input.password),
+          }
+        : undefined;
     const email = this.contacts.protectEmail(input.email);
     const phone = this.contacts.protectPhone(input.phone);
     const providerSubject = this.contacts.protectOpaque(
@@ -139,6 +285,11 @@ export class AuthService {
                     : UserRole.PARTICIPANT,
                 },
               });
+          if (credentials) {
+            await tx.localCredential.create({
+              data: { userId: user.id, ...credentials },
+            });
+          }
           const profile = await tx.playerProfile.findUnique({
             where: { userId: user.id },
             select: { id: true },

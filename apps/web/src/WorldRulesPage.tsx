@@ -1,10 +1,15 @@
-import { Fieldset } from "@aow/ui";
+import { worldWorkspaceSuffix } from "./worldAuthoringModel";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useBlocker } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
+import { useInternalNavigate } from "./navigation";
+import { WorldRuleContext } from "./WorldRuleContext";
+import {
+  worldRuleVisibleText,
+  parseWorldRuleRoute,
+} from "./worldRuleAuthoringModel";
 import { Badge, Button, Input, Label } from "@aow/ui";
 import {
   validateWorldRule,
-  type WorldRule,
   type WorldRuleExecution,
   type WorldRuleEvent,
   type RuleStateView,
@@ -20,30 +25,16 @@ import {
   type WorldRulesCollection,
 } from "./api";
 import { DraftRequired, useWorldAuthoring } from "./WorldAuthoringShell";
-import { WorldRuleEditor } from "./WorldRuleEditor";
 import { statusLabel } from "./campaignLibraryModel";
 
-function draftRule(): WorldRule {
-  return {
-    formatVersion: 1,
-    id: "new-rule",
-    name: "New rule",
-    revision: 1,
-    lifecycle: "disabled",
-    priority: 0,
-    trigger: { event: "aow:movement-declared", version: 1 },
-    effects: [
-      { kind: "set-local", key: "cost", value: { kind: "constant", value: 0 } },
-    ],
-    audit: { createdBy: "draft-author", updatedAt: new Date().toISOString() },
-  };
-}
 export function WorldRulesPage() {
   const { definition, draft, canEdit, adoptDraft } = useWorldAuthoring();
   const [collection, setCollection] = useState<WorldRulesCollection>();
-  const [editor, setEditor] = useState<WorldRule>();
-  const [existingId, setExistingId] = useState<string>();
-  const [baseline, setBaseline] = useState("");
+  const route = parseWorldRuleRoute(useLocation().pathname);
+  const navigateTo = useInternalNavigate();
+  const workspaceSuffix = worldWorkspaceSuffix(useLocation().searchStr);
+  const navigate = (href: string) => navigateTo(href + workspaceSuffix);
+  const base = `/worlds/${encodeURIComponent(definition.id)}/rules`;
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -54,18 +45,13 @@ export function WorldRulesPage() {
   const [result, setResult] = useState<WorldRuleExecution>();
   const requestSequence = useRef(0);
   const pending = useRef(false);
-  const dirty = Boolean(editor && JSON.stringify(editor) !== baseline);
-  const validation = editor ? validateWorldRule(editor) : undefined;
-  useBlocker({
-    shouldBlockFn: () =>
-      pending.current ||
-      (dirty && !window.confirm("Leave without saving this rule?")),
-    enableBeforeUnload: dirty || Boolean(busy),
-  });
+  const dirty = false;
   const load = useCallback(async () => {
     const sequence = ++requestSequence.current;
     try {
       const data = await getWorldRules(definition.id);
+      if (!Array.isArray(data.rules))
+        throw new Error("Unsupported rule collection");
       if (sequence === requestSequence.current) {
         setCollection(data);
         setError("");
@@ -98,18 +84,11 @@ export function WorldRulesPage() {
         expectedStorageRevision: collection.storageRevision,
       }
     : undefined;
-  function open(rule: WorldRule, id?: string) {
-    setEditor(rule);
-    setExistingId(id);
-    setBaseline(JSON.stringify(rule));
-    setError("");
-    setNotice("");
-  }
   async function mutate(
     action: string,
     operation: () => Promise<WorldRulesCollection>,
   ) {
-    if (pending.current || stale) return;
+    if (pending.current || stale || !canEdit) return;
     pending.current = true;
     setBusy(action);
     setError("");
@@ -118,9 +97,6 @@ export function WorldRulesPage() {
     try {
       const data = await operation();
       setCollection(data);
-      setEditor(undefined);
-      setExistingId(undefined);
-      setBaseline("");
       setResult(undefined);
       setNotice(
         "World draft rules saved. Publish and explicitly migrate downstream captures to use these changes in play.",
@@ -210,10 +186,28 @@ export function WorldRulesPage() {
       setBusy("");
     }
   }
+  if (route.kind !== "list")
+    return (
+      <DraftRequired>
+        {collection ? (
+          <WorldRuleContext
+            key={`${routeKey(route)}:${collection.storageRevision}`}
+            route={route}
+            collection={collection}
+            reload={load}
+            onSaved={setCollection}
+          />
+        ) : (
+          <main className="p-6">
+            <p>{error || "Loading rules…"}</p>
+          </main>
+        )}
+      </DraftRequired>
+    );
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10 lg:px-10">
+    <main className="mx-auto max-w-6xl px-6 py-10 lg:px-10 [&_button]:min-h-11 [&_input]:min-h-11 [&_select]:min-h-11">
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-        {definition.name || "World"}
+        {worldRuleVisibleText(definition.name, "World", [definition.id])}
       </p>
       <h1 className="mt-3 text-4xl font-semibold">Rules</h1>
       <p className="mt-4 max-w-3xl opacity-65">
@@ -241,7 +235,7 @@ export function WorldRulesPage() {
             <Button
               tone="primary"
               disabled={Boolean(busy) || dirty || !collection || !canEdit}
-              onClick={() => open(draftRule())}
+              onClick={() => void navigate(`${base}/new`)}
             >
               Create rule
             </Button>
@@ -249,15 +243,6 @@ export function WorldRulesPage() {
               tone="outline"
               disabled={Boolean(busy)}
               onClick={() => {
-                if (
-                  dirty &&
-                  !window.confirm(
-                    "Discard unsaved rule edits and load the latest rules?",
-                  )
-                )
-                  return;
-                setEditor(undefined);
-                setBaseline("");
                 void load();
               }}
             >
@@ -298,168 +283,168 @@ export function WorldRulesPage() {
               Add starter movement rules
             </Button>
           </div>
-          <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
+          <div className="mt-6 grid min-w-0 gap-6">
             <section aria-labelledby="world-rules-list">
               <h2 id="world-rules-list" className="text-xl font-semibold">
                 World draft rules
               </h2>
               {collection?.rules.length ? (
                 <ul className="mt-4 grid gap-3">
-                  {collection.rules.map((rule) => (
-                    <li
-                      key={rule.id}
-                      className="rounded-box border border-base-300 bg-base-200 p-4"
-                    >
-                      <p className="font-semibold">{rule.name}</p>
-                      <p className="mt-1 text-xs opacity-65">
-                        Revision {rule.revision} · priority {rule.priority}
-                      </p>
-                      <Badge className="mt-2" outline>
-                        {statusLabel(rule.lifecycle)}
-                      </Badge>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          tone="outline"
-                          disabled={Boolean(busy) || dirty}
-                          onClick={() => open(rule, rule.id)}
-                        >
-                          Edit {rule.name}
-                        </Button>
-                        <Button
-                          size="sm"
-                          tone="outline"
-                          disabled={Boolean(busy) || dirty || !revision}
-                          onClick={() =>
-                            revision &&
-                            void mutate("duplicate", () =>
-                              duplicateWorldRule(
-                                definition.id,
-                                rule.id,
-                                revision,
+                  {collection.rules.map((rule, index) =>
+                    !validateWorldRule(rule).valid ||
+                    collection.rules.filter((entry) => entry?.id === rule?.id)
+                      .length !== 1 ? (
+                      <li
+                        key={`unsupported-${index}`}
+                        className="rounded-box border border-base-300 p-4"
+                      >
+                        <p className="font-semibold">
+                          {worldRuleVisibleText(rule?.name, "Imported rule")}
+                        </p>
+                        <p>
+                          This imported rule is unsupported or ambiguous. Its
+                          content is preserved; editing is unavailable.
+                        </p>
+                      </li>
+                    ) : (
+                      <li
+                        key={rule.id}
+                        className="rounded-box border border-base-300 bg-base-200 p-4"
+                      >
+                        <p className="font-semibold">
+                          {worldRuleVisibleText(
+                            rule.name,
+                            "Unnamed rule",
+                            collection.rules
+                              .map((entry) => entry?.id)
+                              .filter(
+                                (id): id is string => typeof id === "string",
                               ),
-                            )
-                          }
-                        >
-                          Duplicate
-                        </Button>
-                        <Button
-                          size="sm"
-                          tone="ghost"
-                          disabled={Boolean(busy) || dirty || !revision}
-                          onClick={() =>
-                            revision &&
-                            void mutate("lifecycle", () =>
-                              saveWorldRule(
-                                definition.id,
-                                {
-                                  ...revision,
-                                  rule: {
-                                    ...rule,
-                                    lifecycle:
-                                      rule.lifecycle === "enabled"
-                                        ? "disabled"
-                                        : "enabled",
-                                  },
-                                },
-                                rule.id,
-                              ),
-                            )
-                          }
-                        >
-                          {rule.lifecycle === "enabled" ? "Disable" : "Enable"}
-                        </Button>
-                        {rule.lifecycle !== "archived" && (
+                          )}
+                        </p>
+                        <p className="mt-1 text-xs opacity-65">
+                          Revision {rule.revision} · priority {rule.priority}
+                        </p>
+                        <Badge className="mt-2" outline>
+                          {statusLabel(rule.lifecycle)}
+                        </Badge>
+                        <div className="mt-3 flex flex-wrap gap-2">
                           <Button
-                            size="sm"
-                            tone="ghost"
-                            disabled={Boolean(busy) || dirty || !revision}
+                            size="md"
+                            tone="outline"
+                            disabled={Boolean(busy) || dirty}
+                            onClick={() =>
+                              void navigate(
+                                `${base}/${encodeURIComponent(rule.id)}/edit`,
+                              )
+                            }
+                          >
+                            Edit{" "}
+                            {worldRuleVisibleText(
+                              rule.name,
+                              "Unnamed rule",
+                              collection.rules
+                                .map((entry) => entry?.id)
+                                .filter(
+                                  (id): id is string => typeof id === "string",
+                                ),
+                            )}
+                          </Button>
+                          <Button
+                            size="md"
+                            tone="outline"
+                            disabled={
+                              Boolean(busy) ||
+                              dirty ||
+                              !revision ||
+                              !canEdit ||
+                              stale
+                            }
                             onClick={() =>
                               revision &&
-                              void mutate("archive", () =>
+                              void mutate("duplicate", () =>
+                                duplicateWorldRule(
+                                  definition.id,
+                                  rule.id,
+                                  revision,
+                                ),
+                              )
+                            }
+                          >
+                            Duplicate
+                          </Button>
+                          <Button
+                            size="md"
+                            tone="ghost"
+                            disabled={
+                              Boolean(busy) ||
+                              dirty ||
+                              !revision ||
+                              !canEdit ||
+                              stale
+                            }
+                            onClick={() =>
+                              revision &&
+                              void mutate("lifecycle", () =>
                                 saveWorldRule(
                                   definition.id,
                                   {
                                     ...revision,
-                                    rule: { ...rule, lifecycle: "archived" },
+                                    rule: {
+                                      ...rule,
+                                      lifecycle:
+                                        rule.lifecycle === "enabled"
+                                          ? "disabled"
+                                          : "enabled",
+                                    },
                                   },
                                   rule.id,
                                 ),
                               )
                             }
                           >
-                            Archive
+                            {rule.lifecycle === "enabled"
+                              ? "Disable"
+                              : "Enable"}
                           </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                          {rule.lifecycle !== "archived" && (
+                            <Button
+                              size="md"
+                              tone="ghost"
+                              disabled={
+                                Boolean(busy) ||
+                                dirty ||
+                                !revision ||
+                                !canEdit ||
+                                stale
+                              }
+                              onClick={() =>
+                                revision &&
+                                void mutate("archive", () =>
+                                  saveWorldRule(
+                                    definition.id,
+                                    {
+                                      ...revision,
+                                      rule: { ...rule, lifecycle: "archived" },
+                                    },
+                                    rule.id,
+                                  ),
+                                )
+                              }
+                            >
+                              Archive
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ),
+                  )}
                 </ul>
               ) : (
                 <p className="mt-4 text-sm opacity-65">
                   {collection
                     ? "No rules yet. This World has no automatic mechanics."
                     : "Loading rules…"}
-                </p>
-              )}
-            </section>
-            <section
-              className="min-w-0 rounded-box border border-base-300 bg-base-200 p-5"
-              aria-label="Structured rule editor"
-            >
-              {editor ? (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (revision && validation?.valid)
-                      void mutate("save", () =>
-                        saveWorldRule(
-                          definition.id,
-                          { ...revision, rule: editor },
-                          existingId,
-                        ),
-                      );
-                  }}
-                >
-                  <Fieldset disabled={Boolean(busy) || !canEdit}>
-                    <WorldRuleEditor rule={editor} onChange={setEditor} />
-                  </Fieldset>
-                  {validation && !validation.valid && (
-                    <ul className="mt-4 text-sm text-error" role="alert">
-                      {validation.issues.map((issue, index) => (
-                        <li key={index}>{issue}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="mt-5 flex gap-3">
-                    <Button
-                      type="submit"
-                      tone="primary"
-                      disabled={
-                        Boolean(busy) ||
-                        stale ||
-                        !validation?.valid ||
-                        !revision
-                      }
-                    >
-                      {existingId ? "Save rule" : "Create rule"}
-                    </Button>
-                    <Button
-                      tone="outline"
-                      disabled={Boolean(busy)}
-                      onClick={() => {
-                        setEditor(undefined);
-                        setBaseline("");
-                      }}
-                    >
-                      Discard editor changes
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <p className="text-sm opacity-65">
-                  Choose a rule to edit its trigger, conditions and effect
-                  order, or create a rule.
                 </p>
               )}
             </section>
@@ -533,4 +518,8 @@ export function WorldRulesPage() {
       </DraftRequired>
     </main>
   );
+}
+
+function routeKey(route: ReturnType<typeof parseWorldRuleRoute>) {
+  return JSON.stringify(route);
 }

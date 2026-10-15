@@ -1,7 +1,10 @@
 import {
-  validateCampaignDefinitionContent,
+  PlacementDefinition,
+  PlotDefinition as PlotEntity,
+  type PlotDefinitionValidationIssue,
+} from "@aow/domain";
+import {
   type CampaignDefinitionContent,
-  type CampaignDefinitionId,
   type CampaignPlacementDefinition,
   type CreatureId,
   type DefinitionId,
@@ -113,21 +116,83 @@ export function validateCampaignDefinitionDraft(
 
   if (isCampaignContent(contentValue)) {
     const world = worldContext(capturedWorld);
-    for (const issue of validateCampaignDefinitionContent(
-      contentValue,
-      plots,
-      placements,
-      {
-        campaignDefinitionId: campaignDefinitionId as CampaignDefinitionId,
-        capturedLocationIds: world.locations,
-        capturedCreatureIds: world.creatures,
-        capturedItemDefinitionIds: world.items,
-        capturedDefinitionIds: world.definitions,
-        capturedWorldPlacements: world.placements,
-      },
-    ).issues) {
-      add(issue.code, issue.subject, issue.detail);
+    // Campaign owns aggregate membership; each authored entity owns its own policy.
+    compareMembership(
+      contentValue.plotDefinitionIds,
+      plots.map(({ id }) => id),
+      "plot-membership-mismatch",
+      "The declared Plot collection must exactly match the captured Plot records.",
+      add,
+    );
+    compareMembership(
+      contentValue.placementDefinitionIds,
+      placements.map(({ id }) => id),
+      "placement-membership-mismatch",
+      "The declared placement collection must exactly match the captured placement records.",
+      add,
+    );
+    if (
+      new Set(contentValue.modelSchemaReleaseIds).size !==
+      contentValue.modelSchemaReleaseIds.length
+    )
+      add(
+        "model-release-duplicate",
+        "Campaign Definition",
+        "An exact Model Schema release may be selected only once.",
+      );
+    for (const [plotIndex, plot] of plots.entries()) {
+      const entity = PlotEntity.deserializePayload(plot, {
+        mode: "publication",
+        sourceId: plot.id,
+        campaignDefinitionId,
+        plots,
+        placements,
+        capturedLocationIds: [...world.locations],
+      });
+      try {
+        for (const issue of entity.state.metadata.validity.issues) {
+          const subject = (issue as PlotDefinitionValidationIssue).subject;
+          // Each Plot has the same complete graph evidence. Project that list once,
+          // retaining distinct diagnostics even when multiple Plots share a name.
+          if (issue.path === "hierarchy" && plotIndex > 0) continue;
+          add(issue.code, subject, issue.message);
+        }
+      } finally {
+        entity.dispose();
+      }
     }
+    for (const placement of placements) {
+      const entity = PlacementDefinition.deserializePayload(placement, {
+        scope: "campaign",
+        mode: "publication",
+        sourceId: placement.id,
+        capturedLocationIds: [...world.locations],
+        capturedCreatureIds: [...world.creatures],
+        capturedItemDefinitionIds: [...world.items],
+        capturedDefinitionIds: [...world.definitions],
+        capturedWorldPlacements: [...world.placements.values()],
+        plotIds: plots.map(({ id }) => id),
+      });
+      try {
+        for (const issue of entity.state.metadata.validity.issues)
+          add(
+            issue.code,
+            placement.name?.trim() || "Campaign placement",
+            issue.message,
+          );
+      } finally {
+        entity.dispose();
+      }
+    }
+    if (
+      contentValue.preparation?.startingLocationId !== undefined &&
+      !world.locations.has(contentValue.preparation.startingLocationId)
+    )
+      add(
+        "location-not-captured",
+        "Campaign preparation",
+        "The starting Location is not present in the captured World.",
+      );
     for (const canvas of contentValue.preparation?.locationCanvases ?? []) {
       if (!world.locations.has(canvas.locationId)) {
         add(
@@ -137,35 +202,8 @@ export function validateCampaignDefinitionDraft(
         );
       }
     }
-    validatePlotMemberIdentity(plots, add);
-    for (const placement of placements) {
-      if (
-        new Set(placement.plotDefinitionIds).size !==
-        placement.plotDefinitionIds.length
-      ) {
-        add(
-          "placement-plot-id-duplicate",
-          placement.name?.trim() || "Campaign placement",
-          "A Plot may be associated with a placement only once.",
-        );
-      }
-      if (
-        placement.kind === "independent" &&
-        placement.source.kind === "actor-role" &&
-        placement.source.suggestedCreatureDefinitionId !== undefined &&
-        !world.creatures.has(
-          placement.source
-            .suggestedCreatureDefinitionId as unknown as CreatureId,
-        )
-      ) {
-        add(
-          "placement-source-not-creature",
-          placement.name?.trim() || "Campaign placement",
-          "The suggested source must be a captured Creature definition.",
-        );
-      }
-    }
   }
+
   issues.sort(
     (left, right) =>
       left.code.localeCompare(right.code) ||
@@ -190,201 +228,52 @@ function isCampaignContent(value: unknown): value is CampaignDefinitionContent {
 }
 
 function isPlot(value: unknown, sourceId: string): boolean {
-  if (!isObject(value) || value.id !== sourceId) return false;
-  if (
-    typeof value.campaignDefinitionId !== "string" ||
-    typeof value.name !== "string" ||
-    !value.name.trim() ||
-    !isObject(value.parent) ||
-    !Array.isArray(value.objectives) ||
-    !Array.isArray(value.pressures) ||
-    !Array.isArray(value.resistances) ||
-    !Array.isArray(value.discoveries) ||
-    !Array.isArray(value.locationContexts) ||
-    !value.objectives.every(isNamedComponent) ||
-    !value.pressures.every(isNamedComponent) ||
-    !value.resistances.every(isNamedComponent) ||
-    !value.discoveries.every(isDiscovery) ||
-    !value.locationContexts.every(isLocationContext) ||
-    !optionalConformance(value.conformance) ||
-    !optionalModelValues(value.modelValues) ||
-    !optionalRelationships(value.prerequisites) ||
-    !optionalRelationships(value.dependencies) ||
-    (value.description !== undefined && typeof value.description !== "string")
-  )
+  try {
+    const entity = PlotEntity.deserializePayload(value, {
+      sourceId,
+      validationMode: "shape",
+    });
+    try {
+      return entity.state.metadata.validity.status === "valid";
+    } finally {
+      entity.dispose();
+    }
+  } catch {
     return false;
-  return (
-    value.parent.kind === "root" ||
-    (value.parent.kind === "subplot" &&
-      typeof value.parent.parentPlotDefinitionId === "string")
-  );
+  }
 }
 
 function isCampaignPlacement(value: unknown, sourceId: string): boolean {
-  if (
-    !isObject(value) ||
-    value.id !== sourceId ||
-    typeof value.locationId !== "string" ||
-    !stringArray(value.plotDefinitionIds)
-  )
+  try {
+    const entity = PlacementDefinition.deserializePayload(value, {
+      scope: "campaign",
+      sourceId,
+      validationMode: "shape",
+    });
+    try {
+      return entity.state.metadata.validity.status === "valid";
+    } finally {
+      entity.dispose();
+    }
+  } catch {
     return false;
-  if (value.kind === "world-decoration") {
-    return (
-      typeof value.capturedWorldPlacementId === "string" &&
-      !("source" in value) &&
-      commonPlacementFields(value)
-    );
   }
-  return (
-    value.kind === "independent" &&
-    !("capturedWorldPlacementId" in value) &&
-    isIndependentSource(value.source) &&
-    commonPlacementFields(value)
-  );
 }
 
-function isNamedComponent(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    nonEmpty(value.id) &&
-    nonEmpty(value.name) &&
-    (value.description === undefined || typeof value.description === "string")
-  );
-}
-
-function isDiscovery(value: unknown): boolean {
-  if (!isNamedComponent(value)) return false;
-  const candidate = value as Record<string, unknown>;
+function compareMembership(
+  declared: readonly string[],
+  captured: readonly string[],
+  code: string,
+  detail: string,
+  add: (code: string, subject: string, detail: string) => void,
+): void {
   if (
-    isObject(candidate.truth) &&
-    nonEmpty(candidate.truth.id) &&
-    nonEmpty(candidate.truth.statement) &&
-    Array.isArray(candidate.beliefs) &&
-    Array.isArray(candidate.rumors) &&
-    candidate.beliefs.length + candidate.rumors.length > 0 &&
-    candidate.beliefs.every(isFacet) &&
-    candidate.rumors.every(isFacet)
+    new Set(declared).size !== declared.length ||
+    new Set(captured).size !== captured.length ||
+    declared.length !== captured.length ||
+    declared.some((id) => !captured.includes(id))
   )
-    return true;
-  // Accept old snapshots so they can be opened and migrated without data loss.
-  const claims = candidate.claims;
-  return Array.isArray(claims) && claims.length > 0 && claims.every(isClaim);
-}
-
-function isFacet(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    nonEmpty(value.id) &&
-    nonEmpty(value.statement) &&
-    (value.relation === "supports" || value.relation === "contradicts") &&
-    (value.provenance === undefined || typeof value.provenance === "string")
-  );
-}
-
-function isClaim(value: unknown): boolean {
-  if (!isObject(value) || !nonEmpty(value.id) || !nonEmpty(value.statement))
-    return false;
-  if (value.provenance !== undefined && typeof value.provenance !== "string")
-    return false;
-  if (value.kind === "truth")
-    return (
-      value.conflictsWithClaimIds === undefined &&
-      value.relatedTruthClaimId === undefined
-    );
-  if (value.kind === "belief")
-    return (
-      optionalStringArray(value.conflictsWithClaimIds) &&
-      value.relatedTruthClaimId === undefined
-    );
-  return (
-    value.kind === "rumor" &&
-    optionalStringArray(value.conflictsWithClaimIds) &&
-    (value.relatedTruthClaimId === undefined ||
-      nonEmpty(value.relatedTruthClaimId))
-  );
-}
-
-function isLocationContext(value: unknown): boolean {
-  if (
-    !isObject(value) ||
-    !nonEmpty(value.id) ||
-    !nonEmpty(value.locationId) ||
-    !optionalStringArray(value.placementDefinitionIds)
-  )
-    return false;
-  return (
-    (value.actorPlacements === undefined ||
-      (Array.isArray(value.actorPlacements) &&
-        value.actorPlacements.length === 0)) &&
-    (value.itemPlacements === undefined ||
-      (Array.isArray(value.itemPlacements) &&
-        value.itemPlacements.length === 0))
-  );
-}
-
-function optionalRelationships(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (Array.isArray(value) &&
-      value.every(
-        (entry) =>
-          isObject(entry) &&
-          nonEmpty(entry.plotDefinitionId) &&
-          (entry.crossBranchRationale === undefined ||
-            nonEmpty(entry.crossBranchRationale)),
-      ))
-  );
-}
-
-function commonPlacementFields(value: Record<string, unknown>): boolean {
-  return (
-    (value.name === undefined || typeof value.name === "string") &&
-    (value.notes === undefined || typeof value.notes === "string") &&
-    (value.scale === undefined ||
-      (typeof value.scale === "number" &&
-        Number.isFinite(value.scale) &&
-        value.scale > 0)) &&
-    (value.mapPosition === undefined || isCoordinate(value.mapPosition)) &&
-    optionalConformance(value.conformance) &&
-    optionalModelValues(value.modelValues)
-  );
-}
-
-function optionalConformance(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (isObject(value) &&
-      nonEmpty(value.conceptId) &&
-      stringArray(value.modelSchemaReleaseIds))
-  );
-}
-
-function optionalModelValues(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (isObject(value) && Object.values(value).every(isJsonValue))
-  );
-}
-
-function isJsonValue(value: unknown): boolean {
-  if (value === null || typeof value === "string" || typeof value === "boolean")
-    return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  return isObject(value) && Object.values(value).every(isJsonValue);
-}
-
-function isIndependentSource(value: unknown): boolean {
-  if (!isObject(value)) return false;
-  if (value.kind === "world-creature") return nonEmpty(value.creatureId);
-  if (value.kind === "world-item") return nonEmpty(value.itemDefinitionId);
-  if (value.kind === "registered-content") return nonEmpty(value.definitionId);
-  return (
-    value.kind === "actor-role" &&
-    nonEmpty(value.role) &&
-    (value.suggestedCreatureDefinitionId === undefined ||
-      nonEmpty(value.suggestedCreatureDefinitionId))
-  );
+    add(code, "Campaign Definition", detail);
 }
 
 function isPreparation(value: unknown): boolean {
@@ -404,131 +293,6 @@ function isPreparation(value: unknown): boolean {
     value.locationCanvases === undefined ||
     value.locationCanvases.every(isCanvas)
   );
-}
-
-function validatePlotMemberIdentity(
-  plots: readonly PlotDefinition[],
-  add: (code: string, subject: string, detail: string) => void,
-): void {
-  for (const plot of plots) {
-    uniqueMemberIds(
-      plot.objectives,
-      "plot-objective-id-duplicate",
-      plot.name,
-      "Objective",
-      add,
-    );
-    uniqueMemberIds(
-      plot.pressures,
-      "plot-pressure-id-duplicate",
-      plot.name,
-      "Pressure",
-      add,
-    );
-    uniqueMemberIds(
-      plot.resistances,
-      "plot-resistance-id-duplicate",
-      plot.name,
-      "Resistance",
-      add,
-    );
-    uniqueMemberIds(
-      plot.discoveries,
-      "plot-discovery-id-duplicate",
-      plot.name,
-      "Discovery",
-      add,
-    );
-    uniqueMemberIds(
-      plot.locationContexts,
-      "plot-location-context-id-duplicate",
-      plot.name,
-      "Location context",
-      add,
-    );
-    const claims = plot.discoveries.flatMap((discovery) => {
-      if (discovery.claims) return discovery.claims;
-      return [
-        { ...discovery.truth, kind: "truth" as const },
-        ...discovery.beliefs.map((facet) => ({
-          ...facet,
-          kind: "belief" as const,
-        })),
-        ...discovery.rumors.map((facet) => ({
-          ...facet,
-          kind: "rumor" as const,
-        })),
-      ];
-    }) as Array<{
-      id: string;
-      kind: "truth" | "belief" | "rumor";
-      statement: string;
-      conflictsWithClaimIds?: readonly string[];
-      relatedTruthClaimId?: string;
-    }>;
-    const claimIds = new Set<string>();
-    for (const claim of claims) {
-      if (claimIds.has(claim.id)) {
-        add(
-          "plot-claim-id-duplicate",
-          plot.name,
-          "Claim identities must be unique within a Plot.",
-        );
-      }
-      claimIds.add(claim.id);
-    }
-    const truthIds = new Set(
-      claims.filter((claim) => claim.kind === "truth").map((claim) => claim.id),
-    );
-    for (const claim of claims) {
-      const conflicts =
-        claim.kind === "truth" ? [] : (claim.conflictsWithClaimIds ?? []);
-      if (new Set(conflicts).size !== conflicts.length) {
-        add(
-          "claim-conflict-id-duplicate",
-          plot.name,
-          "A Claim conflict may be referenced only once.",
-        );
-      }
-      if (conflicts.some((id) => !claimIds.has(id))) {
-        add(
-          "claim-conflict-not-found",
-          plot.name,
-          "A Claim conflict is not present in this Plot.",
-        );
-      }
-      if (conflicts.includes(claim.id)) {
-        add(
-          "claim-self-conflict",
-          plot.name,
-          "A Claim cannot conflict with itself.",
-        );
-      }
-      if (
-        claim.kind === "rumor" &&
-        claim.relatedTruthClaimId !== undefined &&
-        !truthIds.has(claim.relatedTruthClaimId)
-      ) {
-        add(
-          "claim-related-truth-not-found",
-          plot.name,
-          "A Rumor's related Truth is not present in this Plot.",
-        );
-      }
-    }
-  }
-}
-
-function uniqueMemberIds(
-  values: readonly { readonly id: string }[],
-  code: string,
-  subject: string,
-  label: string,
-  add: (code: string, subject: string, detail: string) => void,
-): void {
-  if (new Set(values.map(({ id }) => id)).size !== values.length) {
-    add(code, subject, `${label} identities must be unique within a Plot.`);
-  }
 }
 
 function boundedText(value: unknown, max: number): value is string {
@@ -702,10 +466,6 @@ function finite(value: unknown): value is number {
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function optionalStringArray(value: unknown): boolean {
-  return value === undefined || stringArray(value);
 }
 
 const CANVAS_LAYER_KEYS = new Set([

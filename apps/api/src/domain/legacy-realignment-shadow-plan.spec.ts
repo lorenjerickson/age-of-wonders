@@ -426,12 +426,16 @@ describe("planLegacyRealignmentShadowConversion", () => {
         }),
       ]),
     );
+    // Recovery preserves mapless legacy data; publication now requires every Location's map.
     expect(
-      validateWorldDefinitionDraft(
-        worldDraft.content,
-        worldDraft.snapshotRecords,
-      ),
-    ).toMatchObject({ valid: true, issues: [] });
+      validateWorldDefinitionDraft(worldDraft.content, worldDraft.snapshotRecords),
+    ).toEqual({
+      valid: false,
+      issues: [
+        { code: "location-definition-invalid", subject: "Ash Coast", detail: "A Location requires an image map or an isometric terrain map." },
+        { code: "location-definition-invalid", subject: "Glasswake", detail: "A Location requires an image map or an isometric terrain map." },
+      ],
+    });
     expect(
       validateCampaignDefinitionDraft(
         campaignDraft.campaignDefinitionId,

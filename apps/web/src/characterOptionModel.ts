@@ -1,3 +1,8 @@
+import {
+  BackgroundDefinition,
+  HeritageDefinition,
+  ProfessionDefinition,
+} from "@aow/domain";
 import type { JsonValue } from "./api";
 
 export type CharacterOptionKind =
@@ -38,33 +43,18 @@ export function characterOptionDefinition(input: {
     input.kind === "skill"
       ? skillComponents(existing, input.defaultAttribute)
       : input.kind === "background"
-        ? existing
+        ? BackgroundDefinition.authorComponents(existing)
         : input.kind === "profession"
-          ? professionComponents(existing, input.startingProfessionRank)
-          : {
-              ...existing,
-              shortDescription: input.description,
-              modifierPairs: [
-                {
-                  id: "foundation",
-                  title: "Heritage balance",
-                  beneficial: [
-                    {
-                      kind: "custom",
-                      key: "aow:heritage-benefit-description",
-                      payload: input.heritageBenefit ?? "",
-                    },
-                  ],
-                  harmful: [
-                    {
-                      kind: "custom",
-                      key: "aow:heritage-drawback-description",
-                      payload: input.heritageDrawback ?? "",
-                    },
-                  ],
-                },
-              ],
-            };
+          ? ProfessionDefinition.authorComponents(
+              existing,
+              input.startingProfessionRank,
+            )
+          : HeritageDefinition.authorComponents(
+              existing,
+              input.description,
+              input.heritageBenefit,
+              input.heritageDrawback,
+            );
   return {
     identity: {
       id: input.id,
@@ -91,50 +81,6 @@ function skillComponents(
   if (defaultAttribute) components.defaultAttribute = defaultAttribute;
   else delete components.defaultAttribute;
   return components;
-}
-
-function professionComponents(
-  existing: Record<string, JsonValue>,
-  startingProfessionRank: string | undefined,
-): Record<string, JsonValue> {
-  const rank = startingProfessionRank ?? "aow:profession-rank-novice";
-  const expertiseOrder = Array.isArray(existing.expertiseOrder)
-    ? [...existing.expertiseOrder]
-    : [];
-  expertiseOrder[0] = rank;
-
-  const expertiseLevels = Array.isArray(existing.expertiseLevels)
-    ? existing.expertiseLevels.map((level, index) =>
-        index === 0 && isObject(level) ? { ...level, tier: rank } : level,
-      )
-    : [];
-  if (expertiseLevels.length === 0)
-    expertiseLevels.push({ tier: rank, rank: 0, benefits: {} });
-
-  const acquisition = Array.isArray(existing.acquisition)
-    ? existing.acquisition.map((rule) =>
-        isObject(rule) && rule.kind === "character-creation"
-          ? { ...rule, startingExpertise: rank }
-          : rule,
-      )
-    : [];
-  if (
-    !acquisition.some(
-      (rule) => isObject(rule) && rule.kind === "character-creation",
-    )
-  )
-    acquisition.unshift({
-      kind: "character-creation",
-      startingExpertise: rank,
-    });
-
-  return {
-    ...existing,
-    expertiseOrder,
-    expertiseLevels,
-    acquisition,
-    actions: Array.isArray(existing.actions) ? existing.actions : [],
-  };
 }
 
 function isObject(value: JsonValue): value is Record<string, JsonValue> {

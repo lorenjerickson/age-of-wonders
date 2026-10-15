@@ -115,7 +115,18 @@ class PlotOverrideInput {
   value!: JsonValue;
 }
 
+class CreatureKnowledgeInput {
+  @IsIn(["knows-truth", "holds-belief", "heard-rumor"])
+  kind!: "knows-truth" | "holds-belief" | "heard-rumor";
+  @IsString() @MaxLength(240) creatureId!: import("@aow/common").EntityId;
+  @IsString() @MaxLength(240) claimId!: string;
+  @IsOptional() @IsString() @MaxLength(100) learnedAt?: string;
+  @IsOptional() @IsString() @MaxLength(2000) provenance?: string;
+}
+
 export class UpdateCampaignInstancePlotDto implements UpdateCampaignInstancePlotRequest {
+  @IsOptional() @IsArray() @ArrayMaxSize(2000) @ValidateNested({ each: true }) @Type(() => CreatureKnowledgeInput)
+  creatureKnowledge?: CreatureKnowledgeInput[];
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -339,4 +350,16 @@ export class PlaceCampaignInstanceActorDto {
   @ValidateIf((_object, value) => value !== null)
   @IsDefined()
   position!: unknown;
+}
+
+export class ChangeActorEquipmentDto {
+ @IsInt() @Min(1) expectedRuntimeRevision!: number;
+ @IsIn(['create','equip','unequip','stow','retrieve','quantity','allowance']) action!: 'create'|'equip'|'unequip'|'stow'|'retrieve'|'quantity'|'allowance';
+ @IsOptional() @IsString() @MaxLength(240) itemId?:string;
+ @IsOptional() @IsString() @MaxLength(240) definitionId?:string;
+ @IsOptional() @IsString() @MaxLength(240) containerId?:string;
+ @IsOptional() @IsArray() @ArrayMaxSize(100) @IsString({each:true}) slots?:string[];
+ @IsOptional() @IsInt() @Min(0) index?:number;
+ @IsOptional() @IsInt() @Min(1) quantity?:number;
+ @IsOptional() @IsInt() @Min(0) bonusActions?:number;
 }

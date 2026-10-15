@@ -38,7 +38,7 @@ import "./AppShell.css";
 import { ShellToolsTarget } from "./shellToolsContext";
 import { useSidebarResize } from "./useSidebarResize";
 
-export function AppShell({
+function LegacyAppShell({
   children,
   gmAccess = true,
   systemAdministrator = false,
@@ -600,4 +600,15 @@ export function LandingPage({
       </div>
     </main>
   );
+}
+
+export function AppShell(props: Parameters<typeof LegacyAppShell>[0]) {
+  const pathname = useLocation().pathname;
+  if (
+    pathname === "/" ||
+    pathname === "/worlds" ||
+    pathname.startsWith("/worlds/")
+  )
+    return props.children;
+  return <LegacyAppShell {...props} />;
 }

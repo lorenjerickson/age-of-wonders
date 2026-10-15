@@ -1,3 +1,4 @@
+import { SessionLocationPresentation } from "./SessionLocationPresentation";
 import { Details, Summary } from "@aow/ui";
 import { SessionWorkspace } from "./SessionWorkspace";
 import {
@@ -319,6 +320,7 @@ export function CampaignSessionTable({
                       {data.location.description}
                     </p>
                   )}
+                  <SessionLocationPresentation key={data.location.id} campaignId={campaignDefinitionId} instanceId={campaignInstanceId} sessionId={sessionId} location={data.location} runtimeRevision={data.runtimeRevision} onSaved={() => void load()} />
                 </section>
               )}
               <Label

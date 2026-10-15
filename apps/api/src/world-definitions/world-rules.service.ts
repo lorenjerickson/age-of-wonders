@@ -1,3 +1,4 @@
+import { RuleExecution, WorldRule as WorldRuleOwner } from "@aow/domain";
 import {
   BadRequestException,
   ConflictException,
@@ -6,10 +7,7 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
-  executeWorldRules,
   starterMovementRules,
-  validateWorldRule,
-  validateWorldRules,
   WORLD_RULE_RESOURCE,
   type WorldRule,
   type WorldRuleEvent,
@@ -29,9 +27,7 @@ export class WorldRulesService {
   constructor(private readonly authoring: WorldDefinitionAuthoringService) {}
 
   async list(worldId: string, userId: string) {
-    return this.projection(
-      await this.authoring.getActiveDraft(worldId, userId),
-    );
+    return this.projection(await this.authoring.getDraft(worldId, userId));
   }
 
   async upsert(
@@ -64,7 +60,7 @@ export class WorldRulesService {
         updatedAt: new Date().toISOString(),
       },
     };
-    const validation = validateWorldRule(rule);
+    const validation = WorldRuleOwner.validateRule(rule);
     if (!validation.valid)
       throw new BadRequestException(validation.issues.join(" "));
     return this.save(draft, worldId, userId, expected, [
@@ -72,12 +68,38 @@ export class WorldRulesService {
         (r) => !(r.resourceType === WORLD_RULE_RESOURCE && r.sourceId === id),
       ),
       {
+        ...prior,
         resourceType: WORLD_RULE_RESOURCE,
         sourceId: id,
         sourceRevision: rule.revision,
         payload: rule,
       },
     ]);
+  }
+
+  async remove(
+    worldId: string,
+    userId: string,
+    expected: WorldRulesRevision,
+    ruleId: string,
+  ) {
+    const draft = await this.checkedDraft(worldId, userId, expected);
+    if (
+      !draft.records.some(
+        (r) => r.resourceType === WORLD_RULE_RESOURCE && r.sourceId === ruleId,
+      )
+    )
+      throw new NotFoundException("The selected World rule was not found.");
+    return this.save(
+      draft,
+      worldId,
+      userId,
+      expected,
+      draft.records.filter(
+        (r) =>
+          !(r.resourceType === WORLD_RULE_RESOURCE && r.sourceId === ruleId),
+      ),
+    );
   }
 
   async duplicate(
@@ -140,7 +162,7 @@ export class WorldRulesService {
       throw new BadRequestException(
         "Choose bounded example state and event data.",
       );
-    return executeWorldRules({
+    return await RuleExecution.run({
       rules: this.projection(draft).rules,
       event,
       state,
@@ -188,7 +210,7 @@ export class WorldRulesService {
     expected: WorldRulesRevision,
     records: typeof draft.records,
   ) {
-    const validation = validateWorldRules(
+    const validation = WorldRuleOwner.validateRules(
       records
         .filter((r) => r.resourceType === WORLD_RULE_RESOURCE)
         .map((r) => r.payload),

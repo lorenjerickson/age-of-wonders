@@ -1,8 +1,12 @@
 import type { Command, CommandName } from "./command";
 import type { DomainEvent, EventHandlers, EventName } from "./event";
 
+export * from "./entity-runtime";
+
 /**
- * Type-level contract for an entity. Commands and events describe payload unions,
+ * Legacy type-level compatibility contract; executable concepts use Entity.
+ * @deprecated Use the executable Entity base for new domain concepts.
+ * Commands and events describe payload unions,
  * not methods, queues, or a dispatch implementation. Handler events may include
  * events emitted by other entities.
  */

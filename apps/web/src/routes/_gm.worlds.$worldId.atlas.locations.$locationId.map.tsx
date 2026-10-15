@@ -5,5 +5,5 @@ export const Route = createFileRoute(
 )({ component: MapRoute });
 function MapRoute() {
   const { locationId } = Route.useParams();
-  return <WorldMapPage key={locationId} locationId={locationId} />;
+  return <WorldMapPage key={locationId} locationId={locationId} inlineTools />;
 }

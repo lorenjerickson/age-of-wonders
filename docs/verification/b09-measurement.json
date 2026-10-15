@@ -1,0 +1,46 @@
+{
+  "active_start": "2026-10-15T01:21:10+00:00",
+  "active_end": "2026-10-15T01:35:07+00:00",
+  "wall_seconds": 837.0,
+  "command_seconds": 544.60853,
+  "verification_interval_union_seconds": 402.818908,
+  "verification_share_percent": 48.12651230585424,
+  "categories": {
+    "typecheck": {
+      "command_seconds": 137.45592000000002,
+      "commands": 12,
+      "reruns": 4,
+      "failed": 3
+    },
+    "build": {
+      "command_seconds": 59.001403,
+      "commands": 7,
+      "reruns": 1,
+      "failed": 1
+    },
+    "tests": {
+      "command_seconds": 148.22343400000003,
+      "commands": 20,
+      "reruns": 6,
+      "failed": 3
+    },
+    "lint": {
+      "command_seconds": 60.448948,
+      "commands": 14,
+      "reruns": 4,
+      "failed": 5
+    },
+    "browser": {
+      "command_seconds": 139.478825,
+      "commands": 7,
+      "reruns": 1,
+      "failed": 1
+    }
+  },
+  "instrumentation_gaps": [
+    "Early B09 read-only scope audit overlapped MAPFIX before active marker.",
+    "One source tsc was measured by agent at2.92s without wrapper start/end; excluded from aggregate/union.",
+    "Manual preparation/review/cleanup was not separately timed."
+  ],
+  "notes": "An initial API command exited0 with no tests due argument forwarding; not counted as coverage. Temporary fixture cleanup collided with web tsc, and shared domain rebuild collided with two API imports; corrected dependent sequencing and reran."
+}

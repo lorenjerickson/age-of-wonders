@@ -519,6 +519,8 @@ export interface CharacterCreationDraft {
  * compile it with captured Profession, Heritage, Item, and Rule definitions as needed.
  */
 export interface CampaignInstanceCharacterSheet {
+  /** Captured acquisition results; rolled-flat grants are never rerolled on reactivation. */
+  readonly modifierGrants?: readonly import("./modifiers").GrantedModifier[];
   readonly identity: StateIdentity<CharacterId>;
   readonly campaignInstanceId: CampaignInstanceId;
   readonly campaignInstanceSnapshotId: CampaignInstanceSnapshotId;

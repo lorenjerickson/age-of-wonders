@@ -1,11 +1,15 @@
+import { buildSnapshotManifest } from "../domain/snapshot-manifest";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { CampaignInstanceCharactersService } from "./campaign-instance-characters.service";
 
 function harness() {
   const tx = {
+    $executeRawUnsafe: jest.fn().mockResolvedValue(0),
+    campaignInstanceSession: { findFirst: jest.fn().mockResolvedValue(null) },
     campaignInstance: {
-      findFirst: jest.fn().mockResolvedValue({ id: "instance-1" }),
+      findFirst: jest.fn().mockResolvedValue({ id: "instance-1", currentSnapshotId: "instance-snapshot-1", runtime: { id: "runtime-1", revision: 1, state: { formatVersion: 1, preparation: {}, plotProgress: [], placementRealizations: [], creatureEmbodiments: [], itemInstances: [] } }, currentSnapshot: { campaignDefinitionSnapshot: { manifest: buildSnapshotManifest(1, [{ resourceType: "campaign", sourceId: "campaign", payload: {} }]) }, worldDefinitionSnapshot: { manifest: buildSnapshotManifest(1, [{resourceType: "world", sourceId: "world", payload: {}}]) } } }),
     },
+    campaignInstanceRuntime: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     campaignInstanceHumanMembership: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       update: jest.fn().mockResolvedValue({}),
@@ -21,6 +25,7 @@ function harness() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     campaignInstanceCharacterDraft: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       create: jest.fn().mockResolvedValue({}),
     },
     campaignInstanceAuditEvent: { create: jest.fn().mockResolvedValue({}) },
@@ -49,9 +54,13 @@ function harness() {
   const characterDrafts = {
     activationMaterialization: jest.fn().mockResolvedValue({
       snapshotId: "instance-snapshot-1",
+      sourceDraftRevision: 3,
+      equipmentContext: { definitions: [], availableSlots: [] },
       data: {
         identity: { id: "character-1", version: { revision: 1 } },
         ownerMembershipId: "membership-1",
+        campaignInstanceId: "instance-1",
+        startingEquipmentDefinitionIds: [],
       },
     }),
   };
@@ -266,6 +275,7 @@ describe("CampaignInstanceCharactersService", () => {
         professionDefinitionId: "profession-ranger",
         heritageDefinitionIds: ["heritage-riverfolk"],
         attributeAssignments: { might: 75 },
+        privateData: { secret: "preserved import" },
       },
     });
 
@@ -282,6 +292,9 @@ describe("CampaignInstanceCharactersService", () => {
         campaignInstanceId: "instance-1",
         playerMembershipId: "membership-destination",
         name: "Aster Recast",
+        sourceSheet: expect.objectContaining({
+          privateData: { secret: "preserved import" },
+        }) as unknown,
         backgroundDefinitionId: "background-scout",
         professionDefinitionId: "profession-ranger",
         heritageDefinitionIds: ["heritage-riverfolk"],
@@ -370,6 +383,64 @@ describe("CampaignInstanceCharactersService", () => {
         targetStatus: "active",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.domainRecord.upsert).not.toHaveBeenCalled();
+    expect(
+      tx.campaignInstanceCharacterAssociation.updateMany,
+    ).not.toHaveBeenCalled();
+  });
+  it("reactivates an inactive Character without overwriting the runtime sheet", async () => {
+    const { service, prisma, tx, characterDrafts } = harness();
+    prisma.campaignInstanceCharacterAssociation.findFirst.mockResolvedValue({
+      characterId: "character-1",
+      characterName: "Aster",
+      status: "INACTIVE",
+      playerMembershipId: "membership-1",
+      campaignInstance: { name: "Tuesday" },
+      playerMembership: {
+        status: "ACTIVE",
+        playerProfile: { standing: "ACTIVE" },
+      },
+    });
+    await service.changeCharacterStatus("instance-1", "character-1", "gm-1", {
+      expectedStatus: "inactive",
+      targetStatus: "active",
+    });
+    expect(characterDrafts.activationMaterialization).not.toHaveBeenCalled();
+    expect(tx.domainRecord.upsert).not.toHaveBeenCalled();
+    expect(
+      tx.campaignInstanceCharacterAssociation.updateMany,
+    ).toHaveBeenCalled();
+  });
+  it("rejects a concurrently changed approval before publishing the sheet", async () => {
+    const { service, prisma, tx } = harness();
+    prisma.campaignInstanceCharacterAssociation.findFirst.mockResolvedValue({
+      characterId: "character-1",
+      characterName: "Aster",
+      status: "DRAFT",
+      playerMembershipId: "membership-1",
+      campaignInstance: { name: "Tuesday" },
+      playerMembership: {
+        status: "ACTIVE",
+        playerProfile: { standing: "ACTIVE" },
+      },
+    });
+    tx.campaignInstanceCharacterDraft.updateMany.mockResolvedValue({
+      count: 0,
+    });
+    await expect(
+      service.changeCharacterStatus("instance-1", "character-1", "gm-1", {
+        expectedStatus: "draft",
+        targetStatus: "active",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.campaignInstanceCharacterDraft.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          revision: 3,
+          status: "COMPLETE",
+        }) as unknown,
+      }),
+    );
     expect(tx.domainRecord.upsert).not.toHaveBeenCalled();
     expect(
       tx.campaignInstanceCharacterAssociation.updateMany,

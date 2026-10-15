@@ -3,10 +3,23 @@ import { describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { renderToString } from "react-dom/server";
 import { getRouter } from "./router";
+import { astraWorldCompatibilityHref } from "./astraCompatibility";
+import { Route as WorldRoute } from "./routes/_gm.worlds.$worldId";
+import { WorldMapPage } from "./WorldMapPage";
+import {
+  CharacterModelsPage,
+  WorldVersionsPage,
+  WorldLocationPlacements,
+} from "./WorldAuthoringPages";
 
 // UI's built package resolves its own React in the Node test runner.
 vi.mock("@aow/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@aow/ui")>()),
+  Checkbox: ({ checked, label }: { checked?: boolean; label?: string }) => (
+    <div role="checkbox" aria-checked={checked}>
+      {label}
+    </div>
+  ),
   Field: ({ label, children }: { label: string; children: ReactNode }) => (
     <div>
       {label}
@@ -39,15 +52,54 @@ vi.mock("./server/readModels", async (importOriginal) => ({
       revisions: [],
     },
     draft: {
+      id: "draft-internal",
       storageRevision: 1,
       revisionName: "Draft",
       content: {},
       records: [
         {
+          sourceId: "opaque-item",
+          resourceType: "definitions",
+          payload: {
+            kind: "item",
+            identity: {
+              id: "opaque-item",
+              name: "opaque-item",
+              description: "Reference: 550e8400-e29b-41d4-a716-446655440000",
+            },
+            modelValues: { "aow:item-family": "aow:tool" },
+            components: { category: "tool", quality: "standard" },
+          },
+        },
+        {
+          sourceId: "opaque-creature",
+          resourceType: "definitions",
+          payload: {
+            kind: "creature",
+            identity: {
+              id: "opaque-creature",
+              name: "opaque-creature",
+              description: "Reference: 550e8400-e29b-41d4-a716-446655440000",
+            },
+            components: {},
+          },
+        },
+        {
+          sourceId: "item-internal",
+          resourceType: "definitions",
+          payload: {
+            kind: "item",
+            identity: { id: "item-internal", name: "Lantern" },
+            modelValues: { "aow:item-family": "aow:tool" },
+            components: { category: "tool", quality: "standard" },
+          },
+        },
+        {
           sourceId: "location-internal",
           resourceType: "locations",
           payload: {
             identity: { name: "London" },
+            description: "Fog over the Thames",
             mapScene: { notes: "Fog over the Thames", orientation: "overhead" },
           },
         },
@@ -56,81 +108,169 @@ vi.mock("./server/readModels", async (importOriginal) => ({
   }),
 }));
 
-describe("contextual GM rendering", () => {
-  it("keeps World destinations in the sidebar and Location properties in the record tabs", async () => {
-    const router = getRouter();
-    router.update({
-      history: createMemoryHistory({
-        initialEntries: [
-          "/worlds/world-internal/atlas/locations/location-internal/map",
-        ],
-      }),
-    });
-    await router.load();
-    const html = renderToString(<RouterProvider router={router} />);
-    expect(html.replace(/<!--.*?-->/g, "")).toContain("Back to Worlds");
-    expect(html).toContain('aria-label="Age of Wonders navigation"');
-    expect(html).toContain('aria-label="Location properties"');
-    expect(html).toContain('role="tabpanel"');
-    expect(html).toContain('aria-labelledby="location-properties-tab-map"');
-    expect(html).toContain('aria-label="Breadcrumb"');
-    expect(html).toContain("Fog over the Thames");
-    expect(html).toContain("Save map");
-    const sidebar = html.match(/<aside[\s\S]*?<\/aside>/)?.[0] ?? "";
-    expect(sidebar).not.toContain("<details");
+async function renderRoute(path: string) {
+  const router = getRouter();
+  router.update({ history: createMemoryHistory({ initialEntries: [path] }) });
+  await router.load();
+  return renderToString(<RouterProvider router={router} />).replace(
+    /<!--.*?-->/g,
+    "",
+  );
+}
+
+function visibleText(html: string) {
+  return html.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]*>/g, "");
+}
+
+describe("Astra World navigation", () => {
+  it("renders a single compact workspace navigation with the Figma destinations", async () => {
+    const html = await renderRoute("/worlds/world-internal?view=atlas");
+    const sidebar =
+      html.match(
+        /<aside[^>]*aria-label="Workspace navigation"[\s\S]*?<\/aside>/,
+      )?.[0] ?? "";
+    expect(sidebar).not.toBe("");
     for (const destination of [
-      "Locations",
-      "Bestiary",
-      "Items",
+      "Overview",
+      "Atlas",
+      "Codex",
+      "Rule system",
+      "People &amp; access",
+      "Export world",
+    ]) {
+      expect(sidebar).toContain(destination);
+    }
+    expect(sidebar).toContain("Age of Wonders");
+    expect(sidebar).toContain('href="/worlds"');
+    expect(sidebar).toContain('href="/worlds/world-internal?view=atlas"');
+    expect(html).toContain('aria-label="Open navigation menu"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(
+      (html.match(/aria-label="Workspace navigation"/g) ?? []).length,
+    ).toBe(1);
+    expect(html).not.toContain('aria-label="Primary navigation"');
+    for (const excluded of [
       "Skills",
       "Professions",
       "Backgrounds",
-      "Models &amp; taxonomies",
-      "Codex",
-      "Versions",
-    ])
-      expect(sidebar).toContain(destination);
-    expect(sidebar).toMatch(/aria-current="page"[^>]*>Locations/);
-    expect(html).toContain('aria-label="Primary navigation"');
-    expect(html).not.toContain('aria-label="London navigation"');
-    expect(html).not.toContain("Choose a workspace to begin");
-    expect((html.match(/<aside/g) ?? []).length).toBe(1);
-    const visible = html.replace(/<[^>]*>/g, "");
-    expect(visible).not.toContain("world-internal");
-    expect(visible).not.toContain("location-internal");
+      "Quick Start",
+    ]) {
+      expect(sidebar).not.toContain(excluded);
+    }
+    expect(visibleText(html)).not.toContain("world-internal");
+    expect(visibleText(html)).not.toContain("location-internal");
+  });
+
+  it("keeps omitted feature components available in the code", () => {
+    for (const component of [
+      WorldMapPage,
+      CharacterModelsPage,
+      WorldVersionsPage,
+      WorldLocationPlacements,
+    ]) {
+      expect(typeof component).toBe("function");
+    }
   });
 });
 
 it.each([
-  ["", "Player-facing description", "Map or scene notes"],
-  ["discoveries", "Add discovery", "Map or scene notes"],
-  ["connections", "Child Locations", "Map or scene notes"],
-  ["creatures", "Add placement", "Player-facing description"],
-  ["items", "Add placement", "Player-facing description"],
+  "/atlas",
+  "/atlas/locations/new",
+  "/atlas/locations/location-internal",
+  "/atlas/locations/location-internal/map",
+  "/atlas/locations/location-internal/discoveries/new",
+  "/bestiary/creatures/new",
+  "/bestiary/catalog-monsters/monster/actions/new",
+  "/item-compendium/items/item/traits/trait/actions/action/outcomes/new",
+  "/characters",
+  "/characters/professions/new",
+  "/characters/backgrounds/background/rule/choices/new",
+  "/characters/skills/skill",
+  "/characters/catalog-characters/template/traits/new",
+  "/characters/model/structure/effective",
+  "/rules/rule/effects/new",
+  "/versions/draft/review",
 ])(
-  "renders the distinct %s Location section with the same breadcrumb trail",
-  async (section, expected, absent) => {
-    const router = getRouter();
-    router.update({
-      history: createMemoryHistory({
-        initialEntries: [
-          `/worlds/world-internal/atlas/locations/location-internal${section ? `/${section}` : ""}`,
-        ],
-      }),
-    });
-    await router.load();
-    const html = renderToString(<RouterProvider router={router} />);
-    const content = html.match(/<main[\s\S]*?<\/main>/)?.[0] ?? "";
-    expect(content).toContain(expected);
-    expect(content).not.toContain(absent);
-    expect(html).toContain('aria-label="Location properties"');
-    expect(html).toContain(
-      `aria-labelledby="location-properties-tab-${section || "description"}"`,
+  "retains the canonical authoring context %s through the real parent route",
+  (suffix) => {
+    const pathname = `/worlds/world-internal${suffix}`;
+    expect(
+      astraWorldCompatibilityHref("world-internal", pathname),
+    ).toBeUndefined();
+    expect(() =>
+      WorldRoute.options.beforeLoad?.({
+        params: { worldId: "world-internal" },
+        location: { pathname, searchStr: "" },
+      } as never),
+    ).not.toThrow();
+  },
+);
+
+it("exposes retained authoring libraries through progressive disclosure", async () => {
+  const html = await renderRoute("/worlds/world-internal?view=atlas");
+  expect(html).toContain("Authoring libraries");
+  for (const path of [
+    "atlas",
+    "bestiary",
+    "item-compendium",
+    "characters",
+    "characters/models",
+    "rules",
+    "versions",
+  ]) {
+    expect(html).toContain(`href="/worlds/world-internal/${path}"`);
+  }
+});
+
+it("leaves the current World query route untouched", () => {
+  expect(
+    astraWorldCompatibilityHref(
+      "world-internal",
+      "/worlds/world-internal",
+      "?view=atlas",
+    ),
+  ).toBeUndefined();
+});
+
+it("opens existing map and terrain tools from the Atlas map action", async () => {
+  const html = await renderRoute(
+    "/worlds/world-internal?view=atlas&entry=location-internal&map=1",
+  );
+  expect(html).toContain("Back to location");
+  expect(html).toContain("Map orientation");
+  expect(html).toContain("Isometric");
+  expect(html).toContain(
+    'href="/worlds/world-internal?view=atlas&amp;entry=location-internal"',
+  );
+  expect(html).not.toContain("Connections");
+});
+
+it("renders removal on the editable canonical Item page", async () => {
+  const html = await renderRoute(
+    "/worlds/world-internal/item-compendium/items/item-internal",
+  );
+  expect(html).toContain("Remove entry");
+  expect(html).toContain('aria-label="Remove entry"');
+  expect(html).toContain("Save changes");
+});
+
+it.each([
+  ["items", "opaque-item"],
+  ["creatures", "opaque-creature"],
+])(
+  "masks imported %s text in the primary Astra editor without replacing raw fields",
+  async (kind, id) => {
+    const html = await renderRoute(
+      `/worlds/world-internal?view=codex&kind=${kind}&entry=${id}`,
     );
-    const breadcrumb =
-      html.match(/<nav aria-label="Breadcrumb"[\s\S]*?<\/nav>/)?.[0] ?? "";
-    expect(breadcrumb).toContain("London");
-    expect(breadcrumb).not.toContain("Discoveries");
-    expect(breadcrumb).not.toContain("Connections");
+    expect(html).toContain("Existing name preserved.");
+    expect(html).toContain("Replace name");
+    expect(html).toContain("Replace description");
+    expect(html).not.toContain(`value="${id}"`);
+    expect(visibleText(html)).not.toContain(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    if (kind === "creatures")
+      expect(visibleText(html)).not.toContain("opaque-item");
   },
 );

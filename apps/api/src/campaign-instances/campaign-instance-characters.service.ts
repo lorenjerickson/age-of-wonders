@@ -1,3 +1,9 @@
+import { InstanceParticipation } from "@aow/domain";
+import {
+  runtimeCaptureContext,
+  validateRuntimeForCapturedPair,
+} from "./campaign-instance-management.service";
+import { CampaignInstance, CharacterCreation } from "@aow/domain";
 import {
   BadRequestException,
   ConflictException,
@@ -19,21 +25,6 @@ import type {
   UpdateCampaignInstanceCharacterStatusDto,
   UpdateCampaignInstanceMembershipStatusDto,
 } from "./dto/campaign-instance-management.dto";
-
-const MEMBERSHIP_TRANSITIONS: Record<string, readonly string[]> = {
-  ACTIVE: ["INACTIVE", "LEFT", "BANNED"],
-  INACTIVE: ["ACTIVE", "LEFT", "BANNED"],
-  LEFT: [],
-  BANNED: ["INACTIVE"],
-};
-
-const CHARACTER_TRANSITIONS: Record<string, readonly string[]> = {
-  DRAFT: ["ACTIVE"],
-  ACTIVE: ["INACTIVE", "RETIRED", "DEAD"],
-  INACTIVE: ["ACTIVE", "RETIRED", "DEAD"],
-  RETIRED: [],
-  DEAD: [],
-};
 
 const MEMBERSHIP_STATUS = {
   active: CampaignInstanceMembershipStatus.ACTIVE,
@@ -145,19 +136,19 @@ export class CampaignInstanceCharactersService {
       membershipId,
       ownerUserId,
     );
-    if (membership.role === "GM") {
-      throw new ConflictException(
-        "The Game Master membership follows Campaign Instance ownership.",
-      );
-    }
     const expected = MEMBERSHIP_STATUS[dto.expectedStatus];
     const target = MEMBERSHIP_STATUS[dto.targetStatus];
-    if (
-      membership.status !== expected ||
-      !MEMBERSHIP_TRANSITIONS[expected]?.includes(target)
-    ) {
+    try {
+      InstanceParticipation.assertMembershipTransition(
+        { status: membership.status.toLowerCase(), role: membership.role },
+        dto.expectedStatus,
+        dto.targetStatus,
+      );
+    } catch (error) {
       throw new ConflictException(
-        "Membership status changed or the requested transition is unavailable.",
+        error instanceof Error
+          ? error.message
+          : "Membership transition is unavailable.",
       );
     }
     const activeParticipation =
@@ -169,10 +160,36 @@ export class CampaignInstanceCharactersService {
         },
         select: { participantName: true },
       });
-    if (activeParticipation && target !== "ACTIVE") {
+    const participationOwner = InstanceParticipation.deserializePayload({
+      kind: "human",
+      status: membership.status.toLowerCase(),
+      role: membership.role,
+      displayName: membership.displayName,
+    });
+    let departure: string | null | undefined;
+    let clearCharacter = false;
+    try {
+      const result = await participationOwner.command("transition", {
+        initiator: ownerUserId,
+        params: {
+          expectedStatus: dto.expectedStatus,
+          status: dto.targetStatus,
+          occurredAt: new Date().toISOString(),
+        },
+        context: { currentSession: Boolean(activeParticipation) },
+      });
+      if (result.status === "rejected")
+        throw new TypeError("Membership transition is unavailable.");
+      departure = participationOwner.state.data.leftAt;
+      clearCharacter = participationOwner.state.data.activeCharacterId === null;
+    } catch (error) {
       throw new ConflictException(
-        `${membership.displayName}'s membership cannot change while they participate in a current Session.`,
+        error instanceof Error
+          ? error.message
+          : "Membership transition is unavailable.",
       );
+    } finally {
+      participationOwner.dispose();
     }
     await this.prisma.$transaction(async (tx) => {
       const updated = await tx.campaignInstanceHumanMembership.updateMany({
@@ -183,10 +200,8 @@ export class CampaignInstanceCharactersService {
         },
         data: {
           status: target,
-          leftAt: target === "LEFT" ? new Date() : null,
-          ...(target === "LEFT" || target === "BANNED"
-            ? { activeCharacterId: null }
-            : {}),
+          leftAt: departure ? new Date(departure) : null,
+          ...(clearCharacter ? { activeCharacterId: null } : {}),
         },
       });
       if (updated.count !== 1) {
@@ -471,10 +486,7 @@ export class CampaignInstanceCharactersService {
     );
     const expected = CHARACTER_STATUS[dto.expectedStatus];
     const target = CHARACTER_STATUS[dto.targetStatus];
-    if (
-      character.status !== expected ||
-      !CHARACTER_TRANSITIONS[expected]?.includes(target)
-    ) {
+    if (!CharacterCreation.canTransition(character.status, expected, target)) {
       throw new ConflictException(
         "Character status changed or the requested transition is unavailable.",
       );
@@ -489,7 +501,7 @@ export class CampaignInstanceCharactersService {
       );
     }
     const materialization =
-      target === "ACTIVE"
+      target === "ACTIVE" && expected === "DRAFT"
         ? await this.characterDrafts.activationMaterialization(
             instanceId,
             characterId,
@@ -498,18 +510,102 @@ export class CampaignInstanceCharactersService {
         : undefined;
     await this.prisma.$transaction(async (tx) => {
       if (materialization) {
+        await tx.$executeRawUnsafe(
+          'LOCK TABLE "CampaignInstanceSession" IN SHARE ROW EXCLUSIVE MODE',
+        );
+        if (
+          await tx.campaignInstanceSession.findFirst({
+            where: { campaignInstanceId: instanceId, status: "ACTIVE" },
+            select: { id: true },
+          })
+        )
+          throw new ConflictException(
+            "Pause or conclude the active Session before activating a Character.",
+          );
         const currentInstance = await tx.campaignInstance.findFirst({
           where: {
             id: instanceId,
             currentSnapshotId: materialization.snapshotId,
           },
-          select: { id: true },
+          include: {
+            runtime: true,
+            currentSnapshot: {
+              include: {
+                campaignDefinitionSnapshot: true,
+                worldDefinitionSnapshot: true,
+              },
+            },
+          },
         });
         if (!currentInstance) {
           throw new ConflictException(
             "The Campaign Instance snapshot changed; review the Character sheet again.",
           );
         }
+        if (!currentInstance.runtime)
+          throw new ConflictException("The Instance runtime is unavailable.");
+        const owner = CampaignInstance.deserializePayload(
+          currentInstance.runtime.state,
+          { mode: "runtime", captured: runtimeCaptureContext(currentInstance) },
+        );
+        try {
+          const receipt = await owner.activateCharacter(
+            materialization.data,
+            {
+              ...materialization.equipmentContext,
+              campaignInstanceId: instanceId,
+              updatedAt: new Date().toISOString(),
+              createId: randomUUID,
+            },
+            ownerUserId,
+          );
+          if (receipt.status === "rejected")
+            throw new ConflictException(
+              receipt.reason ?? "Character activation rejected.",
+            );
+          const next = owner.serializePayload() as Record<
+            string,
+            Prisma.JsonValue
+          >;
+          if (validateRuntimeForCapturedPair(next, currentInstance).length)
+            throw new ConflictException(
+              "The Character does not conform to this captured Instance.",
+            );
+          const written = await tx.campaignInstanceRuntime.updateMany({
+            where: {
+              id: currentInstance.runtime.id,
+              revision: currentInstance.runtime.revision,
+              campaignInstanceSnapshotId: materialization.snapshotId,
+            },
+            data: { state: next, revision: { increment: 1 } },
+          });
+          if (written.count !== 1)
+            throw new ConflictException(
+              "Instance runtime changed; reload and retry Character activation.",
+            );
+        } catch (error) {
+          if (error instanceof TypeError)
+            throw new ConflictException(error.message);
+          throw error;
+        } finally {
+          owner.dispose();
+        }
+        // Recheck approval under a row lock before publishing the captured sheet.
+        // Consume its revision so a concurrent request-changes cannot commit after activation.
+        const approved = await tx.campaignInstanceCharacterDraft.updateMany({
+          where: {
+            characterId,
+            campaignInstanceId: instanceId,
+            playerMembershipId: character.playerMembershipId,
+            revision: materialization.sourceDraftRevision,
+            status: "COMPLETE",
+          },
+          data: { revision: { increment: 1 } },
+        });
+        if (approved.count !== 1)
+          throw new ConflictException(
+            "The approved Character sheet changed; review it again before activation.",
+          );
         await tx.domainRecord.upsert({
           where: {
             resource_id: { resource: "characters", id: characterId },
@@ -709,76 +805,23 @@ export class CampaignInstanceCharactersService {
   }
 }
 
-function importedCharacterDraftData(
-  value: Prisma.JsonValue,
-  name: string,
-): {
-  name: string;
-  backgroundDefinitionId?: string;
-  professionDefinitionId?: string;
-  heritageDefinitionIds: Prisma.InputJsonArray;
-  attributeAssignments: Prisma.InputJsonObject;
-  startingEquipmentIds: Prisma.InputJsonArray;
-  equipmentAssignments?: Prisma.InputJsonObject;
-  biography?: string;
-  imageAssetIds: Prisma.InputJsonObject;
-} {
-  if (!isJsonObject(value)) {
+function importedCharacterDraftData(value: Prisma.JsonValue, name: string) {
+  try {
+    return CharacterCreation.importDraft(value, name) as {
+      name: string;
+      sourceSheet: Prisma.InputJsonObject;
+      backgroundDefinitionId?: string;
+      professionDefinitionId?: string;
+      heritageDefinitionIds: Prisma.InputJsonArray;
+      attributeAssignments: Prisma.InputJsonObject;
+      startingEquipmentIds: Prisma.InputJsonArray;
+      equipmentAssignments: Prisma.InputJsonObject;
+      biography?: string;
+      imageAssetIds: Prisma.InputJsonObject;
+    };
+  } catch {
     throw new ConflictException(
       "The source Character sheet cannot be imported safely.",
     );
   }
-  return {
-    name,
-    ...(typeof value.backgroundDefinitionId === "string"
-      ? { backgroundDefinitionId: value.backgroundDefinitionId }
-      : {}),
-    ...(typeof value.professionDefinitionId === "string"
-      ? { professionDefinitionId: value.professionDefinitionId }
-      : {}),
-    heritageDefinitionIds: jsonStringArray(value.heritageDefinitionIds),
-    attributeAssignments: jsonNumberRecord(value.attributeAssignments),
-    startingEquipmentIds: jsonStringArray(value.startingEquipmentDefinitionIds),
-    equipmentAssignments: value.equipmentAssignments && typeof value.equipmentAssignments === "object" && !Array.isArray(value.equipmentAssignments) ? value.equipmentAssignments : {},
-    ...(typeof value.biography === "string"
-      ? { biography: value.biography }
-      : {}),
-    imageAssetIds: jsonStringRecord(value.imageAssetIds),
-  };
-}
-
-function jsonStringArray(
-  value: Prisma.JsonValue | undefined,
-): Prisma.InputJsonArray {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [];
-}
-
-function jsonNumberRecord(
-  value: Prisma.JsonValue | undefined,
-): Prisma.InputJsonObject {
-  if (!isJsonObject(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, number] => typeof entry[1] === "number",
-    ),
-  );
-}
-
-function jsonStringRecord(
-  value: Prisma.JsonValue | undefined,
-): Prisma.InputJsonObject {
-  if (!isJsonObject(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
-}
-
-function isJsonObject(
-  value: Prisma.JsonValue | undefined,
-): value is Prisma.JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

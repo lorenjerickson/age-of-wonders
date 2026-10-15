@@ -48,23 +48,40 @@ const record = (
 
 describe("World authoring projection", () => {
   it("loads legacy nested scores into adopted Attributes without submitting legacy objects", () => {
-    const payload = { attributes: { standard: {
-      might: { score: 42, modifier: -1 },
-      will: { score: 67, savingThrow: 2 },
-      unknown: { score: 99 },
-    } } };
-    expect(creatureAttributesForEditor(payload, [
-      { key: "aow:attribute-might" }, { key: "aow:attribute-wisdom" },
-    ])).toEqual({ "aow:attribute-might": 42, "aow:attribute-wisdom": 67 });
-    expect(payload.attributes.standard.will).toEqual({ score: 67, savingThrow: 2 });
+    const payload = {
+      attributes: {
+        standard: {
+          might: { score: 42, modifier: -1 },
+          will: { score: 67, savingThrow: 2 },
+          unknown: { score: 99 },
+        },
+      },
+    };
+    expect(
+      creatureAttributesForEditor(payload, [
+        { key: "aow:attribute-might" },
+        { key: "aow:attribute-wisdom" },
+      ]),
+    ).toEqual({ "aow:attribute-might": 42, "aow:attribute-wisdom": 67 });
+    expect(payload.attributes.standard.will).toEqual({
+      score: 67,
+      savingThrow: 2,
+    });
     expect(creatureAttributesForEditor(payload, [])).toEqual({});
   });
 
   it("preserves canonical custom Attribute values and loads flat legacy scores", () => {
-    expect(creatureAttributesForEditor({ components: { attributes: { "custom:luck": 12 } } }, []))
-      .toEqual({ "custom:luck": 12 });
-    expect(creatureAttributesForEditor({ attributes: { might: 42 } }, [{ key: "aow:attribute-might" }]))
-      .toEqual({ "aow:attribute-might": 42 });
+    expect(
+      creatureAttributesForEditor(
+        { components: { attributes: { "custom:luck": 12 } } },
+        [],
+      ),
+    ).toEqual({ "custom:luck": 12 });
+    expect(
+      creatureAttributesForEditor({ attributes: { might: 42 } }, [
+        { key: "aow:attribute-might" },
+      ]),
+    ).toEqual({ "aow:attribute-might": 42 });
   });
 
   it("resolves legacy armor slots and family against the adopted Model", () => {
@@ -340,9 +357,12 @@ describe("World authoring projection", () => {
       record("locations", "grandchild", { name: "Docks", parentId: "child" }),
       record("locations", "other", { name: "Highlands" }),
     ];
+    const before = structuredClone(locations);
     expect(
       locationParentOptions(locations, "root").map((option) => option.sourceId),
     ).toEqual(["other"]);
+    expect(locations).toEqual(before);
+    expect(locationParentOptions(locations, "root")[0]).toBe(locations[3]);
   });
 
   it("renders effective open model options supplied by the server projection", () => {

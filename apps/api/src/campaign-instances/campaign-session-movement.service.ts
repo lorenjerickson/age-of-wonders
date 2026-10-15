@@ -1,3 +1,5 @@
+import { RuleExecution } from "@aow/domain";
+import { Creature } from "@aow/domain";
 import { randomInt, randomUUID } from "node:crypto";
 import {
   BadRequestException,
@@ -8,7 +10,6 @@ import {
 } from "@nestjs/common";
 import { Prisma, type CampaignSessionMovementProposal } from "@prisma/client";
 import {
-  executeWorldRules,
   isTerrainActorPosition,
   type RecordedRuleRoll,
   type SessionMovementContext,
@@ -289,7 +290,7 @@ export class CampaignSessionMovementService {
             },
           };
           const entropy: RecordedRuleRoll[] = [];
-          let result = executeWorldRules({
+          let result = await RuleExecution.run({
             rules,
             event,
             state: view,
@@ -319,12 +320,12 @@ export class CampaignSessionMovementService {
                 ),
               });
             }
-            result = executeWorldRules({ rules, event, state: view, entropy });
+            result = await RuleExecution.run({ rules, event, state: view, entropy });
           }
           let nextState = state;
           if (result.status === "applied") {
             try {
-              nextState = applyMovementState(state, view, result.state);
+              nextState = await applyMovementState(state, view, result.state);
               const issues = validateRuntimeForCapturedPair(
                 nextState as Record<string, Prisma.JsonValue>,
                 instance,
@@ -657,15 +658,5 @@ export function movementResources(creature: Record<string, unknown>): {
   movementRemaining?: number;
   recordedMoves?: number;
 } {
-  const resources = object(object(creature.extensions)["aow:rules"]);
-  const remaining = resources["aow:movementRemaining"];
-  const moves = resources["aow:moves"];
-  return {
-    ...(typeof remaining === "number" && Number.isFinite(remaining)
-      ? { movementRemaining: remaining }
-      : {}),
-    ...(typeof moves === "number" && Number.isFinite(moves)
-      ? { recordedMoves: moves }
-      : {}),
-  };
+  return Creature.movementResources(creature);
 }

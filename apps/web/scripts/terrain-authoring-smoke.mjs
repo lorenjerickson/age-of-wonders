@@ -40,7 +40,7 @@ import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } fr
 import './index.css';
 const noop = () => {};
 const draft = await fetch('/fixture-draft').then(r=>r.json());
-const root = createRootRoute({component: () => <WorldAuthoringProvider definition={{id:'world',name:'Terrain test',status:'active',createdAt:'2026-09-11',updatedAt:'2026-09-11',revisions:[]}} initialDraft={draft}><WorldMapPage locationId="root"/></WorldAuthoringProvider>});
+const root = createRootRoute({component: () => <WorldAuthoringProvider definition={{id:'world',name:'Terrain test',status:'active',createdAt:'2026-09-11',updatedAt:'2026-09-11',revisions:[]}} initialDraft={draft}><WorldMapPage locationId="root" inlineTools/></WorldAuthoringProvider>});
 const router = createRouter({routeTree:root,history:createMemoryHistory({initialEntries:['/']})});
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router}/>);`,
     );

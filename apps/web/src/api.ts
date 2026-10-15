@@ -290,6 +290,7 @@ export interface WorldDefinitionList {
 }
 
 export interface WorldDefinitionDetail {
+  accessRole?: "owner" | "editor" | "viewer";
   id: string;
   name: string;
   description?: string;
@@ -889,6 +890,22 @@ export function saveWorldItem(
     `/worlds/${encodeURIComponent(worldDefinitionId)}/item-compendium/items`,
     input,
     existingId,
+  );
+}
+
+export function deleteWorldAuthoredRecord(
+  worldDefinitionId: string,
+  collectionPath: string,
+  sourceId: string,
+  expected: { expectedDraftId: string; expectedStorageRevision: number },
+) {
+  return request<WorldDefinitionDraft>(
+    `/worlds/${encodeURIComponent(worldDefinitionId)}/${collectionPath}/${encodeURIComponent(sourceId)}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(expected),
+    },
   );
 }
 
@@ -2532,6 +2549,10 @@ export function getMediaDownloadUrl(id: string) {
   );
 }
 
+export function getMediaAsset(id: string) {
+  return request<MediaAsset>(`/media/${encodeURIComponent(id)}`);
+}
+
 export function deleteMedia(id: string) {
   return request<void>(`/media/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -2584,6 +2605,16 @@ export function updateQuickStartProgress(
 export function listMapMedia(search = "", offset = 0) {
   return request<{ items: MediaAsset[]; total: number }>(
     `/media?${new URLSearchParams({ mediaType: "images", search, offset: String(offset), limit: "24" })}`,
+  );
+}
+
+export function listLocationPresentationMedia(
+  mediaType: "images" | "audio" | "video",
+  search = "",
+  offset = 0,
+) {
+  return request<{ items: MediaAsset[]; total: number }>(
+    `/media?${new URLSearchParams({ mediaType, search, offset: String(offset), limit: "24" })}`,
   );
 }
 export function generateLocationMap(
@@ -2797,4 +2828,75 @@ export function generateCharacterPortrait(
       body: JSON.stringify({ expectedRevision, direction, role }),
     },
   );
+}
+
+export interface ActorEquipmentProjection {
+  runtimeRevision: number;
+  actorName: string;
+  bonusActions: number | null;
+  slots: { id: string; name: string }[];
+  definitions: { id: string; name: string }[];
+  items: {
+    id: string;
+    name: string;
+    quantity: number;
+    locationLabel: string;
+    compatibleSlotSets: string[][];
+    container?: {
+      kind: string;
+      capacity: number | null;
+      slots: { index: number; itemId?: string; itemName?: string }[];
+    };
+  }[];
+  readOnly: boolean;
+}
+export interface ActorEquipmentRequest {
+  expectedRuntimeRevision: number;
+  action:
+    | "create"
+    | "equip"
+    | "unequip"
+    | "stow"
+    | "retrieve"
+    | "quantity"
+    | "allowance";
+  itemId?: string;
+  definitionId?: string;
+  slots?: string[];
+  containerId?: string;
+  index?: number;
+  quantity?: number;
+  bonusActions?: number;
+}
+export function getActorEquipment(
+  campaignId: string,
+  instanceId: string,
+  actorId: string,
+) {
+  return request<ActorEquipmentProjection>(
+    `/campaigns/${campaignId}/instances/${instanceId}/creature-embodiments/${actorId}/equipment`,
+  );
+}
+export function updateActorEquipment(
+  campaignId: string,
+  instanceId: string,
+  actorId: string,
+  body: ActorEquipmentRequest,
+) {
+  return request<ActorEquipmentProjection>(
+    `/campaigns/${campaignId}/instances/${instanceId}/creature-embodiments/${actorId}/equipment`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function changeSessionLocationWeather(campaignId: string, instanceId: string, sessionId: string, input: {expectedRuntimeRevision: number; locationId: string; weather?: import("@aow/common").LocationWeather | null; reset?: boolean}) {
+  return request<import("@aow/common").CampaignSessionTableProjection>(`/campaigns/${encodeURIComponent(campaignId)}/instances/${encodeURIComponent(instanceId)}/sessions/${encodeURIComponent(sessionId)}/table/weather`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(input)});
+}
+
+export function updateInstanceAgentCapabilities(campaignId:string, instanceId:string, participationId:string, input:{expectedObserve:readonly string[];expectedAct:readonly string[];observe:string[];act:string[]}) {
+ return request<CampaignInstanceRoster>(instancePath(campaignId,instanceId,`/agents/${encodeURIComponent(participationId)}/capabilities`),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});
 }

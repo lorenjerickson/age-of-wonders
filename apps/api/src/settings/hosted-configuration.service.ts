@@ -131,6 +131,13 @@ export class HostedConfigurationService {
     return value;
   }
 
+  openAiImageModel(): string {
+    return (
+      this.config.get<string>("OPENAI_IMAGE_MODEL")?.trim() ||
+      "gpt-image-2.5-flare"
+    );
+  }
+
   async openAiApiKey(): Promise<string | undefined> {
     const effective = await this.effective(DEFINITIONS.openai);
     return typeof effective.value === "string" ? effective.value : undefined;

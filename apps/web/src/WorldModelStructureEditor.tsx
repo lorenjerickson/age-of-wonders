@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useBlocker } from "@tanstack/react-router";
+import { RuleTextField } from "./RuleValueFields";
+import { protectedComparisonText } from "./comparisonPrerequisiteModel";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useBlocker, useLocation } from "@tanstack/react-router";
 import {
   Alert,
   Button,
@@ -27,14 +29,18 @@ import {
   modelStructureKey,
   modelStructureLabel,
   modelStructurePayload,
+  modelStructurePayloadEditable,
   type ModelFieldAtomicKind,
   type ModelStructureKind,
 } from "./modelStructureModel";
 import { DraftRequired, useWorldAuthoring } from "./WorldAuthoringShell";
 import {
+  worldWorkspaceSuffix,
   draftAdoptingRegistryRelease,
   recoverableRegistryRelease,
 } from "./worldAuthoringModel";
+
+import { RouterButtonLink, useInternalNavigate } from "./navigation";
 
 type EditableElement = ModelRegistryDetail["elements"][number];
 
@@ -53,9 +59,32 @@ const FIELD_KINDS: ReadonlyArray<{
   { value: "concept-value", label: "Nested concept value" },
 ];
 
-export function WorldModelStructureEditor() {
-  const { draft, saveDraft, refreshEffectiveModels, canEdit, markDirty } =
-    useWorldAuthoring();
+export function WorldModelStructureEditor({
+  context = "effective",
+}: {
+  context?: string;
+}) {
+  const {
+    definition,
+    draft,
+    saveDraft,
+    refreshEffectiveModels,
+    canEdit,
+    markDirty,
+  } = useWorldAuthoring();
+  const location = useLocation();
+  const navigate = useInternalNavigate();
+  const leaving = useRef(false);
+  const initialized = useRef(false);
+  const isListContext = context === "effective";
+  const isNew = context === "new";
+  const base = `/worlds/${encodeURIComponent(definition.id)}/characters/model/structure`;
+  const suffix = worldWorkspaceSuffix(location.searchStr);
+  const listHref = `${base}/effective${suffix}`;
+  function returnToList() {
+    leaving.current = true;
+    void navigate(listHref);
+  }
   const [registries, setRegistries] = useState<ModelRegistrySummary[]>([]);
   const [registryId, setRegistryId] = useState("");
   const [editing, setEditing] = useState<EditableElement>();
@@ -93,6 +122,19 @@ export function WorldModelStructureEditor() {
     };
     label: string;
   }>();
+  const recordIds = new Set([
+    ...(draft?.effectiveModels?.elements ?? []).flatMap((option) =>
+      [
+        option.elementId,
+        option.registryId,
+        option.revisionId,
+        option.sourceReleaseId,
+      ].filter((id): id is string => Boolean(id)),
+    ),
+    ...registries.map((registry) => registry.identity.id),
+  ]);
+  const safeLabel = (value: string, fallback = "Unnamed Model element") =>
+    protectedComparisonText(value, recordIds) ? fallback : value;
   const gmRegistries = registries.filter(
     (registry) => registry.provenance.kind === "gm",
   );
@@ -142,12 +184,25 @@ export function WorldModelStructureEditor() {
     ownerConceptId ||
     sourceConceptId ||
     targetConceptId ||
-    defaultLiteral,
+    defaultLiteral ||
+    kind !== "concept" ||
+    semanticRole !== "custom:concept" ||
+    storageKey !== "custom:value" ||
+    atomicKind !== "string" ||
+    referenceElementId ||
+    list ||
+    minimum ||
+    maximum ||
+    unique ||
+    inverseLabel ||
+    referencePolicy !== "same-release",
   );
 
   useBlocker({
     shouldBlockFn: () =>
-      dirty && !window.confirm("Leave without publishing this Model change?"),
+      !leaving.current &&
+      dirty &&
+      !window.confirm("Leave without publishing this Model change?"),
     enableBeforeUnload: dirty,
   });
   useEffect(() => {
@@ -181,7 +236,7 @@ export function WorldModelStructureEditor() {
         if (!recovery) return;
         setPending({
           release: releaseReference(recovery),
-          label: recovery.name || "Published Model release",
+          label: safeLabel(recovery.name || "Published Model release"),
         });
         setMessage(
           "A published Model release must be adopted before another structural change is published.",
@@ -192,6 +247,31 @@ export function WorldModelStructureEditor() {
       active = false;
     };
   }, [draft, pending, registryId]);
+
+  useEffect(() => {
+    if (
+      isListContext ||
+      isNew ||
+      initialized.current ||
+      !draft?.effectiveModels ||
+      !registries.length
+    )
+      return;
+    initialized.current = true;
+    const matches = structure.filter((option) => option.elementId === context);
+    const selected = matches.length === 1 ? matches[0] : undefined;
+    if (
+      selected &&
+      gmRegistries.some(
+        (registry) => registry.identity.id === selected.registryId,
+      )
+    )
+      void beginEdit(selected);
+    else
+      setMessage(
+        "This Model element is unavailable or read only. Return to the list to choose an editable element.",
+      );
+  }, [context, draft?.effectiveModels, registries]);
 
   function reset() {
     setEditing(undefined);
@@ -227,7 +307,7 @@ export function WorldModelStructureEditor() {
     },
     label: string,
   ) {
-    if (!draft) return false;
+    if (!draft || !canEdit) return false;
     const next = draftAdoptingRegistryRelease(
       draft,
       draft.effectiveModels?.releases ?? [],
@@ -240,7 +320,7 @@ export function WorldModelStructureEditor() {
     if (!(await saveDraft(next))) {
       setPending({ release, label });
       setMessage(
-        `${label} was published, but this World did not adopt it. Resolve the draft conflict, then retry adoption.`,
+        `${safeLabel(label)} was published, but this World did not adopt it. Resolve the draft conflict, then retry adoption.`,
       );
       return false;
     }
@@ -248,7 +328,7 @@ export function WorldModelStructureEditor() {
       await refreshEffectiveModels();
     } catch {
       setMessage(
-        `${label} was published and adopted. Reload to refresh the structure list.`,
+        `${safeLabel(label)} was published and adopted. Reload to refresh the structure list.`,
       );
     }
     setPending(undefined);
@@ -264,12 +344,35 @@ export function WorldModelStructureEditor() {
       const element = registry.elements.find(
         (candidate) => candidate.id === option.elementId,
       );
-      if (!element?.currentRevision || !isStructureKind(element.kind)) {
+      if (
+        !element?.currentRevision ||
+        !isStructureKind(element.kind) ||
+        (option.revisionId &&
+          option.revisionId !== element.currentRevision.identity.id)
+      ) {
         setMessage("That Model element is no longer available for editing.");
         return;
       }
       const payload = element.currentRevision.payload;
+      if (!modelStructurePayloadEditable(element.kind, payload)) {
+        setMessage(
+          "This imported Model structure uses unsupported field data and is preserved read only.",
+        );
+        return;
+      }
       const presentation = element.currentRevision.presentation;
+      if (
+        ["label", "description", "helpText", "group"].some(
+          (key) =>
+            presentation[key] !== undefined &&
+            typeof presentation[key] !== "string",
+        ) ||
+        (presentation.order !== undefined &&
+          typeof presentation.order !== "number")
+      ) {
+        setMessage("This imported Model presentation is preserved read only.");
+        return;
+      }
       const cardinality = objectValue(payload.cardinality);
       const valueType = objectValue(payload.valueType);
       const isList = valueType.kind === "list";
@@ -321,7 +424,15 @@ export function WorldModelStructureEditor() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !valid) return;
+    if (
+      !draft ||
+      !canEdit ||
+      working ||
+      pending ||
+      !valid ||
+      (!isNew && !editing)
+    )
+      return;
     setWorking(true);
     setMessage("");
     try {
@@ -350,7 +461,12 @@ export function WorldModelStructureEditor() {
       const currentElement = editing
         ? registry.elements.find(({ id }) => id === editing.id)
         : undefined;
-      if (editing && !currentElement?.currentRevision) {
+      if (
+        editing &&
+        (!currentElement?.currentRevision ||
+          editing.currentRevision?.identity.id !==
+            currentElement.currentRevision.identity.id)
+      ) {
         setMessage("That Model element changed. Reload and try again.");
         return;
       }
@@ -375,10 +491,22 @@ export function WorldModelStructureEditor() {
       const presentation = {
         ...(currentElement?.currentRevision?.presentation ?? {}),
         label: name.trim(),
-        description: description.trim(),
-        helpText: helpText.trim(),
-        group: group.trim(),
-        order,
+        ...(description ||
+        currentElement?.currentRevision?.presentation.description !== undefined
+          ? { description: description.trim() }
+          : {}),
+        ...(helpText ||
+        currentElement?.currentRevision?.presentation.helpText !== undefined
+          ? { helpText: helpText.trim() }
+          : {}),
+        ...(group ||
+        currentElement?.currentRevision?.presentation.group !== undefined
+          ? { group: group.trim() }
+          : {}),
+        ...(order ||
+        currentElement?.currentRevision?.presentation.order !== undefined
+          ? { order }
+          : {}),
       };
       const result = await extendModelRegistryRelease(selected.identity.id, {
         name: `${editing ? "Revise" : "Add"} ${name.trim()}`,
@@ -413,7 +541,10 @@ export function WorldModelStructureEditor() {
         releaseReference(result.release),
         name.trim(),
       );
-      if (adopted) reset();
+      if (adopted) {
+        reset();
+        returnToList();
+      }
     } catch (error) {
       setMessage(
         error instanceof ApiRequestError && error.status === 409
@@ -428,10 +559,12 @@ export function WorldModelStructureEditor() {
   async function archive(option: WorldModelOption) {
     if (
       !draft ||
+      !canEdit ||
+      working ||
       !option.registryId ||
       !option.elementId ||
       !window.confirm(
-        `Archive ${option.name}? Existing releases keep it, while the successor omits it.`,
+        `Archive ${safeLabel(option.name)}? Existing releases keep it, while the successor omits it.`,
       )
     )
       return;
@@ -450,7 +583,7 @@ export function WorldModelStructureEditor() {
         return;
       }
       const result = await extendModelRegistryRelease(option.registryId, {
-        name: `Archive ${option.name}`,
+        name: `Archive ${safeLabel(option.name)}`,
         predecessorRevisionId: registry.releases[0]?.identity.id,
         archiveElementIds: [option.elementId],
       });
@@ -464,7 +597,7 @@ export function WorldModelStructureEditor() {
 
   if (!canEdit)
     return (
-      <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
+      <main className="[&_input]:min-h-11 [&_select]:min-h-11 [&_button]:min-h-11 [&_a]:min-h-11 mx-auto max-w-5xl px-6 py-12 lg:px-10">
         <h1 className="text-4xl font-semibold">Schema Structure</h1>
         <Alert tone="warning" className="mt-8">
           This World is read only. Restore it before changing Model structure.
@@ -473,7 +606,7 @@ export function WorldModelStructureEditor() {
     );
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12 lg:px-10">
+    <main className="[&_input]:min-h-11 [&_select]:min-h-11 [&_button]:min-h-11 [&_a]:min-h-11 mx-auto max-w-6xl px-6 py-12 lg:px-10">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         Characters · Models &amp; Taxonomies
       </p>
@@ -481,356 +614,438 @@ export function WorldModelStructureEditor() {
         Schema Structure
       </h1>
       <p className="mt-4 max-w-3xl text-base-content/65">
-        Add Concepts, Fields, and Relationships without changing TypeScript.
+        Define Concepts, Fields, and Relationships for this World.
         References use the exact immutable Model releases adopted by this World.
       </p>
-      <section className="mt-8" aria-labelledby="model-structure-heading">
-        <h2 id="model-structure-heading" className="text-2xl font-semibold">
-          Effective structure
-        </h2>
-        <ul className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {structure.map((option) => {
-            const editable = gmRegistries.some(
-              (registry) => registry.identity.id === option.registryId,
-            );
-            return (
-              <li
-                key={option.key}
-                className="rounded-box border border-base-300 bg-base-200 p-4"
-              >
-                <p className="text-xs font-semibold text-primary uppercase">
-                  {isStructureKind(option.kind)
-                    ? modelStructureLabel(option.kind)
-                    : "Model element"}
-                </p>
-                <h3 className="mt-1 font-semibold">{option.name}</h3>
-                {option.description && (
-                  <p className="mt-1 text-sm text-base-content/55">
-                    {option.description}
-                  </p>
-                )}
-                {editable && (
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      tone="outline"
-                      disabled={working}
-                      onClick={() => void beginEdit(option)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      tone="outline"
-                      disabled={working}
-                      onClick={() => void archive(option)}
-                    >
-                      Archive
-                    </Button>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-      <DraftRequired>
-        <form
-          onSubmit={(event) => void submit(event)}
-          className="mt-10 rounded-box border border-base-300 p-5"
+      {message && <Alert className="mt-4">{message}</Alert>}
+      {isListContext && pending && (
+        <Button
+          className="mt-4"
+          disabled={working}
+          onClick={() =>
+            void adopt(pending.release, pending.label).then((ok) => {
+              if (ok) returnToList();
+            })
+          }
         >
-          <h2 className="text-2xl font-semibold">
-            {editing ? "Edit" : "Add"} {modelStructureLabel(kind)}
+          Adopt pending release
+        </Button>
+      )}
+      {isListContext ? (
+        <RouterButtonLink
+          href={`${base}/new${suffix}`}
+          tone="primary"
+          className="mt-6"
+        >
+          Add Model element
+        </RouterButtonLink>
+      ) : (
+        <RouterButtonLink href={listHref} tone="outline" className="mt-6">
+          Back to Schema Structure
+        </RouterButtonLink>
+      )}
+      {isListContext && (
+        <section className="mt-8" aria-labelledby="model-structure-heading">
+          <h2 id="model-structure-heading" className="text-2xl font-semibold">
+            Effective structure
           </h2>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <Field label="Element kind" required>
-              <Select
-                value={kind}
-                disabled={Boolean(editing)}
-                onChange={(event) => {
-                  const next = event.target.value as ModelStructureKind;
-                  setKind(next);
-                  setSemanticRole(`custom:${next}`);
-                }}
-                className="mt-2 w-full"
-              >
-                {MODEL_STRUCTURE_KINDS.map((value) => (
-                  <option key={value} value={value}>
-                    {modelStructureLabel(value)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Semantic role" required>
-              <Input
-                required
-                value={semanticRole}
-                disabled={Boolean(editing)}
-                onChange={(event) => setSemanticRole(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Display name" required>
-              <Input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Display group">
-              <Input
-                value={group}
-                onChange={(event) => setGroup(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Description" className="md:col-span-2">
-              <Textarea
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Authoring help" className="md:col-span-2">
-              <Textarea
-                rows={3}
-                value={helpText}
-                onChange={(event) => setHelpText(event.target.value)}
-                className="mt-2 w-full"
-              />
-            </Field>
-            <Field label="Display order" required>
-              <Input
-                required
-                type="number"
-                value={order}
-                onChange={(event) => setOrder(Number(event.target.value))}
-                className="mt-2 w-full"
-              />
-            </Field>
-          </div>
-          {kind === "concept" && (
-            <Field label="Parent Concept" className="mt-5">
-              <Select
-                value={parentConceptId}
-                onChange={(event) => setParentConceptId(event.target.value)}
-                className="mt-2 w-full"
-              >
-                <option value="">No parent Concept</option>
-                {concepts.map((concept) => (
-                  <option key={concept.key} value={concept.elementId ?? ""}>
-                    {concept.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          {kind === "field" && (
-            <Fieldset className="mt-6 rounded-box border border-base-300 p-4">
-              <Legend className="px-2 font-semibold">Field definition</Legend>
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Owning Concept" required>
-                  <Select
-                    required
-                    value={ownerConceptId}
-                    onChange={(event) => setOwnerConceptId(event.target.value)}
-                    className="mt-2 w-full"
-                  >
-                    <option value="" disabled>
-                      Choose a Concept
+          <ul className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {structure.map((option) => {
+              const editable = gmRegistries.some(
+                (registry) => registry.identity.id === option.registryId,
+              );
+              return (
+                <li
+                  key={option.key}
+                  className="rounded-box border border-base-300 bg-base-200 p-4"
+                >
+                  <p className="text-xs font-semibold text-primary uppercase">
+                    {isStructureKind(option.kind)
+                      ? modelStructureLabel(option.kind)
+                      : "Model element"}
+                  </p>
+                  <h3 className="mt-1 font-semibold">
+                    {safeLabel(option.name)}
+                  </h3>
+                  {option.description && (
+                    <p className="mt-1 text-sm text-base-content/55">
+                      {safeLabel(option.description)}
+                    </p>
+                  )}
+                  {editable && (
+                    <div className="mt-3 flex gap-2">
+                      <RouterButtonLink
+                        href={`${base}/${encodeURIComponent(option.elementId!)}${suffix}`}
+                        tone="outline"
+                      >
+                        Edit
+                      </RouterButtonLink>
+                      <Button
+                        type="button"
+                        className="min-h-11"
+                        tone="outline"
+                        disabled={working}
+                        onClick={() => void archive(option)}
+                      >
+                        Archive
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+      {!isListContext && (
+        <DraftRequired>
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="mt-10 rounded-box border border-base-300 p-5"
+          >
+            <h2 className="text-2xl font-semibold">
+              {editing ? "Edit" : "Add"} {modelStructureLabel(kind)}
+            </h2>
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <Field label="Element kind" required>
+                <Select
+                  value={kind}
+                  disabled={Boolean(editing)}
+                  onChange={(event) => {
+                    const next = event.target.value as ModelStructureKind;
+                    setKind(next);
+                    setSemanticRole(`custom:${next}`);
+                  }}
+                  className="mt-2 w-full"
+                >
+                  {MODEL_STRUCTURE_KINDS.map((value) => (
+                    <option key={value} value={value}>
+                      {modelStructureLabel(value)}
                     </option>
-                    {concepts.map((concept) => (
-                      <option key={concept.key} value={concept.elementId}>
-                        {concept.name}
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Semantic role" required>
+                <Input
+                  required
+                  value={safeLabel(semanticRole, "Existing semantic role")}
+                  disabled={Boolean(editing)}
+                  onChange={(event) => setSemanticRole(event.target.value)}
+                  className="mt-2 w-full"
+                />
+              </Field>
+              <RuleTextField
+                label="Display name"
+                value={name}
+                onChange={setName}
+                recordIds={recordIds}
+              />
+              <RuleTextField
+                label="Display group"
+                value={group}
+                onChange={setGroup}
+                recordIds={recordIds}
+              />
+              <RuleTextField
+                label="Description"
+                value={description}
+                onChange={setDescription}
+                recordIds={recordIds}
+              />
+              <RuleTextField
+                label="Authoring help"
+                value={helpText}
+                onChange={setHelpText}
+                recordIds={recordIds}
+              />
+              <Field label="Display order" required>
+                <Input
+                  required
+                  type="number"
+                  value={order}
+                  onChange={(event) => setOrder(Number(event.target.value))}
+                  className="mt-2 w-full"
+                />
+              </Field>
+            </div>
+            {kind === "concept" && (
+              <Field label="Parent Concept" className="mt-5">
+                <Select
+                  value={parentConceptId}
+                  onChange={(event) => setParentConceptId(event.target.value)}
+                  className="mt-2 w-full"
+                >
+                  {parentConceptId &&
+                    !concepts.some(
+                      (option) => option.elementId === parentConceptId,
+                    ) && (
+                      <option value={parentConceptId}>
+                        Unavailable reference
                       </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Storage key" required>
-                  <Input
-                    required
-                    value={storageKey}
-                    onChange={(event) => setStorageKey(event.target.value)}
-                    className="mt-2 w-full"
-                  />
-                </Field>
-                <Field label="Value type" required>
-                  <Select
-                    value={atomicKind}
-                    onChange={(event) =>
-                      setAtomicKind(event.target.value as ModelFieldAtomicKind)
-                    }
-                    className="mt-2 w-full"
-                  >
-                    {FIELD_KINDS.map(({ value, label }) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                {(atomicKind === "vocabulary-option-reference" ||
-                  atomicKind === "definition-reference" ||
-                  atomicKind === "entity-reference" ||
-                  atomicKind === "concept-value") && (
-                  <Field
-                    label={
-                      atomicKind === "vocabulary-option-reference"
-                        ? "Vocabulary"
-                        : "Referenced Concept"
-                    }
-                    required
-                  >
+                    )}
+                  <option value="">No parent Concept</option>
+                  {concepts.map((concept) => (
+                    <option key={concept.key} value={concept.elementId ?? ""}>
+                      {safeLabel(concept.name)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            {kind === "field" && (
+              <Fieldset className="mt-6 rounded-box border border-base-300 p-4">
+                <Legend className="px-2 font-semibold">Field definition</Legend>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <Field label="Owning Concept" required>
                     <Select
                       required
-                      value={referenceElementId}
+                      value={ownerConceptId}
                       onChange={(event) =>
-                        setReferenceElementId(event.target.value)
+                        setOwnerConceptId(event.target.value)
                       }
                       className="mt-2 w-full"
                     >
+                      {ownerConceptId &&
+                        !concepts.some(
+                          (option) => option.elementId === ownerConceptId,
+                        ) && (
+                          <option value={ownerConceptId}>
+                            Unavailable reference
+                          </option>
+                        )}
                       <option value="" disabled>
-                        Choose an available model
+                        Choose a Concept
                       </option>
-                      {(atomicKind === "vocabulary-option-reference"
-                        ? vocabularies
-                        : concepts
-                      ).map((option) => (
-                        <option key={option.key} value={option.elementId ?? ""}>
-                          {option.name}
+                      {concepts.map((concept) => (
+                        <option key={concept.key} value={concept.elementId}>
+                          {safeLabel(concept.name)}
                         </option>
                       ))}
                     </Select>
                   </Field>
-                )}
-                <Checkbox
-                  checked={list}
-                  onChange={(event) => setList(event.target.checked)}
-                  label="Store a list of values"
-                  wrapperClassName="min-h-11 self-end"
-                />
-                <Checkbox
-                  checked={unique}
-                  onChange={(event) => setUnique(event.target.checked)}
-                  label="Require unique list values"
-                  disabled={!list}
-                  wrapperClassName="min-h-11 self-end"
-                />
-              </div>
-              <CardinalityFields
-                minimum={minimum}
-                maximum={maximum}
-                onMinimum={setMinimum}
-                onMaximum={setMaximum}
-              />
-              <Field label="Literal default (JSON)" className="mt-5">
-                <Textarea
-                  rows={3}
-                  value={defaultLiteral}
-                  onChange={(event) => setDefaultLiteral(event.target.value)}
-                  placeholder='Examples: 0, false, "unknown", or []'
-                  className="mt-2 w-full font-mono text-sm"
-                />
-              </Field>
-              {!defaultResult.valid && (
-                <p className="mt-2 text-sm text-error" role="alert">
-                  Enter a valid JSON value or leave the default blank.
-                </p>
-              )}
-            </Fieldset>
-          )}
-          {kind === "relationship" && (
-            <Fieldset className="mt-6 rounded-box border border-base-300 p-4">
-              <Legend className="px-2 font-semibold">
-                Relationship definition
-              </Legend>
-              <div className="grid gap-5 md:grid-cols-2">
-                <ConceptSelect
-                  label="Source Concept"
-                  value={sourceConceptId}
-                  concepts={concepts}
-                  onChange={setSourceConceptId}
-                />
-                <ConceptSelect
-                  label="Target Concept"
-                  value={targetConceptId}
-                  concepts={concepts}
-                  onChange={setTargetConceptId}
-                />
-                <Field label="Inverse label">
-                  <Input
-                    value={inverseLabel}
-                    onChange={(event) => setInverseLabel(event.target.value)}
-                    className="mt-2 w-full"
+                  <RuleTextField
+                    label="Storage key"
+                    value={storageKey}
+                    onChange={setStorageKey}
+                    recordIds={recordIds}
                   />
-                </Field>
-                <Field label="Reference policy" required>
-                  <Select
-                    value={referencePolicy}
-                    onChange={(event) =>
-                      setReferencePolicy(
-                        event.target.value as typeof referencePolicy,
-                      )
-                    }
-                    className="mt-2 w-full"
-                  >
-                    <option value="same-release">Same captured release</option>
-                    <option value="captured-upstream">Captured upstream</option>
-                    <option value="runtime-local">Runtime local</option>
-                  </Select>
-                </Field>
-              </div>
-              <CardinalityFields
-                minimum={minimum}
-                maximum={maximum}
-                onMinimum={setMinimum}
-                onMaximum={setMaximum}
-              />
-            </Fieldset>
-          )}
-          {!valid && (
-            <p className="mt-4 text-sm text-error" role="alert">
-              Complete the required named fields with valid cardinality and
-              namespaced keys before publishing.
-            </p>
-          )}
-          {message && (
-            <p className="mt-4 text-sm" aria-live="polite">
-              {message}
-            </p>
-          )}
-          {pending && (
-            <Button
-              type="button"
-              tone="outline"
-              className="mt-4"
-              disabled={working}
-              onClick={() => void adopt(pending.release, pending.label)}
-            >
-              Adopt pending release
-            </Button>
-          )}
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              type="submit"
-              tone="primary"
-              loading={working}
-              disabled={!valid || working || Boolean(pending)}
-            >
-              {editing ? "Publish revision and adopt" : "Publish and adopt"}
-            </Button>
-            {editing && (
-              <Button type="button" tone="outline" onClick={reset}>
-                Cancel editing
+                  <Field label="Value type" required>
+                    <Select
+                      value={atomicKind}
+                      onChange={(event) =>
+                        setAtomicKind(
+                          event.target.value as ModelFieldAtomicKind,
+                        )
+                      }
+                      className="mt-2 w-full"
+                    >
+                      {FIELD_KINDS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  {(atomicKind === "vocabulary-option-reference" ||
+                    atomicKind === "definition-reference" ||
+                    atomicKind === "entity-reference" ||
+                    atomicKind === "concept-value") && (
+                    <Field
+                      label={
+                        atomicKind === "vocabulary-option-reference"
+                          ? "Vocabulary"
+                          : "Referenced Concept"
+                      }
+                      required
+                    >
+                      <Select
+                        required
+                        value={referenceElementId}
+                        onChange={(event) =>
+                          setReferenceElementId(event.target.value)
+                        }
+                        className="mt-2 w-full"
+                      >
+                        {referenceElementId &&
+                          !(
+                            atomicKind === "vocabulary-option-reference"
+                              ? vocabularies
+                              : concepts
+                          ).some(
+                            (option) => option.elementId === referenceElementId,
+                          ) && (
+                            <option value={referenceElementId}>
+                              Unavailable reference
+                            </option>
+                          )}
+                        <option value="" disabled>
+                          Choose an available model
+                        </option>
+                        {(atomicKind === "vocabulary-option-reference"
+                          ? vocabularies
+                          : concepts
+                        ).map((option) => (
+                          <option
+                            key={option.key}
+                            value={option.elementId ?? ""}
+                          >
+                            {safeLabel(option.name)}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )}
+                  <Checkbox
+                    checked={list}
+                    onChange={(event) => setList(event.target.checked)}
+                    label="Store a list of values"
+                    wrapperClassName="min-h-11 self-end"
+                  />
+                  <Checkbox
+                    checked={unique}
+                    onChange={(event) => setUnique(event.target.checked)}
+                    label="Require unique list values"
+                    disabled={!list}
+                    wrapperClassName="min-h-11 self-end"
+                  />
+                </div>
+                <CardinalityFields
+                  minimum={minimum}
+                  maximum={maximum}
+                  onMinimum={setMinimum}
+                  onMaximum={setMaximum}
+                />
+                {protectedComparisonText(defaultLiteral, recordIds) ? (
+                  <RuleTextField
+                    label="Literal default"
+                    value={defaultLiteral}
+                    onChange={setDefaultLiteral}
+                    recordIds={recordIds}
+                  />
+                ) : (
+                  <Field label="Literal default (JSON)" className="mt-5">
+                    <Textarea
+                      rows={3}
+                      value={defaultLiteral}
+                      onChange={(event) =>
+                        setDefaultLiteral(event.target.value)
+                      }
+                      placeholder='Examples: 0, false, "unknown", or []'
+                      className="mt-2 w-full font-mono text-sm"
+                    />
+                  </Field>
+                )}
+                {!defaultResult.valid && (
+                  <p className="mt-2 text-sm text-error" role="alert">
+                    Enter a valid JSON value or leave the default blank.
+                  </p>
+                )}
+              </Fieldset>
+            )}
+            {kind === "relationship" && (
+              <Fieldset className="mt-6 rounded-box border border-base-300 p-4">
+                <Legend className="px-2 font-semibold">
+                  Relationship definition
+                </Legend>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <ConceptSelect
+                    label="Source Concept"
+                    value={sourceConceptId}
+                    concepts={concepts}
+                    onChange={setSourceConceptId}
+                  />
+                  <ConceptSelect
+                    label="Target Concept"
+                    value={targetConceptId}
+                    concepts={concepts}
+                    onChange={setTargetConceptId}
+                  />
+                  <RuleTextField
+                    label="Inverse label"
+                    value={inverseLabel}
+                    onChange={setInverseLabel}
+                    recordIds={recordIds}
+                  />
+                  <Field label="Reference policy" required>
+                    <Select
+                      value={referencePolicy}
+                      onChange={(event) =>
+                        setReferencePolicy(
+                          event.target.value as typeof referencePolicy,
+                        )
+                      }
+                      className="mt-2 w-full"
+                    >
+                      <option value="same-release">
+                        Same captured release
+                      </option>
+                      <option value="captured-upstream">
+                        Captured upstream
+                      </option>
+                      <option value="runtime-local">Runtime local</option>
+                    </Select>
+                  </Field>
+                </div>
+                <CardinalityFields
+                  minimum={minimum}
+                  maximum={maximum}
+                  onMinimum={setMinimum}
+                  onMaximum={setMaximum}
+                />
+              </Fieldset>
+            )}
+            {!valid && (
+              <p className="mt-4 text-sm text-error" role="alert">
+                Complete the required named fields with valid cardinality and
+                namespaced keys before publishing.
+              </p>
+            )}
+            {message && (
+              <p className="mt-4 text-sm" aria-live="polite">
+                {message}
+              </p>
+            )}
+            {pending && (
+              <Button
+                type="button"
+                tone="outline"
+                className="mt-4"
+                disabled={working}
+                onClick={() =>
+                  void adopt(pending.release, pending.label).then((ok) => {
+                    if (ok) returnToList();
+                  })
+                }
+              >
+                Adopt pending release
               </Button>
             )}
-          </div>
-        </form>
-      </DraftRequired>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                type="submit"
+                tone="primary"
+                loading={working}
+                disabled={
+                  !valid || working || Boolean(pending) || (!isNew && !editing)
+                }
+              >
+                {editing ? "Publish revision and adopt" : "Publish and adopt"}
+              </Button>
+              <Button
+                type="button"
+                tone="outline"
+                disabled={working}
+                onClick={() => {
+                  if (!dirty || window.confirm("Discard this Model change?"))
+                    returnToList();
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DraftRequired>
+      )}
     </main>
   );
 }
@@ -891,12 +1106,24 @@ function ConceptSelect({
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 w-full"
       >
+        {value && !concepts.some((option) => option.elementId === value) && (
+          <option value={value}>Unavailable Concept</option>
+        )}
         <option value="" disabled>
           Choose a Concept
         </option>
         {concepts.map((concept) => (
           <option key={concept.key} value={concept.elementId ?? ""}>
-            {concept.name}
+            {protectedComparisonText(
+              concept.name,
+              new Set(
+                concepts.flatMap((option) =>
+                  option.elementId ? [option.elementId] : [],
+                ),
+              ),
+            )
+              ? "Unnamed Concept"
+              : concept.name}
           </option>
         ))}
       </Select>

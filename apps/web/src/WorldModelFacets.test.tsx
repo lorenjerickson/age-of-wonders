@@ -56,4 +56,14 @@ describe("World Model facets", () => {
     );
     expect(html).toContain('href="/worlds/example/characters/models"');
   });
+  it("reserves focused editor space for the task", () => {
+    location.pathname = "/worlds/example/characters/model/structure/new";
+    const html = renderToStaticMarkup(
+      <WorldModelFacets>
+        <p>Add Concept</p>
+      </WorldModelFacets>,
+    );
+    expect(html).toContain("Add Concept");
+    expect(html).not.toContain('role="tablist"');
+  });
 });

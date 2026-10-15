@@ -1,3 +1,4 @@
+import { protectedComparisonText } from "./comparisonPrerequisiteModel";
 import { Fieldset, Legend } from "@aow/ui";
 import { Button, Input, Label, Select, Textarea } from "@aow/ui";
 import type {
@@ -42,11 +43,27 @@ function TextControl({
   label,
   value,
   onChange,
+  protectedIds = [],
 }: {
+  protectedIds?: readonly string[];
   label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
+  if (protectedComparisonText(value, new Set(protectedIds)))
+    return (
+      <div>
+        <p className="text-sm">{label}: existing binding preserved.</p>
+        <Button
+          tone="outline"
+          onClick={() => {
+            if (window.confirm("Replace this existing binding?")) onChange("");
+          }}
+        >
+          Replace {label.toLowerCase()}
+        </Button>
+      </div>
+    );
   return (
     <Label>
       {label}
@@ -69,6 +86,8 @@ function ExpressionEditor({
   label: string;
   depth?: number;
 }) {
+  if (!value || typeof value !== "object" || !(value.kind in defaults))
+    return <p>Imported value preserved; this editor does not support it.</p>;
   if (depth > 8)
     return (
       <p className="text-sm">
@@ -96,6 +115,8 @@ function ExpressionEditor({
           className="mt-1 w-full"
           value={value.kind}
           onChange={(event) =>
+            event.currentTarget.value !== value.kind &&
+            window.confirm("Replace this value and its nested content?") &&
             onChange(
               defaults[
                 event.currentTarget.value as WorldRuleExpression["kind"]
@@ -298,7 +319,7 @@ function ExpressionEditor({
                   "Operand " + (index + 1),
                 )}
                 <Button
-                  size="sm"
+                  size="md"
                   tone="ghost"
                   disabled={value.operands.length <= 2}
                   onClick={() =>
@@ -313,7 +334,7 @@ function ExpressionEditor({
               </div>
             ))}
             <Button
-              size="sm"
+              size="md"
               tone="outline"
               onClick={() =>
                 onChange({ ...value, operands: [...value.operands, zero] })
@@ -335,7 +356,7 @@ const predicates: Record<WorldRulePredicate["kind"], WorldRulePredicate> = {
   not: { kind: "not", predicate: { kind: "always" } },
   compare: { kind: "compare", left: zero, operator: "eq", right: zero },
 };
-function ConditionEditor({
+export function ConditionEditor({
   value,
   onChange,
   depth = 0,
@@ -344,6 +365,10 @@ function ConditionEditor({
   onChange: (value: WorldRulePredicate) => void;
   depth?: number;
 }) {
+  if (!value || typeof value !== "object" || !(value.kind in predicates))
+    return (
+      <p>Imported condition preserved; this editor does not support it.</p>
+    );
   if (depth > 8)
     return (
       <p className="text-sm">
@@ -358,6 +383,8 @@ function ConditionEditor({
           className="mt-1 w-full"
           value={value.kind}
           onChange={(event) =>
+            event.currentTarget.value !== value.kind &&
+            window.confirm("Replace this condition and its nested content?") &&
             onChange(
               predicates[
                 event.currentTarget.value as WorldRulePredicate["kind"]
@@ -379,56 +406,12 @@ function ConditionEditor({
           ))}
         </Select>
       </Label>
-      {(value.kind === "all" || value.kind === "any") && (
-        <>
-          {value.predicates.map((predicate, index) => (
-            <div key={index}>
-              <ConditionEditor
-                value={predicate}
-                onChange={(next) =>
-                  onChange({
-                    ...value,
-                    predicates: value.predicates.map((entry, i) =>
-                      i === index ? next : entry,
-                    ),
-                  })
-                }
-                depth={depth + 1}
-              />
-              <Button
-                size="sm"
-                tone="ghost"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    predicates: value.predicates.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                Remove condition {index + 1}
-              </Button>
-            </div>
-          ))}
-          <Button
-            size="sm"
-            tone="outline"
-            onClick={() =>
-              onChange({
-                ...value,
-                predicates: [...value.predicates, { kind: "always" }],
-              })
-            }
-          >
-            Add condition
-          </Button>
-        </>
-      )}
-      {value.kind === "not" && (
-        <ConditionEditor
-          value={value.predicate}
-          onChange={(predicate) => onChange({ ...value, predicate })}
-          depth={depth + 1}
-        />
+      {(value.kind === "all" ||
+        value.kind === "any" ||
+        value.kind === "not") && (
+        <p className="text-sm">
+          Save this condition, then manage its child conditions.
+        </p>
       )}
       {value.kind === "compare" && (
         <>
@@ -473,7 +456,10 @@ function ConditionEditor({
     </Fieldset>
   );
 }
-function defaultRuleEffect(kind: WorldRuleEffect["kind"]): WorldRuleEffect {
+// eslint-disable-next-line react-refresh/only-export-components
+export function defaultRuleEffect(
+  kind: WorldRuleEffect["kind"],
+): WorldRuleEffect {
   if (kind === "set-local") return { kind, key: "cost", value: zero };
   if (kind === "emit")
     return { kind, event: "aow:movement-costed", context: { actorId: actor } };
@@ -494,7 +480,7 @@ function defaultRuleEffect(kind: WorldRuleEffect["kind"]): WorldRuleEffect {
     value: kind === "move" ? { kind: "context", key: "destination" } : zero,
   };
 }
-function EffectEditor({
+export function EffectEditor({
   value,
   onChange,
 }: {
@@ -509,6 +495,8 @@ function EffectEditor({
           className="mt-1 w-full"
           value={value.kind}
           onChange={(event) =>
+            event.currentTarget.value !== value.kind &&
+            window.confirm("Replace this effect and its nested content?") &&
             onChange(
               defaultRuleEffect(
                 event.currentTarget.value as WorldRuleEffect["kind"],
@@ -611,6 +599,7 @@ function EffectEditor({
                 label="Context field name"
                 value={key}
                 onChange={(next) =>
+                  (next === key || !(next in value.context)) &&
                   onChange({
                     ...value,
                     context: Object.fromEntries(
@@ -633,7 +622,7 @@ function EffectEditor({
                 }
               />
               <Button
-                size="sm"
+                size="md"
                 tone="ghost"
                 onClick={() =>
                   onChange({
@@ -651,7 +640,7 @@ function EffectEditor({
             </Fieldset>
           ))}
           <Button
-            size="sm"
+            size="md"
             tone="outline"
             onClick={() => {
               let key = "field";
@@ -676,30 +665,38 @@ export function WorldRuleEditor({
   rule: WorldRule;
   onChange: (rule: WorldRule) => void;
 }) {
-  const move = (index: number, offset: number) => {
-    const effects = [...rule.effects];
-    [effects[index], effects[index + offset]] = [
-      effects[index + offset]!,
-      effects[index]!,
-    ];
-    onChange({ ...rule, effects });
-  };
   return (
     <div className="grid min-w-0 gap-5">
       <TextControl
         label="Rule name"
+        protectedIds={[rule.id]}
         value={rule.name}
         onChange={(name) => onChange({ ...rule, name })}
       />
       <Label>
         Description
-        <Textarea
-          className="mt-1 w-full"
-          value={rule.description ?? ""}
-          onChange={(event) =>
-            onChange({ ...rule, description: event.currentTarget.value })
-          }
-        />
+        {protectedComparisonText(rule.description, new Set([rule.id])) ? (
+          <>
+            <p>Existing description preserved.</p>
+            <Button
+              tone="outline"
+              onClick={() => {
+                if (window.confirm("Replace this description?"))
+                  onChange({ ...rule, description: "" });
+              }}
+            >
+              Replace description
+            </Button>
+          </>
+        ) : (
+          <Textarea
+            className="mt-1 w-full"
+            value={rule.description ?? ""}
+            onChange={(event) =>
+              onChange({ ...rule, description: event.currentTarget.value })
+            }
+          />
+        )}
       </Label>
       <div className="grid gap-4 sm:grid-cols-2">
         <Label>
@@ -749,78 +746,6 @@ export function WorldRuleEditor({
           Version {rule.trigger.version}. Use a namespaced event such as
           aow:movement-declared.
         </p>
-      </section>
-      <section>
-        <h3 className="mb-3 text-lg font-semibold">Conditions</h3>
-        <ConditionEditor
-          value={rule.condition ?? { kind: "always" }}
-          onChange={(condition) => onChange({ ...rule, condition })}
-        />
-      </section>
-      <section>
-        <h3 className="mb-3 text-lg font-semibold">Ordered effects</h3>
-        <ol className="grid gap-4">
-          {rule.effects.map((effect, index) => (
-            <li key={index} className="rounded-box border border-base-300 p-4">
-              <div className="mb-3 flex flex-wrap gap-2">
-                <span className="mr-auto font-semibold">
-                  Effect {index + 1}
-                </span>
-                <Button
-                  size="sm"
-                  tone="outline"
-                  disabled={index === 0}
-                  onClick={() => move(index, -1)}
-                >
-                  Move up
-                </Button>
-                <Button
-                  size="sm"
-                  tone="outline"
-                  disabled={index === rule.effects.length - 1}
-                  onClick={() => move(index, 1)}
-                >
-                  Move down
-                </Button>
-                <Button
-                  size="sm"
-                  tone="ghost"
-                  onClick={() =>
-                    onChange({
-                      ...rule,
-                      effects: rule.effects.filter((_, i) => i !== index),
-                    })
-                  }
-                >
-                  Remove effect
-                </Button>
-              </div>
-              <EffectEditor
-                value={effect}
-                onChange={(next) =>
-                  onChange({
-                    ...rule,
-                    effects: rule.effects.map((entry, i) =>
-                      i === index ? next : entry,
-                    ),
-                  })
-                }
-              />
-            </li>
-          ))}
-        </ol>
-        <Button
-          className="mt-3"
-          tone="outline"
-          onClick={() =>
-            onChange({
-              ...rule,
-              effects: [...rule.effects, defaultRuleEffect("set-local")],
-            })
-          }
-        >
-          Add effect
-        </Button>
       </section>
     </div>
   );

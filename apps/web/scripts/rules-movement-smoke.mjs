@@ -33,15 +33,16 @@ async function withFixture(run) {
     await writeFile(
       component,
       `import { createRoot } from 'react-dom/client';
-import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet } from '@tanstack/react-router';
 import { WorldAuthoringProvider } from './WorldAuthoringShell';
 import { WorldRulesPage } from './WorldRulesPage';
 import { SessionMovementPanel } from './SessionMovementPanel';
 import './index.css';
 const world={id:'world',name:'Clockwork World',status:'active'} as any;
 const draft={id:'world-draft',storageRevision:1,revisionName:'Draft',content:{},records:[]} as any;
-const root=createRootRoute({component:()=>new URLSearchParams(location.search).has('movement')?<main className="mx-auto max-w-5xl p-8"><SessionMovementPanel campaignDefinitionId="campaign" campaignInstanceId="instance" sessionId="session"/></main>:<WorldAuthoringProvider definition={world} initialDraft={draft}><WorldRulesPage/></WorldAuthoringProvider>});
-const router=createRouter({routeTree:root,history:createMemoryHistory({initialEntries:['/']})});
+const root=createRootRoute({component:Outlet});
+const leaf=createRoute({getParentRoute:()=>root,path:'$',component:()=>new URLSearchParams(location.search).has('movement')?<main className="mx-auto max-w-5xl p-8"><SessionMovementPanel campaignDefinitionId="campaign" campaignInstanceId="instance" sessionId="session"/></main>:<WorldAuthoringProvider definition={world} initialDraft={draft}><WorldRulesPage/></WorldAuthoringProvider>});
+const router=createRouter({routeTree:root.addChildren([leaf]),history:createMemoryHistory({initialEntries:['/worlds/world/rules']})});
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router}/>);`,
     );
     await writeFile(
@@ -318,20 +319,42 @@ await withFixture(async (url) => {
         exact: true,
       })
       .click();
-    const editor = page.getByRole("region", { name: "Structured rule editor" });
-    await editor
-      .getByRole("textbox", { name: /^Rule name/ })
+    page.on("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("textbox", { name: "Rule name", exact: true })
       .fill("Reviewed movement");
-    await editor
+    await page.getByRole("button", { name: "Save rule", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Edit Reviewed movement", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Manage conditions", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Edit condition", exact: true })
+      .click();
+    await page
       .getByRole("combobox", { name: "Condition", exact: true })
-      .first()
       .selectOption("always");
-    await editor
+    await page
+      .getByRole("button", { name: "Save condition", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Back to rule", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Manage effects", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "Move up", exact: true })
       .nth(1)
       .click();
-    await editor
-      .getByRole("button", { name: "Save rule", exact: true })
+    await page.waitForTimeout(150);
+    await page
+      .getByRole("button", { name: "Back to rule", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Back to rules", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Edit Reviewed movement", exact: true })

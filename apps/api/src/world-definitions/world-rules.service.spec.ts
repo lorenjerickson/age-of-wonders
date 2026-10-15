@@ -20,6 +20,7 @@ function fixture() {
   };
   const authoring = {
     getActiveDraft: jest.fn(() => Promise.resolve(draft)),
+    getDraft: jest.fn(() => Promise.resolve(draft)),
     save: jest.fn(
       (
         _world: string,
@@ -107,6 +108,41 @@ describe("World executable rules authoring", () => {
     expect(copy.rules).toHaveLength(2);
     expect(copy.rules[1].lifecycle).toBe("disabled");
     expect(copy.rules[1].id).not.toBe(created.rules[0].id);
+  });
+  it("preserves record metadata while assigning rule audit fields server-side", async () => {
+    const { service, getDraft } = fixture();
+    const rule = starterMovementRules({
+      budgetFeet: 30,
+      ids: ["a", "b", "c", "d", "e", "f"],
+      createdBy: "gm",
+      updatedAt: new Date().toISOString(),
+    })[0];
+    const created = await service.upsert("world-one", "gm", expected, rule);
+    const record = getDraft().records[0];
+    const prior = record.payload as typeof rule;
+    Object.assign(record, { privateRecord: { retained: true } });
+    const edited = await service.upsert(
+      "world-one",
+      "gm",
+      { ...expected, expectedStorageRevision: 2 },
+      {
+        ...prior,
+        name: "Revised rule",
+        audit: { createdBy: "forged", updatedAt: "forged" },
+      },
+      created.rules[0].id,
+    );
+    expect(edited.rules[0]).toMatchObject({
+      name: "Revised rule",
+      audit: {
+        createdBy: "gm",
+      },
+    });
+    expect(getDraft().records[0]).toMatchObject({
+      privateRecord: { retained: true },
+      sourceRevision: 2,
+    });
+    expect(edited.rules[0].audit.updatedAt).not.toBe("forged");
   });
   it("rejects unsupported effects and inconsistent captured rule provenance", async () => {
     const { service, authoring } = fixture();

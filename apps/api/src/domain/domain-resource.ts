@@ -1,8 +1,11 @@
 import { BadRequestException } from "@nestjs/common";
 
+// location-connections are retained for legacy reads; DomainService rejects new mutations.
 // location-terrain-chunks are immutable World snapshot components, not generic CRUD resources.
 // The Location map endpoints enforce ownership and capture these components atomically.
 // world-rules are immutable World snapshot components containing executable WorldRule wrappers.
+// world-character-templates, world-conditions and world-effects are also dedicated
+// World snapshot components, not generic runtime Characters, Conditions or ActiveEffects.
 // Dedicated World draft APIs own authoring; they are distinct from generic rule-variants.
 export const DOMAIN_RESOURCES = [
   "definitions",

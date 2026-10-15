@@ -1,3 +1,4 @@
+import { CampaignInstance } from "@aow/domain";
 import {
   BadRequestException,
   ConflictException,
@@ -14,7 +15,6 @@ import {
   canonicalJsonHash,
   isCanonicalSnapshotManifest,
 } from "../domain/snapshot-manifest";
-import { resolveCreatureInstanceEmbodimentPolicy } from "@aow/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CreateCampaignInstanceDto } from "./dto/create-campaign-instance.dto";
 
@@ -883,171 +883,15 @@ export function initializeEmptyLegacyInstanceRuntime(
   return { ...initialRuntimeState(selected, campaignInstanceId), legacyGamePayload: null };
 }
 
-function initialRuntimeState(
-  selected: InitialInstanceRuntimeCapture,
-  campaignInstanceId: string,
-) {
-  const campaignRecords = isCanonicalSnapshotManifest(selected.manifest)
-    ? selected.manifest.records
-    : [];
-  const worldRecords = isCanonicalSnapshotManifest(
-    selected.capturedWorldSnapshot.manifest,
-  )
-    ? selected.capturedWorldSnapshot.manifest.records
-    : [];
-  const content = object(selected.campaignDefinitionRevision.content);
-  const preparationDefaults = object(content.preparation);
-  const plotProgress = campaignRecords
-    .filter((record) => record.resourceType === "plots")
-    .map((record) => {
-      const plot = object(record.payload);
-      return {
-        campaignInstanceId,
-        plotDefinitionId: record.sourceId,
-        status: "not-started",
-        objectiveProgress: array(plot.objectives)
-          .map(object)
-          .filter((objective) => typeof objective.id === "string")
-          .map((objective) => ({
-            objectiveId: objective.id,
-            status: "not-started",
-          })),
-      };
-    });
-  const campaignPlacements = campaignRecords.filter(
-    (record) => record.resourceType === "campaign-placements",
-  );
-  const decoratedWorldPlacements = new Set(
-    campaignPlacements.flatMap((record) => {
-      const placement = object(record.payload);
-      return placement.kind === "world-decoration" &&
-        typeof placement.capturedWorldPlacementId === "string"
-        ? [placement.capturedWorldPlacementId]
-        : [];
-    }),
-  );
-  const now = new Date().toISOString();
-  const creatureEmbodiments = worldRecords
-    .filter((record) => {
-      const creature = object(record.payload);
-      if (record.resourceType !== "definitions" || creature.kind !== "creature")
-        return false;
-      const resolved = resolveCreatureInstanceEmbodimentPolicy(
-        creature.instanceEmbodimentPolicy,
-      );
-      return resolved?.policy.strategy === "one-per-instance";
-    })
-    .map((record) => {
-      const captured = object(record.payload);
-      const policy = resolveCreatureInstanceEmbodimentPolicy(
-        captured.instanceEmbodimentPolicy,
-      )!;
-      const runtimeCreatureId = randomUUID();
-      const runtimeEntityId = randomUUID();
-      return {
-        campaignInstanceId,
-        runtimeCreatureId,
-        runtimeEntityId,
-        source: {
-          kind: "captured-world-creature",
-          sourceCreatureId: record.sourceId,
-          embodimentPolicy: policy,
-        },
-        creature: {
-          identity: {
-            id: runtimeCreatureId,
-            version: { revision: 1, updatedAt: now },
-          },
-          entityId: runtimeEntityId,
-          name: humanName(captured, "Unnamed Creature"),
-          definitionId: record.sourceId,
-        },
-      };
-    });
-  const placementRealizations = [
-    ...campaignPlacements.map((record) => {
-      const placement = object(record.payload);
-      return {
-        identity: {
-          id: randomUUID(),
-          version: { revision: 1, updatedAt: now },
-        },
-        name:
-          typeof placement.name === "string" && placement.name.trim()
-            ? placement.name.trim()
-            : "Campaign placement",
-        campaignInstanceId,
-        source: {
-          kind: "campaign-placement",
-          campaignPlacementDefinitionId: record.sourceId,
-          ...(typeof placement.capturedWorldPlacementId === "string"
-            ? {
-                capturedWorldPlacementDefinitionId:
-                  placement.capturedWorldPlacementId,
-              }
-            : {}),
-        },
-        sourceLocationId:
-          typeof placement.locationId === "string" ? placement.locationId : "",
-        status: "planned",
-      };
-    }),
-    ...worldRecords
-      .filter(
-        (record) =>
-          record.resourceType === "world-placements" &&
-          !decoratedWorldPlacements.has(record.sourceId),
-      )
-      .map((record) => {
-        const placement = object(record.payload);
-        return {
-          identity: {
-            id: randomUUID(),
-            version: { revision: 1, updatedAt: now },
-          },
-          name:
-            typeof placement.name === "string" && placement.name.trim()
-              ? placement.name.trim()
-              : "World placement",
-          campaignInstanceId,
-          source: {
-            kind: "captured-world-placement",
-            worldPlacementDefinitionId: record.sourceId,
-          },
-          sourceLocationId:
-            typeof placement.locationId === "string"
-              ? placement.locationId
-              : "",
-          status: "planned",
-        };
-      }),
-  ];
-  return {
-    formatVersion: 1,
-    preparation: {
-      ...(typeof preparationDefaults.startingLocationId === "string"
-        ? { startingLocationId: preparationDefaults.startingLocationId }
-        : {}),
-      ...(typeof preparationDefaults.startingContext === "string"
-        ? { startingContext: preparationDefaults.startingContext }
-        : {}),
-      ...(typeof preparationDefaults.mapVariations === "string"
-        ? { mapVariations: preparationDefaults.mapVariations }
-        : {}),
-      ...(Array.isArray(preparationDefaults.locationCanvases)
-        ? { locationCanvases: preparationDefaults.locationCanvases }
-        : {}),
-      ...(preparationDefaults.extensions &&
-      typeof preparationDefaults.extensions === "object" &&
-      !Array.isArray(preparationDefaults.extensions)
-        ? { extensions: preparationDefaults.extensions }
-        : {}),
-    },
-    plotProgress,
-    placementRealizations,
-    creatureEmbodiments,
-    itemInstances: [],
-  };
+function initialRuntimeState(selected: InitialInstanceRuntimeCapture, campaignInstanceId: string) {
+  return CampaignInstance.initialRuntime({
+    campaignInstanceId,
+    campaignRecords: isCanonicalSnapshotManifest(selected.manifest) ? selected.manifest.records : [],
+    worldRecords: isCanonicalSnapshotManifest(selected.capturedWorldSnapshot.manifest) ? selected.capturedWorldSnapshot.manifest.records : [],
+    campaignContent: selected.campaignDefinitionRevision.content,
+    updatedAt: new Date().toISOString(),
+    createId: randomUUID,
+  });
 }
 
 function object(value: unknown): Record<string, unknown> {

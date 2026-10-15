@@ -26,6 +26,9 @@ export interface CampaignSessionTableProjection {
     readonly id: string;
     readonly name: string;
     readonly description?: string;
+    readonly weather?: import("./world-authoring").LocationWeather;
+    readonly weatherOverridden?: boolean;
+    readonly audiovisualEffects?: readonly import("./world-authoring").LocationAudiovisualEffect[];
     readonly image?: LocationImage;
     readonly terrain?: IsometricTerrainVolume;
     readonly mapStatus: "isometric" | "image" | "unavailable";
