@@ -41,6 +41,14 @@ export interface InstanceCaptureContext {
   plots?: readonly { sourceId: string; payload: unknown }[];
 }
 export interface CampaignInstanceCommands {
+  encounter: {
+    params: {
+      encounter: import("@aow/common").EncounterState;
+      publish?: boolean;
+      updatedAt: string;
+    };
+    context: object;
+  };
   locationWeather: {
     params: { locationId: string; weather?: Row | null; reset?: boolean };
     context: object;
@@ -191,7 +199,45 @@ export class CampaignInstance extends Entity<
     invocation: CommandInvocation<CampaignInstanceCommands[K]>,
   ): EntityTransition<Runtime, Record<string, never>> {
     const data = this.serializePayload();
-    if (name === "locationWeather") {
+    if (name === "encounter") {
+      const params =
+        invocation.params as CampaignInstanceCommands["encounter"]["params"];
+      data.encounter = copyEntityData(params.encounter);
+      if (params.publish) {
+        if (params.encounter.phase !== "published")
+          throw new TypeError(
+            "Only a reviewed, published round can update actors.",
+          );
+        data.creatureEmbodiments = array(data.creatureEmbodiments)
+          .map(object)
+          .map((entry) => {
+            const actor = params.encounter.combatants.find(
+              (actor) => actor.entityId === entry.runtimeEntityId,
+            );
+            if (!actor) return entry;
+            return {
+              ...entry,
+              creature: Creature.publishCombat(object(entry.creature), {
+                hp: actor.hp,
+                maxHp: actor.maxHp,
+                prone: actor.prone ?? false,
+                removed: actor.removed ?? false,
+                incapacitation: actor.incapacitation ?? null,
+                ...(actor.position
+                  ? {
+                      position: {
+                        x: actor.position.point.x * 5,
+                        y: actor.position.point.y * 5,
+                        z: (actor.position.point.z ?? 0) * 5,
+                      },
+                    }
+                  : {}),
+                updatedAt: params.updatedAt,
+              }),
+            };
+          });
+      }
+    } else if (name === "locationWeather") {
       const { locationId, weather, reset } =
         invocation.params as CampaignInstanceCommands["locationWeather"]["params"];
       if (!this.captured.capturedLocationIds.has(locationId as never))

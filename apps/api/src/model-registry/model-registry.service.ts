@@ -13,11 +13,14 @@ import type {
   ModelRegistry,
   ModelSchemaRelease,
 } from "@aow/common";
+import { ModelElement, ModelSchema } from "@aow/domain";
+import { canonicalJsonHash } from "../domain/snapshot-manifest";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   compileModelSchemaRelease,
+  publishModelSchemaRelease,
   modelElementRevisionContentHash,
   modelSchemaReleaseContentHash,
   validateModelMigrationPlan,
@@ -238,55 +241,116 @@ export class ModelRegistryService {
               );
             return { element, lineage, revision };
           });
-          const revisions = requestedRevisions.map((change) => {
-            const lineage = lineageById.get(change.elementId);
-            const selected = lineage?.currentRevisionId
-              ? revisionById.get(lineage.currentRevisionId)
-              : undefined;
-            if (
-              !lineage ||
-              lineage.status !== "ACTIVE" ||
-              !selected ||
-              selected.id !== change.predecessorRevisionId
-            )
-              throw new ConflictException(
-                "A Model Element changed; refresh before publishing.",
+          const revisions = await Promise.all(
+            requestedRevisions.map(async (change) => {
+              const lineage = lineageById.get(change.elementId);
+              const selected = lineage?.currentRevisionId
+                ? revisionById.get(lineage.currentRevisionId)
+                : undefined;
+              if (
+                !lineage ||
+                lineage.status !== "ACTIVE" ||
+                !selected ||
+                selected.id !== change.predecessorRevisionId
+              )
+                throw new ConflictException(
+                  "A Model Element changed; refresh before publishing.",
+                );
+              assertModelElementRuntimeShape({
+                key: lineage.key,
+                kind: lineage.kind,
+                semanticRole: lineage.semanticRole,
+                applicability: lineage.applicability,
+                payload: change.payload,
+                presentation: change.presentation,
+                ...(change.dependencies
+                  ? { dependencies: change.dependencies }
+                  : {}),
+                ...(change.source ? { source: change.source } : {}),
+              });
+              const revision = commonRevision(
+                randomUUID(),
+                lineage.id,
+                selected.revisionNumber + 1,
+                selected.id,
+                change,
+                userId,
+                publishedAt,
               );
-            assertModelElementRuntimeShape({
-              key: lineage.key,
-              kind: lineage.kind,
-              semanticRole: lineage.semanticRole,
-              applicability: lineage.applicability,
-              payload: change.payload,
-              presentation: change.presentation,
-              ...(change.dependencies
-                ? { dependencies: change.dependencies }
-                : {}),
-              ...(change.source ? { source: change.source } : {}),
-            });
-            const revision = commonRevision(
-              randomUUID(),
-              lineage.id,
-              selected.revisionNumber + 1,
-              selected.id,
-              change,
-              userId,
-              publishedAt,
-            );
-            if (revision.payload.kind !== lineage.kind)
-              throw new BadRequestException(
-                "A Model Element kind does not match its payload.",
+              const owner = ModelElement.deserializePayload(
+                {
+                  lineage: toCommonLineage(lineage),
+                  revision: toCommonRevision(selected),
+                },
+                {
+                  registry: registryResponse(registry),
+                  contentHash: canonicalJsonHash,
+                },
               );
-            return { lineage, revision };
-          });
-          const archived = requestedArchives.map((elementId) => {
-            const lineage = lineageById.get(elementId);
-            if (!lineage || lineage.status !== "ACTIVE")
-              throw new ConflictException(
-                "A Model Element changed; refresh before publishing.",
+              try {
+                const receipt = await owner.command("revise", {
+                  initiator: userId,
+                  params: { revision },
+                  context: {},
+                });
+                if (receipt.status !== "committed")
+                  throw new BadRequestException(
+                    receipt.reason ??
+                      "A Model Element kind does not match its payload.",
+                  );
+                return { lineage, revision: owner.serializePayload().revision };
+              } catch (error) {
+                if (error instanceof TypeError)
+                  throw new BadRequestException(error.message);
+                throw error;
+              } finally {
+                owner.dispose();
+              }
+            }),
+          );
+          const archived = await Promise.all(
+            requestedArchives.map(async (elementId) => {
+              const lineage = lineageById.get(elementId);
+              if (!lineage || lineage.status !== "ACTIVE")
+                throw new ConflictException(
+                  "A Model Element changed; refresh before publishing.",
+                );
+              const selected = lineage.currentRevisionId
+                ? revisionById.get(lineage.currentRevisionId)
+                : undefined;
+              // The exact predecessor selection was loaded and checked above.
+              const selectedRevision =
+                selected ??
+                previousRevisions.find(
+                  (revision) => revision.elementId === lineage.id,
+                )!;
+              const owner = ModelElement.deserializePayload(
+                {
+                  lineage: toCommonLineage(lineage),
+                  revision: toCommonRevision(selectedRevision),
+                },
+                {
+                  registry: registryResponse(registry),
+                  contentHash: canonicalJsonHash,
+                },
               );
-            return lineage;
-          });
+              try {
+                const receipt = await owner.command("archive", {
+                  initiator: userId,
+                  params: {},
+                  context: {},
+                });
+                if (receipt.status !== "committed")
+                  throw new ConflictException(
+                    receipt.reason ??
+                      "A Model Element changed; refresh before publishing.",
+                  );
+                return lineage;
+              } finally {
+                owner.dispose();
+              }
+            }),
+          );
           const revisedById = new Map(
             revisions.map((change) => [change.lineage.id, change]),
           );
@@ -375,7 +439,7 @@ export class ModelRegistryService {
               message: "The Model Schema release is incomplete.",
               issues: validation.issues,
             });
-          const targetCompiled = compileModelSchemaRelease(
+          const targetCompiled = await publishModelSchemaRelease(
             targetCompilationInput,
           );
           const migrationPlan = predecessor
@@ -1134,25 +1198,13 @@ function elementResponseFromCommon(
 export function mergeCompiledRootElements(
   roots: readonly CompiledModelSchema[],
 ): CompiledModelSchema["elements"] {
-  const byKey = new Map<string, CompiledModelSchema["elements"][number]>();
-  for (const root of roots) {
-    for (const element of root.elements) {
-      const existing = byKey.get(element.lineage.key);
-      if (existing) {
-        const sameExactElement =
-          existing.lineage.id === element.lineage.id &&
-          existing.revision.identity.id === element.revision.identity.id &&
-          existing.sourceReleaseId === element.sourceReleaseId;
-        if (!sameExactElement)
-          throw new BadRequestException(
-            "The World draft selects conflicting Model Schema release roots.",
-          );
-        continue;
-      }
-      byKey.set(element.lineage.key, element);
-    }
+  try {
+    return ModelSchema.mergeRoots(roots);
+  } catch {
+    throw new BadRequestException(
+      "The World draft selects conflicting Model Schema release roots.",
+    );
   }
-  return [...byKey.values()];
 }
 function isApplicableToWorld(
   value: Prisma.JsonValue,

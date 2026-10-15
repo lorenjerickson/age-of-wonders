@@ -1,3 +1,4 @@
+import { SessionCombatPanel } from "./SessionCombatPanel";
 import { SessionWorkspace } from "./SessionWorkspace";
 import type { ParticipantSpatialBinding } from "@aow/common";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -171,6 +172,15 @@ export function CampaignSessionParticipantPage({
               </section>
             )}
 
+            {session?.role === "player" &&
+              ["active", "paused"].includes(session.status) && (
+                <SessionCombatPanel
+                  key={`${campaignInstanceId}/${sessionId}`}
+                  campaignInstanceId={campaignInstanceId}
+                  sessionId={sessionId}
+                  blocked={session.status !== "active"}
+                />
+              )}
             <section className="rounded-box border border-base-300/15 bg-base-200 p-5">
               <h2 className="text-xl font-semibold">Session activity</h2>
               <div className="mt-4 grid gap-3" aria-live="polite">

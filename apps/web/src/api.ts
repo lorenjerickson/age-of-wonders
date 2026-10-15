@@ -2893,10 +2893,126 @@ export function updateActorEquipment(
   );
 }
 
-export function changeSessionLocationWeather(campaignId: string, instanceId: string, sessionId: string, input: {expectedRuntimeRevision: number; locationId: string; weather?: import("@aow/common").LocationWeather | null; reset?: boolean}) {
-  return request<import("@aow/common").CampaignSessionTableProjection>(`/campaigns/${encodeURIComponent(campaignId)}/instances/${encodeURIComponent(instanceId)}/sessions/${encodeURIComponent(sessionId)}/table/weather`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(input)});
+export function changeSessionLocationWeather(
+  campaignId: string,
+  instanceId: string,
+  sessionId: string,
+  input: {
+    expectedRuntimeRevision: number;
+    locationId: string;
+    weather?: import("@aow/common").LocationWeather | null;
+    reset?: boolean;
+  },
+) {
+  return request<import("@aow/common").CampaignSessionTableProjection>(
+    `/campaigns/${encodeURIComponent(campaignId)}/instances/${encodeURIComponent(instanceId)}/sessions/${encodeURIComponent(sessionId)}/table/weather`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
-export function updateInstanceAgentCapabilities(campaignId:string, instanceId:string, participationId:string, input:{expectedObserve:readonly string[];expectedAct:readonly string[];observe:string[];act:string[]}) {
- return request<CampaignInstanceRoster>(instancePath(campaignId,instanceId,`/agents/${encodeURIComponent(participationId)}/capabilities`),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});
+export function updateInstanceAgentCapabilities(
+  campaignId: string,
+  instanceId: string,
+  participationId: string,
+  input: {
+    expectedObserve: readonly string[];
+    expectedAct: readonly string[];
+    observe: string[];
+    act: string[];
+  },
+) {
+  return request<CampaignInstanceRoster>(
+    instancePath(
+      campaignId,
+      instanceId,
+      `/agents/${encodeURIComponent(participationId)}/capabilities`,
+    ),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export interface SessionCombatSetupActor {
+  entityId: string;
+  name: string;
+  hp?: number;
+  maxHp?: number;
+  position?: import("@aow/common").TokenPosition;
+  controllerIds: string[];
+  sources: {
+    kind: import("@aow/common").CombatContribution["source"]["kind"];
+    id: string;
+    name: string;
+  }[];
+}
+export interface SessionCombatContext {
+  runtimeRevision: number;
+  encounter:
+    | import("@aow/common").EncounterState
+    | import("@aow/common").PlayerEncounterProjection
+    | null;
+  setupActors?: SessionCombatSetupActor[];
+  controllers?: { id: string; name: string }[];
+}
+export interface SessionCombatRequest {
+  expectedRuntimeRevision: number;
+  idempotencyKey: string;
+  command?: import("@aow/common").EncounterCommand;
+  setup?: {
+    name: string;
+    combatants: {
+      entityId: string;
+      hp: number;
+      maxHp: number;
+      profile: import("@aow/common").CombatProfile;
+      controllerIds?: string[];
+      visibleToPlayers?: boolean;
+      removed?: boolean;
+      incapacitation?: "unconscious" | "dead";
+    }[];
+  };
+}
+export function sessionCombatPath(
+  instanceId: string,
+  sessionId: string,
+  campaignId?: string,
+) {
+  return campaignId
+    ? campaignSessionsPath(
+        campaignId,
+        instanceId,
+        `/${encodeURIComponent(sessionId)}/encounter`,
+      )
+    : `/me/campaign-instances/${encodeURIComponent(instanceId)}/sessions/${encodeURIComponent(sessionId)}/encounter`;
+}
+export function getSessionCombat(
+  instanceId: string,
+  sessionId: string,
+  campaignId?: string,
+) {
+  return request<SessionCombatContext>(
+    sessionCombatPath(instanceId, sessionId, campaignId),
+  );
+}
+export function commandSessionCombat(
+  instanceId: string,
+  sessionId: string,
+  campaignId: string | undefined,
+  input: SessionCombatRequest,
+) {
+  return request<SessionCombatContext>(
+    sessionCombatPath(instanceId, sessionId, campaignId),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 }

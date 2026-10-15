@@ -1,3 +1,8 @@
+import {
+  CampaignEncounterController,
+  PlayerEncounterController,
+} from "./campaign-encounter.controller";
+import { CampaignEncounterService } from "./campaign-encounter.service";
 import { CampaignCharacterArtworkController } from "./campaign-character-artwork.controller";
 import { AiModule } from "../ai/ai.module";
 import { MediaModule } from "../media/media.module";
@@ -34,6 +39,8 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
 @Module({
   imports: [NotificationsModule, AiModule, MediaModule],
   controllers: [
+    CampaignEncounterController,
+    PlayerEncounterController,
     CampaignCharacterArtworkController,
     CampaignSessionMovementController,
     CampaignSessionTableController,
@@ -46,6 +53,7 @@ import { CampaignInstanceCharacterDraftsService } from "./campaign-instance-char
     CampaignInstanceCharacterDraftsController,
   ],
   providers: [
+    CampaignEncounterService,
     CampaignSessionMovementService,
     CampaignSessionTableService,
     TerrainExplorationStore,

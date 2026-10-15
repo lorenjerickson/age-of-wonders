@@ -1,3 +1,5 @@
+import { CampaignCanvasPreparation } from "./CampaignCanvasPreparation";
+import { canvasArray } from "./campaignCanvasModel";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import {
@@ -37,6 +39,7 @@ import {
 } from "./api";
 import {
   campaignPlacementSourceId,
+  campaignDraftWithRecord,
   campaignProposalRecoveryRequested,
   campaignProposalRecoverySuffix,
   campaignRecordLabel,
@@ -602,25 +605,38 @@ function capturedChoices(
   ];
 }
 
-export function CampaignPlacementsPage() {
+export function CampaignPlacementsPage({
+  plotContext,
+}: {
+  plotContext?: { plotId: string; contextId: string; locationId: string };
+}) {
   const {
     draft,
     saveRecord,
-    removeRecord,
+    saveDraft,
     markDirty,
     saveState,
     discardLocalChanges,
   } = useCampaignDefinitionAuthoring();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [mapX, setMapX] = useState("");
+  const [mapY, setMapY] = useState("");
+  const [scale, setScale] = useState("");
+  const [role, setRole] = useState("");
+  const [error, setError] = useState("");
   const [editingId, setEditingId] = useState("");
   const [mode, setMode] = useState<"independent" | "world-decoration">(
     "independent",
   );
   const [name, setName] = useState("");
-  const [locationId, setLocationId] = useState("");
+  const [locationId, setLocationId] = useState(plotContext?.locationId ?? "");
   const [definitionId, setDefinitionId] = useState("");
   const [capturedWorldPlacementId, setCapturedWorldPlacementId] = useState("");
   const [contentType, setContentType] = useState("creature");
-  const [plotIds, setPlotIds] = useState<Set<string>>(new Set());
+  const [plotIds, setPlotIds] = useState<Set<string>>(
+    new Set(plotContext ? [plotContext.plotId] : []),
+  );
   const choices = useMemo(() => capturedChoices(draft), [draft]);
   const locations = choices.filter(
     ({ resourceType, kind }) =>
@@ -634,7 +650,9 @@ export function CampaignPlacementsPage() {
         (kind === "creature" || kind === "item")),
   );
   const worldPlacements = choices.filter(
-    ({ resourceType }) => resourceType === "world-placements",
+    ({ resourceType, locationId }) =>
+      resourceType === "world-placements" &&
+      (!plotContext || locationId === plotContext.locationId),
   );
   const selectedWorldPlacement = worldPlacements.find(
     (placement) => placement.id === capturedWorldPlacementId,
@@ -644,6 +662,14 @@ export function CampaignPlacementsPage() {
   );
   const placements = (draft?.records ?? []).filter(
     ({ resourceType }) => resourceType === "campaign-placements",
+  );
+  const visiblePlacements = placements.filter(
+    (record) =>
+      !plotContext ||
+      (recordObject(record).locationId === plotContext.locationId &&
+        arrayValue(recordObject(record).plotDefinitionIds).includes(
+          plotContext.plotId,
+        )),
   );
   const labelFor = (id: string, fallback: string) =>
     choices.find((choice) => choice.id === id)?.name ??
@@ -665,14 +691,21 @@ export function CampaignPlacementsPage() {
   }
 
   function resetEditor() {
+    setEditorOpen(false);
+    setNotes("");
+    setMapX("");
+    setMapY("");
+    setScale("");
+    setRole("");
+    setError("");
     setEditingId("");
     setMode("independent");
     setName("");
-    setLocationId("");
+    setLocationId(plotContext?.locationId ?? "");
     setDefinitionId("");
     setCapturedWorldPlacementId("");
     setContentType("creature");
-    setPlotIds(new Set());
+    setPlotIds(new Set(plotContext ? [plotContext.plotId] : []));
   }
 
   function editPlacement(record: CampaignDraftRecord) {
@@ -682,13 +715,28 @@ export function CampaignPlacementsPage() {
       payload.kind === "world-decoration" ? "world-decoration" : "independent";
     const source = objectValue(payload.source);
     const nextDefinitionId = campaignPlacementSourceId(record) ?? "";
+    setEditorOpen(true);
+    setNotes(stringValue(payload.notes));
+    const position = objectValue(payload.mapPosition);
+    setMapX(position.x === undefined ? "" : String(position.x));
+    setMapY(position.y === undefined ? "" : String(position.y));
+    setScale(payload.scale === undefined ? "" : String(payload.scale));
+    setRole(stringValue(source.role));
     setEditingId(record.sourceId);
     setMode(nextMode);
     setName(campaignRecordLabel(record));
     setLocationId(stringValue(payload.locationId));
     setDefinitionId(nextDefinitionId);
     setCapturedWorldPlacementId(stringValue(payload.capturedWorldPlacementId));
-    setContentType(source.kind === "world-item" ? "item" : "creature");
+    setContentType(
+      source.kind === "actor-role"
+        ? "actor-role"
+        : source.kind === "registered-content"
+          ? "registered-content"
+          : source.kind === "world-item"
+            ? "item"
+            : "creature",
+    );
     setPlotIds(
       new Set(
         arrayValue(payload.plotDefinitionIds).filter(
@@ -698,23 +746,97 @@ export function CampaignPlacementsPage() {
     );
   }
 
+  function contextReferences(id: string) {
+    return plots.filter((plot) =>
+      arrayValue(recordObject(plot).locationContexts).some((value) =>
+        arrayValue(objectValue(value).placementDefinitionIds).includes(id),
+      ),
+    );
+  }
   async function removePlacement(record: CampaignDraftRecord) {
+    if (!draft || saveState === "saving") return;
+    const affected = plots
+      .filter(
+        (plot) =>
+          arrayValue(recordObject(record).plotDefinitionIds).includes(
+            plot.sourceId,
+          ) || contextReferences(record.sourceId).includes(plot),
+      )
+      .map(campaignRecordLabel);
     if (
       !window.confirm(
-        `Remove ${campaignRecordLabel(record)} from this Campaign draft?`,
+        `Remove ${campaignRecordLabel(record)} from this Campaign draft?${affected.length ? ` Supporting Plots: ${affected.join(", ")}. Its Location context associations will be removed.` : ""} Captured World content remains unchanged.`,
       )
     )
       return;
-    const preserveEditorDirty = saveState === "dirty" || saveState === "error";
-    if (await removeRecord("campaign-placements", record.sourceId)) {
-      if (editingId === record.sourceId) resetEditor();
-      else if (preserveEditorDirty) markDirty();
-    }
+    if (!allowDiscard()) return;
+    const records = draft.records
+      .filter((r) => r !== record)
+      .map((r) => {
+        if (r.resourceType !== "plots") return r;
+        const payload = recordObject(r);
+        return {
+          ...r,
+          payload: {
+            ...payload,
+            locationContexts: arrayValue(payload.locationContexts).map(
+              (value) => {
+                const entry = objectValue(value);
+                return Array.isArray(entry.placementDefinitionIds)
+                  ? {
+                      ...entry,
+                      placementDefinitionIds:
+                        entry.placementDefinitionIds.filter(
+                          (id) => id !== record.sourceId,
+                        ),
+                    }
+                  : entry;
+              },
+            ),
+          },
+        };
+      });
+    if (
+      await saveDraft({
+        ...draft,
+        records,
+        content: {
+          ...draft.content,
+          placementDefinitionIds: records
+            .filter((r) => r.resourceType === "campaign-placements")
+            .map((r) => r.sourceId),
+        },
+      })
+    )
+      resetEditor();
   }
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !name.trim()) return;
+    if (!draft || !name.trim() || saveState === "saving") return;
+    const nextLocation =
+      mode === "world-decoration"
+        ? selectedWorldPlacement?.locationId
+        : locationId;
+    if (
+      editingId &&
+      contextReferences(editingId).some(
+        (plot) =>
+          !plotIds.has(plot.sourceId) ||
+          arrayValue(recordObject(plot).locationContexts).some((value) => {
+            const entry = objectValue(value);
+            return (
+              arrayValue(entry.placementDefinitionIds).includes(editingId) &&
+              entry.locationId !== nextLocation
+            );
+          }),
+      )
+    ) {
+      setError(
+        "Remove incompatible Location context associations before changing this placement’s Location or supporting Plots.",
+      );
+      return;
+    }
     const id = editingId || `campaign-placement:${crypto.randomUUID()}`;
     const existingRecord = placements.find(
       (record) => record.sourceId === editingId,
@@ -728,6 +850,10 @@ export function CampaignPlacementsPage() {
     };
     delete sourceExtensions.creatureId;
     delete sourceExtensions.itemDefinitionId;
+    delete sourceExtensions.role;
+    delete sourceExtensions.definitionId;
+    if (contentType !== "actor-role")
+      delete sourceExtensions.suggestedCreatureDefinitionId;
     const updates: Record<string, JsonValue> =
       mode === "independent"
         ? {
@@ -736,17 +862,21 @@ export function CampaignPlacementsPage() {
             locationId,
             plotDefinitionIds: [...plotIds],
             source:
-              contentType === "item"
-                ? {
-                    ...sourceExtensions,
-                    kind: "world-item",
-                    itemDefinitionId: definitionId,
-                  }
-                : {
-                    ...sourceExtensions,
-                    kind: "world-creature",
-                    creatureId: definitionId,
-                  },
+              contentType === "actor-role"
+                ? { ...sourceExtensions, kind: "actor-role", role: role.trim() }
+                : contentType === "registered-content"
+                  ? objectValue(recordObject(existingRecord).source)
+                  : contentType === "item"
+                    ? {
+                        ...sourceExtensions,
+                        kind: "world-item",
+                        itemDefinitionId: definitionId,
+                      }
+                    : {
+                        ...sourceExtensions,
+                        kind: "world-creature",
+                        creatureId: definitionId,
+                      },
           }
         : {
             id,
@@ -755,11 +885,80 @@ export function CampaignPlacementsPage() {
             capturedWorldPlacementId,
             plotDefinitionIds: [...plotIds],
           };
-    const saved = await saveRecord({
+    if (scale !== "" && Number(scale) <= 0) {
+      setError("Scale must be greater than zero.");
+      return;
+    }
+    if ((mapX === "") !== (mapY === "")) {
+      setError("Enter both map coordinates or leave both empty.");
+      return;
+    }
+    const placementPayload: Record<string, JsonValue> =
+      mergeCampaignPlacementPayload(existingRecord, mode, {
+        ...updates,
+        notes,
+      });
+    if (mapX !== "" && mapY !== "")
+      placementPayload.mapPosition = {
+        ...objectValue(recordObject(existingRecord).mapPosition),
+        kind: "normalized-map",
+        x: Number(mapX),
+        y: Number(mapY),
+      };
+    else delete placementPayload.mapPosition;
+    if (scale !== "") placementPayload.scale = Number(scale);
+    else delete placementPayload.scale;
+    const nextRecord = {
+      ...existingRecord,
       resourceType: "campaign-placements",
       sourceId: id,
-      payload: mergeCampaignPlacementPayload(existingRecord, mode, updates),
-    });
+      payload: placementPayload,
+    };
+    let saved: boolean;
+    if (plotContext) {
+      const records = campaignDraftWithRecord(draft.records, nextRecord).map(
+        (record) => {
+          if (
+            record.resourceType !== "plots" ||
+            record.sourceId !== plotContext.plotId
+          )
+            return record;
+          const payload = recordObject(record);
+          return {
+            ...record,
+            payload: {
+              ...payload,
+              locationContexts: arrayValue(payload.locationContexts).map(
+                (value) => {
+                  const entry = objectValue(value);
+                  return entry.id === plotContext.contextId
+                    ? {
+                        ...entry,
+                        placementDefinitionIds: [
+                          ...new Set([
+                            ...arrayValue(entry.placementDefinitionIds),
+                            id,
+                          ]),
+                        ],
+                      }
+                    : entry;
+                },
+              ),
+            },
+          };
+        },
+      );
+      saved = await saveDraft({
+        ...draft,
+        records,
+        content: {
+          ...draft.content,
+          placementDefinitionIds: records
+            .filter((r) => r.resourceType === "campaign-placements")
+            .map((r) => r.sourceId),
+        },
+      });
+    } else saved = await saveRecord(nextRecord);
     if (saved) resetEditor();
   }
   return (
@@ -767,20 +966,56 @@ export function CampaignPlacementsPage() {
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
         World context
       </p>
-      <h1 className="mt-3 text-3xl font-semibold">Placements</h1>
+      <h1 className="mt-3 text-3xl font-semibold">
+        {plotContext ? "Actor and Item intents" : "Placements"}
+      </h1>
       <p className="mt-3 max-w-3xl text-base-content/65">
         Campaign placements add context to the captured World snapshot without
         modifying World data.
       </p>
       <CampaignDraftRequired>
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        {!plotContext && (
+          <Disclosure
+            summary={`Inherited World placements · ${worldPlacements.length}`}
+          >
+            <ul className="space-y-3">
+              {worldPlacements.map((placement) => (
+                <li key={placement.id}>
+                  {placement.name} ·{" "}
+                  {labelFor(placement.locationId ?? "", "Unavailable Location")}{" "}
+                  · World owned
+                </li>
+              ))}
+            </ul>
+            <p>
+              Inherited placements remain in the captured World. Add a
+              decoration for Campaign-specific context.
+            </p>
+          </Disclosure>
+        )}
+
+        {error && <Alert tone="warning">{error}</Alert>}
+        {!editorOpen && (
+          <Button
+            className="mt-5 min-h-11"
+            onClick={() => {
+              resetEditor();
+              setEditorOpen(true);
+            }}
+          >
+            Add placement
+          </Button>
+        )}
+        <div
+          className={`mt-8 grid gap-6 ${editorOpen ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""}`}
+        >
           <section aria-labelledby="placement-list-title">
             <h2 id="placement-list-title" className="text-xl font-semibold">
               Campaign placements
             </h2>
             <div className="mt-4 space-y-3">
-              {placements.length ? (
-                placements.map((record) => {
+              {visiblePlacements.length ? (
+                visiblePlacements.map((record) => {
                   const payload = recordObject(record);
                   const decoration = payload.kind === "world-decoration";
                   return (
@@ -804,17 +1039,24 @@ export function CampaignPlacementsPage() {
                               stringValue(payload.capturedWorldPlacementId),
                               "Unavailable captured World placement",
                             )
-                          : `${labelFor(campaignPlacementSourceId(record) ?? "", "Unavailable captured content")} · ${labelFor(stringValue(payload.locationId), "Unavailable captured Location")}`}
+                          : `${stringValue(objectValue(payload.source).role) || labelFor(campaignPlacementSourceId(record) ?? "", "Unavailable captured content")} · ${labelFor(stringValue(payload.locationId), "Unavailable captured Location")}`}
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {decoration ||
-                        ["world-creature", "world-item"].includes(
+                        [
+                          "world-creature",
+                          "world-item",
+                          "actor-role",
+                          "registered-content",
+                        ].includes(
                           stringValue(objectValue(payload.source).kind),
                         ) ? (
                           <Button
                             type="button"
                             tone="outline"
                             size="sm"
+                            className="min-h-11"
+                            disabled={saveState === "saving"}
                             onClick={() => editPlacement(record)}
                           >
                             Edit placement
@@ -828,6 +1070,8 @@ export function CampaignPlacementsPage() {
                           type="button"
                           tone="danger"
                           size="sm"
+                          className="min-h-11"
+                          disabled={saveState === "saving"}
                           onClick={() => void removePlacement(record)}
                         >
                           Remove placement
@@ -841,196 +1085,312 @@ export function CampaignPlacementsPage() {
               )}
             </div>
           </section>
-          <form
-            onSubmit={save}
-            className="card h-fit border border-base-300 bg-base-200"
-          >
-            <div className="card-body gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="card-title">
-                  {editingId ? "Edit placement" : "Add placement"}
-                </h2>
-                {editingId && (
-                  <Button
-                    type="button"
-                    tone="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (allowDiscard()) resetEditor();
-                    }}
-                  >
-                    Cancel editing
-                  </Button>
-                )}
-              </div>
-              <Fieldset>
-                <Legend className="text-sm font-medium">Ownership</Legend>
-                <div className="mt-2 space-y-2">
-                  <Label className="flex min-h-11 items-center gap-3">
-                    <Input
-                      type="radio"
-                      name="placement-mode"
-                      value="independent"
-                      checked={mode === "independent"}
-                      onChange={() => {
-                        setMode("independent");
-                        markDirty();
+          {editorOpen && (
+            <form
+              onSubmit={save}
+              className="card h-fit border border-base-300 bg-base-200"
+            >
+              <div className="card-body gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="card-title">
+                    {editingId ? "Edit placement" : "Add placement"}
+                  </h2>
+                  {editorOpen && (
+                    <Button
+                      type="button"
+                      tone="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (allowDiscard()) resetEditor();
                       }}
-                    />
-                    Place Campaign content
-                  </Label>
-                  <Label className="flex min-h-11 items-center gap-3">
-                    <Input
-                      type="radio"
-                      name="placement-mode"
-                      value="world-decoration"
-                      checked={mode === "world-decoration"}
-                      onChange={() => {
-                        setMode("world-decoration");
-                        markDirty();
-                      }}
-                    />
-                    Decorate a World placement
-                  </Label>
+                    >
+                      Cancel editing
+                    </Button>
+                  )}
                 </div>
-              </Fieldset>
-              <Label>
-                Campaign label
-                <Input
-                  required
-                  className="mt-2 w-full"
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.currentTarget.value);
-                    markDirty();
-                  }}
-                />
-              </Label>
-              {mode === "independent" ? (
-                <>
+                <Fieldset>
+                  <Legend className="text-sm font-medium">Ownership</Legend>
+                  <div className="mt-2 space-y-2">
+                    <Label className="flex min-h-11 items-center gap-3">
+                      <Input
+                        type="radio"
+                        name="placement-mode"
+                        value="independent"
+                        checked={mode === "independent"}
+                        onChange={() => {
+                          setMode("independent");
+                          markDirty();
+                        }}
+                      />
+                      Place Campaign content
+                    </Label>
+                    <Label className="flex min-h-11 items-center gap-3">
+                      <Input
+                        type="radio"
+                        name="placement-mode"
+                        value="world-decoration"
+                        checked={mode === "world-decoration"}
+                        onChange={() => {
+                          setMode("world-decoration");
+                          markDirty();
+                        }}
+                      />
+                      Decorate a World placement
+                    </Label>
+                  </div>
+                </Fieldset>
+                <Label>
+                  Campaign label
+                  <Input
+                    required
+                    className="mt-2 w-full"
+                    value={name}
+                    onChange={(event) => {
+                      setName(event.currentTarget.value);
+                      markDirty();
+                    }}
+                  />
+                </Label>
+                {mode === "independent" ? (
+                  <>
+                    <Label>
+                      Captured Location
+                      <Select
+                        disabled={!!plotContext}
+                        required
+                        className="mt-2 w-full"
+                        value={locationId}
+                        onChange={(event) => {
+                          setLocationId(event.currentTarget.value);
+                          markDirty();
+                        }}
+                      >
+                        <option value="">
+                          {locations.length
+                            ? "Choose a Location"
+                            : "No captured Locations available"}
+                        </option>
+                        {locations.map((choice) => (
+                          <option key={choice.id} value={choice.id}>
+                            {choice.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Label>
+                    <Label>
+                      Intent source
+                      <Select
+                        value={
+                          contentType === "actor-role"
+                            ? "actor-role"
+                            : contentType === "registered-content"
+                              ? "registered-content"
+                              : "content"
+                        }
+                        onChange={(event) => {
+                          setContentType(
+                            event.currentTarget.value === "actor-role"
+                              ? "actor-role"
+                              : "creature",
+                          );
+                          setDefinitionId("");
+                          markDirty();
+                        }}
+                      >
+                        <option value="content">
+                          Captured Creature or Item
+                        </option>
+                        <option value="actor-role">Actor role</option>
+                        {contentType === "registered-content" && (
+                          <option value="registered-content">
+                            Existing registered content
+                          </option>
+                        )}
+                      </Select>
+                    </Label>
+                    {contentType === "actor-role" ? (
+                      <Label>
+                        Actor role
+                        <Input
+                          required
+                          value={role}
+                          onChange={(event) => {
+                            setRole(event.currentTarget.value);
+                            markDirty();
+                          }}
+                        />
+                      </Label>
+                    ) : contentType === "registered-content" ? (
+                      <p>Registered content source is preserved.</p>
+                    ) : (
+                      <Label>
+                        Creature or Item
+                        <Select
+                          required
+                          className="mt-2 w-full"
+                          aria-label="Creature or Item"
+                          value={definitionId}
+                          onChange={(event) => {
+                            setDefinitionId(event.currentTarget.value);
+                            const selected = content.find(
+                              ({ id }) => id === event.currentTarget.value,
+                            );
+                            setContentType(
+                              selected?.kind === "item" ||
+                                selected?.resourceType === "items"
+                                ? "item"
+                                : "creature",
+                            );
+                            markDirty();
+                          }}
+                        >
+                          <option value="">
+                            {content.length
+                              ? "Choose captured content"
+                              : "No captured Creatures or Items available"}
+                          </option>
+                          {content.map((choice) => (
+                            <option key={choice.id} value={choice.id}>
+                              {choice.name} ·{" "}
+                              {choice.kind || choice.resourceType}
+                            </option>
+                          ))}
+                        </Select>
+                      </Label>
+                    )}
+                  </>
+                ) : (
                   <Label>
-                    Captured Location
+                    Captured World placement
                     <Select
+                      aria-label="Captured World placement"
                       required
                       className="mt-2 w-full"
-                      value={locationId}
+                      value={capturedWorldPlacementId}
                       onChange={(event) => {
-                        setLocationId(event.currentTarget.value);
+                        setCapturedWorldPlacementId(event.currentTarget.value);
                         markDirty();
                       }}
                     >
                       <option value="">
-                        {locations.length
-                          ? "Choose a Location"
-                          : "No captured Locations available"}
+                        {worldPlacements.length
+                          ? "Choose a World placement"
+                          : "No captured World placements available"}
                       </option>
-                      {locations.map((choice) => (
+                      {worldPlacements.map((choice) => (
                         <option key={choice.id} value={choice.id}>
                           {choice.name}
                         </option>
                       ))}
                     </Select>
                   </Label>
-                  <Label>
-                    Creature or Item
-                    <Select
-                      required
-                      className="mt-2 w-full"
-                      value={definitionId}
-                      onChange={(event) => {
-                        setDefinitionId(event.currentTarget.value);
-                        const selected = content.find(
-                          ({ id }) => id === event.currentTarget.value,
-                        );
-                        setContentType(
-                          selected?.kind === "item" ||
-                            selected?.resourceType === "items"
-                            ? "item"
-                            : "creature",
-                        );
-                        markDirty();
-                      }}
-                    >
-                      <option value="">
-                        {content.length
-                          ? "Choose captured content"
-                          : "No captured Creatures or Items available"}
-                      </option>
-                      {content.map((choice) => (
-                        <option key={choice.id} value={choice.id}>
-                          {choice.name} · {choice.kind || choice.resourceType}
-                        </option>
-                      ))}
-                    </Select>
-                  </Label>
-                </>
-              ) : (
+                )}
                 <Label>
-                  Captured World placement
-                  <Select
-                    required
-                    className="mt-2 w-full"
-                    value={capturedWorldPlacementId}
+                  GM notes
+                  <Textarea
+                    value={notes}
                     onChange={(event) => {
-                      setCapturedWorldPlacementId(event.currentTarget.value);
+                      setNotes(event.currentTarget.value);
                       markDirty();
                     }}
-                  >
-                    <option value="">
-                      {worldPlacements.length
-                        ? "Choose a World placement"
-                        : "No captured World placements available"}
-                    </option>
-                    {worldPlacements.map((choice) => (
-                      <option key={choice.id} value={choice.id}>
-                        {choice.name}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 </Label>
-              )}
-              <Fieldset>
-                <Legend>Supporting Plots</Legend>
+                <Disclosure summary="Map position and scale">
+                  <div className="grid gap-3">
+                    <p>Coordinates run from 0 to 1 across the captured map.</p>
+                    <Label>
+                      Horizontal position
+                      <Input
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="any"
+                        value={mapX}
+                        onChange={(event) => {
+                          setMapX(event.currentTarget.value);
+                          markDirty();
+                        }}
+                      />
+                    </Label>
+                    <Label>
+                      Vertical position
+                      <Input
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="any"
+                        value={mapY}
+                        onChange={(event) => {
+                          setMapY(event.currentTarget.value);
+                          markDirty();
+                        }}
+                      />
+                    </Label>
+                    <Label>
+                      Scale
+                      <Input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={scale}
+                        onChange={(event) => {
+                          setScale(event.currentTarget.value);
+                          markDirty();
+                        }}
+                      />
+                    </Label>
+                  </div>
+                </Disclosure>
+                <Fieldset>
+                  <Legend>Supporting Plots</Legend>
+                  <p className="text-xs text-base-content/60">
+                    Optionally associate this placement with one or more Plots.
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {plots.map((plot) => (
+                      <Checkbox
+                        key={plot.sourceId}
+                        label={campaignRecordLabel(plot)}
+                        disabled={plotContext?.plotId === plot.sourceId}
+                        checked={plotIds.has(plot.sourceId)}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
+                          setPlotIds((current) => {
+                            const next = new Set(current);
+                            if (checked) next.add(plot.sourceId);
+                            else next.delete(plot.sourceId);
+                            return next;
+                          });
+                          markDirty();
+                        }}
+                      />
+                    ))}
+                  </div>
+                </Fieldset>
                 <p className="text-xs text-base-content/60">
-                  Optionally associate this placement with one or more Plots.
+                  World facts remain read only. Only the Campaign overlay is
+                  saved.
                 </p>
-                <div className="mt-2 space-y-2">
-                  {plots.map((plot) => (
-                    <Checkbox
-                      key={plot.sourceId}
-                      label={campaignRecordLabel(plot)}
-                      checked={plotIds.has(plot.sourceId)}
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-                        setPlotIds((current) => {
-                          const next = new Set(current);
-                          if (checked) next.add(plot.sourceId);
-                          else next.delete(plot.sourceId);
-                          return next;
-                        });
-                        markDirty();
-                      }}
-                    />
-                  ))}
-                </div>
-              </Fieldset>
-              <p className="text-xs text-base-content/60">
-                World facts remain read only. Only the Campaign overlay is
-                saved.
-              </p>
-              <Button
-                type="submit"
-                disabled={
-                  mode === "independent"
-                    ? !locationId || !definitionId
-                    : !capturedWorldPlacementId ||
-                      !selectedWorldPlacement?.locationId
-                }
-              >
-                {editingId ? "Save placement" : "Add to draft"}
-              </Button>
-            </div>
-          </form>
+                <Button
+                  type="submit"
+                  disabled={
+                    saveState === "saving" ||
+                    (mode === "independent"
+                      ? !locationId ||
+                        (contentType === "actor-role"
+                          ? !role.trim()
+                          : contentType === "registered-content"
+                            ? false
+                            : !definitionId)
+                      : !capturedWorldPlacementId ||
+                        !selectedWorldPlacement?.locationId)
+                  }
+                >
+                  {editingId ? "Save placement" : "Add to draft"}
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
       </CampaignDraftRequired>
     </main>
@@ -1038,7 +1398,14 @@ export function CampaignPlacementsPage() {
 }
 
 export function CampaignPreparationPage() {
-  const { draft, saveDraft, markDirty } = useCampaignDefinitionAuthoring();
+  const {
+    draft,
+    saveDraft,
+    markDirty,
+    discardLocalChanges,
+    saveState,
+    canEdit,
+  } = useCampaignDefinitionAuthoring();
   const preparation = objectValue(draft?.content.preparation);
   const [startingContext, setStartingContext] = useState(
     stringValue(preparation.startingContext),
@@ -1049,6 +1416,23 @@ export function CampaignPreparationPage() {
   const [mapVariations, setMapVariations] = useState(
     stringValue(preparation.mapVariations),
   );
+  const [locationCanvases, setLocationCanvases] = useState(() =>
+    canvasArray(preparation.locationCanvases),
+  );
+  const [canvasesChanged, setCanvasesChanged] = useState(false);
+  function cancel() {
+    if (
+      (saveState === "dirty" || saveState === "error") &&
+      !window.confirm("Discard unsaved preparation changes?")
+    )
+      return;
+    setStartingContext(stringValue(preparation.startingContext));
+    setStartingLocationId(stringValue(preparation.startingLocationId));
+    setMapVariations(stringValue(preparation.mapVariations));
+    setLocationCanvases(canvasArray(preparation.locationCanvases));
+    setCanvasesChanged(false);
+    discardLocalChanges();
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!draft) return;
@@ -1057,6 +1441,7 @@ export function CampaignPreparationPage() {
       startingContext: startingContext.trim(),
       mapVariations: mapVariations.trim(),
     };
+    if (canvasesChanged) nextPreparation.locationCanvases = locationCanvases;
     if (startingLocationId)
       nextPreparation.startingLocationId = startingLocationId;
     else delete nextPreparation.startingLocationId;
@@ -1084,49 +1469,75 @@ export function CampaignPreparationPage() {
       </Alert>
       <CampaignDraftRequired>
         <form className="mt-8 space-y-6" onSubmit={save}>
-          <Label>
-            Starting Location
-            <Select
-              className="mt-2 w-full"
-              value={startingLocationId}
-              onChange={(event) => {
-                setStartingLocationId(event.currentTarget.value);
-                markDirty();
-              }}
-            >
-              <option value="">Choose later in a Campaign Instance</option>
-              {(draft?.capturedWorldContent?.locations ?? []).map(
-                (location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name || "Unnamed captured Location"}
-                  </option>
-                ),
-              )}
-            </Select>
-          </Label>
-          <Label>
-            Starting context
-            <Textarea
-              className="mt-2 min-h-40 w-full"
-              value={startingContext}
-              onChange={(event) => {
-                setStartingContext(event.currentTarget.value);
+          <fieldset
+            className="min-w-0 space-y-6"
+            disabled={!canEdit || saveState === "saving"}
+          >
+            <Label>
+              Starting Location
+              <Select
+                className="mt-2 w-full"
+                value={startingLocationId}
+                onChange={(event) => {
+                  setStartingLocationId(event.currentTarget.value);
+                  markDirty();
+                }}
+              >
+                <option value="">Choose later in a Campaign Instance</option>
+                {(draft?.capturedWorldContent?.locations ?? []).map(
+                  (location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name || "Unnamed captured Location"}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </Label>
+            <Label>
+              Starting context
+              <Textarea
+                className="mt-2 min-h-40 w-full"
+                value={startingContext}
+                onChange={(event) => {
+                  setStartingContext(event.currentTarget.value);
+                  markDirty();
+                }}
+              />
+            </Label>
+            <Label>
+              Source-map variations
+              <Textarea
+                className="mt-2 min-h-40 w-full"
+                value={mapVariations}
+                onChange={(event) => {
+                  setMapVariations(event.currentTarget.value);
+                  markDirty();
+                }}
+              />
+            </Label>
+            <CampaignCanvasPreparation
+              canvases={locationCanvases}
+              locations={draft?.capturedWorldContent?.locations ?? []}
+              onChange={(value) => {
+                setLocationCanvases(value);
+                setCanvasesChanged(true);
                 markDirty();
               }}
             />
-          </Label>
-          <Label>
-            Source-map variations
-            <Textarea
-              className="mt-2 min-h-40 w-full"
-              value={mapVariations}
-              onChange={(event) => {
-                setMapVariations(event.currentTarget.value);
-                markDirty();
-              }}
-            />
-          </Label>
-          <Button type="submit">Save preparation defaults</Button>
+            <div className="flex flex-wrap gap-3">
+              <Button className="min-h-11" type="submit">
+                Save preparation defaults
+              </Button>
+              <Button
+                className="min-h-11"
+                type="button"
+                tone="outline"
+                onClick={cancel}
+              >
+                Cancel preparation changes
+              </Button>
+            </div>
+          </fieldset>
         </form>
       </CampaignDraftRequired>
     </main>

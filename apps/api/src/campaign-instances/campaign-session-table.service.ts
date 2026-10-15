@@ -514,9 +514,8 @@ export function projectSessionTable(
     plots,
     unavailable,
     encounter: {
-      status: "unavailable",
-      detail:
-        "Encounter adjudication and Rules execution are not available. This table is read-only.",
+      status: "available",
+      detail: "Use the encounter panel to plan activities and guide combat resolution.",
     },
   };
 }

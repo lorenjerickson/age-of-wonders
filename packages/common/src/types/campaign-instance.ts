@@ -110,6 +110,14 @@ export interface CampaignInstanceCreatureStateOverlay<
   readonly terrainPosition?: TerrainPoint;
   /** Optional equipment overlay; absent on historical captures until explicitly equipped. */
   readonly equipment?: import("./items").EquipmentState;
+  /** Explicit GM-configured combat health, updated only when a round is published. */
+  readonly combat?: {
+    readonly hp: number;
+    readonly maxHp: number;
+    readonly prone: boolean;
+    readonly removed: boolean;
+    readonly incapacitation?: "unconscious" | "dead" | null;
+  };
   /** Explicit runtime effects; Instance orchestration supplies elapsed units/events. */
   readonly activeEffects?: readonly import("./rules").ActiveEffect[];
   /** The aow:rules namespace stores authored numeric aow:movementRemaining, aow:moves and aow:bonusActions resources; absence grants no default allowance. */
@@ -135,6 +143,8 @@ export interface CampaignInstanceRuntimeState<
   Extensions extends ExtensionData = ExtensionData,
 > {
   readonly formatVersion: 1;
+  /** Sole durable encounter owner, including locked plans and unpublished simulation. */
+  readonly encounter?: import("./combat").EncounterState;
   readonly preparation: CampaignInstancePreparation<Extensions>;
   /** One progress overlay for every captured root Plot and subplot. */
   readonly plotProgress: readonly CampaignInstancePlotProgress<Extensions>[];
@@ -183,7 +193,8 @@ export type CampaignInstanceRuntimeValidationIssueCode =
   | "creature-embodiment-policy-mismatch"
   | "creature-source-not-captured"
   | "runtime-entity-not-found"
-  | "invalid-terrain-position";
+  | "invalid-terrain-position"
+  | "invalid-encounter";
 
 export interface CampaignInstanceRuntimeValidationIssue {
   readonly code: CampaignInstanceRuntimeValidationIssueCode;
@@ -208,6 +219,60 @@ export function validateCampaignInstanceRuntimeState(
     detail: string,
   ) => issues.push({ code, subject, detail });
 
+  if (state.encounter !== undefined) {
+    const encounter = state.encounter;
+    const knownActors = new Set(
+      state.creatureEmbodiments.map((actor) => actor.runtimeEntityId),
+    );
+    if (
+      !encounter ||
+      encounter.schemaVersion !== 2 ||
+      !Number.isSafeInteger(encounter.revision) ||
+      encounter.revision < 0 ||
+      ![
+        "setup",
+        "planning",
+        "locked",
+        "resolving",
+        "adjudication",
+        "review",
+        "published",
+        "completed",
+      ].includes(encounter.phase) ||
+      !Array.isArray(encounter.combatants) ||
+      !Array.isArray(encounter.simulated) ||
+      encounter.combatants.some((actor) => !knownActors.has(actor.entityId)) ||
+      new Set(encounter.combatants.map((actor) => actor.entityId)).size !==
+        encounter.combatants.length
+    ) {
+      add(
+        "invalid-encounter",
+        "Encounter",
+        "The encounter must be a versioned ordered-plan state bound to this Instance's actors.",
+      );
+    }
+  }
+  for (const actor of state.creatureEmbodiments) {
+    const health = actor.creature.combat;
+    if (
+      health !== undefined &&
+      (!health ||
+        !Number.isFinite(health.hp) ||
+        !Number.isFinite(health.maxHp) ||
+        health.maxHp <= 0 ||
+        health.hp < 0 ||
+        health.hp > health.maxHp ||
+        typeof health.prone !== "boolean" ||
+        typeof health.removed !== "boolean" ||
+        (health.incapacitation != null &&
+          !["unconscious", "dead"].includes(health.incapacitation)))
+    )
+      add(
+        "invalid-encounter",
+        "Actor health",
+        "Combat health must be explicitly configured and within its maximum.",
+      );
+  }
   const plotIds = [...context.capturedPlotObjectiveIds.keys()];
   const progressIds = state.plotProgress.map(
     ({ plotDefinitionId }) => plotDefinitionId,

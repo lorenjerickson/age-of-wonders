@@ -2334,9 +2334,49 @@ location ID, and `stationary`, `traveling`, or `lost` status.
   values, and extensions. Item
   location is discriminated as `inventory`, `container`, `scene`, `location`, `carried`, or
   `destroyed`.
-- `EncounterState` contains identity/name, phase, round/turn, initiative, combatants, environment,
-  pending rule executions, roll history, and extensions. Encounter position is scene-local and is
-  not a substitute for strategic `LocationState` placement.
+- `EncounterState` schema version 2 is the simultaneous planned-combat aggregate. It contains
+  identity/name, optimistic revision, round/checkpoint, phase, pause state, authoritative combatants,
+  simulated combatants, ordered per-actor plans, pending conflict, history, random cursor, processed
+  command IDs, environment and private extensions. There is no initiative or active combatant turn.
+  Encounter square coordinates are scene-local; the Instance adapter converts them to/from runtime
+  feet at five feet per square. They do not replace strategic `LocationState` placement.
+- `CombatProfile` explicitly captures attack, defense, damage, resistance and Might formulas with
+  named source-bound signed dice and integer constants. Equipped Items, captured Attributes/Skills
+  and active Conditions supply available source bindings; sparse actors do not receive fabricated
+  statistics. GM setup supplies missing health and formulas explicitly. Defender wins ties, a fresh
+  attack-minus-defense margin of at least 10 is critical, and critical damage doubles dice counts
+  rather than constants. Damage taken is `max(0, damage - resistance)`.
+- The `Encounter` Entity owns plan editing/submission, lock, guided stepping, pause/resume, conflict
+  decisions, reopening, round publication and completion. Plans advance only when their current
+  activity concludes. Six movement checkpoints are the default; diagonals and orthogonal moves each
+  consume one five-foot square. Authored profile rules specify available actions and resource costs;
+  unresolved interactions require explicit GM adjudication rather than an implicit order.
+- `CombatProfile.resources` contains explicit remaining allowances. Only keys in optional
+  `roundResourceLimits` reset at the next round; other resources persist as consumables. Attack
+  costs are explicitly free or resource-backed. Activity costs are paid on completion; reaction
+  costs on trigger. Empty formula arrays explicitly mean zero; missing formula fields are invalid.
+- Reaction declarations bind a named captured rule, incoming-attack trigger, protected target and
+  optional source filter. Before reactions add their separately sampled defense contribution;
+  after/replace reactions require scoped GM custom consequences. Pending/armed/triggered/
+  invalidated/expired states and matched reaction identities persist across pauses.
+- Unconscious/dead is an explicit `incapacitation` state, also stored on sparse runtime `combat`.
+  Unconscious actors may declare a configured death-save for GM resolution; no numerical death-save
+  formula is invented. Discarded plans do not resume following resurrection. GM correction commands
+  can set health, consciousness, presence or additional actor controllers within an open round.
+- Summon rules activate an already captured inactive roster actor. A same-round summoned attack must
+  be declared in the summoner's activity and consume its explicit configured capacity; otherwise
+  that actor waits until the next round. Arbitrary same-round summoned activity trees are unsupported.
+  Concurrency pairings explicitly label each side and use a captured winner-first contest; unspecified
+  simultaneous interactions require a GM outcome.
+- `CampaignInstanceRuntimeState.encounter` stores the active durable encounter. The API binds it to
+  the selected active Session, validates controller membership and captured sources, and persists
+  commands with revision checks and idempotency receipts. Private captured entropy makes resumed
+  resolution reproducible. Authoritative Creature health/position changes occur atomically only
+  when the round is published; concurrent actor/equipment changes prevent stale publication.
+- Player projections expose visible actors, owned plans and named action choices, and released public
+  history. They omit other plans, simulated outcomes, private roll formulas/entropy, conflicts and GM
+  reasoning. Legacy turn events/durations/limits require explicit rules review; do not silently
+  reinterpret them as rounds or generate new initiative encounters.
 
 Character heritage records an origin region and zero to three immutable-at-creation heritage
 selections. Character profession state records current expertise, how it was acquired, advancement
@@ -3841,3 +3881,37 @@ release v1 is preserved and is not automatically extended/readopted.
 `WorldRule` owns structural validation; `RuleExecution` exposes deterministic preview/replay results through command/state$. The existing interpreter still evaluates expressions and stages conflict-checked writes. Movement commits route through Creature/Character commands; no mutable captured record is exposed. There is no production encounter, decision, rest or downtime executor to migrate: their existing legacy value contracts remain preserved, and no combat/time algorithm or competing runtime World is introduced.
 
 Weather changes use the GM-owned active/paused Session boundary, validate captured Location membership, CAS runtime and audit atomically. Local table focus remains viewing state. These changes add JSON fields and projections only: `CampaignInstanceRuntime`, Session, participation and existing rule capture storage remain authoritative. No generic DomainRecord resource or database schema migration is introduced.
+
+## Definition and Model lifecycle ownership (B07)
+
+`CampaignDefinition` owns complete authored content plus its Plot/placement records,
+preparation (including per-Location canvas configuration), captured membership and
+publication diagnostics. Draft replacement preserves incomplete/private content and
+reports nonblocking draft diagnostics; exact publication validation remains required.
+Forking rewrites Campaign-owned identities and references while retaining the captured
+World and unknown/private fields. World reference rewriting preserves the existing
+registered-reference grammar, including Skill keys/property paths and terrain capture
+identity. Neither operation changes already published content or source drafts.
+
+`DefinitionLineage` owns active/archive transitions and exact-predecessor publication
+policy for World/Campaign Definitions. Publication requires the expected draft revision,
+current base and validation of that exact draft; the adapter revalidates current captured
+content and commits revision/capture/head changes with existing transaction/CAS guards.
+IDs, timestamps, authorization, hashing, immutable snapshot storage and idempotent retries
+remain adapter responsibilities. Direct-successor World adoption retains conflict review
+and reference mappings; it does not silently select a new World or Model release.
+
+`ModelElement` owns revision and cardinality/shape validity plus revise/archive commands.
+`ModelSchema` owns exact dependency closure, publication validity and adopted-root
+collision policy. `ModelMigration` owns direct-lineage mappings and typed backfill
+validation. World/Campaign owners enforce their governed-record conformance using the
+exact compiled selection. Compiler adapters supply hashing; services still authorize
+registries/releases and persist immutable revisions atomically. Existing unsupported
+expression/pattern constraints remain rejected rather than acquiring invented evaluators.
+
+GM Campaign editors author independent placements and decorations, associate canonical
+placement IDs with Plot Location contexts, and expose existing preparation layers,
+lights, sounds, drawings, templates and notes. Deprecated inline intent arrays are
+preserved, not used for new authoring. Canvas configuration is reusable preparation;
+these controls do not add a rendering or synchronized playback engine. B07 changes
+ownership and consumers without changing common payload schemas or resource mappings.

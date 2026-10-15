@@ -1,3 +1,4 @@
+import { DefinitionLineage, rewriteWorldDefinitionReferences as rewriteReferences } from "@aow/domain";
 import {
   Map as DomainMap,
   WorldDefinition,
@@ -6,13 +7,10 @@ import {
   ItemDefinition,
   CharacterTemplate,
   SkillDefinition,
-  ProfessionDefinition,
-  BackgroundDefinition,
 } from "@aow/domain";
 import { worldAccessWhere } from "./world-access";
 import {
   worldCodexSnapshotIssue,
-  grantedConditionIssue,
 } from "./world-codex-validation";
 import { WORLD_CODEX_RESOURCES } from "@aow/common";
 import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
@@ -45,7 +43,6 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CORE_MODEL_SCHEMA_RELEASE_ID } from "../model-registry/editable-core-model-seed";
 import { ModelRegistryService } from "../model-registry/model-registry.service";
-import type { CompiledModelElement } from "../model-registry/model-registry-compiler";
 import type {
   CreateWorldDraftDto,
   ExpectedDraftRevisionDto,
@@ -1405,7 +1402,6 @@ export class WorldDefinitionAuthoringService {
         records,
         new Set(definitionIds(owned.draft.content)),
         worldDefinitionId,
-        userId,
       )),
     );
     issues.sort(
@@ -1472,22 +1468,23 @@ export class WorldDefinitionAuthoringService {
             },
           });
           if (!world?.draft) throw notFound();
-          if (world.status !== "ACTIVE") throw archivedConflict();
           const draft = world.draft;
-          if (draft.storageRevision !== dto.expectedStorageRevision)
-            throw staleDraft();
-          if (
-            (draft.baseRevisionId ?? null) !== (world.currentRevisionId ?? null)
-          )
-            throw staleBase();
-          if (
-            draft.validationStatus !== "VALID" ||
-            draft.validatedStorageRevision !== draft.storageRevision
-          ) {
-            throw new BadRequestException(
-              "Validate this exact World draft revision before publishing it.",
-            );
+          const lineage = DefinitionLineage.deserializePayload({ status: world.status, currentRevisionId: world.currentRevisionId, revisionNumber: world.currentRevision?.revisionNumber ?? 0 });
+          const evidence = { expectedStorageRevision: dto.expectedStorageRevision, storageRevision: draft.storageRevision, baseRevisionId: draft.baseRevisionId ?? null, validationStatus: draft.validationStatus, validatedStorageRevision: draft.validatedStorageRevision };
+          const issue = DefinitionLineage.publicationIssue(lineage.state.data, evidence);
+          if (issue) {
+            lineage.dispose();
+            if (issue === "archived") throw archivedConflict();
+            if (issue === "stale-draft") throw staleDraft();
+            if (issue === "stale-base") throw staleBase();
+            throw new BadRequestException("Validate this exact World draft revision before publishing it.");
           }
+          const revisionId = randomUUID();
+          let nextRevisionNumber: number;
+          try {
+            await lineage.command("publish", { initiator: userId, params: { ...evidence, revisionId }, context: {} });
+            nextRevisionNumber = lineage.state.data.revisionNumber;
+          } finally { lineage.dispose(); }
           const records = readRecords(draft.snapshotRecords);
           const report = validateWorldDefinitionDraft(draft.content, records);
           if (!report.valid)
@@ -1499,7 +1496,6 @@ export class WorldDefinitionAuthoringService {
             records,
             new Set(definitionIds(draft.content)),
             worldDefinitionId,
-            userId,
           );
           if (mediaIssues.length > 0) throw invalidWorldItemImage();
           const modelSchemaReleaseIds = modelReleaseIds(draft.content);
@@ -1529,11 +1525,10 @@ export class WorldDefinitionAuthoringService {
               );
             }
           }
-          const revisionNumber =
-            (world.currentRevision?.revisionNumber ?? 0) + 1;
+          const revisionNumber = nextRevisionNumber;
           const revision = await tx.worldDefinitionRevision.create({
             data: {
-              worldDefinitionId,
+              id: revisionId, worldDefinitionId,
               revisionNumber,
               predecessorRevisionId: world.currentRevisionId,
               name: draft.revisionName,
@@ -1664,7 +1659,7 @@ export class WorldDefinitionAuthoringService {
           const sourceRecords = source.manifest.records.filter(
             (record) => record.resourceType !== RESERVED_RECORD,
           );
-          const mapping: ResourceIdentityMapping = {};
+          const mapping: Record<string, Record<string, string>> = {};
           for (const record of sourceRecords) {
             if (record.resourceType === TERRAIN_CHUNK_RESOURCE) continue;
             (mapping[record.resourceType] ??= {})[record.sourceId] =
@@ -1809,7 +1804,7 @@ export class WorldDefinitionAuthoringService {
         status: archived ? "ACTIVE" : "ARCHIVED",
       },
       data: {
-        status: archived ? "ARCHIVED" : "ACTIVE",
+        status: await DefinitionLineage.archiveStatus(archived, userId),
         archivedAt: archived ? new Date() : null,
         metadataRevision: { increment: 1 },
         updatedAt: new Date(),
@@ -1991,68 +1986,6 @@ function newWorldBaseline(name: string) {
     ],
   };
 }
-type ResourceIdentityMapping = Record<string, Record<string, string>>;
-function rewriteReferences(
-  value: unknown,
-  mapping: ResourceIdentityMapping,
-  currentResource?: string,
-  fieldName?: string,
-): unknown {
-  if (typeof value === "string") {
-    if (fieldName === "propertyPath") {
-      const skill = /^skills\.(.+)\.(value|modifier)$/.exec(value);
-      if (skill && mapping.definitions?.[skill[1]!])
-        return `skills.${mapping.definitions[skill[1]!]}.${skill[2]}`;
-    }
-    return mappedReference(value, mapping, currentResource, fieldName) ?? value;
-  }
-  if (Array.isArray(value))
-    return value.map((entry) =>
-      rewriteReferences(entry, mapping, currentResource, fieldName),
-    );
-  if (isObject(value))
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        fieldName === "skills" ? (mapping.definitions?.[key] ?? key) : key,
-        rewriteReferences(entry, mapping, currentResource, key),
-      ]),
-    );
-  return value;
-}
-function mappedReference(
-  value: string,
-  mapping: ResourceIdentityMapping,
-  currentResource?: string,
-  fieldName?: string,
-): string | undefined {
-  if (fieldName === "id" && currentResource)
-    return mapping[currentResource]?.[value];
-  const normalized = fieldName?.toLowerCase() ?? "";
-  const preferred =
-    normalized === "equipmentpool"
-      ? ["definitions"]
-      : normalized === "conditionid"
-        ? ["world-conditions"]
-        : normalized === "effectid"
-          ? ["world-effects"]
-          : normalized.includes("location")
-            ? ["locations"]
-            : normalized.includes("schema")
-              ? ["extension-schemas", "definitions"]
-              : normalized.includes("definition")
-                ? ["definitions"]
-                : normalized.includes("creature")
-                  ? ["creatures"]
-                  : normalized.includes("item")
-                    ? ["items"]
-                    : normalized.endsWith("id") || normalized.endsWith("ids")
-                      ? Object.keys(mapping)
-                      : [];
-  const matches = preferred.flatMap((resource) =>
-    mapping[resource]?.[value] ? [mapping[resource][value]] : [],
-  );
-  return matches.length === 1 ? matches[0] : undefined;
-}
 function jsonObject(value: unknown): Prisma.InputJsonObject {
   return value as Prisma.InputJsonObject;
 }
@@ -2195,7 +2128,6 @@ async function itemMediaAuthorizationIssues(
   records: readonly WorldDraftRecordDto[],
   declaredDefinitionIds: ReadonlySet<string>,
   worldDefinitionId: string,
-  userId: string,
 ) {
   const items = records.filter(
     (record) =>
@@ -2267,152 +2199,9 @@ function invalidWorldItemImage(): BadRequestException {
     "The selected Item image is unavailable for this World.",
   );
 }
-export function assertGovernedRecordConformance(
-  records: readonly WorldDraftRecordDto[],
-  rootReleaseIds: readonly string[],
-  elements: readonly CompiledModelElement[],
-  declaredDefinitionIds?: ReadonlySet<string>,
-  mode: "draft" | "publication" = "publication",
-): void {
-  const conceptIds = new Set(
-    elements
-      .filter((element) => element.lineage.kind === "concept")
-      .map((element) => element.lineage.id as string),
-  );
-  for (const record of records) {
-    if (
-      declaredDefinitionIds &&
-      record.resourceType === "definitions" &&
-      !declaredDefinitionIds.has(record.sourceId)
-    ) {
-      continue;
-    }
-    if (!isObject(record.payload)) continue;
-    const conformance = record.payload.conformance;
-    const hasGovernedValues = "modelValues" in record.payload;
-    const definitionType = governedDefinitionKind(
-      record.resourceType,
-      record.payload,
-    );
-    if (
-      definitionType === "creature" ||
-      definitionType === "item" ||
-      definitionType === "skill" ||
-      definitionType === "profession" ||
-      definitionType === "background"
-    ) {
-      const entityClass =
-        definitionType === "creature"
-          ? CreatureDefinition
-          : definitionType === "item"
-            ? ItemDefinition
-            : definitionType === "skill"
-              ? SkillDefinition
-              : definitionType === "profession"
-                ? ProfessionDefinition
-                : BackgroundDefinition;
-      const entity = entityClass.deserializePayload(
-        // Explicit adapter for pre-kind authored records; no stored payload is changed.
-        { ...record.payload, kind: definitionType },
-        {
-          sourceId: record.sourceId,
-          mode,
-          model: {
-            releaseIds: rootReleaseIds,
-            elements: elements.map((element) => ({
-              key: element.lineage.key,
-              id: element.lineage.id,
-              kind: element.lineage.kind,
-              semanticRole: element.lineage.semanticRole,
-              valueMetadata: isObject(element.revision.payload)
-                ? element.revision.payload.valueMetadata
-                : undefined,
-            })),
-          },
-        },
-      );
-      try {
-        const issue = entity.state.metadata.validity.issues.find(
-          (issue) => issue.code === `${definitionType}-model-invalid`,
-        );
-        if (issue) throw new BadRequestException(issue.message);
-      } finally {
-        entity.dispose();
-      }
-      continue;
-    }
-    const expectedRole = definitionType
-      ? `aow:${definitionType}`
-      : record.resourceType === "world-placements"
-        ? "aow:world-placement"
-        : undefined;
-    const matchingConcepts = expectedRole
-      ? elements.filter(
-          (element) =>
-            element.lineage.kind === "concept" &&
-            element.lineage.semanticRole === expectedRole,
-        )
-      : [];
-    if (!isObject(conformance)) {
-      if (hasGovernedValues || definitionType || matchingConcepts.length > 0)
-        throw new BadRequestException(
-          "A governed authored resource is missing Model Schema conformance.",
-        );
-      continue;
-    }
-    const selected = conformance.modelSchemaReleaseIds;
-    if (
-      !Array.isArray(selected) ||
-      selected.length !== rootReleaseIds.length ||
-      selected.some((id, index) => id !== rootReleaseIds[index])
-    ) {
-      throw new BadRequestException(
-        "A governed authored resource does not conform to the draft's exact Model Schema releases.",
-      );
-    }
-    if (
-      typeof conformance.conceptId !== "string" ||
-      !conceptIds.has(conformance.conceptId)
-    ) {
-      throw new BadRequestException(
-        "A governed authored resource references an unavailable Model concept.",
-      );
-    }
-    if (expectedRole) {
-      if (
-        matchingConcepts.length === 0 ||
-        !matchingConcepts.some(
-          ({ lineage }) => conformance.conceptId === lineage.id,
-        )
-      ) {
-        throw new BadRequestException(
-          "A governed authored resource uses the wrong Model concept.",
-        );
-      }
-    }
-  }
-}
-
-function governedDefinitionKind(
-  resourceType: string,
-  payload: Record<string, unknown>,
-): "creature" | "item" | "skill" | "profession" | "background" | undefined {
-  if (resourceType !== "definitions") return undefined;
-  if (
-    payload.kind === "creature" ||
-    payload.kind === "item" ||
-    payload.kind === "skill" ||
-    payload.kind === "profession" ||
-    payload.kind === "background"
-  )
-    return payload.kind;
-  // Explicit compatibility for records written before Definition.kind became authoritative.
-  if (
-    payload.kind === undefined &&
-    (payload.definitionType === "creature" || payload.definitionType === "item")
-  )
-    return payload.definitionType;
-  return undefined;
+export function assertGovernedRecordConformance(...args: Parameters<typeof WorldDefinition.assertGovernedConformance>): void {
+  try { WorldDefinition.assertGovernedConformance(...args); }
+  catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Invalid Model conformance."); }
 }
 function visible(value: string, message: string) {
   const v = value?.trim();

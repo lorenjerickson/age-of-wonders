@@ -201,7 +201,7 @@ describe("GM Session table", () => {
     ).toEqual([false, true]);
     expect(JSON.stringify(result)).not.toContain("missing-id");
     expect(JSON.stringify(result)).not.toContain("Foreign secret");
-    expect(result.encounter.status).toBe("unavailable");
+    expect(result.encounter.status).toBe("available");
   });
 
   it("changes only local map focus, rejects uncaptured choices and reports missing maps explicitly", () => {

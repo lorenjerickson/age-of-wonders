@@ -17,6 +17,18 @@ export interface CreatureRuntimeContext {
   campaignInstanceId?: string;
 }
 export interface CreatureCommands {
+  publishCombat: {
+    params: {
+      hp: number;
+      maxHp: number;
+      prone: boolean;
+      removed: boolean;
+      incapacitation?: "unconscious" | "dead" | null;
+      position?: unknown;
+      updatedAt: string;
+    };
+    context: object;
+  };
   applyEffect: {
     params: { effect: CapturedEffect; updatedAt: string };
     context: object;
@@ -185,6 +197,35 @@ export class Creature extends Entity<
     }
     return this.revised(next, params.updatedAt);
   }
+  static publishCombat(
+    data: CreatureRuntimeState,
+    params: CreatureCommands["publishCombat"]["params"],
+  ): CreatureRuntimeState {
+    if (
+      !Number.isFinite(params.hp) ||
+      !Number.isFinite(params.maxHp) ||
+      params.maxHp <= 0 ||
+      params.hp < 0 ||
+      params.hp > params.maxHp ||
+      (params.incapacitation != null &&
+        !["unconscious", "dead"].includes(params.incapacitation))
+    )
+      throw new TypeError(
+        "Combat health must be between zero and the configured maximum.",
+      );
+    const next = copyEntityData(data);
+    next.combat = {
+      ...object(next.combat),
+      hp: params.hp,
+      maxHp: params.maxHp,
+      prone: params.prone,
+      removed: params.removed,
+      incapacitation: params.incapacitation ?? null,
+    };
+    if (params.position !== undefined)
+      next.terrainPosition = copyEntityData(params.position);
+    return this.revised(next, params.updatedAt);
+  }
   static applyRuleFields(
     data: CreatureRuntimeState,
     params: CreatureCommands["applyRuleFields"]["params"],
@@ -291,21 +332,26 @@ export class Creature extends Entity<
     invocation: CommandInvocation<CreatureCommands[K]>,
   ): EntityTransition<CreatureRuntimeState, CreatureEvents> {
     const data =
-      name === "place"
-        ? Creature.place(
+      name === "publishCombat"
+        ? Creature.publishCombat(
             this.serialize().data,
-            invocation.params as CreatureCommands["place"]["params"],
+            invocation.params as CreatureCommands["publishCombat"]["params"],
           )
-        : name === "applyRuleFields"
-          ? Creature.applyRuleFields(
+        : name === "place"
+          ? Creature.place(
               this.serialize().data,
-              invocation.params as CreatureCommands["applyRuleFields"]["params"],
+              invocation.params as CreatureCommands["place"]["params"],
             )
-          : Creature.effectTransition(
-              this.serialize().data,
-              name,
-              invocation.params as unknown as Record<string, unknown>,
-            );
+          : name === "applyRuleFields"
+            ? Creature.applyRuleFields(
+                this.serialize().data,
+                invocation.params as CreatureCommands["applyRuleFields"]["params"],
+              )
+            : Creature.effectTransition(
+                this.serialize().data,
+                name,
+                invocation.params as unknown as Record<string, unknown>,
+              );
     return {
       data,
       events:

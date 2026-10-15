@@ -1138,4 +1138,15 @@ full mutation commands and publication enforcement remain open. Experience/engin
 
 The executable CampaignInstance aggregate owns captured initialization, placement realization/decisions, objective/Discovery progress, Character embodiment and starting equipment composition, and scoped weather overrides. CampaignSession owns existing lifecycle/readiness/presence policy. InstanceParticipation separates membership transitions and Agent capabilities. WorldRule and RuleExecution preserve the existing interpreter while actor commits and exploration observations use entity commands and observable state. Persistence, authentication, active-session locks, clocks, entropy, hashes, CAS and journals stay in adapters. Existing APIs and migration validation consume the owners.
 
-There is no runtime World root. Encounter/Decision/Scene/rest/downtime remain existing value contracts where no production executor exists; B11's new combat mechanics are not part of migration. Runtime weather inherits captured defaults unless explicitly overridden or suppressed. Media playback is an explicit local GM control, not a scheduler or cross-participant broadcast. See [B10 verification](verification/b10-instance-session.md) for exact evidence and retained boundaries.
+There is no runtime World root. Scene/rest/downtime remain existing value contracts where no production executor exists. B11, selected separately after B07, now implements the Encounter owner and planned-combat executor; its verification and bounded execution are recorded in [B11 evidence](verification/b11-planned-combat.md). Decisions and roll records inside Encounter are owned values. Runtime weather inherits captured defaults unless explicitly overridden or suppressed. Media playback is an explicit local GM control, not a scheduler or cross-participant broadcast. See [B10 verification](verification/b10-instance-session.md) for exact evidence and retained boundaries.
+
+### B07 Definition and Model lifecycle checkpoint
+
+CampaignDefinition owns complete authored aggregate validation, replacement, preparation
+and fork references; DefinitionLineage owns exact draft/base/validation publication and
+archive transitions. World/Campaign conformance policy delegates to owners. ModelElement,
+ModelSchema and ModelMigration own revision/shape/cardinality, dependency/release/adoption
+and mapping/backfill policies. Persistence, hashing, authorization and transactional CAS
+remain adapters. Campaign overlay/Plot intent and existing preparation canvas editors
+consume canonical draft persistence. See `verification/b07-definition-model-lifecycles.md`
+for evidence and limitations; universal compatibility retirement remains B12.

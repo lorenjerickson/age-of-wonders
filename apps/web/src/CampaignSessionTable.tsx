@@ -22,6 +22,7 @@ import {
 import { dateLabel, statusLabel } from "./campaignLibraryModel";
 import { useSessionMovement } from "./useSessionMovement";
 import { SessionMovementPanel } from "./SessionMovementPanel";
+import { SessionCombatPanel } from "./SessionCombatPanel";
 import { CampaignSessionTerrainOverview } from "./CampaignSessionTerrainOverview";
 
 function CapturedMapImage({
@@ -320,7 +321,15 @@ export function CampaignSessionTable({
                       {data.location.description}
                     </p>
                   )}
-                  <SessionLocationPresentation key={data.location.id} campaignId={campaignDefinitionId} instanceId={campaignInstanceId} sessionId={sessionId} location={data.location} runtimeRevision={data.runtimeRevision} onSaved={() => void load()} />
+                  <SessionLocationPresentation
+                    key={data.location.id}
+                    campaignId={campaignDefinitionId}
+                    instanceId={campaignInstanceId}
+                    sessionId={sessionId}
+                    location={data.location}
+                    runtimeRevision={data.runtimeRevision}
+                    onSaved={() => void load()}
+                  />
                 </section>
               )}
               <Label
@@ -454,8 +463,14 @@ export function CampaignSessionTable({
               </p>
             )}
             <div className="mt-5 border-t border-base-300 pt-4">
-              <h3 className="font-semibold">Encounter & adjudication</h3>
-              <p className="mt-2 text-sm opacity-65">{data.encounter.detail}</p>
+              <SessionCombatPanel
+                key={context}
+                campaignDefinitionId={campaignDefinitionId}
+                campaignInstanceId={campaignInstanceId}
+                sessionId={sessionId}
+                blocked={data.status !== "active"}
+                onCommitted={() => void load()}
+              />
             </div>
           </>
         ) : (

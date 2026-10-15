@@ -8,13 +8,32 @@ are superseded by this open-work register.
 
 ## Current status and next step
 
+**B11 complete — contested rolls and simultaneous planned combat.**
+Encounter now owns ordered plans, source-bound contested dice, durable reactions,
+guided conflicts and simulated round publication. Session/API and responsive GM/player
+consumers enforce ownership, revision checks, private projections and stale-state protection.
+Confirmed: damage is max(0, damage minus resistance); attack margin >=10 triggers
+critical damage dice doubling. Sparse actors require explicit health/profile setup.
+See [B11 evidence](docs/verification/b11-planned-combat.md) for verification, bounded
+summon/death-save/reaction execution, remaining rules-content decisions and measurement.
+B07/B11 work is included together in the user-requested commit. B12 remains deferred until selected.
+
+**B07 complete — Definition and Model lifecycles.**
+Campaign aggregate/preparation, World/Campaign lineage and reference migration, and
+Model element/schema/migration policy now have domain owners and real service consumers.
+Campaign overlays and Plot Location actor/Item intents are editable through canonical
+placements. The explicitly selected per-Location canvas controls cover all existing
+built-in fields, with private content and captured data preserved.
+See [B07 evidence](docs/verification/b07-definition-model-lifecycles.md) for verification,
+measurement and the live-database limitation. B11 is completed above; B12 remains deferred.
+
 **B10 complete — Instance, Session and existing execution.**
 Instance realization/progress, atomic Character/starting-Item activation, Session
 lifecycle/readiness/presence, membership/Agent policy and existing rule/movement/
 exploration consumers now use owners. Operational collection/detail destinations,
 Discovery knowledge, Instance weather overrides and manual GM media controls are
 implemented. Verification and its limits are recorded in [B10 evidence](docs/verification/b10-instance-session.md).
-B07 lifecycle work, B11 combat redesign and B12 remaining retirement remain deferred.
+B11 combat redesign is completed above; B12 remaining retirement remains deferred.
 UX-08's unselected new proficiency/profession screens remain a decision; existing
 Character review/import/selections/equipment integrate through the B08/B10 boundary.
 
@@ -29,10 +48,10 @@ Both editors and storage now reject them clearly; same-filename retry works, and
 standalone Map route's missing tools were restored. Valid replacements were verified
 through preview, save and reload on desktop/mobile.
 
-B01–06, B08 and B09 are complete. B10 is complete for existing execution with verification below; B07, B11 and B12 remain deferred. Feat, Heritage
+B01–11 are complete for their selected scope. B12 remains deferred. Feat, Heritage
 and Discipline remain permanently excluded. See [B09 evidence](docs/verification/b09-maps-location.md)
 and [map-upload repair evidence](docs/verification/map-image-upload.md).
-Next step: await selection of B07, B11 or B12. Do not automatically start another batch.
+Next step: await user selection; do not automatically start B12.
 
 ## Consolidated delivery plan — 12 batches, not hundreds of slices
 
@@ -44,7 +63,7 @@ A batch can span several working sessions; internal checkpoints do not require a
 by a fictional factor of ten. No elapsed-time estimate is credible until measured.
 
 **Five authoring batches** cover the currently selected direction. Seven further
-batches organize the retained migration/features; B06, B08, B09 and B10 are complete and the other three remain deferred. Decision-tagged
+batches organize the retained migration/features; B06–11 are complete and B12 remains deferred. Decision-tagged
 fields/libraries/custom extensions remain decisions, not automatic new requirements.
 There is no unlisted “whatever comes later” category: all current open IDs map below.
 
@@ -52,11 +71,11 @@ There is no unlisted “whatever comes later” category: all current open IDs m
 | --- | --- | --- |
 | B05 Complete — authoring integration and acceptance | Existing editor routes, removal/Cancel, malformed/private preservation, current structural validation and owner delegation closed; representative authenticated database acceptance and finite field matrix recorded. | AU-25, QA-01–04, authored DM-04; authoring portion of DM-02 |
 | B06 Complete — Entity graph and catalog foundation | Complete scoped graph hydration/reference validity/commands/observables/disposal and remaining catalog owners; settle entity-versus-value boundaries. | DM-01, DM-03 |
-| B07 Deferred — Definition and Model lifecycles | Complete World/Campaign/Model ownership, publication/fork/adoption/capture policy, Campaign overlays/intents and agreed preparation configuration. | DM-05–07, UX-01–03 |
+| B07 Complete — Definition and Model lifecycles | Complete World/Campaign/Model ownership, publication/fork/adoption/capture policy, Campaign overlays/intents and agreed preparation configuration. | DM-05–07, UX-01–03 |
 | B08 Complete — actors, Characters and equipment | Migrate Creature/Character/Item runtime ownership, grants/acquisitions and Character lifecycle together with Character specialization and slot/Belt/Pack behavior. Establish Instance interfaces early; integrate activation in B10. | DM-09–11, DOM-01, EQ-01 |
 | B09 Complete — maps and Location capabilities | Deliver Map/Wall/Door/Window ownership and accepted weather/A/V configuration, preserving both map formats. Map runtime visibility integrates with Instance in B10. | DM-08, DM-15, LOC-01–02 |
 | B10 Complete — Instance, Session and existing execution | Complete Instance realization/progress, Session/membership, existing runtime command/state$ cutover and their operational views. Integrate B08/B09 against the Instance contract; preserve existing gameplay behavior. | DM-12–14, UX-04–08; integration of DM-10/15 |
-| B11 Deferred — combat redesign | Implement the two user-requested combat changes together after resolving formula/timing/contention decisions in the existing requirements. | COM-01–02 |
+| B11 Complete — combat redesign | Contested formulas, ordered plans, guided durable adjudication, atomic publication and GM/player consumers; bounded first-release contracts and content decisions recorded in B11 evidence. | COM-01–02 |
 | B12 Deferred — remaining consumers and operational navigation | Complete remaining import/restore/generator/legacy cutovers, People/Settings/library navigation and original migration acceptance audit. Authoring navigation already closed in B05 is not repeated. | DM-16–17, UX-09–11 |
 
 B01–05 are the authoring finish line, excluding permanently retired AU-19–21. B06–12 do not become prerequisites for declaring
@@ -172,9 +191,9 @@ existing rule, movement and exploration commands. Universal writer retirement re
 | ID / status | Outstanding work / inventory coverage | Dependencies and completion boundary | Batch |
 | --- | --- | --- | --- |
 | DM-02 Authoring portion complete; remaining semantics deferred | B01–05 close supplied built-in structure, current publication policy and Vehicle component targets. Broader expression/reference/catalog resolution remains, excluding permanently removed Feat/Heritage/Discipline work. | Count authored validation once; B06 graph/catalog foundation and B08 acquisition ownership are complete; remaining adapter migration follows DM-16 and runtime execution DM-14. Missing editor does not imply a new root entity. | B06/B08/B10/B12 |
-| DM-05 Deferred — Campaign Definition | I06/D18/C05–07: content/readiness/membership/preparation and canvas layers/lights/sounds/drawings/templates/notes. | Existing Plot/Discovery/Placement classes; saves/publication delegate policy, preserve rich/private content. | B07 |
-| DM-06 Deferred — World/Campaign lineage | I06/D02/D18/C07: create/publish/fork/adoption/capture migration/reference rewrite. | Definition owners; retain immutable captures, provenance and external transaction/CAS/hash adapters. | B07 |
-| DM-07 Deferred — Model lifecycle | I06/D08/D24/C13: element/revision/schema dependencies, cardinality, release/adoption/conformance/migration. Attribute alone is migrated. | Compiler coordinates owners; preserve releases and compatibility; overlaps AU-23 UI but not same deliverable. | B07 |
+| DM-05 Complete in B07 — Campaign Definition | I06/D18/C05–07: content/readiness/membership/preparation and canvas layers/lights/sounds/drawings/templates/notes. | Existing Plot/Discovery/Placement classes; saves/publication delegate policy, preserve rich/private content. | B07 |
+| DM-06 Complete in B07 — World/Campaign lineage | I06/D02/D18/C07: create/publish/fork/adoption/capture migration/reference rewrite. | Definition owners; retain immutable captures, provenance and external transaction/CAS/hash adapters. | B07 |
+| DM-07 Complete in B07 — Model lifecycle | I06/D08/D24/C13: element/revision/schema dependencies, cardinality, release/adoption/conformance/migration. ModelElement/ModelSchema/ModelMigration own existing policy. | Compiler coordinates owners; preserve releases and compatibility; overlaps AU-23 UI but not same deliverable. | B07 |
 | DM-08 Complete in B09 — Map, Wall, Door, Window | I05/D03–04: settle owned Map/Terrain boundary; concrete geometry/blocking/opening behavior; 2D legacy and 3D formats. | Preserve required maps, hierarchy position, image/terrain formats, private fields, scenic-grid exclusion and current spatial editing/captures. | B09 |
 | DM-10 Complete in B08/B10 | Approved Character → Instance embodiment/physical starting Items now commits with approval and runtime/capture CAS; reactivation preserves runtime. Creation/review/import/status and existing membership binding remain intact. | B08 realization/binding ports; preserve schema capture, entropy/audit/provenance/private data. | B10 |
 | DM-12 Implemented in B10 — Instance composition/progress | I07/D15–19: captured-pair realization, stable Placement identities, Plot/Discovery/knowledge progress, party/clock/inventory/checkpoints/migration/restore. | Runtime/definition owners; **Instance owns runtime**, no competing runtime World root. | B10 |
@@ -200,9 +219,9 @@ this inventory does not approve them or restart experience work.
 
 | ID / status | Retained outstanding scope | Boundary / dependency | Batch |
 | --- | --- | --- | --- |
-| UX-01 Deferred | Campaign placement overlay list/Add/Edit/removal | Preserve independent/inherited/decoration source ownership and named impact. | B07 |
-| UX-02 Deferred | Plot Location context actor/Item intent editing | Existing context/association routes preserve hidden intents but do not author their full content. | B07 |
-| UX-03 Decision/deferred | Per-Location preparation canvas configurations | Only when supported/exposed; ordinary notes stay scalar forms. Depends DM-05; no fabricated fields. | B07 |
+| UX-01 Complete in B07 | Campaign placement overlay list/Add/Edit/removal | Preserve independent/inherited/decoration source ownership and named impact. | B07 |
+| UX-02 Complete in B07 | Plot Location context actor/Item intent editing | Canonical placements author actor/Item intents and reciprocal context associations; deprecated inline intents remain preserved. | B07 |
+| UX-03 Complete in B07 — selected | Per-Location preparation canvas configurations | All existing built-in layers/light/sound/drawing/template/note fields exposed; ordinary notes stay scalar forms. No new canvas runtime. | B07 |
 | UX-04 Implemented in B10 | Instance Plot/objective progress and Location realization/knowledge detail | Supported audited commands, no editing captured Definitions. | B10 |
 | UX-05 Implemented in B10 | Placement realizations/embodiments/Item instances | Supported realize/defer/replace/remove operations; runtime ownership first. | B10 |
 | UX-06 Implemented in B10 | Instance members/invitations/Character review/import and Agents | Authority, revoke/review lifecycle and profile/assignment distinctions preserved. | B10 |
@@ -237,7 +256,7 @@ combat timing/reconciliation. No reliable implementation estimate is assigned be
 those mechanics and integration boundaries are resolved. That uncertainty is visible,
 not a claim these entries are small or finished.
 
-## COM-01 — Contested combat rolls (deferred, 2026-10-13)
+## COM-01 — Contested combat rolls (complete, 2026-10-14)
 
 User-requested future combat change: determine hits through contested attack and
 defense rolls, and damage taken through contested damage and resistance rolls.
@@ -250,20 +269,22 @@ formula is `1d10` from chainmail `+ 1d6` from plated gloves `+ 1d8` from a helme
 `+ 1d2` from bracers. A rolls `13 + 4 - 2 = 15`; B rolls
 `10 + 4 + 1 + 2 = 17`; A misses.
 
-Next step when combat work resumes: specify formula contribution/composition
-contracts and resolution rules, including ties and how the damage/resistance
-contest determines damage taken. These details are not yet defined. Preserve
-this requirement for later domain, authoring and engine implementation; current
-structured-authoring priorities and the engine-work pause remain unchanged.
+Selected for B11. Confirmed resolution: defenders win ties; damage taken is
+max(0, damage minus resistance); attack minus defense >=10 doubles damage dice
+counts without doubling constant terms. Formula contributions bind to captured
+actor, equipment, Attribute, Skill and Condition sources. Implemented and verified;
+see [B11 evidence](docs/verification/b11-planned-combat.md).
 
-## COM-02 — Simultaneous evaluation of planned orders (deferred, requirements documented, 2026-10-13)
+## COM-02 — Simultaneous evaluation of planned orders (complete, 2026-10-14)
 
 User-requested future combat change: account for simultaneous evaluation of orders
 given during turn planning. Requirements are recorded in
 [Simultaneous combat requirements](docs/simultaneous-combat-requirements.md).
-Retain this alongside COM-01. When combat work resumes, review that document and
-resolve remaining timing/contention questions before designing or implementing
-simultaneous resolution. Combat remains deferred during structured-authoring work.
+Selected with COM-01 for B11. The confirmed guided-resolution requirements in
+[Combat system requirements](docs/combat-system-requirements.md) govern ordered
+plans, simultaneous checkpoints, durable GM adjudication and atomic round
+publication. Implemented and verified within the explicit first-release execution
+boundary in [B11 evidence](docs/verification/b11-planned-combat.md).
 
 
 ---

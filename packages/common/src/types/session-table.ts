@@ -46,7 +46,7 @@ export interface CampaignSessionTableProjection {
   readonly plots: readonly CampaignSessionTablePlot[];
   readonly unavailable: readonly string[];
   readonly encounter: {
-    readonly status: "unavailable";
+    readonly status: "available" | "unavailable";
     readonly detail: string;
   };
 }

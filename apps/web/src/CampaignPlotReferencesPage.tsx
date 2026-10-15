@@ -1,3 +1,4 @@
+import { CampaignPlacementsPage } from "./CampaignDefinitionPages";
 import {
   eligiblePlotContextPlacements,
   plotContextAssociationsValid,
@@ -33,7 +34,6 @@ export function CampaignPlotReferencesPage(props: {
   associationPage?: boolean;
   placementId?: string;
 }) {
-  const { draft } = useCampaignDefinitionAuthoring();
   if (
     !["locations", "prerequisites", "dependencies"].includes(props.collection)
   )
@@ -41,7 +41,7 @@ export function CampaignPlotReferencesPage(props: {
   return (
     <CampaignDraftRequired>
       <References
-        key={`${props.plotId}:${props.collection}:${props.childId ?? "list"}:${props.associationPage}:${props.placementId}:${draft?.storageRevision}`}
+        key={`${props.plotId}:${props.collection}:${props.childId ?? "list"}:${props.associationPage}:${props.placementId}`}
         {...props}
         collection={props.collection as Collection}
       />
@@ -93,6 +93,7 @@ function References({
     placementId === "new" ? "" : (placementId ?? ""),
   );
   const [error, setError] = useState("");
+  const [intentsOpen, setIntentsOpen] = useState(false);
   const base = `/campaigns/definitions/${encodeURIComponent(definition.id)}/plots/${encodeURIComponent(plotId)}/${collection}`;
   const singular =
     collection === "locations"
@@ -214,6 +215,32 @@ function References({
         This reference is unavailable.{" "}
         <InternalLink href={`${base}${suffix}`}>Back to {title}</InternalLink>
       </Alert>
+    );
+  if (intentsOpen && prior && collection === "locations")
+    return (
+      <>
+        <Button
+          className="m-4 min-h-11"
+          onClick={() => {
+            if (
+              (saveState === "dirty" || saveState === "error") &&
+              !window.confirm("Discard unsaved intent changes?")
+            )
+              return;
+            context.discardLocalChanges();
+            setIntentsOpen(false);
+          }}
+        >
+          Back to Location context
+        </Button>
+        <CampaignPlacementsPage
+          plotContext={{
+            plotId,
+            contextId: String(prior.id),
+            locationId: String(prior.locationId),
+          }}
+        />
+      </>
     );
   if (associationPage) {
     if (!prior)
@@ -480,6 +507,24 @@ function References({
                 Required for a Plot outside the parent or ancestor chain.
               </p>
             </div>
+          )}
+          {collection === "locations" && childId !== "new" && (
+            <Button
+              type="button"
+              tone="outline"
+              className="min-h-11"
+              onClick={() => {
+                if (
+                  (saveState === "dirty" || saveState === "error") &&
+                  !window.confirm("Discard unsaved Location context changes?")
+                )
+                  return;
+                context.discardLocalChanges();
+                setIntentsOpen(true);
+              }}
+            >
+              Edit actor and Item intents
+            </Button>
           )}
           {collection === "locations" && childId !== "new" && (
             <InternalLink

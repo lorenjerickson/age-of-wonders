@@ -1,3 +1,5 @@
+import { DefinitionLineage } from "@aow/domain";
+import { randomUUID } from "node:crypto";
 import { worldAccessWhere } from "./world-access";
 import {
   BadRequestException,
@@ -391,10 +393,20 @@ export class WorldDefinitionsService {
             throw stalePredecessor();
           }
 
+          const lineage = DefinitionLineage.deserializePayload({ status: world.status, currentRevisionId: predecessor.id, revisionNumber: predecessor.revisionNumber });
+          const revisionId = randomUUID();
+          let nextRevisionNumber: number;
+          try {
+            await lineage.command("publish", { initiator: createdByUserId, params: {
+              revisionId, baseRevisionId: predecessor.id, storageRevision: 0,
+              expectedStorageRevision: 0, validationStatus: "VALID", validatedStorageRevision: 0,
+            }, context: {} });
+            nextRevisionNumber = lineage.state.data.revisionNumber;
+          } finally { lineage.dispose(); }
           const revision = await transaction.worldDefinitionRevision.create({
             data: {
               worldDefinitionId: world.id,
-              revisionNumber: predecessor.revisionNumber + 1,
+              id: revisionId, revisionNumber: nextRevisionNumber,
               predecessorRevisionId: predecessor.id,
               name: revisionName,
               content: dto.content,

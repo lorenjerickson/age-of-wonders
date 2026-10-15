@@ -1,3 +1,4 @@
+import { assertWorldGovernedConformance } from "./definition-conformance";
 import {
   Entity,
   type DeepReadonly,
@@ -54,6 +55,7 @@ export class WorldDefinition extends Entity<
   WorldDefinitionEvents,
   WorldDefinitionValidationContext
 > {
+  static assertGovernedConformance = assertWorldGovernedConformance;
   private constructor(
     data: WorldDefinitionState,
     context: WorldDefinitionValidationContext,

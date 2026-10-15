@@ -39,7 +39,11 @@ Engine feature development remains paused for the entity architecture refactor.
 The user has resumed structured authoring work, tracked in [the project backlog](../BACKLOG.md);
 B08 was subsequently authorized for existing runtime actor/Character ownership and equipment,
 and B06 for the Entity graph and remaining catalog foundation. B09 completed Map ownership and authored Location weather/audiovisual configuration.
-B10 implements existing Instance/Session execution and operational integration; broader engine expansion remains deferred.
+B10 implements existing Instance/Session execution and operational integration.
+The user selected B11 for contested rolls and simultaneous planned combat on 2026-10-14;
+it is implemented under `combat-system-requirements.md`, with verification and explicit
+first-release execution boundaries in [B11 evidence](verification/b11-planned-combat.md). Other engine expansion
+and B12 remain deferred.
 Feat, Heritage and Discipline were permanently removed from scope by the user on
 2026-10-13. AU-19–21 are retired, not deferred; this decision supersedes their earlier
 planning/deferral entries in supporting inventories. Existing code/type descriptions
@@ -51,7 +55,7 @@ Attribute, Skill, Modifier, Location Definition, World Definition, Placement, Di
 gaps. Feat and Item now consume embedded Trait validity, and Trait consumes embedded Action validity.
 Item also consumes direct and Vehicle Action validity; catalog Character Definitions also own embedded Traits. Built-in recursive rule authoring and structural validation are implemented through B01–05. B08 adds runtime Creature/Character/Item ownership, captured grants/effects, Character lifecycle policy and actor equipment/container operations; B06 adds isolated graph hydration, dependency validity and catalog owners; broader gameplay catalog execution remains deferred; B10 covers existing Instance/Session orchestration. See [B05 acceptance](verification/b05-authoring-acceptance.md) and its finite field-coverage matrix, plus [B08 actors/equipment evidence](verification/b08-actors-equipment.md). Location authoring now requires maps, uses hierarchy-only relationships and preserves grids
 without applying them to scenic maps. B09 adds authored weather/audiovisual defaults and owned Map/element policies;
-B10 adds Instance realization, runtime weather overrides and manual GM media playback. World now owns revision-content validation, membership and hierarchy policy; lineage lifecycle and runtime World remain pending. Existing implementation records below
+B10 adds Instance realization, runtime weather overrides and manual GM media playback. World now owns revision-content validation, membership and hierarchy policy; B07 adds World/Campaign lineage and Model lifecycle ownership. Instance continues to own runtime; no competing runtime World is introduced. Existing implementation records below
 remain evidence of current behavior, not authorization to resume feature development.
 
 B08 uses sparse captured Creature overlays and `Character extends Creature`; it does not fabricate
@@ -174,3 +178,5 @@ amended decision and `post-realignment-recovery-report.md` for the recovery evid
   replacements, exclusions, or material operational events.
 
 B10 operational views separate Plot, placement, actor/Item, member/invitation/Agent details and Session planning from collection destinations. Runtime/discovery progress uses named captured references. Existing Character review/import and equipment controls are retained; decision-tagged new proficiency/profession screens remain unselected. See [B10 evidence](verification/b10-instance-session.md). No new combat, participant live-map endpoint, automatic rules scheduler or synchronized media dispatch is implied.
+
+B07 adds Campaign aggregate/preparation and Definition lineage owners, domain-owned World adoption planning and reference rewriting, and Model element/schema/migration policy with real service consumers. Campaign overlay and Plot actor/Item intent editors use canonical placements; the user also selected existing per-Location canvas configuration controls. See [B07 evidence](verification/b07-definition-model-lifecycles.md). B11/B12 remain deferred.

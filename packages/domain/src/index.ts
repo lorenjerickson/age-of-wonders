@@ -262,3 +262,21 @@ export { WorldRule, RuleExecution } from "./world-rule";
 
 export { InstanceParticipation } from "./instance-participation";
 export type { InstanceParticipationState, InstanceParticipationCommands, InstanceParticipationEvents } from "./instance-participation";
+
+export { CampaignDefinition, rewriteCampaignReferences, rewriteCampaignWorldReferences } from "./campaign-definition";
+export type { CampaignDefinitionState, CampaignDefinitionContext } from "./campaign-definition";
+export { isSafeCampaignRichText } from "./campaign-definition-policy";
+export type { CampaignDraftRecord, CampaignDraftValidationIssue, CampaignDraftValidationReport, CampaignCapturedWorld } from "./campaign-definition-policy";
+export { DefinitionLineage } from "./definition-lineage";
+export type { DefinitionLineageState, DefinitionPublicationEvidence, DefinitionPublicationIssue } from "./definition-lineage";
+
+export { rewriteWorldDefinitionReferences } from "./definition-references";
+export * from "./model-schema";
+
+export * from "./campaign-migration";
+
+export { combatCompatibilityIssues } from "./combat-compatibility";
+export type { CombatCompatibilityIssue } from "./combat-compatibility";
+
+export { Encounter, createEncounterState, decodeEncounterState, projectEncounter } from "./encounter";
+export { CombatEntropy, validateCombatFormula } from "./combat-rolls";

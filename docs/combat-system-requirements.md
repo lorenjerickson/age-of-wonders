@@ -344,7 +344,9 @@ fictionally possible outcome.
 - The required attack, defense, damage, and other contested rolls are defined by the action or item
   being resolved rather than by a universal scheduler rule.
 - Ties favor the target or defender.
+- An attack is a critical hit when its final attack total exceeds the fresh defense total by 10 or more (confirmed 2026-10-14).
 - A critical hit doubles the number of damage dice rolled, not the numeric result after rolling.
+- Damage taken is `max(0, damage total - resistance total)`, using a fresh damage/resistance contest; for example 12 against 7 deals 5 (confirmed 2026-10-14).
 - Damage is applied immediately after its damage roll within the simulated round state.
 - Applying damage and any resulting state changes completes the attack activity.
 - Block is a specifically declared reaction triggered by an incoming attack. Its action definition
@@ -434,11 +436,11 @@ ResolutionProposal. These are requirements vocabulary, not approved TypeScript A
 
 ## Relationship to the current domain model
 
-The source-of-truth types in `packages/common/src/types` currently model initiative and turns:
+Before B11, the source-of-truth types in `packages/common/src/types` modeled initiative and turns:
 
-- `EncounterState` has an initiative phase, turn index, active combatant, and initiative list.
-- `CombatantTurnState` and ready actions assume per-turn execution.
-- `GameCommand` contains turn advancement and standalone movement but no ordered-plan lock,
+- The previous `EncounterState` had an initiative phase, turn index, active combatant, and initiative list.
+- The previous `CombatantTurnState` and ready actions assumed per-turn execution.
+- The previous `GameCommand` contained turn advancement and standalone movement but no ordered-plan lock,
   conflict, or adjudication workflow.
 - Rule events, durations, and usage limits include turn-based concepts.
 - Attack resolution contains assumptions that may not match the intended contested-roll model.
