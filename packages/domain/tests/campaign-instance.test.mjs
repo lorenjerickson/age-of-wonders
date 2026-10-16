@@ -51,3 +51,25 @@ test('Discovery knowledge validates actor scope and truth versus belief, preserv
  assert.equal((await command(owner,'plot',{plotDefinitionId:'plot',patch:{creatureKnowledge:[{kind:'knows-truth',creatureId:'entity',claimId:'truth',provenance:'Witness'}]}})).status,'committed');
  assert.equal(owner.state.data.plotProgress[0].creatureKnowledge[0].private,42);owner.dispose();
 });
+
+test('NPCs sharing Human retain distinct embodiments, overrides and reusable placements', () => {
+  let n = 0;
+  const worldRecords = [
+    {resourceType:'definitions',sourceId:'human',payload:{kind:'creature',components:{attributes:{strength:10}},instanceEmbodimentPolicy:{strategy:'one-per-realization'}}},
+    ...['count','steward'].map((id, i) => ({resourceType:'world-character-templates',sourceId:id,payload:{id,name:id,creatureDefinitionId:'human',health:{current:20+i,maximum:30,temporary:0},attributes:{strength:14+i},skills:{},movement:{walk:30},vision:{day:60,night:30}}})),
+    {resourceType:'world-placements',sourceId:'placement',payload:{id:'placement',locationId:'room',source:{kind:'world-character',characterTemplateId:'count'}}},
+  ];
+  const input={campaignInstanceId:'instance',campaignRecords:[],worldRecords,campaignContent:{},updatedAt:'now',createId:()=>`id-${++n}`};
+  const runtime=CampaignInstance.initialRuntime(input);
+  assert.equal(runtime.creatureEmbodiments.length,2);
+  assert.deepEqual(runtime.creatureEmbodiments.map(e=>e.source.sourceCreatureId),['count','steward']);
+  assert.equal(runtime.creatureEmbodiments[0].creature.combat.hp,20);
+  assert.equal(runtime.creatureEmbodiments[1].creature.extensions['aow:rules'].attributes.strength,15);
+  const resolved=CampaignInstance.resolvePlacement({...input,id:'instance'},runtime.placementRealizations[0],runtime);
+  assert.equal(resolved.realizedEntity.runtimeCreatureId,runtime.creatureEmbodiments[0].runtimeCreatureId);
+  assert.equal(resolved.creatureEmbodiments.length,2);
+  assert.throws(() => CampaignInstance.resolvePlacement({...input,id:'instance',worldRecords:worldRecords.filter(r => r.sourceId !== 'count')},runtime.placementRealizations[0],runtime), /Character is unavailable/);
+  const fresh=CampaignInstance.resolvePlacement({...input,id:"instance"},runtime.placementRealizations[0],{creatureEmbodiments:[],itemInstances:[]});
+  assert.equal(fresh.creatureEmbodiments[0].source.sourceCreatureId,"count");
+  assert.equal(fresh.creatureEmbodiments[0].creature.combat.hp,20);
+});

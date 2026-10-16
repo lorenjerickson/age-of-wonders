@@ -1,3 +1,12 @@
+import { EquipmentPaperdoll } from "./EquipmentPaperdoll";
+import {
+  worldEquipmentItems,
+  worldEquipmentSlots,
+} from "./worldEquipmentPresentation";
+import {
+  visibleRecordName as recordName,
+  visibleRecordDescription as recordDescription,
+} from "./recordDisplay";
 import { formatAstraModifier } from "./astraModifiers";
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useBlocker } from "@tanstack/react-router";
@@ -28,11 +37,7 @@ import {
 } from "./api";
 import { astraRequest } from "./astraApi";
 import { useWorldAuthoring } from "./WorldAuthoringShell";
-import {
-  recordName,
-  recordDescription,
-  recordPayload,
-} from "./worldAuthoringModel";
+import { recordPayload, recordsForLibrary } from "./worldAuthoringModel";
 import { InternalLink, useInternalNavigate } from "./navigation";
 import { RecordThumbnail } from "./RecordArtwork";
 import { MediaImage } from "./MediaImage";
@@ -75,18 +80,30 @@ const object = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 function recordsFor(records: WorldDraftRecord[], kind: Category) {
-  return records.filter((r) =>
-    kind === "items" || kind === "creatures"
-      ? recordPayload(r).kind === singular[kind]
-      : r.resourceType === resources[kind],
-  );
+  return kind === "items" || kind === "creatures"
+    ? recordsForLibrary(records, kind)
+    : records.filter((r) => r.resourceType === resources[kind]);
 }
-export function AstraCodex() {
+export function AstraCodex({
+  collection,
+  entryId,
+}: {
+  collection?: "bestiary" | "characters" | "items";
+  entryId?: string;
+} = {}) {
   const { definition, draft, canEdit } = useWorldAuthoring();
   const location = useLocation();
   const navigate = useInternalNavigate();
   const query = new URLSearchParams(location.searchStr);
+  const destination = collection ?? query.get("view");
   const raw =
+    (destination === "bestiary"
+      ? "creatures"
+      : destination === "items"
+        ? "items"
+        : destination === "characters"
+          ? "characters"
+          : undefined) ||
     query.get("kind") ||
     (location.pathname.includes("bestiary")
       ? "creatures"
@@ -96,10 +113,11 @@ export function AstraCodex() {
   const kind: Category = categories.includes(raw as Category)
     ? (raw as Category)
     : "items";
-  const entry = query.get("entry");
+  const entry = entryId ?? query.get("entry");
   const [search, setSearch] = useState("");
-  const base = `/worlds/${encodeURIComponent(definition.id)}?view=codex`;
-  const listHref = `${base}&kind=${kind}`;
+  const dedicated = ["creatures", "characters", "items"].includes(kind);
+  const base = `/worlds/${encodeURIComponent(definition.id)}?view=${kind === "creatures" ? "bestiary" : kind === "characters" ? "characters" : kind === "items" ? "items" : "codex"}`;
+  const listHref = dedicated ? base : `${base}&kind=${kind}`;
   const records = recordsFor(draft?.records ?? [], kind);
   const visible = records.filter((r) =>
     `${recordName(r, "")} ${recordDescription(r) ?? ""}`
@@ -127,10 +145,20 @@ export function AstraCodex() {
     <main className="astra-page">
       <div className="astra-heading">
         <div>
-          <div className="astra-eyebrow">THE WORLD CODEX</div>
-          <h1>Everything belongs somewhere.</h1>
+          <div className="astra-eyebrow">WORLD AUTHORING</div>
+          <h1>
+            {kind === "creatures"
+              ? "Bestiary"
+              : kind === "characters"
+                ? "Characters"
+                : titleCase(kind)}
+          </h1>
           <p>
-            A living collection of the things and beings that make your world.
+            {kind === "creatures"
+              ? "Creature templates for your world."
+              : kind === "characters"
+                ? "The people and named characters who inhabit your world."
+                : "Items, conditions, effects, and rules for your world."}
           </p>
         </div>
         {canEdit && (
@@ -142,18 +170,6 @@ export function AstraCodex() {
           </InternalLink>
         )}
       </div>
-      <nav className="astra-tabs" aria-label="Codex categories">
-        {categories.map((c) => (
-          <InternalLink
-            key={c}
-            href={`${base}&kind=${c}`}
-            className={kind === c ? "active" : ""}
-          >
-            {titleCase(c)}{" "}
-            <small>{recordsFor(draft?.records ?? [], c).length}</small>
-          </InternalLink>
-        ))}
-      </nav>
       <div className="astra-search">
         <Input
           aria-label={`Search ${kind}`}
@@ -223,7 +239,7 @@ export function AstraCodex() {
                 ? "Author how movement, combat, and modifiers should work."
                 : `Add ${kind} to bring your world to life.`}
           </p>
-          {!search && (
+          {!search && canEdit && (
             <InternalLink className="btn" href={`${listHref}&entry=new`}>
               ＋ Add {singular[kind]}
             </InternalLink>
@@ -401,7 +417,7 @@ function CodexEditor({
     return (
       <main className="astra-form-page">
         <InternalLink className="astra-back" href={href}>
-          ← Back
+          ← Back to {kind === "characters" ? "Characters" : "Codex"}
         </InternalLink>
         <h1>Entry unavailable</h1>
         <p>This entry may have been removed from the World.</p>
@@ -410,7 +426,7 @@ function CodexEditor({
   return (
     <main className="astra-form-page">
       <InternalLink className="astra-back" href={href}>
-        ← Back
+        ← Back to {kind === "characters" ? "Characters" : "Codex"}
       </InternalLink>
       <div className="astra-eyebrow">WORKSPACE / AUTHORING</div>
       <h1>
@@ -451,6 +467,7 @@ function CodexEditor({
             onChange={change}
             existing={!!entryId}
             onBusyChange={setBusy}
+            disabled={busy || !canEdit}
           />
         )}{" "}
         {error && (
@@ -855,20 +872,28 @@ function CharacterFields({
   onChange,
   existing,
   onBusyChange,
+  disabled,
 }: {
   entry: Record<string, unknown>;
   onChange: (patch: Record<string, unknown>) => void;
   existing: boolean;
   onBusyChange: (busy: boolean) => void;
+  disabled: boolean;
 }) {
   const { definition, draft } = useWorldAuthoring();
   const records = draft?.records ?? [];
   const creatures = records.filter((r) => recordPayload(r).kind === "creature");
-  const items = records.filter((r) => recordPayload(r).kind === "item");
+  const equipmentItems = worldEquipmentItems(records);
   const conditions = records.filter(
     (r) => r.resourceType === "world-conditions",
   );
   const character = entry as unknown as WorldCharacterTemplate;
+  const creatureRecord = creatures.find(
+    (r) => r.sourceId === character.creatureDefinitionId,
+  );
+  const supportedSlots = creatureRecord
+    ? object(recordPayload(creatureRecord).components).equipmentSlots
+    : [];
   const [source, setSource] = useState("keep");
   const [imageError, setImageError] = useState("");
   function template(id: string) {
@@ -893,6 +918,7 @@ function CharacterFields({
       vision: c.vision ?? { day: 60, night: 30 },
       images: object(object(c.art).images),
       grantedConditions: c.grantedConditions ?? [],
+      equipment: Array.isArray(c.equipment) ? structuredClone(c.equipment) : [],
     });
   }
   const imageRoles = [
@@ -1134,34 +1160,16 @@ function CharacterFields({
         day: "Daytime vision",
         night: "Nighttime vision",
       })}
-      <Field label="Equipment">
-        <div className="astra-checks">
-          {items.map((r) => (
-            <Checkbox
-              key={r.sourceId}
-              label={recordName(r, "Item")}
-              checked={(character.equipment ?? []).some(
-                (e) => e.itemDefinitionId === r.sourceId,
-              )}
-              onChange={(e) =>
-                onChange({
-                  equipment: e.target.checked
-                    ? [
-                        ...(character.equipment ?? []),
-                        {
-                          slot: "carried",
-                          itemDefinitionId: r.sourceId,
-                        },
-                      ]
-                    : (character.equipment ?? []).filter(
-                        (i) => i.itemDefinitionId !== r.sourceId,
-                      ),
-                })
-              }
-            />
-          ))}
-        </div>
-      </Field>
+      <EquipmentPaperdoll
+        slots={worldEquipmentSlots(
+          supportedSlots,
+          draft?.effectiveModels?.equipmentSlots ?? [],
+        )}
+        items={equipmentItems}
+        disabled={disabled}
+        equipment={character.equipment ?? []}
+        onChange={(equipment) => onChange({ equipment })}
+      />
       <Fieldset>
         <Legend>Granted conditions</Legend>
         <p className="astra-muted">

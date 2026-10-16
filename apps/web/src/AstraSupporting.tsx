@@ -24,7 +24,9 @@ export function AstraSupporting({ view }: { view: string }) {
   ) : view === "export" ? (
     <ExportWorld />
   ) : (
-    <RuleSystem />
+    <SupportingPage title="Rules">
+      <WorldRuleSettings />
+    </SupportingPage>
   );
 }
 
@@ -51,7 +53,7 @@ function SupportingPage({
   );
 }
 
-function RuleSystem() {
+export function WorldRuleSettings() {
   const { definition, draft, canEdit, saveDraft } = useWorldAuthoring();
   const [name, setName] = useState(
     String(draft?.content.ruleSystemName ?? `${definition.name} Rules`),
@@ -78,86 +80,78 @@ function RuleSystem() {
       );
   }
   return (
-    <SupportingPage title="Rule system">
-      <form
-        className="astra-panel astra-form"
-        onSubmit={(event) => void save(event)}
-      >
+    <form
+      className="astra-panel astra-form"
+      onSubmit={(event) => void save(event)}
+    >
+      <p className="astra-muted">
+        A shared language for every creature, character, and encounter in your
+        world.
+      </p>
+      <TextInput
+        label="Rule system name"
+        value={name}
+        required
+        maxLength={120}
+        disabled={!draft || !canEdit}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <section className="astra-supporting-options">
+        <h2>World foundations</h2>
         <p className="astra-muted">
-          A shared language for every creature, character, and encounter in your
-          world.
+          The adopted world model supplies these values to your Codex.
         </p>
-        <TextInput
-          label="Rule system name"
-          value={name}
-          required
-          maxLength={120}
-          disabled={!draft || !canEdit}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <section className="astra-supporting-options">
-          <h2>World foundations</h2>
-          <p className="astra-muted">
-            The adopted world model supplies these values to your Codex.
-          </p>
-          {[
-            ["Attributes", models?.attributes],
-            ["Equipment slots", models?.equipmentSlots],
-            ["Profession ranks", models?.professionRanks],
-          ].map(([title, options]) => (
-            <div key={String(title)} className="astra-supporting-summary">
-              <strong>{String(title)}</strong>
-              <p className="astra-muted">
-                {Array.isArray(options) && options.length
-                  ? options.map((option) => option.name).join(" · ")
-                  : "No values adopted yet."}
-              </p>
-            </div>
-          ))}
-          {Boolean(models?.selectedReleaseNames?.length) && (
+        {[
+          ["Attributes", models?.attributes],
+          ["Equipment slots", models?.equipmentSlots],
+          ["Profession ranks", models?.professionRanks],
+        ].map(([title, options]) => (
+          <div key={String(title)} className="astra-supporting-summary">
+            <strong>{String(title)}</strong>
             <p className="astra-muted">
-              Based on {models!.selectedReleaseNames!.join(", ")}.
+              {Array.isArray(options) && options.length
+                ? options.map((option) => option.name).join(" · ")
+                : "No values adopted yet."}
             </p>
-          )}
-        </section>
-        <div className="astra-supporting-summary">
-          <h2>Rules</h2>
+          </div>
+        ))}
+        {Boolean(models?.selectedReleaseNames?.length) && (
           <p className="astra-muted">
-            Create and maintain the rules used by your world.
-          </p>
-          <InternalLink
-            className="btn"
-            href={`/worlds/${encodeURIComponent(definition.id)}?view=codex&kind=rules`}
-          >
-            Manage rules ↗
-          </InternalLink>
-        </div>
-        {error && (
-          <p role="alert" className="astra-error">
-            {error}
+            Based on {models!.selectedReleaseNames!.join(", ")}.
           </p>
         )}
-        {notice && <p role="status">{notice}</p>}
-        {(!draft || !canEdit) && (
-          <p className="astra-muted">This world is currently read only.</p>
-        )}
-        <div className="astra-actions">
-          <InternalLink
-            className="btn"
-            href={`/worlds/${encodeURIComponent(definition.id)}`}
-          >
-            Cancel
-          </InternalLink>
-          <Button
-            tone="primary"
-            type="submit"
-            disabled={busy || !draft || !canEdit || !name.trim()}
-          >
-            Save changes
-          </Button>
-        </div>
-      </form>
-    </SupportingPage>
+      </section>
+      <InternalLink
+        className="btn"
+        href={`/worlds/${encodeURIComponent(definition.id)}/characters/models`}
+      >
+        World model reference
+      </InternalLink>
+      {error && (
+        <p role="alert" className="astra-error">
+          {error}
+        </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
+      {(!draft || !canEdit) && (
+        <p className="astra-muted">This world is currently read only.</p>
+      )}
+      <div className="astra-actions">
+        <InternalLink
+          className="btn"
+          href={`/worlds/${encodeURIComponent(definition.id)}`}
+        >
+          Cancel
+        </InternalLink>
+        <Button
+          tone="primary"
+          type="submit"
+          disabled={busy || !draft || !canEdit || !name.trim()}
+        >
+          Save changes
+        </Button>
+      </div>
+    </form>
   );
 }
 

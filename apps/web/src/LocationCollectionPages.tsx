@@ -126,8 +126,11 @@ export function LocationCollectionPage({
       r.resourceType === "world-placements" &&
       recordPayload(r).locationId === location.sourceId &&
       object(recordPayload(r).source) &&
-      (recordPayload(r).source as ObjectValue).kind ===
-        (collection === "items" ? "world-item" : "world-creature"),
+      (collection === "items"
+        ? (recordPayload(r).source as ObjectValue).kind === "world-item"
+        : ["world-creature", "world-character"].includes(
+            String((recordPayload(r).source as ObjectValue).kind),
+          )),
   );
   const entries =
     collection === "discoveries"
@@ -182,12 +185,22 @@ export function LocationCollectionPage({
   });
   const field = (key: string, text: string) =>
     setValue((v) => ({ ...v, [key]: text }));
-  const sources = recordsForLibrary(
-    records,
-    collection === "items" ? "items" : "creatures",
-  );
+  const sources = [
+    ...recordsForLibrary(
+      records,
+      collection === "items" ? "items" : "creatures",
+    ),
+    ...(collection === "items"
+      ? []
+      : records.filter((r) => r.resourceType === "world-character-templates")),
+  ];
   const source = object(value.source) ? value.source : {};
-  const sourceKey = collection === "items" ? "itemDefinitionId" : "creatureId";
+  const sourceKey =
+    collection === "items"
+      ? "itemDefinitionId"
+      : source.kind === "world-character"
+        ? "characterTemplateId"
+        : "creatureId";
   const sourceId =
     typeof source[sourceKey] === "string" ? source[sourceKey] : "";
   const position = object(value.mapPosition) ? value.mapPosition : {};
@@ -602,7 +615,11 @@ export function LocationCollectionPage({
                       multiline={false}
                     />
                     <Field
-                      label={collection === "items" ? "Item" : "Creature"}
+                      label={
+                        collection === "items"
+                          ? "Item"
+                          : "Creature or Character"
+                      }
                       required
                     >
                       <Select
@@ -612,7 +629,24 @@ export function LocationCollectionPage({
                         onChange={(e) =>
                           setValue({
                             ...value,
-                            source: { ...source, [sourceKey]: e.target.value },
+                            source:
+                              collection === "items"
+                                ? {
+                                    kind: "world-item",
+                                    itemDefinitionId: e.target.value,
+                                  }
+                                : sources.find(
+                                      (r) => r.sourceId === e.target.value,
+                                    )?.resourceType ===
+                                    "world-character-templates"
+                                  ? {
+                                      kind: "world-character",
+                                      characterTemplateId: e.target.value,
+                                    }
+                                  : {
+                                      kind: "world-creature",
+                                      creatureId: e.target.value,
+                                    },
                           })
                         }
                       >
@@ -731,7 +765,13 @@ export function LocationCollectionPage({
                 <p>
                   {(() => {
                     const ref = object(entry.payload.source)
-                      ? entry.payload.source[sourceKey]
+                      ? entry.payload.source[
+                          entry.payload.source.kind === "world-character"
+                            ? "characterTemplateId"
+                            : collection === "items"
+                              ? "itemDefinitionId"
+                              : "creatureId"
+                        ]
                       : undefined;
                     const matched = sources.filter((s) => s.sourceId === ref);
                     return matched.length === 1
@@ -789,7 +829,7 @@ export function LocationPreservedPlacements({
       r.resourceType === "world-placements" &&
       recordPayload(r).locationId === location.sourceId &&
       (!object(recordPayload(r).source) ||
-        !["world-creature", "world-item"].includes(
+        !["world-creature", "world-character", "world-item"].includes(
           String((recordPayload(r).source as ObjectValue).kind),
         )),
   );

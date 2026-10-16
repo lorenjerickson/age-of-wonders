@@ -250,3 +250,46 @@ it("permits zero-cost empty Profession drafts while preserving publication rank 
   ).toBe(true);
   entity.dispose();
 });
+
+describe("Profession authored Effect references", () => {
+  const effect = {
+    resourceType: "world-effects",
+    sourceId: "blessing",
+    payload: {
+      id: "blessing",
+      name: "Blessing",
+      revision: 1,
+      modifiers: [
+        {
+          id: "health",
+          propertyPath: "health.maximum",
+          operation: "add",
+          value: 1,
+          allowConditionOverride: false,
+        },
+      ],
+      duration: { kind: "permanent" },
+    },
+  };
+  const withEffects = (grantedEffects: unknown) =>
+    record({
+      ...payload,
+      components: { ...payload.components, grantedEffects },
+    });
+  it("accepts same-World associations and prevents dangling references after deletion", () => {
+    const owner = withEffects([{ effectId: "blessing" }]);
+    expect(worldCodexSnapshotIssue([owner, effect])).toBeUndefined();
+    expect(worldCodexSnapshotIssue([owner], [owner, effect])).toBe(
+      "A granted Effect is duplicated or unavailable in this World.",
+    );
+    expect(
+      worldCodexSnapshotIssue([
+        withEffects([{ effectId: "blessing" }, { effectId: "blessing" }]),
+        effect,
+      ]),
+    ).toBe("A granted Effect is duplicated or unavailable in this World.");
+    expect(worldCodexSnapshotIssue([withEffects("invalid"), effect])).toBe(
+      "Choose a valid granted Effect list.",
+    );
+  });
+});

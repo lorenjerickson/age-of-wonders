@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
-import { ItemCompendiumPage } from "../WorldAuthoringPages";
+import { AstraCodex } from "../AstraCodex";
 export const Route = createFileRoute("/_gm/worlds/$worldId/item-compendium")({
   component: SectionRoute,
 });
@@ -9,7 +9,7 @@ function SectionRoute() {
   const pathname = useLocation().pathname.replace(/\/$/, "");
   return pathname ===
     `/worlds/${encodeURIComponent(worldId)}/item-compendium` ? (
-    <ItemCompendiumPage />
+    <AstraCodex />
   ) : (
     <Outlet />
   );

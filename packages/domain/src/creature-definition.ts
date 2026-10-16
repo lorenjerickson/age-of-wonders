@@ -1,3 +1,5 @@
+import { canonicalEquipmentSlotKey } from "@aow/common";
+import { authoredEquipmentIssue } from "./authored-equipment";
 import {
   WORLD_CODEX_RESOURCES,
   type JsonValue,
@@ -256,6 +258,24 @@ export class CreatureDefinition extends Entity<
         "creature-embodiment-policy-invalid",
         "A Creature Definition requires an explicit valid Instance embodiment policy.",
       );
+    if (c.equipment !== undefined) {
+      const previous = CreatureDefinition.object(
+        CreatureDefinition.object(context.baseline).components,
+      ).equipment;
+      const equipmentIssue = authoredEquipmentIssue(c.equipment, {
+        records: context.records,
+        slots: c.equipmentSlots,
+        preserveCompatibility:
+          previous !== undefined &&
+          JSON.stringify(previous) === JSON.stringify(c.equipment),
+      });
+      if (equipmentIssue)
+        add(
+          "creature-codex-equipment-assignment",
+          equipmentIssue,
+          "components.equipment",
+        );
+    }
     if (!context.records) {
       issues.push({
         code: "creature-references-unresolved",
@@ -426,7 +446,12 @@ export class CreatureDefinition extends Entity<
       slots.some(
         (key) =>
           typeof key !== "string" ||
-          byKey.get(key)?.semanticRole !== "aow:equipment-slot",
+          !model.elements.some(
+            (element) =>
+              element.semanticRole === "aow:equipment-slot" &&
+              canonicalEquipmentSlotKey(element.key) ===
+                canonicalEquipmentSlotKey(key),
+          ),
       )
     )
       return issue(
@@ -528,6 +553,7 @@ export class CreatureDefinition extends Entity<
       health?: { current: number; maximum: number; temporary: number };
       vision?: { day: number; night: number };
       equipmentPool?: string[];
+      equipment?: import("@aow/common").WorldEquipmentAssignment[];
       equipmentSlots: string[];
       instanceEmbodimentPolicy: Record<string, unknown>;
       artDirection?: string;
@@ -565,7 +591,14 @@ export class CreatureDefinition extends Entity<
       components: {
         ...priorComponents,
         ...Object.fromEntries(
-          ["grantedConditions", "skills", "health", "vision", "equipmentPool"]
+          [
+            "grantedConditions",
+            "skills",
+            "health",
+            "vision",
+            "equipmentPool",
+            "equipment",
+          ]
             .filter((key) => input[key as keyof typeof input] !== undefined)
             .map((key) => [key, input[key as keyof typeof input]]),
         ),

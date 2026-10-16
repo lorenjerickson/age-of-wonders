@@ -1,7 +1,14 @@
+import {
+  EquipmentPaperdoll,
+  type EquipmentAssignment,
+} from "./EquipmentPaperdoll";
+import {
+  worldEquipmentItems,
+  worldEquipmentSlots,
+} from "./worldEquipmentPresentation";
 import { RouterButtonLink } from "./navigation";
 import { protectedComparisonText } from "./protectedAuthoringText";
 import { RuleTextField } from "./RuleValueFields";
-import { visibleRecordName } from "./recordDisplay";
 import { useBlocker } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -162,9 +169,14 @@ export function AstraCreatureItemEditor({
       ]),
     ),
   );
-  const [equipmentPool, setEquipmentPool] = useState<string[]>(
-    Array.isArray(components.equipmentPool)
-      ? (components.equipmentPool as string[])
+  const [equipment, setEquipment] = useState<EquipmentAssignment[] | undefined>(
+    Array.isArray(components.equipment)
+      ? (components.equipment as EquipmentAssignment[])
+      : undefined,
+  );
+  const [equipmentSlots, setEquipmentSlots] = useState<string[]>(
+    Array.isArray(components.equipmentSlots)
+      ? (components.equipmentSlots as string[])
       : [],
   );
   const [grants, setGrants] = useState<string[]>(
@@ -222,7 +234,8 @@ export function AstraCreatureItemEditor({
     health,
     vision,
     movement,
-    equipmentPool,
+    equipment,
+    equipmentSlots,
     grants,
     family,
     category,
@@ -276,8 +289,8 @@ export function AstraCreatureItemEditor({
           description,
           attributes:
             attributes as CreateWorldCreatureDraftRequest["attributes"],
-          equipmentSlots: (components.equipmentSlots ??
-            []) as CreateWorldCreatureDraftRequest["equipmentSlots"],
+          equipmentSlots:
+            equipmentSlots as CreateWorldCreatureDraftRequest["equipmentSlots"],
           instanceEmbodimentPolicy: (payload.instanceEmbodimentPolicy ?? {
             strategy: "one-per-instance",
             maximumPerCampaignInstance: 1,
@@ -309,7 +322,7 @@ export function AstraCreatureItemEditor({
           skills,
           health,
           vision,
-          equipmentPool,
+          ...(equipment === undefined ? {} : { equipment }),
         };
         saved =
           existing?.resourceType === "creatures"
@@ -393,7 +406,9 @@ export function AstraCreatureItemEditor({
     return (
       <main className="astra-page">
         <h1 className="astra-heading">Entry unavailable</h1>
-        <Button onClick={onCancel}>Back to Codex</Button>
+        <Button onClick={onCancel}>
+          Back to {creature ? "Bestiary" : "Items"}
+        </Button>
       </main>
     );
   const skillOptions = [
@@ -424,7 +439,7 @@ export function AstraCreatureItemEditor({
   return (
     <main className="astra-page astra-atlas astra-atlas-form-page">
       <Button tone="ghost" className="astra-atlas-back" onClick={onCancel}>
-        ← Back
+        ← Back to {creature ? "Bestiary" : "Items"}
       </Button>
       <p className="astra-eyebrow">WORKSPACE / AUTHORING</p>
       <h1 className="astra-heading">
@@ -674,30 +689,45 @@ export function AstraCreatureItemEditor({
                   ))}
                 </div>
               </section>
-              <Fieldset className="astra-atlas-group">
-                <Legend>Default equipment pool</Legend>
-                <p className="astra-atlas-help">
-                  One item is randomly selected from this pool when a character
-                  is created. Each character gets its own copy of these stats.
-                </p>
-                <div className="astra-atlas-choices">
-                  {recordsForLibrary(draft?.records ?? [], "items").map(
-                    (item) => (
-                      <Label key={item.sourceId}>
-                        <Checkbox
-                          checked={equipmentPool.includes(item.sourceId)}
-                          onChange={() =>
-                            setEquipmentPool(
-                              toggle(equipmentPool, item.sourceId),
-                            )
-                          }
-                        />
-                        {visibleRecordName(item, "Unnamed item", recordIds)}
-                      </Label>
-                    ),
+              <section>
+                <EquipmentPaperdoll
+                  slots={worldEquipmentSlots(
+                    equipmentSlots,
+                    draft?.effectiveModels?.equipmentSlots ?? [],
                   )}
-                </div>
-              </Fieldset>
+                  items={worldEquipmentItems(draft?.records ?? [])}
+                  equipment={equipment ?? []}
+                  onChange={setEquipment}
+                  disabled={busy || !canEdit}
+                />
+                <details className="mt-4">
+                  <summary className="min-h-11 cursor-pointer">
+                    Supported equipment slots
+                  </summary>
+                  <p className="astra-atlas-help">
+                    Choose the slots this creature supports. Clear a slot’s
+                    equipment before removing it.
+                  </p>
+                  <div className="astra-atlas-choices">
+                    {(draft?.effectiveModels?.equipmentSlots ?? []).map(
+                      (slot) => (
+                        <Label key={slot.key}>
+                          <Checkbox
+                            checked={equipmentSlots.includes(slot.key)}
+                            disabled={busy || !canEdit}
+                            onChange={() =>
+                              setEquipmentSlots(
+                                toggle(equipmentSlots, slot.key),
+                              )
+                            }
+                          />
+                          {slot.name}
+                        </Label>
+                      ),
+                    )}
+                  </div>
+                </details>
+              </section>
             </>
           ) : (
             <>

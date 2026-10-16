@@ -63,7 +63,6 @@ export type ItemCategory = OpenString<
 /** Seed identities from the editable core Equipment Slot vocabulary. This list is not exhaustive. */
 export const CORE_EQUIPMENT_SLOT_KEYS = [
   "aow:equipment-slot-pack",
-  "aow:equipment-slot-belt",
   "aow:equipment-slot-head",
   "aow:equipment-slot-neck",
   "aow:equipment-slot-off-hand",
@@ -80,6 +79,15 @@ export const CORE_EQUIPMENT_SLOT_KEYS = [
   "aow:equipment-slot-right-finger",
   "aow:equipment-slot-left-finger",
 ] as const;
+
+/** Exact historical Belt slot aliases; the Belt container category is unrelated. */
+export function canonicalEquipmentSlotKey(slot: string): string {
+  return slot === "belt"
+    ? "waist"
+    : slot === "aow:equipment-slot-belt"
+      ? "aow:equipment-slot-waist"
+      : slot;
+}
 
 /** Stable key of an Equipment Slot option in an adopted Model Schema release. */
 export type EquipmentSlot = NamespacedKey;
@@ -150,8 +158,17 @@ export function containerSlotCapacity<Quality extends ItemQuality>(
   rarity?: ItemRarity,
 ): number | undefined {
   const rows = container.capacityByQuality;
-  return (rows.find((entry) => entry.quality === quality && entry.rarity !== undefined && entry.rarity === rarity)
-    ?? rows.find((entry) => entry.quality === quality && entry.rarity === undefined))?.slots;
+  return (
+    rows.find(
+      (entry) =>
+        entry.quality === quality &&
+        entry.rarity !== undefined &&
+        entry.rarity === rarity,
+    ) ??
+    rows.find(
+      (entry) => entry.quality === quality && entry.rarity === undefined,
+    )
+  )?.slots;
 }
 
 export type WeaponCategory = OpenString<

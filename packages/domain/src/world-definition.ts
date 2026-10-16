@@ -149,7 +149,11 @@ export class WorldDefinition extends Entity<
     );
     const source = payload.source;
     let exists = false;
-    if (source.kind === "world-creature") {
+    if (source.kind === "world-character") {
+      exists = captured.has(
+        `world-character-templates\0${source.characterTemplateId}`,
+      );
+    } else if (source.kind === "world-creature") {
       const id = source.creatureId as string;
       const definition = definitions.get(id);
       exists =

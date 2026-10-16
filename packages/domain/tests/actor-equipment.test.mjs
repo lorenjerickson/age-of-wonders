@@ -343,3 +343,45 @@ test("Self containment and duplicate container rows reject without mutation", as
     e.dispose();
   }
 });
+
+test("runtime Belt slot alias shares Waist occupancy while Belt containers retain their behavior", async () => {
+  const defs = [
+    definition("belt", {
+      equippable: { compatibleSlotSets: [["aow:equipment-slot-belt"]] },
+      slottedContainer: {
+        kind: "belt",
+        accepts: "belt-compatible-items",
+        capacityByQuality: [{ quality: "standard", slots: 2 }],
+      },
+    }),
+  ];
+  const owner = ActorEquipment.deserialize(
+    { actor, items: [item("one", "belt"), item("two", "belt")] },
+    { definitions: defs, availableSlots: ["aow:equipment-slot-waist"] },
+  );
+  try {
+    await change(owner, {
+      action: "equip",
+      itemId: "one",
+      slots: ["aow:equipment-slot-belt"],
+    });
+    assert.equal(
+      owner.serializePayload().actor.equipment.slots[
+        "aow:equipment-slot-waist"
+      ],
+      "one",
+    );
+    assert.equal(owner.serializePayload().actor.equipment.containers.length, 1);
+    await assert.rejects(
+      () =>
+        change(owner, {
+          action: "equip",
+          itemId: "two",
+          slots: ["aow:equipment-slot-waist"],
+        }),
+      /occupied/,
+    );
+  } finally {
+    owner.dispose();
+  }
+});

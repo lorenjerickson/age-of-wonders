@@ -244,3 +244,46 @@ test("Profession authoring helpers preserve later tiers, grants, acquisition rul
     "aow:profession-rank-novice",
   );
 });
+
+test("Profession Effect associations preserve authored data and validate captured membership", () => {
+  const input = {
+    ...payload(),
+    components: {
+      ...payload().components,
+      grantedEffects: [{ effectId: "blessing", privateNote: "retained" }],
+    },
+  };
+  const records = [
+    {
+      resourceType: "world-effects",
+      sourceId: "blessing",
+      payload: { id: "blessing" },
+    },
+  ];
+  const entity = ProfessionDefinition.deserializePayload(input, {
+    records,
+    model,
+  });
+  assert.equal(
+    codes(entity).some((code) => code.includes("granted-effects")),
+    false,
+  );
+  assert.deepEqual(entity.serializePayload(), input);
+  entity.dispose();
+  for (const grantedEffects of [
+    null,
+    "blessing",
+    [{ effectId: "missing" }],
+    [{ effectId: "blessing" }, { effectId: "blessing" }],
+  ]) {
+    const invalid = ProfessionDefinition.deserializePayload(
+      { ...input, components: { ...input.components, grantedEffects } },
+      { records, model },
+    );
+    assert(codes(invalid).includes("profession-codex-granted-effects"));
+    invalid.dispose();
+  }
+  const unresolved = ProfessionDefinition.deserializePayload(input, { model });
+  assert(codes(unresolved).includes("profession-references-unresolved"));
+  unresolved.dispose();
+});

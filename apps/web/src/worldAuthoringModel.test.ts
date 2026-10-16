@@ -864,3 +864,16 @@ describe("World authoring projection", () => {
     ]);
   });
 });
+
+it("resolves editable World NPC placements in the Character namespace", () => {
+  const record = {
+    resourceType: "world-placements",
+    sourceId: "placement",
+    sourceRevision: 1,
+    payload: {
+      source: { kind: "world-character", characterTemplateId: "npc" },
+    },
+  };
+  expect(worldPlacementSourceId(record)).toBe("npc");
+  expect(worldPlacementSourceIsEditable(record)).toBe(true);
+});

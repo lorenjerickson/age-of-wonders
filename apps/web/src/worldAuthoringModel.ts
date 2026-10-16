@@ -543,6 +543,11 @@ export function worldPlacementSourceId(record: WorldDraftRecord) {
   const source = recordPayload(record).source;
   if (!source || typeof source !== "object" || Array.isArray(source)) return;
   const value = source as Record<string, unknown>;
+  if (
+    value.kind === "world-character" &&
+    typeof value.characterTemplateId === "string"
+  )
+    return value.characterTemplateId;
   if (value.kind === "world-creature" && typeof value.creatureId === "string")
     return value.creatureId;
   if (value.kind === "world-item" && typeof value.itemDefinitionId === "string")
@@ -562,7 +567,7 @@ export function worldPlacementSourceKind(record: WorldDraftRecord) {
 }
 
 export function worldPlacementSourceIsEditable(record: WorldDraftRecord) {
-  return ["world-creature", "world-item"].includes(
+  return ["world-creature", "world-character", "world-item"].includes(
     worldPlacementSourceKind(record) ?? "",
   );
 }

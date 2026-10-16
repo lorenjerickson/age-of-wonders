@@ -1,3 +1,4 @@
+import { worldNavigationCounts } from "./gmNavigationModel";
 import {
   useEffect,
   useRef,
@@ -6,7 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { useLocation, useBlocker } from "@tanstack/react-router";
-import { Button, TextInput, Textarea, Field, Disclosure } from "@aow/ui";
+import { Button, TextInput, Textarea, Field } from "@aow/ui";
 import { useWorldAuthoring } from "./WorldAuthoringShell";
 import { InternalLink, useInternalNavigate } from "./navigation";
 import {
@@ -20,8 +21,8 @@ import {
 import {
   recordName,
   recordPayload,
+  recordsForLibrary,
   projectEffectiveModels,
-  worldWorkspaceSuffix,
 } from "./worldAuthoringModel";
 import { AstraAtlas } from "./AstraAtlas";
 import { AstraCodex } from "./AstraCodex";
@@ -56,6 +57,38 @@ export function AstraFrame({
   const [user, setUser] = useState("GM");
   const navigate = useInternalNavigate();
   const location = useLocation();
+  const query = new URLSearchParams(location.searchStr);
+  const worldPath = location.pathname
+    .slice(base.length)
+    .split("/")
+    .filter(Boolean);
+  const optionKind =
+    worldPath[0] === "characters" &&
+    ["professions", "skills", "backgrounds"].includes(worldPath[1])
+      ? worldPath[1]
+      : undefined;
+  const activeView =
+    worldPath[0] === "rules" ||
+    (worldPath[0] === "characters" && worldPath.length > 1 && !optionKind)
+      ? "rules"
+      : worldPath[0] === "atlas"
+        ? "atlas"
+        : worldPath[0] === "bestiary"
+          ? "bestiary"
+          : worldPath[0] === "characters" && worldPath.length === 1
+            ? "characters"
+            : worldPath[0] === "item-compendium"
+              ? "items"
+              : optionKind
+                ? "codex"
+                : worldPath[0] === "versions"
+                  ? "overview"
+                  : view;
+  const activeKind =
+    optionKind ??
+    (worldPath[0] === "item-compendium"
+      ? "items"
+      : (query.get("kind") ?? "items"));
   const menuButton = useRef<HTMLButtonElement>(null);
   const sidebar = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -122,59 +155,84 @@ export function AstraFrame({
         {base !== "/worlds" && (
           <>
             <div className="astra-nav-label">WORKSPACE</div>
-            <nav>
+            <nav aria-label="World navigation">
               {[
-                ["overview", "◈", "Overview"],
                 ["atlas", "⌖", "Atlas"],
+                ["bestiary", "♧", "Bestiary"],
+                ["characters", "♙", "Characters"],
                 ["codex", "▤", "Codex"],
-                ["system", "⚙", "Rule system"],
+                ["items", "◇", "Items"],
+                ["overview", "◈", "Overview"],
+                ["rules", "⚙", "Rules"],
               ].map(([key, icon, label]) => (
-                <InternalLink
-                  key={key}
-                  href={`${base}?view=${key}`}
-                  className={view === key ? "active" : ""}
-                >
-                  <span className="astra-nav-icon">{icon}</span>
-                  {label}
-                  {(key === "atlas" || key === "codex") && (
-                    <span className="astra-nav-count">
-                      {key === "atlas" ? counts.locations : counts.codex}
-                    </span>
+                <div key={key}>
+                  <InternalLink
+                    href={
+                      key === "rules" ? `${base}/rules` : `${base}?view=${key}`
+                    }
+                    className={activeView === key ? "active" : ""}
+                    aria-current={
+                      activeView === key && key !== "codex" ? "page" : undefined
+                    }
+                  >
+                    <span className="astra-nav-icon">{icon}</span>
+                    {label}
+                    {(key === "atlas" || key === "codex") && (
+                      <span className="astra-nav-count">
+                        {key === "atlas" ? counts.locations : counts.codex}
+                      </span>
+                    )}
+                  </InternalLink>
+                  {key === "codex" && (
+                    <nav
+                      className="astra-codex-navigation"
+                      aria-label="Codex navigation"
+                    >
+                      {[
+                        ["backgrounds", "Backgrounds"],
+                        ["conditions", "Conditions"],
+                        ["effects", "Effects"],
+                        ["professions", "Professions"],
+                        ["skills", "Skills"],
+                      ].map(([kind, title]) => (
+                        <InternalLink
+                          key={kind}
+                          href={
+                            ["professions", "skills", "backgrounds"].includes(
+                              kind,
+                            )
+                              ? `${base}/characters/${kind}`
+                              : `${base}?view=codex&kind=${kind}`
+                          }
+                          className={
+                            activeView === "codex" && activeKind === kind
+                              ? "active"
+                              : ""
+                          }
+                          aria-current={
+                            activeView === "codex" && activeKind === kind
+                              ? "page"
+                              : undefined
+                          }
+                        >
+                          {title}
+                        </InternalLink>
+                      ))}
+                    </nav>
                   )}
-                </InternalLink>
+                </div>
               ))}
             </nav>
-            <Disclosure summary="Authoring libraries">
-              <nav aria-label="Authoring libraries">
-                {[
-                  ["atlas", "Locations"],
-                  ["bestiary", "Bestiary"],
-                  ["item-compendium", "Items"],
-                  ["characters", "Character options"],
-                  ["characters/models", "Models & taxonomies"],
-                  ["rules", "World rules"],
-                  ["versions", "Versions"],
-                ].map(([path, label]) => (
-                  <InternalLink
-                    key={path}
-                    className="min-h-11"
-                    href={`${base}/${path}${worldWorkspaceSuffix(location.searchStr)}`}
-                  >
-                    {label}
-                  </InternalLink>
-                ))}
-              </nav>
-            </Disclosure>
           </>
         )}
         <div className="astra-sidebar-bottom">
           {base !== "/worlds" && (
             <nav>
-              <InternalLink href={`${base}?view=people`}>
-                <span className="astra-nav-icon">♙</span>People &amp; access
-              </InternalLink>
               <InternalLink href={`${base}?view=export`}>
                 <span className="astra-nav-icon">↗</span>Export world
+              </InternalLink>
+              <InternalLink href={`${base}?view=people`}>
+                <span className="astra-nav-icon">♙</span>People &amp; access
               </InternalLink>
             </nav>
           )}
@@ -257,27 +315,16 @@ export function AstraWorldWorkspace() {
     params.get("view") ||
     (suffix.startsWith("atlas")
       ? "atlas"
-      : suffix.startsWith("bestiary") ||
-          suffix.startsWith("item-compendium") ||
-          suffix.startsWith("characters") ||
-          suffix.startsWith("rules")
-        ? "codex"
-        : "overview");
+      : suffix.startsWith("bestiary")
+        ? "bestiary"
+        : suffix.startsWith("item-compendium") ||
+            suffix.startsWith("characters") ||
+            suffix.startsWith("rules")
+          ? "codex"
+          : "overview");
   const records = draft?.records ?? [];
   const base = `/worlds/${encodeURIComponent(definition.id)}`;
-  const counts = {
-    locations: records.filter((r) => r.resourceType === "locations").length,
-    codex: records.filter(
-      (r) =>
-        [
-          "world-character-templates",
-          "world-conditions",
-          "world-effects",
-          "world-rules",
-        ].includes(r.resourceType) ||
-        ["creature", "item"].includes(String(recordPayload(r).kind)),
-    ).length,
-  };
+  const counts = worldNavigationCounts(records);
   const name = String(draft?.content.name ?? definition.name);
   return (
     <AstraFrame
@@ -289,19 +336,25 @@ export function AstraWorldWorkspace() {
       title={
         view === "atlas"
           ? "World atlas"
-          : view === "codex"
-            ? "World codex"
-            : view === "system"
-              ? "Rule system"
-              : view === "people"
-                ? "People & access"
-                : view === "export"
-                  ? "Export world"
-                  : view === "account"
-                    ? "Account"
-                    : params.get("edit")
-                      ? "Edit world"
-                      : "World overview"
+          : view === "items"
+            ? "Items"
+            : view === "bestiary"
+              ? "Bestiary"
+              : view === "characters"
+                ? "Characters"
+                : view === "codex"
+                  ? "World codex"
+                  : view === "system"
+                    ? "Rule system"
+                    : view === "people"
+                      ? "People & access"
+                      : view === "export"
+                        ? "Export world"
+                        : view === "account"
+                          ? "Account"
+                          : params.get("edit")
+                            ? "Edit world"
+                            : "World overview"
       }
     >
       {!draft && !["account", "people", "export"].includes(view) ? (
@@ -335,8 +388,8 @@ export function AstraWorldWorkspace() {
         </main>
       ) : view === "atlas" ? (
         <AstraAtlas />
-      ) : view === "codex" ? (
-        <AstraCodex />
+      ) : ["codex", "bestiary", "characters", "items"].includes(view) ? (
+        <AstraCodex key={view} />
       ) : ["system", "people", "export", "account"].includes(view) ? (
         <AstraSupporting view={view} />
       ) : (
@@ -370,12 +423,13 @@ function AstraOverview() {
   });
   const records = draft?.records ?? [];
   const locations = records.filter((r) => r.resourceType === "locations");
-  const kinds = ["locations", "item", "creature", "world-character-templates"];
-  const counts = kinds.map(
-    (k) =>
-      records.filter((r) => r.resourceType === k || recordPayload(r).kind === k)
-        .length,
-  );
+  const counts = [
+    locations.length,
+    recordsForLibrary(records, "items").length,
+    recordsForLibrary(records, "creatures").length,
+    records.filter((r) => r.resourceType === "world-character-templates")
+      .length,
+  ];
   async function save(e: FormEvent) {
     e.preventDefault();
     if (!draft || !canEdit || busy) return;
@@ -460,6 +514,9 @@ function AstraOverview() {
         )}
       </div>
       <p className="astra-muted">{description}</p>
+      <InternalLink className="btn" href={`${base}/versions`}>
+        Versions
+      </InternalLink>
       <section className="astra-hero">
         <img
           className="astra-hero-art"
@@ -485,7 +542,7 @@ function AstraOverview() {
         {["Locations", "Items", "Creatures", "Characters"].map((label, i) => (
           <InternalLink
             key={label}
-            href={`${base}?view=${i === 0 ? "atlas" : `codex&kind=${label.toLowerCase()}`}`}
+            href={`${base}?view=${i === 0 ? "atlas" : i === 2 ? "bestiary" : i === 3 ? "characters" : "items"}`}
             className="astra-panel astra-stat"
           >
             <strong>{String(counts[i]).padStart(2, "0")}</strong>

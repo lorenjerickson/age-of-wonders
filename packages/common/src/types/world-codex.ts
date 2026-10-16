@@ -43,10 +43,21 @@ export interface WorldConditionEffect {
 export interface WorldConditionDefinition extends WorldCodexIdentity {
   readonly effects: readonly WorldConditionEffect[];
 }
+/** Authored reusable Effect association; execution requires an explicit runtime workflow. */
+export interface WorldGrantedEffect {
+  readonly effectId: string;
+}
 export interface WorldGrantedCondition {
   readonly conditionId: string;
 }
+/** One occupied slot; repeat an Item across every slot of a complete compatible set. */
+export interface WorldEquipmentAssignment {
+  readonly slot: string;
+  readonly itemDefinitionId: string;
+}
 export interface WorldCharacterTemplate extends WorldCodexIdentity {
+  /** Defaults to one per Instance; keyed by this NPC identity, independently of its Creature base. */
+  readonly instanceEmbodimentPolicy?: import("./creatures").CreatureInstanceEmbodimentPolicy;
   /** Immutable after creation; references a creature Definition in the same World draft. */
   readonly creatureDefinitionId: string;
   readonly attributes: Readonly<Record<string, number>>;
@@ -73,11 +84,8 @@ export interface WorldCharacterTemplate extends WorldCodexIdentity {
     >
   >;
   readonly vision: { readonly day: number; readonly night: number };
-  readonly equipment: readonly {
-    /** "carried" may repeat; named equipment slots are unique. */
-    readonly slot: string;
-    readonly itemDefinitionId: string;
-  }[];
+  /** Carried entries remain explicit and do not occupy a worn slot. */
+  readonly equipment: readonly WorldEquipmentAssignment[];
   readonly grantedConditions: readonly WorldGrantedCondition[];
   readonly images?: Partial<CreatureImages>;
 }

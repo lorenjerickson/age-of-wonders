@@ -125,6 +125,8 @@ export type CharacterDefinition<
 > = Definition<"character-template", CharacterTemplateComponents, Extensions>;
 
 export interface BackgroundComponents {
+  readonly grantedConditions?: readonly import("./world-codex").WorldGrantedCondition[];
+  readonly grantedEffects?: readonly import("./world-codex").WorldGrantedEffect[];
   /** Backstory benefits granted once when the Background is acquired. */
   readonly modifierGrants?: readonly ModifierGrantDefinition[];
   readonly attributeOptions?: readonly Attribute[];

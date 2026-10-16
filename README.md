@@ -187,7 +187,9 @@ The repository is bind-mounted into both application containers. Nest and Vite u
 
 Each container has isolated dependency and shared-package build volumes. The development supervisor
 (`scripts/dev-container.mjs`) installs the locked dependencies and builds shared JavaScript and
-TypeScript declarations before starting the app. It watches shared-package sources and configuration,
+TypeScript declarations before starting the app (`common → domain` for API;
+`common → domain → ui` for web). Domain dependencies and build output have separate
+container volumes too. It watches shared-package sources and configuration,
 rebuilds them, and restarts the consuming app. Host builds cannot erase a running container's package
 declarations. App source edits continue to use Nest watch or Vite hot reload. The web supervisor
 waits for API health before starting, avoiding startup requests against an API still compiling.

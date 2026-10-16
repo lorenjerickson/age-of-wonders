@@ -86,15 +86,17 @@ export function resolveInstancePlacement(
   const placement = capturedPlacement(instance, source);
   const placementSource = objectValue(placement.source);
   const definitionId =
-    typeof placementSource.creatureId === "string"
-      ? placementSource.creatureId
-      : typeof placementSource.itemDefinitionId === "string"
-        ? placementSource.itemDefinitionId
-        : typeof placementSource.definitionId === "string"
-          ? placementSource.definitionId
-          : typeof placementSource.suggestedCreatureDefinitionId === "string"
-            ? placementSource.suggestedCreatureDefinitionId
-            : undefined;
+    typeof placementSource.characterTemplateId === "string"
+      ? placementSource.characterTemplateId
+      : typeof placementSource.creatureId === "string"
+        ? placementSource.creatureId
+        : typeof placementSource.itemDefinitionId === "string"
+          ? placementSource.itemDefinitionId
+          : typeof placementSource.definitionId === "string"
+            ? placementSource.definitionId
+            : typeof placementSource.suggestedCreatureDefinitionId === "string"
+              ? placementSource.suggestedCreatureDefinitionId
+              : undefined;
   if (!definitionId) {
     throw new TypeError(
       "This placement source cannot be realized automatically; choose an explicit replacement.",
@@ -102,10 +104,16 @@ export function resolveInstancePlacement(
   }
   const definitionRecord = snapshotRecords(
     instance.worldRecords,
-    "definitions",
+    placementSource.kind === "world-character"
+      ? "world-character-templates"
+      : "definitions",
   ).find((record) => record.sourceId === definitionId);
+  if (placementSource.kind === "world-character" && !definitionRecord) {
+    throw new TypeError("This Character is unavailable in the captured World.");
+  }
   const definition = objectValue(definitionRecord?.payload);
   const isCreature =
+    placementSource.kind === "world-character" ||
     placementSource.kind === "world-creature" ||
     typeof placementSource.suggestedCreatureDefinitionId === "string" ||
     definition.kind === "creature";
@@ -166,13 +174,30 @@ export function resolveInstancePlacement(
                   sourceCreatureId: definitionId,
                   embodimentPolicy: policy,
                 },
-          creature: runtimeCreature(
-            humanName(definition, "Unnamed Creature"),
-            runtimeCreatureId,
-            runtimeEntityId,
-            definitionId,
-            instance.updatedAt,
-          ),
+          creature:
+            placementSource.kind === "world-character"
+              ? Creature.fromWorldCharacter(
+                  {
+                    id: runtimeCreatureId,
+                    entityId: runtimeEntityId,
+                    name: humanName(definition, "Unnamed Character"),
+                    definitionId,
+                    updatedAt: instance.updatedAt,
+                  },
+                  definition,
+                  instance.worldRecords.find(
+                    (r) =>
+                      r.resourceType === "definitions" &&
+                      r.sourceId === definition.creatureDefinitionId,
+                  )?.payload,
+                )
+              : runtimeCreature(
+                  humanName(definition, "Unnamed Creature"),
+                  runtimeCreatureId,
+                  runtimeEntityId,
+                  definitionId,
+                  instance.updatedAt,
+                ),
         },
         50_000,
       ),

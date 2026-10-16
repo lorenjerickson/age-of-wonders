@@ -91,6 +91,8 @@ export interface ProfessionActionProgression<
 export interface ProfessionComponents<
   Tier extends string = ProfessionExpertise,
 > {
+  readonly grantedConditions?: readonly import("./world-codex").WorldGrantedCondition[];
+  readonly grantedEffects?: readonly import("./world-codex").WorldGrantedEffect[];
   /** Lowest to highest; each tier must appear exactly once. */
   readonly expertiseOrder: readonly Tier[];
   readonly expertiseLevels: readonly ProfessionExpertiseLevel<Tier>[];

@@ -1,3 +1,4 @@
+import { WorldRuleSettings } from "./AstraSupporting";
 import { worldWorkspaceSuffix } from "./worldAuthoringModel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
@@ -7,7 +8,7 @@ import {
   worldRuleVisibleText,
   parseWorldRuleRoute,
 } from "./worldRuleAuthoringModel";
-import { Badge, Button, Input, Label } from "@aow/ui";
+import { Badge, Button, Input, Label, Disclosure } from "@aow/ui";
 import {
   validateWorldRule,
   type WorldRuleExecution,
@@ -77,7 +78,7 @@ export function WorldRulesPage() {
     return () => {
       requestSequence.current++;
     };
-  }, [draft?.id, load]);
+  }, [draft?.id, draft?.storageRevision, load]);
   const revision = collection
     ? {
         expectedDraftId: collection.draftId,
@@ -215,6 +216,12 @@ export function WorldRulesPage() {
         mechanics apply until enabled rules are published and captured by an
         Instance.
       </p>
+      <Disclosure
+        summary="Rules settings and World model reference"
+        className="mt-5"
+      >
+        <WorldRuleSettings />
+      </Disclosure>
       <DraftRequired>
         <>
           {stale && (

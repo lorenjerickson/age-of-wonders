@@ -200,3 +200,36 @@ test("World fork and Campaign adoption rewrite only existing reference grammar",
     /different/,
   );
 });
+
+test("World NPC placement forks use the Character resource namespace", () => {
+  assert.deepEqual(
+    rewriteWorldDefinitionReferences(
+      { kind: "world-character", characterTemplateId: "same", notes: "same" },
+      {
+        definitions: { same: "creature-copy" },
+        "world-character-templates": { same: "npc-copy" },
+      },
+    ),
+    { kind: "world-character", characterTemplateId: "npc-copy", notes: "same" },
+  );
+});
+
+test("Profession and Background forks rewrite Effect and Condition associations by resource namespace", () => {
+  const source = {
+    components: {
+      grantedEffects: [{ effectId: "benefit" }],
+      grantedConditions: [{ conditionId: "benefit" }],
+    },
+    extensions: { private: "benefit" },
+  };
+  const fork = rewriteWorldDefinitionReferences(source, {
+    "world-effects": { benefit: "effect-copy" },
+    "world-conditions": { benefit: "condition-copy" },
+  });
+  assert.equal(fork.components.grantedEffects[0].effectId, "effect-copy");
+  assert.equal(
+    fork.components.grantedConditions[0].conditionId,
+    "condition-copy",
+  );
+  assert.equal(fork.extensions.private, "benefit");
+});

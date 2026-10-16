@@ -1,4 +1,5 @@
 import {
+  canonicalEquipmentSlotKey,
   containerSlotCapacity,
   isBeltSlotCompatible,
   type SlottedContainerDefinition,
@@ -121,8 +122,14 @@ export class ActorEquipment extends Entity<
         "Existing equipment must be repaired before changing it.",
       );
     const occupied = new Map<string, string[]>();
+    const occupiedSlots = new Map<string, string>();
     for (const [slot, id] of Object.entries(obj(equipment.slots))) {
-      if (typeof id !== "string" || !this.capture.availableSlots.includes(slot))
+      if (
+        typeof id !== "string" ||
+        !this.capture.availableSlots
+          .map(canonicalEquipmentSlotKey)
+          .includes(canonicalEquipmentSlotKey(slot))
+      )
         throw new TypeError("An equipped slot is unavailable.");
       const item = this.item(data, id);
       this.requireOwned(data, item);
@@ -130,7 +137,11 @@ export class ActorEquipment extends Entity<
         throw new TypeError(
           "A contained Item cannot also occupy an actor slot.",
         );
-      occupied.set(id, [...(occupied.get(id) ?? []), slot]);
+      const key = canonicalEquipmentSlotKey(slot);
+      if (occupiedSlots.has(key) && occupiedSlots.get(key) !== id)
+        throw new TypeError("An equipment slot is occupied.");
+      occupiedSlots.set(key, id);
+      occupied.set(id, [...new Set([...(occupied.get(id) ?? []), key])]);
     }
     for (const [id, slots] of occupied)
       this.fit(this.definition(this.item(data, id)), slots);
@@ -255,19 +266,28 @@ export class ActorEquipment extends Entity<
     )
       throw new TypeError("This Item is not configured for Belt slots.");
   }
-  private fit(definition: EquipmentObject, slots: readonly string[]) {
+  private fit(definition: EquipmentObject, inputSlots: readonly string[]) {
+    const slots = inputSlots.map(canonicalEquipmentSlotKey);
     const sets = obj(obj(definition.components).equippable).compatibleSlotSets;
     if (
       !slots.length ||
       new Set(slots).size !== slots.length ||
-      slots.some((s) => !this.capture.availableSlots.includes(s)) ||
-      !Array.isArray(sets) ||
-      !sets.some(
+      slots.some(
         (s) =>
-          Array.isArray(s) &&
-          s.length === slots.length &&
-          s.every((k) => slots.includes(k)),
-      )
+          !this.capture.availableSlots
+            .map(canonicalEquipmentSlotKey)
+            .includes(s),
+      ) ||
+      !Array.isArray(sets) ||
+      !sets.some((set) => {
+        if (!Array.isArray(set) || !set.every((key) => typeof key === "string"))
+          return false;
+        const normalized = [...new Set(set.map(canonicalEquipmentSlotKey))];
+        return (
+          normalized.length === slots.length &&
+          normalized.every((key) => slots.includes(key))
+        );
+      })
     )
       throw new TypeError(
         "The Item does not fit that complete slot assignment.",
@@ -318,10 +338,16 @@ export class ActorEquipment extends Entity<
       delete obj(item.location).containerId;
       delete obj(item.location).carrierId;
     };
-    const equip = (item: EquipmentObject, chosen: readonly string[]) => {
+    const equip = (item: EquipmentObject, inputSlots: readonly string[]) => {
+      const chosen = inputSlots.map(canonicalEquipmentSlotKey);
       this.fit(this.definition(item), chosen);
       for (const slot of chosen)
-        if (slots[slot] !== undefined && slots[slot] !== item.id)
+        if (
+          Object.entries(slots).some(
+            ([key, id]) =>
+              canonicalEquipmentSlotKey(key) === slot && id !== item.id,
+          )
+        )
           throw new TypeError("An equipment slot is occupied.");
       moveOut(item);
       for (const slot of chosen) slots[slot] = item.id;

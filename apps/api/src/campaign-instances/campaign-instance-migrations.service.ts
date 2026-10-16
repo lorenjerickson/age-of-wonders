@@ -1216,7 +1216,22 @@ export function rewriteRuntimeReferences(
   return {
     ...state,
     formatVersion: 1,
-    ...(Array.isArray(state.locationPresentationOverrides) ? { locationPresentationOverrides: state.locationPresentationOverrides.map(value => { const entry = requiredRecord(value, "Location presentation"); return {...entry, locationId: mapped(mappings, "locations", requiredString(entry.locationId, "Location presentation"))}; }) } : {}),
+    ...(Array.isArray(state.locationPresentationOverrides)
+      ? {
+          locationPresentationOverrides:
+            state.locationPresentationOverrides.map((value) => {
+              const entry = requiredRecord(value, "Location presentation");
+              return {
+                ...entry,
+                locationId: mapped(
+                  mappings,
+                  "locations",
+                  requiredString(entry.locationId, "Location presentation"),
+                ),
+              };
+            }),
+        }
+      : {}),
     preparation: rewriteGoverned(
       {
         ...preparation,
@@ -1470,9 +1485,8 @@ export function rewriteRuntimeReferences(
             source.kind === "captured-world-creature"
               ? {
                   ...source,
-                  sourceCreatureId: mapped(
+                  sourceCreatureId: mappedActorIdentity(
                     mappings,
-                    "definitions",
                     requiredString(source.sourceCreatureId, "Creature source"),
                   ),
                 }
@@ -1489,9 +1503,8 @@ export function rewriteRuntimeReferences(
                     ),
                     ...(typeof source.sourceCreatureId === "string"
                       ? {
-                          sourceCreatureId: mapped(
+                          sourceCreatureId: mappedActorIdentity(
                             mappings,
-                            "definitions",
                             source.sourceCreatureId,
                           ),
                         }
@@ -1503,9 +1516,8 @@ export function rewriteRuntimeReferences(
               ...creature,
               ...(typeof creature.definitionId === "string"
                 ? {
-                    definitionId: mapped(
+                    definitionId: mappedActorIdentity(
                       mappings,
-                      "definitions",
                       creature.definitionId,
                     ),
                   }
@@ -1558,6 +1570,17 @@ export function rewriteRuntimeReferences(
       },
     ),
   };
+}
+
+function mappedActorIdentity(
+  mappings: ReadonlyMap<string, string>,
+  value: string,
+) {
+  return (
+    mappings.get(`definitions:${value}`) ??
+    mappings.get(`world-character-templates:${value}`) ??
+    value
+  );
 }
 
 function mapped(
@@ -1828,7 +1851,10 @@ export function validateTargetRuntime(
     [];
   for (const record of worldRecords) {
     const payload = recordObject(record.payload);
-    if (record.resourceType !== "definitions" || payload.kind !== "creature")
+    if (
+      record.resourceType !== "world-character-templates" &&
+      (record.resourceType !== "definitions" || payload.kind !== "creature")
+    )
       continue;
     const policy = resolveCreatureInstanceEmbodimentPolicy(
       payload.instanceEmbodimentPolicy,
@@ -2301,7 +2327,14 @@ function definitionHasKind(
     (candidate) =>
       candidate.resourceType === "definitions" && candidate.sourceId === id,
   );
-  return recordObject(record?.payload).kind === expectedKind;
+  return (
+    recordObject(record?.payload).kind === expectedKind ||
+    (expectedKind === "creature" &&
+      !!closure?.records.some(
+        (r) =>
+          r.resourceType === "world-character-templates" && r.sourceId === id,
+      ))
+  );
 }
 
 function validateGovernedRuntime(

@@ -9,7 +9,11 @@ import {
 } from "@tanstack/react-router";
 import { astraWorldCompatibilityHref } from "../astraCompatibility";
 import { readWorldAuthoring } from "../server/readModels";
-import { WorldAuthoringProvider } from "../WorldAuthoringShell";
+import {
+  WorldAuthoringProvider,
+  useWorldAuthoring,
+} from "../WorldAuthoringShell";
+import { worldNavigationCounts } from "../gmNavigationModel";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId")({
   beforeLoad: ({ params, location }) => {
@@ -60,16 +64,30 @@ function WorldLayout() {
       {pathname.replace(/\/$/, "") === base ? (
         <Outlet />
       ) : (
-        <AstraFrame
-          name={result.definition.name}
-          base={base}
-          title="World authoring"
-          view="authoring"
-        >
-          <ContextualBreadcrumbs />
-          <Outlet />
-        </AstraFrame>
+        <AuthoringFrame base={base} pathname={pathname} />
       )}
     </WorldAuthoringProvider>
+  );
+}
+
+function AuthoringFrame({
+  base,
+  pathname,
+}: {
+  base: string;
+  pathname: string;
+}) {
+  const { definition, draft } = useWorldAuthoring();
+  return (
+    <AstraFrame
+      name={String(draft?.content.name ?? definition.name)}
+      base={base}
+      counts={worldNavigationCounts(draft?.records ?? [])}
+      title="World authoring"
+      view={pathname.startsWith(`${base}/bestiary`) ? "bestiary" : "authoring"}
+    >
+      <ContextualBreadcrumbs />
+      <Outlet />
+    </AstraFrame>
   );
 }

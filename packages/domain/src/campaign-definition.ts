@@ -222,6 +222,7 @@ export function rewriteCampaignWorldReferences(
 function resourceForField(key: string): string | undefined {
   if (key === "locationId" || key === "parentLocationId") return "locations";
   if (key === "creatureId") return "creatures";
+  if (key === "characterTemplateId") return "world-character-templates";
   if (
     key === "itemDefinitionId" ||
     key === "definitionId" ||

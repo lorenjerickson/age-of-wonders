@@ -901,3 +901,7 @@
     align-items: center;
   }
 }
+
+.astra-sidebar nav.astra-codex-navigation {
+  margin-left: 24px;
+}

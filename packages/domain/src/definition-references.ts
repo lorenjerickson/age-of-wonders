@@ -41,25 +41,27 @@ function mappedReference(
     return mapping[currentResource]?.[value];
   const normalized = fieldName?.toLowerCase() ?? "";
   const preferred =
-    normalized === "equipmentpool"
-      ? ["definitions"]
-      : normalized === "conditionid"
-        ? ["world-conditions"]
-        : normalized === "effectid"
-          ? ["world-effects"]
-          : normalized.includes("location")
-            ? ["locations"]
-            : normalized.includes("schema")
-              ? ["extension-schemas", "definitions"]
-              : normalized.includes("definition")
-                ? ["definitions"]
-                : normalized.includes("creature")
-                  ? ["creatures"]
-                  : normalized.includes("item")
-                    ? ["items"]
-                    : normalized.endsWith("id") || normalized.endsWith("ids")
-                      ? Object.keys(mapping)
-                      : [];
+    normalized === "charactertemplateid"
+      ? ["world-character-templates"]
+      : normalized === "equipmentpool"
+        ? ["definitions"]
+        : normalized === "conditionid"
+          ? ["world-conditions"]
+          : normalized === "effectid"
+            ? ["world-effects"]
+            : normalized.includes("location")
+              ? ["locations"]
+              : normalized.includes("schema")
+                ? ["extension-schemas", "definitions"]
+                : normalized.includes("definition")
+                  ? ["definitions"]
+                  : normalized.includes("creature")
+                    ? ["creatures"]
+                    : normalized.includes("item")
+                      ? ["items"]
+                      : normalized.endsWith("id") || normalized.endsWith("ids")
+                        ? Object.keys(mapping)
+                        : [];
   const matches = preferred.flatMap((resource) =>
     mapping[resource]?.[value] ? [mapping[resource][value]] : [],
   );

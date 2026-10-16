@@ -60,7 +60,23 @@ The user accepted responsive mobile layouts derived from the desktop designs, su
 using the supplied page/form patterns, and account-name/password sign-in. Mobile navigation uses
 a compact row with progressive disclosure rather than stacked persistent controls.
 
-The Codex introduces World-owned **Characters as NPC templates**, distinct from Campaign Instance
+**Accepted World navigation simplification (2026-10-15):** The secondary navigation is
+Atlas, Bestiary, Characters, Codex, Items, Overview, Rules, ordered alphabetically.
+Codex has hierarchical left-nav children Backgrounds, Conditions, Effects, Professions
+and Skills, also alphabetical, replacing
+category tabs. Atlas contains all World locations; Rules consolidates the former Rule
+system and World rules destinations. There is no Authoring libraries section.
+Bestiary is the sole Creature listing/creation/editing destination; Characters owns
+authored NPC templates. Old entry links remain compatible. Human remains a Creature
+base, named humanoids are Characters, and Ionic Wight remains in Bestiary by decision.
+
+Profession Rank, Equipment Slot, Attribute and Schema Structure definitions are outside
+World editing scope and retained read-only. This does not freeze Character/Creature
+attribute scores or equipment assignments. Separate Profession Rank authoring is removed;
+folding its data into Profession definitions is a future model change, not an implicit
+migration or deletion in this navigation task.
+
+The Characters destination owns World-owned **Characters as NPC templates**, distinct from Campaign Instance
 playable Characters and their histories. Each NPC template references a Creature Definition in
 the same World and owns its editable authoring statistics. This does not move playable Character
 ownership into the World or bypass versioned campaign capture.

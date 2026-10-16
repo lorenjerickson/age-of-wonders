@@ -8,6 +8,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/common/package.json packages/common/package.json
+COPY packages/domain/package.json packages/domain/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
@@ -30,6 +31,7 @@ COPY --from=build /workspace/package.json /workspace/pnpm-workspace.yaml ./
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/apps/api ./apps/api
 COPY --from=build /workspace/packages/common ./packages/common
+COPY --from=build /workspace/packages/domain ./packages/domain
 COPY --from=build /workspace/prompts ./prompts
 EXPOSE 3000
 CMD ["sh", "-c", "pnpm --filter @aow/api db:deploy && pnpm --filter @aow/api start"]

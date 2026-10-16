@@ -301,6 +301,42 @@ describe("WorldDefinitionAuthoringService", () => {
     },
   );
 
+  it("rejects World model adoption changes without writing or changing retained definitions", async () => {
+    const updateMany = jest.fn();
+    const prisma = {
+      worldDefinition: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            id: "world-1",
+            status: "ACTIVE",
+            metadataRevision: 1,
+            draft,
+          }),
+      },
+      worldDefinitionDraft: { updateMany },
+    };
+    await expect(
+      serviceWith(prisma).save(
+        "world-1",
+        {
+          expectedStorageRevision: 3,
+          revisionName: draft.revisionName,
+          content: {
+            ...draft.content,
+            modelSchemaReleaseIds: ["replacement-release"],
+          },
+          records: draft.snapshotRecords,
+        },
+        "gm-1",
+      ),
+    ).rejects.toThrow("World model definitions are read only");
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(draft.content.modelSchemaReleaseIds).toEqual([
+      "aow:model-schema-release:core:1",
+    ]);
+  });
+
   it("rejects a generic change to the protected World root", async () => {
     const updateMany = jest.fn();
     const prisma = {
@@ -2968,13 +3004,11 @@ describe("Location section persistence", () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const service = serviceWith({
       worldDefinition: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({
-            id: "world-1",
-            status: "ACTIVE",
-            draft: legacyDraft,
-          }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: "world-1",
+          status: "ACTIVE",
+          draft: legacyDraft,
+        }),
       },
       worldDefinitionDraft: { updateMany },
     });

@@ -27,6 +27,7 @@ const codes = (entity) =>
 test("Placement round trips explicit persisted variants and isolates private fields", () => {
   for (const [data, scope] of [
     [world(), "world"],
+    [{ ...world(), source: { kind: "world-character", characterTemplateId: "npc" } }, "world"],
     [campaign(), "campaign"],
     [
       {

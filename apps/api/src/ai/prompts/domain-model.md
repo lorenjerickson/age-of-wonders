@@ -516,7 +516,7 @@ common maximum-three Heritage selection contract.
 
 ### Executable Background authoring
 
-`BackgroundDefinition` owns existing authored modifier-grant checks, compatibility granted-Condition
+`BackgroundDefinition` owns existing authored modifier-grant checks, granted Condition and Effect
 references and exact Model release/concept conformance (`aow:background`). It provides immutable
 observable state, raw payload codecs, a `background-definition` round-trip envelope and a typed
 `rename` command/event. Missing Model/reference context is unresolved; local grant feedback alone
@@ -524,17 +524,29 @@ is not publication readiness. Canonical/Codex/draft-save/Model adapters read cla
 short-lived instances. The browser Background editor uses its class for grant validation and explicit
 grant edits; component construction preserves all prior values, including malformed legacy input.
 
-Common `BackgroundComponents` fields and the `definitions` resource remain unchanged. Granted
-Conditions retain their existing compatibility-field treatment rather than becoming a newly declared
-common field. The class preserves optional attributes, skills/tools, language choices, equipment,
+`BackgroundComponents` and `ProfessionComponents` declare optional
+`grantedConditions: WorldGrantedCondition[]` (`{conditionId}`) and
+`grantedEffects: WorldGrantedEffect[]` (`{effectId}`). These associations resolve only
+against the same World capture (`world-conditions` and `world-effects`), reject duplicate
+or missing targets, and prevent deleting referenced recipes. World forks rewrite the IDs
+by resource namespace. Omitted lists remain absent; an explicit empty list clears them.
+The `definitions` resource mapping is unchanged. The class preserves optional attributes, skills/tools, language choices, equipment,
 feat/features, characteristics and choices; supplied known field and nested Choice shapes are recursively validated.
 Selected Background and explicit starting Profession/Skill modifier grants are acquired on Character
 activation through `GrantedModifier`; broader runtime selection remains separate work. Generate raw common JSON,
 not entity envelopes, and retain extension/private data.
 
+Profession and Background authoring use the existing human-readable description plus optional
+modifiers, Conditions and Effects. Modifier recipes remain at
+`BackgroundComponents.modifierGrants` or
+`ProfessionComponents.expertiseLevels[].benefits.modifierGrants`; do not flatten tier benefits.
+Condition and Effect associations are authored references only: they do not automatically
+execute, acquire active effects, or alter runtime Character statistics. Existing explicit
+modifier acquisition remains unchanged.
+
 ### Executable Profession authoring
 
-`ProfessionDefinition` owns existing authored Profession tier/grant validation, granted Condition
+`ProfessionDefinition` owns existing authored Profession tier/grant validation, granted Condition and Effect
 references, exact Model release/concept conformance and Profession Rank selections. It composes
 Modifier validation, exposes validity through state and supports observable `state$`, raw payload
 serialization, a `profession-definition` round-trip envelope, and a typed `rename` command/event.
@@ -800,10 +812,11 @@ stable `worldPlacementDefinitionIds`, legacy schema selections, and required
 `modelSchemaReleaseIds` for one World revision. World Placement records use the exact snapshot
 resource name `world-placements`. Those IDs
 select exact immutable Model Schema Releases; a World never resolves a mutable registry head or
-embeds editable registry records. Model vocabulary elements and Schema Concepts/Fields/Relationships
-have dedicated list/Add/Edit contexts in the existing Models & taxonomies destination. Revisions
-publish immutable releases before exact adoption; failed adoption can retry the same published
-release. Archive remains an explicit registry lifecycle operation.
+embeds editable registry records. Attributes, Equipment Slots, Profession Ranks and Schema Structure are read-only
+references in World editing. Existing World draft saves preserve their exact adopted Model
+release IDs; they cannot publish, adopt, revise or archive these definitions. Independent
+Model Registry lifecycle APIs remain available outside World editing. Initial World creation
+and fork capture retain their existing exact-release initialization.
 `CampaignDefinitionRevision` owns one complete
 `CampaignDefinitionContent` payload—including its format version, authored premise, introduction,
 Plot and placement references, preparation defaults, extensions, and exact Campaign-scoped
@@ -1006,12 +1019,10 @@ the lineage is marked archived and omitted from a direct successor. A dependency
 is valid when its last local element is archived because its exact dependency closure remains
 explicit.
 
-The GM-facing World editor exposes these same contracts through progressively disclosed schema
-controls. It can author nested Concepts; Fields with owners, storage keys, typed values, literal
-defaults, list uniqueness, and cardinality; and Relationships with source/target Concepts,
-cardinality, inverse labels, and reference policy. It preserves supported payload and presentation
-properties that the focused form does not change, publishes a direct successor, and adopts that
-exact release into the World draft. It never mutates system or plugin registries.
+The World editor preserves adopted Concepts, Fields, Relationships and vocabulary definitions
+as read-only reference data. Character and Creature attribute values, equipment assignments and
+Profession Definitions remain editable through their existing authoring workflows; this restriction
+does not redesign Profession Rank data or freeze independent Model Registry authoring.
 
 Field payloads use a safe typed AST rather than executable JavaScript. Atomic values are string,
 integer, number, boolean, bounded JSON, vocabulary-option references, Definition references,
@@ -1071,8 +1082,7 @@ All Model Registry HTTP endpoints require an authenticated GM:
   immutable release history. Neither query grants edit rights to a global or another GM's registry.
 - `POST /model-registries` creates a GM-owned registry from a namespaced key, name, and optional
   description. The authenticated GM becomes the provenance owner.
-- `POST /model-registries/:id/releases` is the bounded release-publication workflow used by
-  contextual World editors. It creates elements, publishes revisions (including presentation
+- `POST /model-registries/:id/releases` is the independent registry release-publication workflow. It creates elements, publishes revisions (including presentation
   reorganization), archives lineages by omission, carries forward unchanged exact selections,
   locks the installed core release dependency, and validates the complete effective closure. Every
   non-initial successor also validates and persists its direct-lineage, all-or-nothing
@@ -3812,6 +3822,15 @@ in the same draft; numeric `attributes` and `skills`; `health` (`current`, `maxi
 entries `{slot,itemDefinitionId}`; `grantedConditions` entries `{conditionId}`; and optional
 portrait/overheadToken/paperDollToken `images` using the existing Creature image contract.
 Do not generate campaign-instance ownership fields on these templates.
+World placements may reference an authored NPC using
+`{kind:"world-character",characterTemplateId:"<WorldCharacterTemplate id>"}`.
+The reference resolves in `world-character-templates`, not `definitions`, and follows
+World forks. This preserves authored placement identity, position and notes. Direct
+Campaign independent NPC placement remains unsupported. Captured NPCs realize using
+their own identity and optional `instanceEmbodimentPolicy` (default one per Instance),
+never their shared Creature base identity. NPC overrides are captured in runtime
+`extensions["aow:rules"]`; positive health also initializes combat health. Runtime
+`sourceCreatureId` and `definitionId` may identify the captured NPC resource.
 
 `WorldEffectDefinition` is an authored reusable numeric modifier recipe, not an `ActiveEffect` or
 an executable WorldRule. It contains `modifiers` with unique `id`, `propertyPath`, operation
@@ -3848,7 +3867,24 @@ Example Condition effect link: `{"effectId":"<same-world-effect>","modifierOverr
 World Location types no longer expose related-Location links. Do not generate adjacency or
 travel-connection content; containment is the sole authored Location relationship. Location `grantedConditions` remain part of the authored contract. Creature and Item components optionally carry the same Condition grants.
 Creature components additionally support numeric `skills`, `health`, day/night `vision`, and
-`equipmentPool` (same-World Item Definition IDs). Item components support `weight`, `cost`, and
+`equipmentPool` (same-World Item Definition IDs), plus optional explicit `equipment`
+using `WorldEquipmentAssignment[]` (`{slot,itemDefinitionId}`). Creature create/update
+requests accept the same optional field; omission preserves assignments and `[]` clears
+only assignments. The pool remains availability data and never implies equipped Items.
+NPC top-level `equipment` uses the same contract. A multi-slot Item repeats its ID once
+per occupied slot and must match one complete `components.equippable.compatibleSlotSets`
+alternative. Slots must belong to the Creature base, be unoccupied, and resolve known
+core bare aliases against `aow:equipment-slot-<name>` without rewriting saved links.
+Waist is the sole canonical waist equipment slot. Exact historical `belt` and
+`aow:equipment-slot-belt` aliases resolve to `waist` and `aow:equipment-slot-waist`
+respectively, including compatibility and occupancy checks. Immutable core v1 release
+data retains its historical Belt entry and hash; effective projections prefer the Waist
+entry. This does not rename `slottedContainer.kind: "belt"`, which remains a storage category.
+Explicit `carried` entries remain supported but cannot coexist with worn slots for the
+same Item. Unchanged legacy assignments remain readable/editable during unrelated saves;
+references must still resolve. These are authored templates: existing sparse runtime
+realization does not automatically create physical Items from either template equipment
+or pools. Item components support `weight`, `cost`, and
 private authoring `notes`; `weight` uses the existing Weight contract and cost uses CurrencyAmount
 entries. A **World** Item's artwork may be omitted until attached; the generic runtime
 `ItemDefinition.image` contract remains required. Omitted fields preserve existing authored data.
@@ -3870,7 +3906,6 @@ B08 equipment uses exact captured Model revisions for labels and the Creature
 Definition `components.equipmentSlots` (including an explicit empty list) for
 availability. The open slot vocabulary supports authored Wrists; immutable core
 release v1 is preserved and is not automatically extended/readopted.
-
 
 ### B10 runtime ownership and operational projections
 
@@ -3915,7 +3950,6 @@ lights, sounds, drawings, templates and notes. Deprecated inline intent arrays a
 preserved, not used for new authoring. Canvas configuration is reusable preparation;
 these controls do not add a rendering or synchronized playback engine. B07 changes
 ownership and consumers without changing common payload schemas or resource mappings.
-
 
 ## B12 consumer and compatibility closure
 

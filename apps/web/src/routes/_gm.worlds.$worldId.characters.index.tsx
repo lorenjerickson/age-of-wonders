@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CharactersPage } from "../WorldAuthoringPages";
+import { AstraCodex } from "../AstraCodex";
 
 export const Route = createFileRoute("/_gm/worlds/$worldId/characters/")({
-  component: CharactersPage,
+  component: () => <AstraCodex collection="characters" />,
 });

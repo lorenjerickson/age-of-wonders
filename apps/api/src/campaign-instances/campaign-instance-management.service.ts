@@ -1652,7 +1652,10 @@ export function capturedCreaturePolicyProblems(
   }
   return snapshot.worldDefinitionSnapshot.manifest.records.flatMap((record) => {
     const payload = objectValue(record.payload);
-    if (record.resourceType !== "definitions" || payload.kind !== "creature")
+    if (
+      record.resourceType !== "world-character-templates" &&
+      (record.resourceType !== "definitions" || payload.kind !== "creature")
+    )
       return [];
     const resolved = resolveCreatureInstanceEmbodimentPolicy(
       payload.instanceEmbodimentPolicy,
@@ -1895,7 +1898,10 @@ export function runtimeCaptureContext(
   const capturedCreaturePolicies = new Map();
   for (const record of worldManifest.records) {
     const payload = objectValue(record.payload);
-    if (record.resourceType !== "definitions" || payload.kind !== "creature")
+    if (
+      record.resourceType !== "world-character-templates" &&
+      (record.resourceType !== "definitions" || payload.kind !== "creature")
+    )
       continue;
     const policy = resolveCreatureInstanceEmbodimentPolicy(
       payload.instanceEmbodimentPolicy,

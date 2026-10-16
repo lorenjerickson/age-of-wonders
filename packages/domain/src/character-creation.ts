@@ -1,3 +1,4 @@
+import { canonicalEquipmentSlotKey } from "@aow/common";
 import { copyEntityData } from "./entity";
 
 export type CharacterCreationOption = {
@@ -143,21 +144,28 @@ export class CharacterCreation {
     assignments: Readonly<Record<string, readonly string[]>>,
     slots: readonly { id: string; name: string }[],
   ): readonly (readonly string[])[] {
-    return (item.compatibleSlotSets ?? []).filter((set) => {
-      const candidate = { ...assignments, [item.id]: set };
-      const occupied = Object.entries(candidate)
-        .filter(([id]) => id !== item.id)
-        .flatMap(([, values]) => values);
-      return (
-        set.length > 0 &&
-        new Set(set).size === set.length &&
-        set.every(
-          (slot) =>
-            slots.some((option) => option.id === slot) &&
-            !occupied.includes(slot),
-        )
-      );
-    });
+    return (item.compatibleSlotSets ?? [])
+      .map((set) =>
+        new Set(set).size === set.length
+          ? [...new Set(set.map(canonicalEquipmentSlotKey))]
+          : set.map(canonicalEquipmentSlotKey),
+      )
+      .filter((set) => {
+        const candidate = { ...assignments, [item.id]: set };
+        const occupied = Object.entries(candidate)
+          .filter(([id]) => id !== item.id)
+          .flatMap(([, values]) => values.map(canonicalEquipmentSlotKey));
+        return (
+          set.length > 0 &&
+          new Set(set).size === set.length &&
+          set.every(
+            (slot) =>
+              slots.some(
+                (option) => canonicalEquipmentSlotKey(option.id) === slot,
+              ) && !occupied.includes(slot),
+          )
+        );
+      });
   }
 
   static editable(status: string): boolean {
@@ -444,7 +452,12 @@ function characterEquipmentIssue(
 ): string | undefined {
   if (!isObject(assignments)) return "Equipment assignments must be an object.";
   const occupied = new Set<string>();
-  for (const [id, assigned] of Object.entries(assignments)) {
+  for (const [id, rawAssigned] of Object.entries(assignments)) {
+    const assigned = Array.isArray(rawAssigned)
+      ? rawAssigned.map((slot) =>
+          typeof slot === "string" ? canonicalEquipmentSlotKey(slot) : slot,
+        )
+      : rawAssigned;
     const item = items.find((item) => item.id === id);
     if (
       !selected.includes(id) ||
@@ -458,13 +471,14 @@ function characterEquipmentIssue(
       new Set(assigned).size !== assigned.length ||
       !item.compatibleSlotSets?.some(
         (set) =>
-          set.length === assigned.length &&
-          set.every((s) => assigned.includes(s)),
+          new Set(set.map(canonicalEquipmentSlotKey)).size ===
+            assigned.length &&
+          set.every((s) => assigned.includes(canonicalEquipmentSlotKey(s))),
       )
     )
       return "This Item does not fit the selected equipment slots.";
     for (const slot of assigned) {
-      if (!slots.some((s) => s.id === slot))
+      if (!slots.some((s) => canonicalEquipmentSlotKey(s.id) === slot))
         return "An equipment slot is unavailable in this capture.";
       if (occupied.has(slot))
         return "Two Items cannot occupy the same equipment slot.";

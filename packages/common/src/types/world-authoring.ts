@@ -109,6 +109,8 @@ export interface WorldCreatureDefinitionComponents {
   };
   readonly vision?: { readonly day: number; readonly night: number };
   readonly equipmentPool?: readonly string[];
+  /** Explicit worn/carried assignments; omission preserves existing authoring. */
+  readonly equipment?: readonly import("./world-codex").WorldEquipmentAssignment[];
   readonly grantedConditions?: readonly import("./world-codex").WorldGrantedCondition[];
   readonly attributes: Readonly<Record<NamespacedKey, number>>;
   readonly equipmentSlots: readonly EquipmentSlot[];
@@ -186,6 +188,8 @@ export interface CreateWorldCreatureDraftRequest extends WorldDraftMutationReque
   };
   readonly vision?: { readonly day: number; readonly night: number };
   readonly equipmentPool?: readonly string[];
+  /** Explicit worn/carried assignments; omission preserves existing authoring. */
+  readonly equipment?: readonly import("./world-codex").WorldEquipmentAssignment[];
   readonly grantedConditions?: readonly import("./world-codex").WorldGrantedCondition[];
   readonly attributes: Readonly<Record<NamespacedKey, number>>;
   readonly equipmentSlots: readonly EquipmentSlot[];

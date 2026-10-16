@@ -6,7 +6,41 @@ export function astraWorldCompatibilityHref(
 ): string | undefined {
   const parts = pathname.split("/").filter(Boolean);
   const suffix = parts.slice(2);
-  if (!suffix.length) return undefined;
+  if (!suffix.length) {
+    const query = new URLSearchParams(search);
+    if (query.get("view") === "codex" && !query.get("kind")) {
+      query.delete("view");
+      return `/worlds/${encodeURIComponent(worldId)}/characters/backgrounds${query.size ? `?${query}` : ""}`;
+    }
+    if (
+      ["rules", "system"].includes(query.get("view") ?? "") ||
+      (query.get("view") === "codex" && query.get("kind") === "rules")
+    ) {
+      const entry = query.get("entry");
+      query.delete("view");
+      query.delete("kind");
+      query.delete("entry");
+      const path = entry
+        ? entry === "new"
+          ? "/new"
+          : `/${encodeURIComponent(entry)}/edit`
+        : "";
+      return `/worlds/${encodeURIComponent(worldId)}/rules${path}${query.size ? `?${query}` : ""}`;
+    }
+
+    if (
+      query.get("view") === "codex" &&
+      ["creatures", "characters", "items"].includes(query.get("kind") ?? "")
+    ) {
+      query.set(
+        "view",
+        query.get("kind") === "creatures" ? "bestiary" : query.get("kind")!,
+      );
+      query.delete("kind");
+      return `/worlds/${encodeURIComponent(worldId)}?${query}`;
+    }
+    return undefined;
+  }
   // These are active authoring routes, including their dedicated child editors.
   // Only obsolete aliases may be translated to the query-based workspace.
   if (

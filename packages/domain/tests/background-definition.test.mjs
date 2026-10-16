@@ -203,3 +203,46 @@ test("Background authoring helpers preserve sparse data and detach unchanged ben
   assert.equal(existing.choices[0].name, "Choose");
   assert.equal(grants[0].label, "Bonus");
 });
+
+test("Background Effect associations preserve authored data and validate captured membership", () => {
+  const input = {
+    ...payload(),
+    components: {
+      ...payload().components,
+      grantedEffects: [{ effectId: "blessing", privateNote: "retained" }],
+    },
+  };
+  const records = [
+    {
+      resourceType: "world-effects",
+      sourceId: "blessing",
+      payload: { id: "blessing" },
+    },
+  ];
+  const entity = BackgroundDefinition.deserializePayload(input, {
+    records,
+    model,
+  });
+  assert.equal(
+    codes(entity).some((code) => code.includes("granted-effects")),
+    false,
+  );
+  assert.deepEqual(entity.serializePayload(), input);
+  entity.dispose();
+  for (const grantedEffects of [
+    null,
+    "blessing",
+    [{ effectId: "missing" }],
+    [{ effectId: "blessing" }, { effectId: "blessing" }],
+  ]) {
+    const invalid = BackgroundDefinition.deserializePayload(
+      { ...input, components: { ...input.components, grantedEffects } },
+      { records, model },
+    );
+    assert(codes(invalid).includes("background-codex-granted-effects"));
+    invalid.dispose();
+  }
+  const unresolved = BackgroundDefinition.deserializePayload(input, { model });
+  assert(codes(unresolved).includes("background-references-unresolved"));
+  unresolved.dispose();
+});

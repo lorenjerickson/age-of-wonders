@@ -14,6 +14,7 @@ import type { ModelConformance } from "./model-registry";
 
 /** Reusable World content that can be placed at a captured Location. */
 export type WorldPlaceableSource =
+  | { readonly kind: "world-character"; readonly characterTemplateId: string }
   | { readonly kind: "world-creature"; readonly creatureId: CreatureId }
   | { readonly kind: "world-item"; readonly itemDefinitionId: DefinitionId }
   | {
@@ -43,7 +44,7 @@ export interface WorldPlacementDefinition<
 }
 
 export type CampaignIndependentPlacementSource =
-  | WorldPlaceableSource
+  | Exclude<WorldPlaceableSource, { readonly kind: "world-character" }>
   | {
       readonly kind: "actor-role";
       readonly role: string;

@@ -1,3 +1,4 @@
+import { canonicalEquipmentSlotKey } from "@aow/common";
 import { worldAccessWhere } from "../world-definitions/world-access";
 import {
   BadRequestException,
@@ -718,10 +719,41 @@ export class ModelRegistryService {
       world.ownerUserId ?? userId,
       worldDefinitionId,
     );
-    const elements = resolved.elements.map((element) => ({
+    const capturedElements = resolved.elements.map((element) => ({
       ...elementResponseFromCommon(element.lineage, element.revision),
       sourceReleaseId: element.sourceReleaseId,
     }));
+    // Read projection only: immutable captured releases retain their original hashes.
+    const waist = capturedElements.find(
+      (element) =>
+        element.semanticRole === "aow:equipment-slot" &&
+        element.key === "aow:equipment-slot-waist",
+    );
+    const elements = capturedElements
+      .filter(
+        (element) =>
+          !(
+            waist &&
+            element.semanticRole === "aow:equipment-slot" &&
+            element.key === "aow:equipment-slot-belt"
+          ),
+      )
+      .map((element) =>
+        element.semanticRole === "aow:equipment-slot" &&
+        canonicalEquipmentSlotKey(element.key) !== element.key
+          ? {
+              ...element,
+              key: canonicalEquipmentSlotKey(element.key),
+              currentRevision: {
+                ...element.currentRevision,
+                presentation: {
+                  ...element.currentRevision.presentation,
+                  label: "Waist",
+                },
+              },
+            }
+          : element,
+      );
     return {
       releases: resolved.roots.map((root) => ({
         id: root.compiled.releaseId,

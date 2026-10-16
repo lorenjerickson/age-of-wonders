@@ -1,69 +1,66 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { WorldModelFacets } from "./WorldModelFacets";
-
-const location = vi.hoisted(() => ({
-  pathname: "/worlds/example/characters/models",
-  searchStr: "",
-}));
-vi.mock("@tanstack/react-router", () => ({ useLocation: () => location }));
+import { WorldModelEditor } from "./WorldModelEditor";
+import { WorldModelStructureEditor } from "./WorldModelStructureEditor";
 vi.mock("./WorldAuthoringShell", () => ({
-  useWorldAuthoring: () => ({ definition: { id: "example" } }),
+  useWorldAuthoring: () => ({
+    draft: {
+      effectiveModels: {
+        attributes: [
+          {
+            key: "strength",
+            name: "Strength",
+            payload: {
+              valueMetadata: {
+                "aow:minimum": 0,
+                "aow:maximum": 100,
+                "aow:default": 50,
+              },
+            },
+          },
+        ],
+        equipmentSlots: [{ key: "head", name: "Head" }],
+        professionRanks: [{ key: "expert", name: "Expert" }],
+        elements: [{ key: "actor", name: "Actor", kind: "concept" }],
+      },
+    },
+  }),
 }));
-vi.mock("./navigation", () => ({
-  InternalLink: ({ children, ...props }: React.ComponentProps<"a">) => (
-    <a {...props}>{children}</a>
-  ),
-}));
-
-describe("World Model facets", () => {
-  it("makes every model facet reachable from the overview", () => {
-    location.pathname = "/worlds/example/characters/models";
+describe("World Model reference pages", () => {
+  it("retains content without authoring navigation", () => {
     const html = renderToStaticMarkup(
       <WorldModelFacets>
-        <p>Model overview</p>
+        <p>Retained definitions</p>
       </WorldModelFacets>,
     );
-    expect(html).toContain('role="tablist"');
-    expect(html.match(/role="tab"/g)).toHaveLength(5);
-    for (const kind of [
-      "structure",
-      "attributes",
-      "equipment-slots",
-      "profession-ranks",
-    ]) {
-      expect(html).toContain(
-        `href="/worlds/example/characters/model/${kind}/effective"`,
-      );
-    }
-    expect(html).toContain('aria-labelledby="world-models-tab-overview"');
-    expect(html).toContain("Model overview");
-  });
-
-  it("selects the facet for a direct editor route", () => {
-    location.pathname =
-      "/worlds/example/characters/model/equipment-slots/effective";
-    const html = renderToStaticMarkup(
-      <WorldModelFacets>
-        <p>Equipment editor</p>
-      </WorldModelFacets>,
-    );
-    expect(html).toContain(
-      'aria-labelledby="world-models-tab-equipment-slots"',
-    );
-    expect(html).toMatch(
-      /id="world-models-tab-equipment-slots"[^>]*aria-selected="true"/,
-    );
-    expect(html).toContain('href="/worlds/example/characters/models"');
-  });
-  it("reserves focused editor space for the task", () => {
-    location.pathname = "/worlds/example/characters/model/structure/new";
-    const html = renderToStaticMarkup(
-      <WorldModelFacets>
-        <p>Add Concept</p>
-      </WorldModelFacets>,
-    );
-    expect(html).toContain("Add Concept");
+    expect(html).toContain("Retained definitions");
     expect(html).not.toContain('role="tablist"');
+  });
+  it.each(["effective", "new", "existing"])(
+    "renders old %s URLs read only with adopted data",
+    (context) => {
+      const html = renderToStaticMarkup(
+        <WorldModelEditor kind="attributes" context={context} />,
+      );
+      expect(html).toContain("Strength");
+      expect(html).toContain("Minimum");
+      expect(html).toContain("50");
+      expect(html).toContain("read only");
+      expect(html).not.toMatch(/<form|<input|<button|Publish|Archive/);
+    },
+  );
+  it("keeps slots, ranks and schema names readable", () => {
+    expect(
+      renderToStaticMarkup(<WorldModelEditor kind="equipment-slots" />),
+    ).toContain("Head");
+    expect(
+      renderToStaticMarkup(<WorldModelEditor kind="profession-ranks" />),
+    ).toContain("Expert");
+    const html = renderToStaticMarkup(
+      <WorldModelStructureEditor context="new" />,
+    );
+    expect(html).toContain("Actor");
+    expect(html).not.toMatch(/<form|<input|<button/);
   });
 });

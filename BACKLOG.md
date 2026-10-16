@@ -1,12 +1,82 @@
 # Project backlog
 
-Updated 2026-10-14. This is the consolidated **known outstanding work from this
+Updated 2026-10-15. This is the consolidated **known outstanding work from this
 conversation and its active supporting inventories**, checked against current source.
 It replaces the previous practice of showing only the next slice. Existing completed
 records are retained below the horizontal rule; their historical “remaining” notes
 are superseded by this open-work register.
 
 ## Current status and next step
+
+**Waist consolidation and equipment totals complete.** Belt is a legacy alias of Waist;
+effective options and paperdoll show one slot. Three Turn of the Century draft records
+were backed up/migrated atomically (revision176→177), with no conflicts and an idempotent
+read-back. Belt containers and immutable Model releases are preserved. The equipment
+panel shows net Attack, Defense, Damage and Resistance contributions, counts multi-slot
+Items once, excludes carried Items, separates weapon alternatives and flags conditional
+or variable bonuses. 68 domain,13 API and13 web tests plus common/domain builds, API/web
+typechecks and1440px/390px browser smoke pass. Live Cedric has one Waist slot and Defense
+1d8 +3d4 +2d2 at both widths. See [verification](docs/verification/waist-and-equipment-bonuses.md).
+No further scope selected.
+
+**World equipment paperdoll complete.** Creature/Character World editors share anatomical
+slot icons, compatible named Item picker, icon-only equipped slots, and hover/focus/touch
+Item details with bonuses. Explicit Creature assignments persist; existing equipment,
+carried entries and pool data remain preserved. Known core slot aliases resolve safely;
+complete multi-slot assignments and occupied slots are validated. Common/domain builds,
+API/web typechecks, 24 domain/30 API/7 web tests and scoped 1440px/390px browser smoke pass.
+Live existing Character and Creature UI verified without data writes. See
+[verification](docs/verification/equipment-paperdoll.md). Runtime equipment materialization
+and Player creation inventory screens remain unchanged; no further scope selected.
+
+**Structured Profession and Background benefits complete.** Both active editors expose
+Description and optional named Condition/Effect grants alongside existing modifier authoring.
+Lists show descriptions and benefit summaries. Typed associations validate same-World
+references; deletion and fork behavior retain their protections. Existing data and unknown
+metadata are preserved. 67 scoped web, 45 API and 21 domain tests pass, as do common/domain
+builds and API/web typechecks. Desktop/mobile UI verified; actual form save/reopen
+passed for both kinds at 1440px/390px using intercepted HTTP persistence fixtures. See
+[verification](docs/verification/profession-background-benefits.md). Runtime execution and
+Profession Rank redesign remain outside this authoring change. No further scope selected.
+
+**World navigation simplification complete.** Main navigation is alphabetical: Atlas,
+Bestiary, Characters, Codex, Items, Overview, Rules. Codex children are Backgrounds,
+Conditions, Effects, Professions and Skills. Authoring libraries and Codex category
+tabs are removed; legacy links retain context. Atlas covers all Locations, Rules
+consolidates existing rules/settings, and Items is independent. Profession Rank,
+Equipment Slot, Attribute and Schema Structure definitions are read-only in World
+scope; actor values remain editable. See [verification](docs/verification/world-navigation-readonly.md).
+248 scoped navigation tests, 61 count follow-up tests, 98 API tests, 5 read-only UI
+tests, API/web typechecks and targeted lint passed. Live desktop/mobile navigation,
+old creation-link read-only behavior and data preservation verified. No further scope
+selected; existing save-performance follow-up remains deferred below.
+
+**Bestiary / Characters consolidation complete.** Bestiary and Characters are peer World
+navigation destinations alongside Codex, with one shared Creature authoring flow and
+legacy links retaining entry context. Four remaining human people moved to Characters;
+Ionic Wight stays in Bestiary per user decision. The World now contains ten Characters
+and seven canonical Creature templates; original payloads, artwork, equipment and
+placements are preserved. See [verification](docs/verification/bestiary-character-consolidation.md).
+117 focused web tests, typecheck and targeted lint pass. Live create/save/reopen passes;
+slow save performance is retained below as a separate follow-up. No further migration selected.
+
+**Container Domain import regression fixed.** Reproduced Vite HTTP 500 for
+`locationWorkspaceModel.ts`. Domain now participates in Docker manifest installation,
+ordered builds/watch, isolated dependencies/output and API production copying. Both
+app containers were rebuilt/recreated; the exact failing module and Character UI module
+return 200, API/database health passes, and the authenticated browser loads without
+console errors. See [verification](docs/verification/domain-container-resolution.md).
+No data changes; next step is normal authoring. Production runtime was not exercised.
+
+**Named Creature → Character migration complete.** The six current authored people in
+Turn of the Century now use Character records backed by a new Human Creature;
+Sewer Lamprey remains unchanged. Existing artwork, stats, private fields and eighteen
+associated equipment links were preserved. The Count’s placement now supports Character
+sources, including distinct runtime realization for Characters sharing Human. The live
+World draft was backed up, updated atomically, read back and checked for idempotence;
+published captures and legacy actor records remain unchanged. See
+[verification](docs/verification/creature-character-migration.md). Next: user edits the
+chosen defaults; no further content migration is selected.
 
 **B12 complete — remaining consumers, navigation and migration closure.**
 DM-16/17 and UX-09–11 are closed for existing migrated behavior. Remaining aggregate
@@ -257,6 +327,16 @@ are not added as obligations of this conversation.
 | --- | --- | --- | --- |
 | LOC-01 Complete in B09 — authored weather | Open condition, optional temperatureCelsius, wind speedKph and optional directionDegrees. Authored defaults and Instance runtime overrides implemented in B09/B10. | Authored Location owner, commands/codecs, API and responsive editors/read-only summary verified. Source: accepted Location ledger. | B09 |
 | LOC-02 Complete in B09 — authored audiovisual | Named asset-backed audio/visual effects, enabled/loop and audio volume or visual opacity in 0–1; preserve current spatial-audio consumers. | Authored World configuration and scoped media UI verified; manual GM playback is implemented in B10; automatic/cross-participant dispatch is not introduced. Distinct from mechanical Conditions/Effects. | B09 |
+
+## Deferred authoring save performance
+
+- During live Bestiary consolidation verification (2026-10-15), creating one minimal
+  Creature in Turn of the Century took several minutes before HTTP 201 and successful
+  persistence. No save failure or data loss occurred. Snapshot validation iterates all
+  records and entity contexts clone them; terrain accounts for ~7 MB of the ~8 MB capture.
+  This is a hypothesis, not an established root cause: a late CPU profile caught idle time.
+  Next: measure the complete save path under this fixture, then narrowly optimize the
+  demonstrated bottleneck while retaining reference validation. Avoid duplicate submissions.
 
 ## Deferred user-requested feature changes
 

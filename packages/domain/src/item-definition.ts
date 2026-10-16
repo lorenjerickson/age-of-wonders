@@ -1,3 +1,4 @@
+import { canonicalEquipmentSlotKey } from "@aow/common";
 import {
   WORLD_CODEX_RESOURCES,
   type ModelConformance,
@@ -766,7 +767,12 @@ export class ItemDefinition extends RuleDefinitionEntity<
       slots.some(
         (key) =>
           typeof key !== "string" ||
-          byKey.get(key)?.semanticRole !== "aow:equipment-slot",
+          !model.elements.some(
+            (element) =>
+              element.semanticRole === "aow:equipment-slot" &&
+              canonicalEquipmentSlotKey(element.key) ===
+                canonicalEquipmentSlotKey(key),
+          ),
       )
     )
       return issue(

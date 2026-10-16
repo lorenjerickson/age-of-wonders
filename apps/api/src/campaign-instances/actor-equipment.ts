@@ -1,3 +1,4 @@
+import { canonicalEquipmentSlotKey } from "@aow/common";
 import {
   BadRequestException,
   ConflictException,
@@ -107,17 +108,21 @@ async function capturedEquipmentSlots(
     throw new ConflictException(
       "A captured equipment Model revision is unavailable.",
     );
-  return elements
+  const projected = elements
     .filter(
       (revision) => revision.element.semanticRole === "aow:equipment-slot",
     )
     .map((revision) => ({
-      id: revision.element.key,
-      name: label(obj(revision.presentation).label, "Equipment slot", [
-        revision.id,
-        revision.element.key,
-      ]),
+      id: canonicalEquipmentSlotKey(revision.element.key),
+      name:
+        canonicalEquipmentSlotKey(revision.element.key) !== revision.element.key
+          ? "Waist"
+          : label(obj(revision.presentation).label, "Equipment slot", [
+              revision.id,
+              revision.element.key,
+            ]),
     }));
+  return [...new Map(projected.map((slot) => [slot.id, slot])).values()];
 }
 async function load(
   prisma: PrismaService,
@@ -180,7 +185,9 @@ async function load(
   const creature = obj(actor.creature),
     source = records.find(
       (r) =>
-        r.resourceType === "definitions" &&
+        ["definitions", "world-character-templates"].includes(
+          String(r.resourceType),
+        ) &&
         (r.sourceId === creature.definitionId ||
           r.sourceId === obj(actor.source).sourceCreatureId),
     ),
@@ -211,7 +218,20 @@ async function load(
       (slot) => !capturedSlots.some((captured) => captured.id === slot.id),
     ),
   ];
-  const components = obj(sourcePayload.components);
+  const base =
+    source?.resourceType === "world-character-templates"
+      ? obj(
+          records.find(
+            (r) =>
+              r.resourceType === "definitions" &&
+              r.sourceId === sourcePayload.creatureDefinitionId,
+          )?.payload,
+        )
+      : {};
+  const components = {
+    ...obj(base.components),
+    ...obj(sourcePayload.components),
+  };
   if (
     Object.hasOwn(components, "equipmentSlots") &&
     (!Array.isArray(components.equipmentSlots) ||
@@ -228,14 +248,39 @@ async function load(
         ? (obj(sourcePayload.modelValues)["aow:equipment-slots"] as unknown[])
         : allSlots.map((slot) => slot.id);
   const slots = Array.from(
-    new Set(declared.filter((s): s is string => typeof s === "string")),
+    new Set(
+      declared
+        .filter((s): s is string => typeof s === "string")
+        .map(canonicalEquipmentSlotKey),
+    ),
   ).map((key) => ({
     id: key,
     name: allSlots.find((s) => s.id === key)?.name ?? "Equipment slot",
   }));
   for (const definition of definitions) {
-    const components = obj(definition.components), equippable = obj(components.equippable);
-    if (Array.isArray(equippable.compatibleSlotSets)) definition.components = {...components, equippable:{...equippable, compatibleSlotSets:equippable.compatibleSlotSets.map(set=>Array.isArray(set) ? set.map(key=>allSlots.find(slot=>slot.id===key || slot.id.endsWith(`-slot-${String(key)}`))?.id ?? key) : set)}};
+    const components = obj(definition.components),
+      equippable = obj(components.equippable);
+    if (Array.isArray(equippable.compatibleSlotSets))
+      definition.components = {
+        ...components,
+        equippable: {
+          ...equippable,
+          compatibleSlotSets: equippable.compatibleSlotSets.map((set) =>
+            Array.isArray(set)
+              ? set.map(
+                  (key) =>
+                    allSlots.find(
+                      (slot) =>
+                        slot.id === key ||
+                        slot.id.endsWith(
+                          `-slot-${canonicalEquipmentSlotKey(String(key))}`,
+                        ),
+                    )?.id ?? key,
+                )
+              : set,
+          ),
+        },
+      };
   }
   const owner = ActorEquipment.deserialize(
     { actor: creature, items: rows(state.itemInstances) },

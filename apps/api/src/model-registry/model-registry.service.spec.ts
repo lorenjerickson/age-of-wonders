@@ -277,10 +277,44 @@ describe("ModelRegistryService", () => {
       (element) => element.currentRevision.presentation.label === "Wisdom",
     );
     expect(wisdom?.semanticRole).toBe("aow:attribute");
+    expect(
+      result.equipmentSlots.filter(
+        (option) => option.key === "aow:equipment-slot-waist",
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.equipmentSlots.some(
+        (option) => option.key === "aow:equipment-slot-belt",
+      ),
+    ).toBe(false);
     const pack = result.equipmentSlots.find(
       (element) => element.currentRevision.presentation.label === "Pack",
     );
     expect(pack).toBeDefined();
+    const captured = await service.resolveEffectiveRoots(
+      ["aow:model-schema-release:core:1"],
+      "gm-1",
+      "world-1",
+    );
+    const original = JSON.stringify(captured);
+    jest
+      .spyOn(service, "resolveEffectiveRoots")
+      .mockResolvedValue({
+        ...captured,
+        elements: captured.elements.filter(
+          (element) => element.lineage.key !== "aow:equipment-slot-waist",
+        ),
+      });
+    const historical = await service.effective("world-1", "gm-1");
+    const waistAlias = historical.equipmentSlots.find(
+      (element) => element.key === "aow:equipment-slot-waist",
+    );
+    expect(waistAlias?.currentRevision.presentation.label).toBe("Waist");
+    expect(
+      historical.elements.find((element) => element.id === waistAlias?.id)?.key,
+    ).toBe("aow:equipment-slot-waist");
+    expect(JSON.stringify(captured)).toBe(original);
+
     expect(
       result.professionRanks.map(
         (element) => element.currentRevision.presentation.label,

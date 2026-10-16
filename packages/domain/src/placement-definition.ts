@@ -336,13 +336,15 @@ export class PlacementDefinition extends Entity<
   private static source(value: unknown, world: boolean): boolean {
     if (!this.object(value)) return false;
     const field =
-      value.kind === "world-creature"
-        ? "creatureId"
-        : value.kind === "world-item"
-          ? "itemDefinitionId"
-          : value.kind === "registered-content"
-            ? "definitionId"
-            : undefined;
+      world && value.kind === "world-character"
+        ? "characterTemplateId"
+        : value.kind === "world-creature"
+          ? "creatureId"
+          : value.kind === "world-item"
+            ? "itemDefinitionId"
+            : value.kind === "registered-content"
+              ? "definitionId"
+              : undefined;
     if (field)
       return (
         this.text(value[field], world ? 240 : Infinity) &&

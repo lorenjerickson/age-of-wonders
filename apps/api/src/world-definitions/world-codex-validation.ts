@@ -31,6 +31,7 @@ export function worldCodexEntryIssue(
   collection: WorldCodexCollection,
   value: unknown,
   records: readonly RecordEntry[],
+  baseline?: unknown,
 ): string | undefined {
   try {
     const entity =
@@ -38,7 +39,7 @@ export function worldCodexEntryIssue(
         ? EffectDefinition.deserializePayload(value, { records })
         : collection === "conditions"
           ? ConditionDefinition.deserializePayload(value, { records })
-          : CharacterTemplate.deserializePayload(value, { records });
+          : CharacterTemplate.deserializePayload(value, { records, baseline });
     try {
       return entity.state.metadata.validity.issues.find(
         (issue) => issue.blocking !== false,
@@ -78,14 +79,22 @@ export function worldCodexSnapshotIssue(
   } = {},
 ): string | undefined {
   for (const record of records) {
-
     const collection = (
       Object.keys(WORLD_CODEX_RESOURCES) as WorldCodexCollection[]
     ).find((k) => WORLD_CODEX_RESOURCES[k] === record.resourceType);
     if (collection) {
       if (!isObject(record.payload) || record.payload.id !== record.sourceId)
         return "The Codex identity does not match its snapshot record.";
-      const issue = worldCodexEntryIssue(collection, record.payload, records);
+      const issue = worldCodexEntryIssue(
+        collection,
+        record.payload,
+        records,
+        previousRecords?.find(
+          (previous) =>
+            previous.resourceType === record.resourceType &&
+            previous.sourceId === record.sourceId,
+        )?.payload,
+      );
       if (issue) return issue;
     }
     if (isObject(record.payload)) {
@@ -510,6 +519,5 @@ export function worldCodexSnapshotIssue(
     } catch {
       return "A catalog record requires valid JSON data.";
     }
-
   }
 }

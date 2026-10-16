@@ -80,6 +80,7 @@ export interface CampaignInstancePlacementRealization<
 export type CampaignInstanceCreatureSource =
   | {
       readonly kind: "captured-world-creature";
+      /** Captured Creature Definition or World NPC template identity. */
       readonly sourceCreatureId: CreatureId;
       readonly embodimentPolicy: ResolvedCreatureInstanceEmbodimentPolicy;
     }
@@ -103,6 +104,7 @@ export interface CampaignInstanceCreatureStateOverlay<
   readonly identity: StateIdentity<CreatureId>;
   readonly entityId: EntityId;
   readonly name: string;
+  /** Captured Creature Definition or World NPC template identity. */
   readonly definitionId?: DefinitionId;
   readonly currentLocationId?: LocationId;
   /** Feet in grid units of the current captured isometric Location. Authored during setup or changed by an approved captured-rule effect. */

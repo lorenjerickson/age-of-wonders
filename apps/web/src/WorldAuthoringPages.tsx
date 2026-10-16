@@ -1,3 +1,4 @@
+import { AstraCodex } from "./AstraCodex";
 import { ItemStorageFields, type ItemStorageEdits } from "./ItemStorageFields";
 import { visibleRecordName, visibleRecordDescription } from "./recordDisplay";
 import { protectedComparisonText } from "./protectedAuthoringText";
@@ -961,56 +962,7 @@ export function AtlasPage() {
 }
 
 export function BestiaryPage() {
-  const guideSuffix = worldWorkspaceSuffix(useLocation().searchStr);
-  const { definition, draft } = useWorldAuthoring();
-  const [query, setQuery] = useState("");
-  const creatures = recordsForLibrary(draft?.records ?? [], "creatures").filter(
-    (record) =>
-      `${visibleRecordName(record, "")} ${visibleRecordDescription(record) ?? ""}`
-        .toLocaleLowerCase()
-        .includes(query.toLocaleLowerCase()),
-  );
-  return (
-    <LibraryPage
-      eyebrow="Bestiary"
-      title="Bestiary"
-      description="Creatures in this World"
-      createHref={`/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/new`}
-    >
-      <DraftRequired>
-        <RouterButtonLink
-          className="min-h-11"
-          href={`/worlds/${encodeURIComponent(definition.id)}/bestiary/catalog-monsters${guideSuffix}`}
-        >
-          Catalog creatures
-        </RouterButtonLink>
-        <Field label="Search creatures" className="mt-5">
-          <Input
-            type="search"
-            placeholder="Search by name or description"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="min-h-11 w-full"
-          />
-        </Field>
-        <p className="mt-4 text-sm text-base-content/60">
-          {creatures.length} creatures
-        </p>
-        {creatures.length ? (
-          <CardGrid
-            records={creatures}
-            list
-            showImages
-            href={(record) =>
-              `/worlds/${encodeURIComponent(definition.id)}/bestiary/creatures/${encodeURIComponent(record.sourceId)}`
-            }
-          />
-        ) : (
-          <Empty label="No Creatures yet" />
-        )}
-      </DraftRequired>
-    </LibraryPage>
-  );
+  return <AstraCodex collection="bestiary" />;
 }
 
 export function ItemCompendiumPage() {
@@ -2588,8 +2540,8 @@ export function CharactersPage() {
         Catalog Character templates
       </RouterButtonLink>
       <p className="mt-4 max-w-3xl text-base-content/65">
-        Author the choices that shape Characters. Open model structure only when
-        you need to change the vocabulary behind these editors.
+        Author the choices that shape Characters in the Codex. The World model
+        reference describes the read-only vocabulary used by these editors.
       </p>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <ModelCard
@@ -2642,7 +2594,7 @@ export function CharacterDefinitionsPage({
   const base = `/worlds/${encodeURIComponent(definition.id)}/characters/${segment}`;
   return (
     <LibraryPage
-      eyebrow="Characters"
+      eyebrow="Codex"
       title={title}
       description={`Create and revise ${title.toLocaleLowerCase()} within this World Definition.`}
       createHref={`${base}/new`}
@@ -3038,16 +2990,21 @@ export function CharacterModelsPage() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
       <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-        Characters
+        Rules
       </p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-        Model &amp; Taxonomies
+        World model reference
       </h1>
       <p className="mt-4 max-w-3xl text-base-content/65">
-        Edit open World schema and vocabularies separately from record values.
-        Changes affect compatible editors in this working revision and are
-        reviewed before publication.
+        Read-only schema and vocabularies adopted by this World. Character and
+        creature values remain editable in their own records.
       </p>
+      <RouterButtonLink
+        className="mt-5 min-h-11"
+        href={`/worlds/${encodeURIComponent(definition.id)}/rules`}
+      >
+        Back to Rules
+      </RouterButtonLink>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <ModelCard
           title="Schema Structure"

@@ -1,4 +1,8 @@
-import { WORLD_CODEX_RESOURCES } from "@aow/common";
+import { authoredEquipmentIssue } from "./authored-equipment";
+import {
+  WORLD_CODEX_RESOURCES,
+  isCreatureInstanceEmbodimentPolicy,
+} from "@aow/common";
 import {
   type DeepReadonly,
   type EntityOptions,
@@ -96,6 +100,14 @@ export class CharacterTemplate extends CodexDefinition<CharacterTemplateValidati
     const issue = (code: string, message: string): ValidationIssue[] => [
       { code: `character-codex-${code}`, message },
     ];
+    if (
+      data.instanceEmbodimentPolicy !== undefined &&
+      !isCreatureInstanceEmbodimentPolicy(data.instanceEmbodimentPolicy)
+    )
+      return issue(
+        "embodiment-policy",
+        "Choose a valid Character embodiment policy.",
+      );
     if (context.records) {
       const creature = this.reference(
         context,
@@ -150,37 +162,33 @@ export class CharacterTemplate extends CodexDefinition<CharacterTemplateValidati
         "movement",
         "Choose valid movement modes and nonnegative speeds.",
       );
-    if (!CharacterTemplate.array(data.equipment))
-      return issue("equipment", "Choose an equipment list.");
-    const slots = new Set<string>();
-    const itemIds = new Set<string>();
-    for (const link of data.equipment) {
-      if (
-        !CharacterTemplate.isObject(link) ||
-        !CharacterTemplate.text(link.slot) ||
-        (link.slot !== "carried" && slots.has(link.slot))
-      )
-        return issue("slot", "Choose one Item for each equipment slot.");
-      slots.add(link.slot);
-      if (
-        !CharacterTemplate.text(link.itemDefinitionId) ||
-        itemIds.has(link.itemDefinitionId)
-      )
-        return issue("item-duplicate", "Choose each equipment Item only once.");
-      itemIds.add(link.itemDefinitionId);
-      if (context.records) {
-        const item = this.reference(
-          context,
-          "definitions",
-          link.itemDefinitionId,
-        );
-        if (!CharacterTemplate.isObject(item) || item.kind !== "item")
-          return issue(
-            "item-unavailable",
-            "An equipped Item is unavailable in this World.",
-          );
-      }
-    }
+    const creature = CharacterTemplate.isObject(
+      context.records?.find(
+        (record) =>
+          record.resourceType === "definitions" &&
+          record.sourceId === data.creatureDefinitionId,
+      )?.payload,
+    )
+      ? (context.records!.find(
+          (record) =>
+            record.resourceType === "definitions" &&
+            record.sourceId === data.creatureDefinitionId,
+        )!.payload as Record<string, unknown>)
+      : {};
+    const components = CharacterTemplate.isObject(creature.components)
+      ? creature.components
+      : {};
+    const baseline = CharacterTemplate.isObject(context.baseline)
+      ? context.baseline
+      : {};
+    const equipmentIssue = authoredEquipmentIssue(data.equipment, {
+      records: context.records,
+      slots: components.equipmentSlots,
+      preserveCompatibility:
+        baseline.equipment !== undefined &&
+        JSON.stringify(baseline.equipment) === JSON.stringify(data.equipment),
+    });
+    if (equipmentIssue) return issue("equipment", equipmentIssue);
     if (data.grantedConditions !== undefined) {
       if (!CharacterTemplate.array(data.grantedConditions))
         return issue("conditions", "Choose a valid granted Condition list.");

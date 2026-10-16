@@ -316,6 +316,7 @@ test("World placement relationship policy distinguishes declared kinds and legac
       sourceId: "registered",
       payload: { kind: "custom" },
     },
+    { resourceType: "world-character-templates", sourceId: "npc", payload: { id: "npc", name: "Count" } },
     { resourceType: "creatures", sourceId: "legacy", payload: {} },
     { resourceType: "creatures", sourceId: "item", payload: {} },
   ];
@@ -333,6 +334,8 @@ test("World placement relationship policy distinguishes declared kinds and legac
     check({ kind: "world-creature", creatureId: "creature" }),
     [],
   );
+  assert.deepEqual(check({ kind: "world-character", characterTemplateId: "npc" }), []);
+  assert.equal(check({ kind: "world-character", characterTemplateId: "creature" })[0].code, "world-placement-source-not-found");
   assert.deepEqual(check({ kind: "world-creature", creatureId: "legacy" }), []);
   assert.deepEqual(check({ kind: "world-item", itemDefinitionId: "item" }), []);
   assert.deepEqual(

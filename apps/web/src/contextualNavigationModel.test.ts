@@ -72,7 +72,7 @@ describe("contextual navigation stack", () => {
     );
     expect(stack.at(-1)?.kind).toBe("World");
     expect(stack.at(-1)?.links.find((link) => link.active)?.label).toBe(
-      "Models & taxonomies",
+      "Rules",
     );
     expect(stack.map(({ label }) => label)).toEqual([
       "GM Workspace",

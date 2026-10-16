@@ -1,3 +1,6 @@
+import { CharacterBenefitFields } from "./CharacterBenefitFields";
+import { characterBenefitSummary } from "./characterBenefitModel";
+import { visibleRecordDescription } from "./recordDisplay";
 import { WorldRecordRemoval } from "./WorldRecordRemoval";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useBlocker, useLocation } from "@tanstack/react-router";
@@ -58,9 +61,9 @@ export function CharacterAuthorPage({
       <h1 className="text-3xl font-semibold">{characterAuthorTitle(kind)}s</h1>
       <RouterButtonLink
         className="min-h-11"
-        href={`/worlds/${encodeURIComponent(definition.id)}/characters${suffix}`}
+        href={`/worlds/${encodeURIComponent(definition.id)}?view=codex${suffix.replace(/^\?/, "&")}`}
       >
-        Character options
+        Back to Codex
       </RouterButtonLink>
       {canEdit && (
         <RouterButtonLink className="min-h-11" href={`${base}/new${suffix}`}>
@@ -69,14 +72,26 @@ export function CharacterAuthorPage({
       )}
       {records.length === 0 && <p>No {kind}s yet.</p>}
       {records.map((record, index) => (
-        <div key={`${record.sourceId}/${index}`}>
+        <section
+          key={`${record.sourceId}/${index}`}
+          className="min-w-0 space-y-3 rounded border border-base-300 p-4"
+        >
           <RouterButtonLink
             className="min-h-11"
             href={`${base}/${encodeURIComponent(record.sourceId)}${suffix}`}
           >
             {characterAuthorName(record, ids)}
           </RouterButtonLink>
-        </div>
+          <p className="break-words text-sm text-base-content/70">
+            {visibleRecordDescription(record, ids) ?? "No description yet."}
+          </p>
+          <p className="break-words text-sm text-base-content/70">
+            {characterBenefitSummary(
+              mechanicsObject(mechanicsObject(record.payload).components),
+              draft?.records ?? [],
+            ).join(" · ") || "No modifier, Condition, or Effect grants."}
+          </p>
+        </section>
       ))}
     </main>
   );
@@ -252,11 +267,16 @@ function CharacterAuthorEditor({
           />
           <RuleTextField
             recordIds={ids}
-            label={kind === "background" ? "Backstory" : "Description"}
+            label="Description"
             value={identity.description}
             onChange={(description) =>
               setForm({ ...form, identity: { ...identity, description } })
             }
+          />
+          <CharacterBenefitFields
+            value={components}
+            records={draft.records}
+            onChange={context.onChange}
           />
           {kind === "profession" ? (
             <ProfessionAuthoringFields

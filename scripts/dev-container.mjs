@@ -6,7 +6,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const app = process.argv[2];
 if (!["api", "web"].includes(app)) throw new Error("Choose api or web.");
-const libraries = app === "api" ? ["common"] : ["common", "ui"];
+const libraries =
+  app === "api" ? ["common", "domain"] : ["common", "domain", "ui"];
 const manifests = [
   "package.json",
   "pnpm-lock.yaml",
@@ -14,6 +15,7 @@ const manifests = [
   "apps/api/package.json",
   "apps/web/package.json",
   "packages/common/package.json",
+  "packages/domain/package.json",
   "packages/ui/package.json",
 ];
 let child;

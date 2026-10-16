@@ -151,6 +151,42 @@ export class ProfessionDefinition extends RuleDefinitionEntity<
           });
       }
     }
+    const effectGrants = components.grantedEffects;
+    if (effectGrants !== undefined) {
+      const invalid = (message: string) =>
+        issues.push({ code: "profession-codex-granted-effects", message });
+      if (!Array.isArray(effectGrants) || effectGrants.length > 200)
+        invalid("Choose a valid granted Effect list.");
+      else {
+        const ids = new Set<string>();
+        for (const link of effectGrants) {
+          if (
+            !ProfessionDefinition.isObject(link) ||
+            !ProfessionDefinition.text(link.effectId) ||
+            ids.has(link.effectId) ||
+            (context.records &&
+              !context.records.find(
+                (record) =>
+                  record.resourceType === WORLD_CODEX_RESOURCES.effects &&
+                  record.sourceId === link.effectId,
+              )?.payload)
+          ) {
+            invalid(
+              "A granted Effect is duplicated or unavailable in this World.",
+            );
+            break;
+          }
+          ids.add(link.effectId);
+        }
+        if (effectGrants.length && !context.records)
+          issues.push({
+            code: "profession-references-unresolved",
+            message:
+              "Profession Effects have not been checked against a World capture.",
+            unresolved: true,
+          });
+      }
+    }
     if (context.model)
       issues.push(...this.modelIssues(data, context.model, context.mode));
     else

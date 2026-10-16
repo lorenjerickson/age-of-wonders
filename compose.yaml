@@ -72,8 +72,10 @@ services:
       - api_node_modules:/workspace/apps/api/node_modules
       - /workspace/apps/web/node_modules
       - /workspace/packages/common/node_modules
+      - /workspace/packages/domain/node_modules
       - /workspace/packages/ui/node_modules
       - /workspace/packages/common/dist
+      - /workspace/packages/domain/dist
       - /workspace/packages/ui/dist
       - /workspace/apps/api/.container-build
     depends_on:
@@ -120,8 +122,10 @@ services:
       - web_node_modules:/workspace/apps/web/node_modules
       - /workspace/apps/api/node_modules
       - /workspace/packages/common/node_modules
+      - /workspace/packages/domain/node_modules
       - /workspace/packages/ui/node_modules
       - /workspace/packages/common/dist
+      - /workspace/packages/domain/dist
       - /workspace/packages/ui/dist
     depends_on:
       - api

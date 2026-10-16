@@ -118,6 +118,45 @@ export class Creature extends Entity<
       definitionId: input.definitionId,
     };
   }
+  /** NPC statistics are captured as rule fields; identity remains specific to the NPC. */
+  static fromWorldCharacter(
+    input: Parameters<typeof Creature.fromCaptured>[0],
+    template: Record<string, unknown>,
+    base: unknown,
+  ): CreatureRuntimeState {
+    const inherited = object(object(base).components);
+    const fields = Object.fromEntries(
+      [
+        "attributes",
+        "skills",
+        "health",
+        "vision",
+        "movement",
+        "grantedConditions",
+        "images",
+      ].flatMap((key) => {
+        const value = template[key] ?? inherited[key];
+        return value === undefined ? [] : [[key, copyEntityData(value)]];
+      }),
+    );
+    const health = object(fields.health);
+    return {
+      ...this.fromCaptured(input),
+      ...(typeof health.current === "number" &&
+      typeof health.maximum === "number" &&
+      health.maximum > 0
+        ? {
+            combat: {
+              hp: health.current,
+              maxHp: health.maximum,
+              prone: false,
+              removed: false,
+            },
+          }
+        : {}),
+      extensions: { "aow:rules": fields },
+    };
+  }
   static embodimentPolicy(value: unknown) {
     return resolveCreatureInstanceEmbodimentPolicy(value);
   }

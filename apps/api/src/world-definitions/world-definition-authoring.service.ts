@@ -1,4 +1,7 @@
-import { DefinitionLineage, rewriteWorldDefinitionReferences as rewriteReferences } from "@aow/domain";
+import {
+  DefinitionLineage,
+  rewriteWorldDefinitionReferences as rewriteReferences,
+} from "@aow/domain";
 import {
   Map as DomainMap,
   WorldDefinition,
@@ -9,9 +12,7 @@ import {
   SkillDefinition,
 } from "@aow/domain";
 import { worldAccessWhere } from "./world-access";
-import {
-  worldCodexSnapshotIssue,
-} from "./world-codex-validation";
+import { worldCodexSnapshotIssue } from "./world-codex-validation";
 import { WORLD_CODEX_RESOURCES } from "@aow/common";
 import { worldRuleSnapshotIssue } from "./world-rule-snapshot";
 import type {
@@ -1223,6 +1224,13 @@ export class WorldDefinitionAuthoringService {
       throw new BadRequestException(
         "Terrain chunks must be saved through the Location map editor.",
       );
+    if (
+      canonicalJsonHash(modelReleaseIds(dto.content)) !==
+      canonicalJsonHash(modelReleaseIds(owned.draft.content))
+    )
+      throw new BadRequestException(
+        "World model definitions are read only. Preserve the currently adopted Model releases.",
+      );
     const records = normalizeRecords([
       ...dto.records,
       ...readRecords(owned.draft.snapshotRecords).filter(
@@ -1469,22 +1477,43 @@ export class WorldDefinitionAuthoringService {
           });
           if (!world?.draft) throw notFound();
           const draft = world.draft;
-          const lineage = DefinitionLineage.deserializePayload({ status: world.status, currentRevisionId: world.currentRevisionId, revisionNumber: world.currentRevision?.revisionNumber ?? 0 });
-          const evidence = { expectedStorageRevision: dto.expectedStorageRevision, storageRevision: draft.storageRevision, baseRevisionId: draft.baseRevisionId ?? null, validationStatus: draft.validationStatus, validatedStorageRevision: draft.validatedStorageRevision };
-          const issue = DefinitionLineage.publicationIssue(lineage.state.data, evidence);
+          const lineage = DefinitionLineage.deserializePayload({
+            status: world.status,
+            currentRevisionId: world.currentRevisionId,
+            revisionNumber: world.currentRevision?.revisionNumber ?? 0,
+          });
+          const evidence = {
+            expectedStorageRevision: dto.expectedStorageRevision,
+            storageRevision: draft.storageRevision,
+            baseRevisionId: draft.baseRevisionId ?? null,
+            validationStatus: draft.validationStatus,
+            validatedStorageRevision: draft.validatedStorageRevision,
+          };
+          const issue = DefinitionLineage.publicationIssue(
+            lineage.state.data,
+            evidence,
+          );
           if (issue) {
             lineage.dispose();
             if (issue === "archived") throw archivedConflict();
             if (issue === "stale-draft") throw staleDraft();
             if (issue === "stale-base") throw staleBase();
-            throw new BadRequestException("Validate this exact World draft revision before publishing it.");
+            throw new BadRequestException(
+              "Validate this exact World draft revision before publishing it.",
+            );
           }
           const revisionId = randomUUID();
           let nextRevisionNumber: number;
           try {
-            await lineage.command("publish", { initiator: userId, params: { ...evidence, revisionId }, context: {} });
+            await lineage.command("publish", {
+              initiator: userId,
+              params: { ...evidence, revisionId },
+              context: {},
+            });
             nextRevisionNumber = lineage.state.data.revisionNumber;
-          } finally { lineage.dispose(); }
+          } finally {
+            lineage.dispose();
+          }
           const records = readRecords(draft.snapshotRecords);
           const report = validateWorldDefinitionDraft(draft.content, records);
           if (!report.valid)
@@ -1528,7 +1557,8 @@ export class WorldDefinitionAuthoringService {
           const revisionNumber = nextRevisionNumber;
           const revision = await tx.worldDefinitionRevision.create({
             data: {
-              id: revisionId, worldDefinitionId,
+              id: revisionId,
+              worldDefinitionId,
               revisionNumber,
               predecessorRevisionId: world.currentRevisionId,
               name: draft.revisionName,
@@ -1998,7 +2028,7 @@ function jsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
 function canonicalContentHash(value: Prisma.JsonValue): string {
   return canonicalJsonHash(value);
 }
-function modelReleaseIds(value: Prisma.JsonValue): string[] {
+function modelReleaseIds(value: unknown): string[] {
   if (!isObject(value) || !Array.isArray(value.modelSchemaReleaseIds))
     return [];
   return value.modelSchemaReleaseIds.filter(
@@ -2199,9 +2229,16 @@ function invalidWorldItemImage(): BadRequestException {
     "The selected Item image is unavailable for this World.",
   );
 }
-export function assertGovernedRecordConformance(...args: Parameters<typeof WorldDefinition.assertGovernedConformance>): void {
-  try { WorldDefinition.assertGovernedConformance(...args); }
-  catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Invalid Model conformance."); }
+export function assertGovernedRecordConformance(
+  ...args: Parameters<typeof WorldDefinition.assertGovernedConformance>
+): void {
+  try {
+    WorldDefinition.assertGovernedConformance(...args);
+  } catch (error) {
+    throw new BadRequestException(
+      error instanceof Error ? error.message : "Invalid Model conformance.",
+    );
+  }
 }
 function visible(value: string, message: string) {
   const v = value?.trim();

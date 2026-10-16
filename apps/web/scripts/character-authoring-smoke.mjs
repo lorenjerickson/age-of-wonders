@@ -175,6 +175,16 @@ await withFixture(async (fixtureUrl) => {
           }),
           record("item-secret", "item", "Hammer", { category: "tool" }),
           record("trait-secret", "trait", "Steady hands", {}),
+          {
+            resourceType: "world-conditions",
+            sourceId: "condition-secret",
+            payload: { id: "condition-secret", name: "Resolute" },
+          },
+          {
+            resourceType: "world-effects",
+            sourceId: "effect-secret",
+            payload: { id: "effect-secret", name: "Clear thinking" },
+          },
         ],
       };
       const original = structuredClone(draft);
@@ -286,6 +296,99 @@ await withFixture(async (fixtureUrl) => {
         ]);
         assert.equal(draft.storageRevision, revision + 1);
       };
+      if (process.env.CHARACTER_BENEFITS_ONLY === "1") {
+        components("profession-secret").grantedConditions = [
+          { conditionId: "unavailable-condition", private: { keep: true } },
+        ];
+        components("profession-secret").grantedEffects = [
+          { effectId: "unavailable-effect", private: [1, 2] },
+        ];
+        components("background-secret").modifierGrants = [
+          {
+            id: "modifier-secret",
+            label: "Steady craft",
+            kind: "rolled-flat",
+            target: { kind: "health-maximum" },
+            dice: [{ count: 1, sides: 4 }],
+            stacking: "add",
+          },
+        ];
+        for (const [type, id, route] of [
+          ["Profession", "profession-secret", profession],
+          ["Background", "background-secret", background],
+        ]) {
+          const before = structuredClone(payload(id));
+          await open(route);
+          await textbox("Description").fill(
+            `${type} description saved by form`,
+          );
+          if (!components(id).grantedConditions)
+            await button("Add granted conditions").click();
+          if (!components(id).grantedEffects)
+            await button("Add granted effects").click();
+          await select("Condition grant 1").selectOption({ label: "Resolute" });
+          await select("Effect grant 1").selectOption({
+            label: "Clear thinking",
+          });
+          await saveOwner(type);
+          assert.deepEqual(components(id).grantedConditions, [
+            {
+              ...(before.components.grantedConditions?.[0] ?? {}),
+              conditionId: "condition-secret",
+            },
+          ]);
+          assert.deepEqual(components(id).grantedEffects, [
+            {
+              ...(before.components.grantedEffects?.[0] ?? {}),
+              effectId: "effect-secret",
+            },
+          ]);
+          assert.deepEqual(
+            components(id).modifierGrants,
+            before.components.modifierGrants,
+          );
+          assert.deepEqual(
+            components(id).expertiseLevels,
+            before.components.expertiseLevels,
+          );
+          assert.deepEqual(components(id).retained, before.components.retained);
+          assert.deepEqual(payload(id).extensions, before.extensions);
+          await open(route);
+          assert.equal(
+            await textbox("Description").inputValue(),
+            `${type} description saved by form`,
+          );
+          assert.equal(
+            await select("Condition grant 1")
+              .locator("option:checked")
+              .textContent(),
+            "Resolute",
+          );
+          assert.equal(
+            await select("Effect grant 1")
+              .locator("option:checked")
+              .textContent(),
+            "Clear thinking",
+          );
+          await capture(`benefits-${type.toLowerCase()}`);
+          await open(`${type.toLowerCase()}s`);
+          const list = await page.locator("main").innerText();
+          assert.ok(list.includes(`${type} description saved by form`));
+          assert.ok(list.includes("Conditions: Resolute"));
+          assert.ok(list.includes("Effects: Clear thinking"));
+          assert.ok(
+            !list.includes("condition-secret") &&
+              !list.includes("effect-secret"),
+          );
+        }
+        assert.equal(writes.length, 2);
+        assert.deepEqual(errors, []);
+        await page.close();
+        console.log(
+          `PASS benefits form save/reopen at ${width}px; grant metadata, descriptions, modifiers and private data preserved`,
+        );
+        continue;
+      }
       await open(profession);
       await textbox("Name").fill("Master artisan");
       await saveOwner("Profession");
@@ -406,7 +509,7 @@ await withFixture(async (fixtureUrl) => {
       await textbox("Name").fill("Explorer");
       await saveOwner("Profession");
       const newProfession = draft.records.find(
-        (r) => r.payload.identity.name === "Explorer",
+        (r) => r.payload.identity?.name === "Explorer",
       );
       assert.ok(newProfession);
       assert.deepEqual(newProfession.payload.components.expertiseLevels, []);
@@ -425,19 +528,19 @@ await withFixture(async (fixtureUrl) => {
       assert.equal(await number("Rank number").inputValue(), "0");
       await open("backgrounds/new");
       await textbox("Name").fill("Guild orphan");
-      await textbox("Backstory").fill("Raised by craftworkers");
+      await textbox("Description").fill("Raised by craftworkers");
       await saveOwner("Background");
       const created = draft.records.find(
-        (r) => r.payload.identity.name === "Guild orphan",
+        (r) => r.payload.identity?.name === "Guild orphan",
       );
       assert.ok(created);
       await open("backgrounds/" + created.sourceId);
       assert.equal(
-        await textbox("Backstory").inputValue(),
+        await textbox("Description").inputValue(),
         "Raised by craftworkers",
       );
       await open(background);
-      await textbox("Backstory").fill("Unsaved recovery text");
+      await textbox("Description").fill("Unsaved recovery text");
       failNext = 500;
       await button("Save Background").click();
       await page
@@ -446,11 +549,11 @@ await withFixture(async (fixtureUrl) => {
         )
         .waitFor();
       assert.equal(
-        await textbox("Backstory").inputValue(),
+        await textbox("Description").inputValue(),
         "Unsaved recovery text",
       );
       await saveOwner("Background");
-      await textbox("Backstory").fill("Conflict recovery text");
+      await textbox("Description").fill("Conflict recovery text");
       failNext = 409;
       await button("Save Background").click();
       await page
@@ -459,7 +562,7 @@ await withFixture(async (fixtureUrl) => {
         )
         .waitFor();
       assert.equal(
-        await textbox("Backstory").inputValue(),
+        await textbox("Description").inputValue(),
         "Conflict recovery text",
       );
       assert.equal(await button("Save Background").isDisabled(), true);
@@ -469,7 +572,7 @@ await withFixture(async (fixtureUrl) => {
       );
       await open(background);
       assert.equal(
-        await textbox("Backstory").inputValue(),
+        await textbox("Description").inputValue(),
         "Unsaved recovery text",
       );
       assert.deepEqual(

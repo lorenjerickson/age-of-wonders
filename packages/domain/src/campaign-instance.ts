@@ -579,8 +579,9 @@ export class CampaignInstance extends Entity<
       .filter((record) => {
         const creature = object(record.payload);
         if (
-          record.resourceType !== "definitions" ||
-          creature.kind !== "creature"
+          record.resourceType !== "world-character-templates" &&
+          (record.resourceType !== "definitions" ||
+            creature.kind !== "creature")
         )
           return false;
         const resolved = resolveCreatureInstanceEmbodimentPolicy(
@@ -604,7 +605,18 @@ export class CampaignInstance extends Entity<
             sourceCreatureId: record.sourceId,
             embodimentPolicy: policy,
           },
-          creature: Creature.fromCaptured({
+          creature: (record.resourceType === "world-character-templates"
+            ? (args: Parameters<typeof Creature.fromCaptured>[0]) =>
+                Creature.fromWorldCharacter(
+                  args,
+                  captured,
+                  worldRecords.find(
+                    (r) =>
+                      r.resourceType === "definitions" &&
+                      r.sourceId === captured.creatureDefinitionId,
+                  )?.payload,
+                )
+            : Creature.fromCaptured)({
             id: runtimeCreatureId,
             entityId: runtimeEntityId,
             name: humanName(captured, "Unnamed Creature"),

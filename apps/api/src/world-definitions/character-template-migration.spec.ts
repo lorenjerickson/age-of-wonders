@@ -98,3 +98,67 @@ describe("Character Template migration compatibility", () => {
     ).toBe("Choose a Creature template in this World.");
   });
 });
+
+describe("authored equipment compatibility", () => {
+  const equipment = [
+    { slot: "main-hand", itemDefinitionId: "sword" },
+    { slot: "off-hand", itemDefinitionId: "sword" },
+  ];
+  const capture = [
+    {
+      resourceType: "definitions",
+      sourceId: "creature",
+      payload: {
+        kind: "creature",
+        components: {
+          equipmentSlots: [
+            "aow:equipment-slot-main-hand",
+            "aow:equipment-slot-off-hand",
+          ],
+        },
+      },
+    },
+    {
+      resourceType: "definitions",
+      sourceId: "sword",
+      payload: {
+        kind: "item",
+        components: {
+          equippable: { compatibleSlotSets: [["main-hand", "off-hand"]] },
+        },
+      },
+    },
+  ];
+  it("validates complete multi-slot Item assignment and retains unchanged legacy links", () => {
+    expect(
+      worldCodexEntryIssue("characters", { ...character, equipment }, capture),
+    ).toBeUndefined();
+    expect(
+      worldCodexEntryIssue(
+        "characters",
+        { ...character, equipment: equipment.slice(0, 1) },
+        capture,
+      ),
+    ).toBe("The Item does not fit that complete slot assignment.");
+    const previous = {
+      ...character,
+      equipment: [{ slot: "historic", itemDefinitionId: "sword" }],
+    };
+    expect(
+      worldCodexEntryIssue(
+        "characters",
+        { ...previous, name: "Renamed" },
+        capture,
+        previous,
+      ),
+    ).toBeUndefined();
+    expect(
+      worldCodexEntryIssue(
+        "characters",
+        { ...previous, name: "Renamed" },
+        capture.filter((r) => r.sourceId !== "sword"),
+        previous,
+      ),
+    ).toBe("An equipped Item is unavailable in this World.");
+  });
+});

@@ -198,6 +198,10 @@ export class UpsertWorldCreatureDraftDto extends WorldDraftMutationDto {
   @IsOptional() @IsObject() vision?: { day: number; night: number };
   @IsOptional() @IsArray() @ArrayMaxSize(200) equipmentPool?: string[];
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  equipment?: import("@aow/common").WorldEquipmentAssignment[];
+  @IsOptional()
   @IsObject()
   images?: Record<string, unknown>;
 
